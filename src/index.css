@@ -1,0 +1,128 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Palette : violet profond en couleur de marque (Sophia), gris légèrement
+ * chauds en neutres, corail réservé à l'urgence — la carte « à poster
+ * aujourd'hui » est la seule chose qui doit crier dans l'interface.
+ */
+@layer base {
+  :root {
+    --background: 250 33% 99%;
+    --foreground: 250 20% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 250 20% 12%;
+
+    --primary: 262 72% 52%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 255 30% 95%;
+    --secondary-foreground: 262 45% 32%;
+
+    --muted: 252 22% 96%;
+    --muted-foreground: 250 8% 46%;
+
+    --accent: 262 60% 96%;
+    --accent-foreground: 262 55% 34%;
+
+    --destructive: 3 82% 58%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 58% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 33 92% 50%;
+    --warning-foreground: 30 60% 12%;
+
+    --border: 252 18% 90%;
+    --input: 252 18% 88%;
+    --ring: 262 72% 52%;
+
+    --sidebar: 258 30% 15%;
+    --sidebar-foreground: 255 20% 82%;
+    --sidebar-active: 262 60% 60%;
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 255 22% 8%;
+    --foreground: 255 15% 94%;
+
+    --card: 256 20% 11%;
+    --card-foreground: 255 15% 94%;
+
+    --primary: 262 70% 64%;
+    --primary-foreground: 258 40% 10%;
+
+    --secondary: 256 18% 18%;
+    --secondary-foreground: 255 20% 90%;
+
+    --muted: 256 18% 16%;
+    --muted-foreground: 255 10% 62%;
+
+    --accent: 258 25% 20%;
+    --accent-foreground: 262 60% 82%;
+
+    --destructive: 3 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 45% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 33 80% 55%;
+    --warning-foreground: 30 60% 10%;
+
+    --border: 256 16% 22%;
+    --input: 256 16% 24%;
+    --ring: 262 70% 64%;
+
+    --sidebar: 257 26% 11%;
+    --sidebar-foreground: 255 15% 78%;
+    --sidebar-active: 262 60% 62%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family:
+      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Les listes défilables du produit (nav, files) n'ont pas besoin d'une
+     barre système épaisse qui casse la mise en page. */
+  .scrollbar-slim::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+  }
+  .scrollbar-slim::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border;
+  }
+}
+
+@layer components {
+  .surface-gradient {
+    background-image:
+      radial-gradient(
+        60rem 40rem at 15% -10%,
+        hsl(var(--primary) / 0.12),
+        transparent 60%
+      ),
+      radial-gradient(
+        50rem 35rem at 100% 0%,
+        hsl(262 72% 52% / 0.08),
+        transparent 55%
+      );
+  }
+}

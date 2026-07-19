@@ -1,0 +1,54 @@
+-- Planification automatique du pipeline.
+--
+-- ⚠️ NON APPLIQUÉE VOLONTAIREMENT. Activer ces crons déclenche des dépenses
+-- récurrentes (Apify au scan, Gemini au nettoyage/traduction/génération) sans
+-- que personne ne soit devant. À appliquer une fois le volume et le budget
+-- décidés, et après avoir remplacé <CRON_SECRET> ci-dessous.
+--
+-- Les fréquences ci-dessous suivent la spec (discovery /15 min, pipeline /min).
+-- Pour une poignée de comptes, un scan deux fois par jour suffit largement et
+-- coûte bien moins cher : '0 6,18 * * *'.
+
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+select cron.unschedule('discovery-daily') where exists (
+  select 1 from cron.job where jobname = 'discovery-daily'
+);
+select cron.unschedule('pipeline-tick-minute') where exists (
+  select 1 from cron.job where jobname = 'pipeline-tick-minute'
+);
+
+select cron.schedule(
+  'discovery-daily',
+  '*/15 * * * *',
+  $$
+  select net.http_post(
+    url := 'https://mbikecieskoobeizixig.supabase.co/functions/v1/discovery',
+    headers := jsonb_build_object(
+      'content-type', 'application/json',
+      'x-cron-secret', '<CRON_SECRET>'
+    ),
+    body := '{}'::jsonb
+  );
+  $$
+);
+
+select cron.schedule(
+  'pipeline-tick-minute',
+  '* * * * *',
+  $$
+  select net.http_post(
+    url := 'https://mbikecieskoobeizixig.supabase.co/functions/v1/pipeline',
+    headers := jsonb_build_object(
+      'content-type', 'application/json',
+      'x-cron-secret', '<CRON_SECRET>'
+    ),
+    body := '{}'::jsonb
+  );
+  $$
+);
+
+-- Pour tout arrêter :
+--   select cron.unschedule('discovery-daily');
+--   select cron.unschedule('pipeline-tick-minute');

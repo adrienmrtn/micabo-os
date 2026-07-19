@@ -1,0 +1,406 @@
+import {
+  cleanImage,
+  extractAndTranslate,
+  generateSophiaText,
+  verifyClean,
+} from "../_shared/gemini.ts";
+import { assertAuthorised, json, serviceClient, todayIso } from "../_shared/supabase.ts";
+
+type Supabase = ReturnType<typeof serviceClient>;
+
+const BUCKET = "slideshow-media";
+/** cleanImage essaie déjà chaque modèle ; ces tentatives-ci s'étalent sur
+ *  plusieurs ticks, pour absorber les refus qui ne se reproduisent pas. */
+const MAX_CLEAN_ATTEMPTS = 3;
+
+/**
+ * Une Edge Function ne survit pas à un slideshow entier : sept nettoyages
+ * d'images d'affilée dépassent largement sa durée de vie (mesuré à 9 min avant
+ * d'être tué). On traite donc un nombre borné de slides par appel et on laisse
+ * le cron reprendre là où il s'est arrêté à la minute suivante.
+ */
+const FRAMES_PER_TICK = 2;
+
+Deno.serve(async (request) => {
+  const denied = await assertAuthorised(request);
+  if (denied) return denied;
+
+  const supabase = serviceClient();
+
+  try {
+    // Un slideshow déjà entamé garde la priorité : on le termine avant d'en
+    // ouvrir un nouveau, sinon rien n'aboutit jamais.
+    const { data: candidates } = await supabase
+      .from("slideshows")
+      .select("*")
+      .in("auto_pipeline_status", ["running", "pending"])
+      .order("auto_pipeline_status", { ascending: false })
+      .order("created_at")
+      .limit(1);
+
+    const slideshow = candidates?.[0];
+    if (!slideshow) {
+      return json({ ok: true, idle: true, backfilled: await backfill(supabase) });
+    }
+
+    const step = await advanceSlideshow(supabase, slideshow);
+    const backfilled = await backfill(supabase);
+
+    return json({ ok: true, slideshow: slideshow.id, step, backfilled });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return json({ ok: false, error: message }, 500);
+  }
+});
+
+async function setStep(supabase: Supabase, id: string, step: string) {
+  await supabase
+    .from("slideshows")
+    .update({ auto_pipeline_status: "running", auto_pipeline_step: step })
+    .eq("id", id);
+}
+
+/**
+ * Fait avancer un slideshow d'un cran et rend la main. Chaque appel traite au
+ * plus FRAMES_PER_TICK slides, puis le cron reprend à la minute suivante.
+ * Renvoie l'étape effectuée, pour le journal.
+ */
+// deno-lint-ignore no-explicit-any
+async function advanceSlideshow(supabase: Supabase, slideshow: any): Promise<string> {
+  try {
+    const { data: frames } = await supabase
+      .from("slideshow_frames")
+      .select("*")
+      .eq("slideshow_id", slideshow.id)
+      .order("position");
+
+    if (!frames || frames.length === 0) throw new Error("Slideshow sans slide");
+
+    const context = slideshow.title ?? "";
+
+    // 1 — nettoyage des slides restantes, par petits lots.
+    const toClean = frames.filter(
+      (frame) =>
+        frame.original_url &&
+        frame.clean_status !== "done" &&
+        frame.clean_status !== "failed",
+    );
+
+    if (toClean.length > 0) {
+      await setStep(supabase, slideshow.id, "cleaning");
+      for (const frame of toClean.slice(0, FRAMES_PER_TICK)) {
+        await cleanFrame(supabase, slideshow.id, slideshow.tiktok_account_id, frame);
+      }
+      return "cleaning";
+    }
+
+    // 2 — OCR + traduction.
+    //
+    // Toujours sur l'image d'ORIGINALE : le nettoyage vient d'en retirer le
+    // texte, lire l'image nettoyée ne rendrait donc rien.
+    //
+    // Le filtre teste `=== null` et non la falsy-ness : une traduction vide est
+    // une tentative aboutie, la re-sélectionner bouclerait indéfiniment.
+    const toTranslate = frames.filter(
+      (frame) => frame.translated_text === null && frame.original_url,
+    );
+
+    if (toTranslate.length > 0) {
+      await setStep(supabase, slideshow.id, "translating");
+      for (const frame of toTranslate.slice(0, FRAMES_PER_TICK)) {
+        const { extracted, translated } = await extractAndTranslate(
+          frame.original_url,
+          context,
+        );
+        await supabase
+          .from("slideshow_frames")
+          .update({ extracted_text: extracted, translated_text: translated })
+          .eq("id", frame.id);
+      }
+      return "translating";
+    }
+
+    // 3 — texte pub Sophia sur la dernière slide, là où l'appel à l'action a
+    // le plus de sens dans un slideshow.
+    await setStep(supabase, slideshow.id, "sophia");
+    await generateSophia(supabase, slideshow.id, context);
+
+    // 4 — assignation au poster du compte de référence.
+    await setStep(supabase, slideshow.id, "assigning");
+    await assign(supabase, slideshow);
+
+    await supabase
+      .from("slideshows")
+      .update({
+        auto_pipeline_status: "done",
+        auto_pipeline_step: null,
+        auto_pipeline_error: null,
+      })
+      .eq("id", slideshow.id);
+
+    return "done";
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await supabase
+      .from("slideshows")
+      .update({ auto_pipeline_status: "failed", auto_pipeline_error: message })
+      .eq("id", slideshow.id);
+    return "failed";
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+async function cleanFrame(
+  supabase: Supabase,
+  slideshowId: string,
+  accountId: string | null,
+  frame: any,
+) {
+  const attempts = (frame.clean_attempts ?? 0) + 1;
+  const exhausted = attempts >= MAX_CLEAN_ATTEMPTS;
+
+  try {
+    const base64 = await cleanImage(frame.original_url);
+
+    if (!base64) {
+      // Le modèle a refusé la retouche. Tant qu'il reste des tentatives on
+      // repassera ; une fois épuisées, on substitue une image de bibliothèque
+      // plutôt que de livrer la slide avec son texte d'origine incrusté.
+      await handleCleanFailure(supabase, accountId, frame, attempts, exhausted);
+      return;
+    }
+
+    const isClean = await verifyClean(base64, "image/png");
+    if (!isClean && !exhausted) {
+      await supabase
+        .from("slideshow_frames")
+        .update({ clean_attempts: attempts })
+        .eq("id", frame.id);
+      return;
+    }
+
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const path = `${slideshowId}/${frame.position}.png`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(BUCKET)
+      .upload(path, bytes, { contentType: "image/png", upsert: true });
+
+    if (uploadError) throw uploadError;
+
+    const publicUrl = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+
+    await supabase
+      .from("slideshow_frames")
+      .update({
+        cleaned_url: publicUrl,
+        clean_status: "done",
+        clean_attempts: attempts,
+        image_source: "cleaned",
+      })
+      .eq("id", frame.id);
+
+    // Une slide nettoyée est un fond vierge réutilisable : elle alimente la
+    // bibliothèque du compte pour les prochaines substitutions.
+    if (accountId) {
+      await supabase.from("account_images").insert({
+        tiktok_account_id: accountId,
+        storage_path: path,
+        public_url: publicUrl,
+        kind: "slide_background",
+        source: "cleaned_slide",
+      });
+    }
+  } catch (_error) {
+    await handleCleanFailure(supabase, accountId, frame, attempts, exhausted);
+  }
+}
+
+/**
+ * Tentatives épuisées : on remplace le visuel par une image de la bibliothèque
+ * du compte (la moins utilisée d'abord). Sans bibliothèque disponible, la slide
+ * est marquée `failed` — l'admin la verra dans sa file plutôt que de la
+ * découvrir chez un poster.
+ */
+// deno-lint-ignore no-explicit-any
+async function handleCleanFailure(
+  supabase: Supabase,
+  accountId: string | null,
+  frame: any,
+  attempts: number,
+  exhausted: boolean,
+) {
+  if (!exhausted) {
+    await supabase
+      .from("slideshow_frames")
+      .update({ clean_attempts: attempts })
+      .eq("id", frame.id);
+    return;
+  }
+
+  const { data: candidates } = await supabase
+    .from("account_images")
+    .select("id, public_url, used_count")
+    .eq("kind", "slide_background")
+    .or(accountId ? `tiktok_account_id.eq.${accountId},tiktok_account_id.is.null` : "tiktok_account_id.is.null")
+    .order("used_count")
+    .limit(1);
+
+  const replacement = candidates?.[0];
+
+  if (!replacement) {
+    await supabase
+      .from("slideshow_frames")
+      .update({ clean_status: "failed", clean_attempts: attempts })
+      .eq("id", frame.id);
+    return;
+  }
+
+  await supabase
+    .from("slideshow_frames")
+    .update({
+      cleaned_url: replacement.public_url,
+      clean_status: "done",
+      clean_attempts: attempts,
+      image_source: "library",
+    })
+    .eq("id", frame.id);
+
+  await supabase
+    .from("account_images")
+    .update({ used_count: replacement.used_count + 1 })
+    .eq("id", replacement.id);
+}
+
+async function generateSophia(supabase: Supabase, slideshowId: string, context: string) {
+  const { data: existing } = await supabase
+    .from("sophia_variants")
+    .select("id")
+    .eq("slideshow_id", slideshowId)
+    .limit(1);
+
+  if (existing && existing.length > 0) return;
+
+  const { data: prompt } = await supabase
+    .from("sophia_prompts")
+    .select("content")
+    .eq("key", "master")
+    .single();
+
+  const { data: corrections } = await supabase
+    .from("sophia_corrections")
+    .select("original_text, corrected_text")
+    .order("created_at", { ascending: false })
+    .limit(40);
+
+  const { data: frames } = await supabase
+    .from("slideshow_frames")
+    .select("id, position, translated_text")
+    .eq("slideshow_id", slideshowId)
+    .order("position", { ascending: false })
+    .limit(1);
+
+  const target = frames?.[0];
+  if (!target) return;
+
+  const text = await generateSophiaText({
+    masterPrompt: prompt?.content ?? "",
+    corrections: corrections ?? [],
+    slideText: target.translated_text ?? "",
+    slideshowContext: context,
+  });
+
+  await supabase.from("sophia_variants").insert({
+    slideshow_id: slideshowId,
+    frame_id: target.id,
+    text,
+    chosen: true,
+  });
+}
+
+/**
+ * Assigne le slideshow au poster du compte de référence, pour le premier jour
+ * où il n'a encore rien sur ce compte. L'index unique (poster, compte, date)
+ * garantit qu'on ne double jamais une journée.
+ */
+// deno-lint-ignore no-explicit-any
+async function assign(supabase: Supabase, slideshow: any) {
+  if (!slideshow.tiktok_account_id) return;
+
+  const { data: assignment } = await supabase
+    .from("assignments")
+    .select("poster_id")
+    .eq("tiktok_account_id", slideshow.tiktok_account_id)
+    .maybeSingle();
+
+  if (!assignment) return;
+
+  const { data: taken } = await supabase
+    .from("slideshows")
+    .select("assigned_date")
+    .eq("poster_id", assignment.poster_id)
+    .eq("tiktok_account_id", slideshow.tiktok_account_id)
+    .not("assigned_date", "is", null);
+
+  const takenDates = new Set((taken ?? []).map((row) => row.assigned_date));
+
+  const date = new Date();
+  for (let offset = 0; offset < 60; offset += 1) {
+    const iso = date.toISOString().slice(0, 10);
+    if (!takenDates.has(iso)) {
+      await supabase
+        .from("slideshows")
+        .update({ poster_id: assignment.poster_id, assigned_date: iso })
+        .eq("id", slideshow.id);
+      return;
+    }
+    date.setDate(date.getDate() + 1);
+  }
+}
+
+/**
+ * Filet de sécurité : si un poster n'a rien pour aujourd'hui sur un compte
+ * assigné, on lui redonne un slideshow déjà validé plutôt que de le laisser
+ * sans rien à publier.
+ */
+async function backfill(supabase: Supabase): Promise<number> {
+  const today = todayIso();
+  let count = 0;
+
+  const { data: assignments } = await supabase
+    .from("assignments")
+    .select("poster_id, tiktok_account_id");
+
+  for (const assignment of assignments ?? []) {
+    const { data: todays } = await supabase
+      .from("slideshows")
+      .select("id")
+      .eq("poster_id", assignment.poster_id)
+      .eq("tiktok_account_id", assignment.tiktok_account_id)
+      .eq("assigned_date", today)
+      .limit(1);
+
+    if (todays && todays.length > 0) continue;
+
+    const { data: reusable } = await supabase
+      .from("slideshows")
+      .select("id")
+      .eq("tiktok_account_id", assignment.tiktok_account_id)
+      .eq("auto_pipeline_status", "done")
+      .is("posted_at", null)
+      .is("assigned_date", null)
+      .order("created_at")
+      .limit(1);
+
+    if (!reusable || reusable.length === 0) continue;
+
+    await supabase
+      .from("slideshows")
+      .update({ poster_id: assignment.poster_id, assigned_date: today })
+      .eq("id", reusable[0].id);
+
+    count += 1;
+  }
+
+  return count;
+}

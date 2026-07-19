@@ -1,0 +1,106 @@
+import * as React from "react";
+import { useTranslation } from "react-i18next";
+import { LogOut, Menu } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/features/auth/AuthContext";
+import { signOut } from "@/features/auth/api";
+import { SUPPORTED_LANGUAGES } from "@/locales";
+import { MobileDrawer, Sidebar, type NavItem } from "./Sidebar";
+
+function initials(name: string | null | undefined) {
+  if (!name) return "?";
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function UserBlock() {
+  const { profile } = useAuth();
+  return (
+    <div className="flex items-center gap-2.5 px-2 py-1">
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-active/25 text-xs font-semibold text-white">
+        {initials(profile?.display_name)}
+      </div>
+      <span className="min-w-0 flex-1 truncate text-sm text-sidebar-foreground">
+        {profile?.display_name ?? "—"}
+      </span>
+    </div>
+  );
+}
+
+export function AppShell({
+  navLabel,
+  navItems,
+  children,
+}: {
+  navLabel: string;
+  navItems: NavItem[];
+  children: React.ReactNode;
+}) {
+  const { t, i18n } = useTranslation();
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+
+  const footer = <UserBlock />;
+
+  return (
+    <div className="flex min-h-screen bg-background">
+      <Sidebar title={t("app.name")} items={navItems} footer={footer} />
+      <MobileDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title={t("app.name")}
+        items={navItems}
+        footer={footer}
+      />
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur">
+          <div className="flex h-14 items-center justify-between gap-3 px-4 lg:px-8">
+            <div className="flex min-w-0 items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="lg:hidden"
+                onClick={() => setDrawerOpen(true)}
+                aria-label="Ouvrir le menu"
+              >
+                <Menu />
+              </Button>
+              <span className="truncate text-sm font-medium text-muted-foreground">
+                {navLabel}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {SUPPORTED_LANGUAGES.length > 1 && (
+                <select
+                  aria-label="langue"
+                  className="h-8 rounded-md border border-input bg-card px-2 text-sm"
+                  value={i18n.resolvedLanguage}
+                  onChange={(e) => i18n.changeLanguage(e.target.value)}
+                >
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <option key={lang} value={lang}>
+                      {lang.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <Button variant="ghost" size="sm" onClick={() => signOut()}>
+                <LogOut />
+                <span className="hidden sm:inline">{t("auth.logout")}</span>
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 animate-fade-in px-4 py-6 lg:px-8 lg:py-8">
+          <div className="mx-auto w-full max-w-5xl">{children}</div>
+        </main>
+      </div>
+    </div>
+  );
+}
