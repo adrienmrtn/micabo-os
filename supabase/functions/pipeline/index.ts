@@ -1,7 +1,8 @@
 import {
   cleanImage,
   extractAndTranslate,
-  generateSophiaText,
+  integrateSophia,
+  scoreRelevance,
   verifyClean,
 } from "../_shared/gemini.ts";
 import { assertAuthorised, json, serviceClient, todayIso } from "../_shared/supabase.ts";
@@ -20,6 +21,13 @@ const MAX_CLEAN_ATTEMPTS = 3;
  * le cron reprendre là où il s'est arrêté à la minute suivante.
  */
 const FRAMES_PER_TICK = 2;
+
+/**
+ * En dessous, le slideshow part en 'rejected' : une pub Sophia glissée dans un
+ * contenu hors sujet se verrait. Seuil volontairement bas au démarrage, à
+ * remonter une fois qu'on aura vu ce que la notation donne en vrai.
+ */
+const RELEVANCE_THRESHOLD = 50;
 
 Deno.serve(async (request) => {
   const denied = await assertAuthorised(request);
@@ -77,6 +85,38 @@ async function advanceSlideshow(supabase: Supabase, slideshow: any): Promise<str
     if (!frames || frames.length === 0) throw new Error("Slideshow sans slide");
 
     const context = slideshow.title ?? "";
+
+    // 0 — pertinence, avant toute dépense de nettoyage ou de traduction.
+    //
+    // À ce stade rien n'est encore traduit : on note sur la légende du post,
+    // seul signal disponible. Un slideshow recalé reste en base, visible dans
+    // l'admin, rattrapable à la main.
+    if (slideshow.relevance_score === null) {
+      await setStep(supabase, slideshow.id, "scoring");
+      const { score, reason } = await scoreRelevance({
+        caption: context,
+        hookText: "",
+      });
+
+      if (score < RELEVANCE_THRESHOLD) {
+        await supabase
+          .from("slideshows")
+          .update({
+            relevance_score: score,
+            relevance_reason: reason,
+            auto_pipeline_status: "rejected",
+            auto_pipeline_step: null,
+          })
+          .eq("id", slideshow.id);
+        return "rejected";
+      }
+
+      await supabase
+        .from("slideshows")
+        .update({ relevance_score: score, relevance_reason: reason })
+        .eq("id", slideshow.id);
+      return "scoring";
+    }
 
     // 1 — nettoyage des slides restantes, par petits lots.
     const toClean = frames.filter(
@@ -272,6 +312,12 @@ async function handleCleanFailure(
     .eq("id", replacement.id);
 }
 
+/**
+ * Remplace l'un des conseils du slideshow par une version où Sophia est la
+ * réponse. Le modèle voit toutes les slides pour choisir la plus substituable
+ * et calquer le format des autres ; le texte d'origine est conservé dans
+ * sophia_variants pour l'affichage admin et le retour arrière.
+ */
 async function generateSophia(supabase: Supabase, slideshowId: string, context: string) {
   const { data: existing } = await supabase
     .from("sophia_variants")
@@ -297,25 +343,38 @@ async function generateSophia(supabase: Supabase, slideshowId: string, context: 
     .from("slideshow_frames")
     .select("id, position, translated_text")
     .eq("slideshow_id", slideshowId)
-    .order("position", { ascending: false })
-    .limit(1);
+    .order("position");
 
-  const target = frames?.[0];
-  if (!target) return;
+  if (!frames || frames.length < 2) return;
 
-  const text = await generateSophiaText({
+  const choice = await integrateSophia({
     masterPrompt: prompt?.content ?? "",
     corrections: corrections ?? [],
-    slideText: target.translated_text ?? "",
-    slideshowContext: context,
+    slides: frames.map((f) => ({
+      position: f.position,
+      text: f.translated_text ?? "",
+    })),
+    caption: context,
   });
+
+  if (!choice) return;
+
+  const target = frames.find((f) => f.position === choice.position);
+  if (!target) return;
 
   await supabase.from("sophia_variants").insert({
     slideshow_id: slideshowId,
     frame_id: target.id,
-    text,
+    text: choice.text,
+    original_text: target.translated_text,
     chosen: true,
   });
+
+  // Le poster lit slideshow_frames : c'est donc là que le texte doit atterrir.
+  await supabase
+    .from("slideshow_frames")
+    .update({ translated_text: choice.text, is_sophia_slide: true })
+    .eq("id", target.id);
 }
 
 /**

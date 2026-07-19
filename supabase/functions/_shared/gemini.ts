@@ -117,12 +117,19 @@ export async function extractAndTranslate(
   const prompt = `Tu analyses une slide d'un slideshow TikTok.
 
 1. Transcris exactement le texte visible sur l'image.
-2. Traduis-le en français.
+2. Traduis-le en français, pour être lu sur TikTok.
 
 Règles de traduction impératives :
 - Tutoiement systématique ("tu"), jamais "vous".
+- Écris comme un humain parle, pas comme un site de marketing.
+- Phrases courtes. On lit au pouce, en une seconde.
+- INTERDIT : le tiret long (—) et le tiret demi-cadratin (–). Utilise une
+  virgule, un point ou deux-points. Ces tirets trahissent un texte d'IA.
+- INTERDIT : "plonge dans", "libère ton potentiel", "révolutionne",
+  "incontournable", "game changer", "boostе", "transforme ta vie", et tout
+  autre mot creux de ce registre.
+- Pas de point d'exclamation en rafale, pas d'emoji ajouté.
 - Voix cohérente avec le reste du slideshow.
-- Tournures simples et naturelles, pas de jargon.
 - Ne mentionne jamais une autre application : reformule en conseil générique.
 - Conserve les URLs et les sources citées telles quelles.
 
@@ -146,13 +153,61 @@ Réponds uniquement en JSON, sans bloc de code :
   }
 }
 
-/** Génère un texte pub Sophia à insérer sur une slide. */
-export async function generateSophiaText(input: {
+/**
+ * Note la pertinence d'un slideshow pour une pub Sophia (app de culture
+ * générale). Évite de payer nettoyage et traduction sur un contenu inutilisable.
+ */
+export async function scoreRelevance(input: {
+  caption: string;
+  hookText: string;
+}): Promise<{ score: number; reason: string }> {
+  const prompt = `Sophia est une application de culture générale : elle aide à
+apprendre, à enrichir ses connaissances et à devenir plus cultivé.
+
+Voici un slideshow TikTok candidat pour une publicité Sophia.
+
+Accroche : ${input.hookText || "(inconnue)"}
+Légende : ${input.caption || "(aucune)"}
+
+Note de 0 à 100 sa pertinence pour y glisser naturellement un conseil menant à
+Sophia.
+
+Notes hautes : savoir, culture, apprentissage, éloquence, conversation,
+curiosité, lecture, mémoire, esprit critique ("devenir exceptionnellement
+cultivé", "être intéressant en soirée", "paraître plus intelligent").
+
+Notes basses : fitness, beauté, séduction, argent, productivité pure, ou tout
+sujet où parler d'une app de culture générale sonnerait plaqué.
+
+Réponds uniquement en JSON, sans bloc de code :
+{"score": 0-100, "reason": "une phrase"}`;
+
+  const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }]);
+  const raw = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
+
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      score: Number(parsed.score) || 0,
+      reason: String(parsed.reason ?? ""),
+    };
+  } catch {
+    return { score: 0, reason: raw.slice(0, 200) };
+  }
+}
+
+/**
+ * Intègre Sophia dans le slideshow en REMPLAÇANT l'un des conseils existants,
+ * pas en ajoutant une slide. Le modèle choisit lui-même le conseil le plus
+ * substituable et le réécrit au même format, même longueur, même ton — la
+ * couture ne doit pas se voir.
+ */
+export async function integrateSophia(input: {
   masterPrompt: string;
   corrections: Array<{ original_text: string | null; corrected_text: string }>;
-  slideText: string;
-  slideshowContext: string;
-}): Promise<string> {
+  slides: Array<{ position: number; text: string }>;
+  caption: string;
+}): Promise<{ position: number; text: string } | null> {
   const examples = input.corrections
     .slice(0, 40)
     .map((c) =>
@@ -162,16 +217,52 @@ export async function generateSophiaText(input: {
     )
     .join("\n");
 
+  const slideList = input.slides
+    .map((s) => `${s.position}. ${s.text || "(vide)"}`)
+    .join("\n");
+
   const prompt = `${input.masterPrompt}
 
-${examples ? `Corrections passées à respecter :\n${examples}\n` : ""}
-Contexte du slideshow : ${input.slideshowContext || "(aucun)"}
-Texte de la slide cible : ${input.slideText || "(vide)"}
+Voici un slideshow TikTok complet. La slide 1 est l'accroche, les suivantes
+sont des conseils.
 
-Réponds uniquement par le texte à insérer, sans guillemets ni commentaire.`;
+${slideList}
+
+Légende : ${input.caption || "(aucune)"}
+${examples ? `\nCorrections passées à respecter :\n${examples}\n` : ""}
+Ta mission : choisir UN conseil (jamais l'accroche, jamais la slide 1) et le
+réécrire pour que Sophia en soit la réponse.
+
+Impératifs :
+- Choisis le conseil où Sophia s'insère le plus naturellement au vu de l'accroche.
+- Le texte réécrit doit avoir la MÊME longueur, le MÊME format et le MÊME ton
+  que les autres slides. Un lecteur ne doit pas pouvoir deviner laquelle a changé.
+- Ça reste un conseil, pas une publicité. Sophia est la façon d'appliquer le
+  conseil, pas le sujet de la phrase.
+- Tutoiement.
+- INTERDIT : le tiret long (—) et le tiret demi-cadratin (–).
+- INTERDIT : le jargon marketing ("libère ton potentiel", "incontournable",
+  "révolutionne", "game changer").
+- Pas de superlatif sur l'app, pas de "télécharge", pas d'appel à l'action.
+
+Réponds uniquement en JSON, sans bloc de code :
+{"position": <numéro de la slide remplacée>, "text": "<le nouveau texte>"}`;
 
   const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }]);
-  return textOf(parts);
+  const raw = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
+
+  try {
+    const parsed = JSON.parse(raw);
+    const position = Number(parsed.position);
+    const text = String(parsed.text ?? "").trim();
+
+    // L'accroche porte la promesse du slideshow : la remplacer casserait tout.
+    if (!position || position < 2 || !text) return null;
+
+    return { position, text };
+  } catch {
+    return null;
+  }
 }
 
 /**

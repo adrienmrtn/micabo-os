@@ -24,3 +24,5 @@ supabase/.temp
 
 # Assets inlinés, régénérés par npm run build:site
 supabase/functions/site/assets.ts
+.vercel
+.env*
