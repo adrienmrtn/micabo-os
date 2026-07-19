@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:site": "DEPLOY_TARGET=supabase VITE_ROUTER=hash vite build && node scripts/bundle-site.mjs",
+    "deploy:site": "npm run build:site && supabase functions deploy site --no-verify-jwt"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.1",

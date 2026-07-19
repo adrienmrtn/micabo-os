@@ -21,3 +21,6 @@ supabase/.temp
 
 # Réglages locaux Claude Code
 .claude/settings.local.json
+
+# Assets inlinés, régénérés par npm run build:site
+supabase/functions/site/assets.ts
