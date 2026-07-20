@@ -12,6 +12,8 @@ export interface Slideshow {
   auto_pipeline_status: PipelineStatus;
   auto_pipeline_error: string | null;
   auto_pipeline_step: string | null;
+  relevance_score: number | null;
+  relevance_reason: string | null;
   assigned_date: string | null;
   posted_at: string | null;
   posted_url: string | null;
@@ -33,6 +35,8 @@ export interface SlideshowFrame {
   translated_text: string | null;
   clean_status: PipelineStatus;
   clean_attempts: number;
+  is_sophia_slide: boolean;
+  image_source: "original" | "cleaned" | "library";
 }
 
 /** Vue poster : jamais de tiktok_account_id, jamais de source_url. */

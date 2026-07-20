@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,12 +24,16 @@ function FrameRow({
 
   const isDirty = text !== (frame.translated_text ?? "");
 
+  // On montre l'image nettoyée si elle existe, sinon l'originale : une slide en
+  // attente de nettoyage ne doit pas apparaître comme une case grise vide.
+  const imageUrl = frame.cleaned_url ?? frame.original_url;
+
   return (
     <div className="flex flex-wrap gap-4 rounded-lg border p-3 sm:flex-nowrap">
       <div className="shrink-0">
-        {frame.cleaned_url ? (
+        {imageUrl ? (
           <img
-            src={frame.cleaned_url}
+            src={imageUrl}
             alt={`Slide ${frame.position}`}
             className="h-32 w-24 rounded-md border object-cover"
           />
@@ -41,8 +46,12 @@ function FrameRow({
 
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">
+          <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
             {t("editor.slide", { position: frame.position })}
+            {frame.is_sophia_slide && <Badge variant="default">Sophia</Badge>}
+            {frame.clean_status !== "done" && (
+              <Badge variant="warning">{t("editor.notCleaned")}</Badge>
+            )}
           </span>
           <Button
             size="sm"

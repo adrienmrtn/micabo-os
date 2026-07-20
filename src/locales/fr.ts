@@ -166,6 +166,11 @@ export const fr = {
       textPlaceholder: "Le texte à copier sur TikTok…",
       add: "Ajouter",
       confirmDeleteFrame: "Supprimer cette slide ?",
+      notCleaned: "pas encore nettoyée",
+    },
+    detail: {
+      relevance: "Pertinence {{score}}/100",
+      processing: "Traitement en cours ({{step}})… cette page se met à jour toute seule.",
     },
     setup: {
       title: "Crée ton compte TikTok",
