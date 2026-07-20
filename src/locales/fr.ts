@@ -216,11 +216,19 @@ export const fr = {
       open: "Ouvrir",
     },
     prompts: {
-      title: "Prompt Sophia",
-      subtitle: "Le prompt utilisé pour générer les textes pub.",
+      relevanceTitle: "Prompt — Pertinence",
+      relevanceDesc:
+        "Décide quels slideshows méritent une pub Sophia. Les recalés ne sont ni nettoyés ni traduits.",
+      masterTitle: "Prompt — Placement de Sophia",
+      masterDesc:
+        "Comment Sophia remplace un conseil existant, sans que la couture se voie.",
+      translateTitle: "Prompt — Traduction",
+      translateDesc:
+        "Le ton des textes traduits : naturel, lisible sur TikTok, sans jargon ni tirets d'IA.",
+      saved: "Enregistré ✓",
       correctionsTitle: "Corrections récentes",
       correctionsSubtitle:
-        "Les 40 dernières corrections sont réinjectées dans le prompt pour améliorer les générations.",
+        "Les 40 dernières corrections sont réinjectées dans le prompt de placement pour l'améliorer.",
       noCorrections: "Aucune correction pour l'instant.",
     },
     common: {

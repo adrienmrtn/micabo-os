@@ -108,9 +108,31 @@ export async function fetchImageAsInline(url: string): Promise<Part> {
  * OCR + traduction en une passe : demander les deux séparément ferait perdre
  * le contexte visuel qui lève la plupart des ambiguïtés de traduction.
  */
+/** Règles de traduction par défaut, surchargeables depuis l'admin (clé
+ *  `translate`). Le format de sortie JSON, lui, reste fixé dans le code pour
+ *  qu'une édition ne casse jamais le parsing. */
+export const DEFAULT_TRANSLATE_PROMPT = `Règles de traduction impératives :
+- Tutoiement systématique ("tu"), jamais "vous".
+- Écris comme un humain parle, pas comme un site de marketing.
+- Phrases courtes. On lit au pouce, en une seconde.
+- INTERDIT : le tiret long (—) et le tiret demi-cadratin (–). Utilise une
+  virgule, un point ou deux-points. Ces tirets trahissent un texte d'IA.
+- INTERDIT : "plonge dans", "libère ton potentiel", "révolutionne",
+  "incontournable", "game changer", "booste", "transforme ta vie", et tout
+  autre mot creux de ce registre.
+- Pas de point d'exclamation en rafale, pas d'emoji ajouté.
+- Voix cohérente avec le reste du slideshow.
+- Aucune mention d'un produit tiers : ni application, ni site, ni logiciel, ni
+  "outil d'IA", ni marque. Réécris le conseil comme une action pure ("entraîne
+  ton élocution à voix haute", pas "utilise une appli pour t'entraîner"). Le
+  seul produit qui a le droit d'exister dans ce slideshow, c'est Sophia, et ce
+  n'est pas ton rôle de l'ajouter ici.
+- Conserve les URLs et les sources citées telles quelles.`;
+
 export async function extractAndTranslate(
   imageUrl: string,
   slideshowContext: string,
+  rules: string = DEFAULT_TRANSLATE_PROMPT,
 ): Promise<{ extracted: string; translated: string }> {
   const image = await fetchImageAsInline(imageUrl);
 
@@ -119,19 +141,7 @@ export async function extractAndTranslate(
 1. Transcris exactement le texte visible sur l'image.
 2. Traduis-le en français, pour être lu sur TikTok.
 
-Règles de traduction impératives :
-- Tutoiement systématique ("tu"), jamais "vous".
-- Écris comme un humain parle, pas comme un site de marketing.
-- Phrases courtes. On lit au pouce, en une seconde.
-- INTERDIT : le tiret long (—) et le tiret demi-cadratin (–). Utilise une
-  virgule, un point ou deux-points. Ces tirets trahissent un texte d'IA.
-- INTERDIT : "plonge dans", "libère ton potentiel", "révolutionne",
-  "incontournable", "game changer", "boostе", "transforme ta vie", et tout
-  autre mot creux de ce registre.
-- Pas de point d'exclamation en rafale, pas d'emoji ajouté.
-- Voix cohérente avec le reste du slideshow.
-- Ne mentionne jamais une autre application : reformule en conseil générique.
-- Conserve les URLs et les sources citées telles quelles.
+${rules}
 
 Contexte du slideshow : ${slideshowContext || "(aucun)"}
 
@@ -157,27 +167,30 @@ Réponds uniquement en JSON, sans bloc de code :
  * Note la pertinence d'un slideshow pour une pub Sophia (app de culture
  * générale). Évite de payer nettoyage et traduction sur un contenu inutilisable.
  */
-export async function scoreRelevance(input: {
-  caption: string;
-  hookText: string;
-}): Promise<{ score: number; reason: string }> {
-  const prompt = `Sophia est une application de culture générale : elle aide à
-apprendre, à enrichir ses connaissances et à devenir plus cultivé.
+export const DEFAULT_RELEVANCE_PROMPT = `Sophia est une application de culture
+générale : elle aide à apprendre, à enrichir ses connaissances et à devenir
+plus cultivé.
 
-Voici un slideshow TikTok candidat pour une publicité Sophia.
-
-Accroche : ${input.hookText || "(inconnue)"}
-Légende : ${input.caption || "(aucune)"}
-
-Note de 0 à 100 sa pertinence pour y glisser naturellement un conseil menant à
-Sophia.
+Note de 0 à 100 la pertinence de ce slideshow pour y glisser naturellement un
+conseil menant à Sophia.
 
 Notes hautes : savoir, culture, apprentissage, éloquence, conversation,
 curiosité, lecture, mémoire, esprit critique ("devenir exceptionnellement
 cultivé", "être intéressant en soirée", "paraître plus intelligent").
 
 Notes basses : fitness, beauté, séduction, argent, productivité pure, ou tout
-sujet où parler d'une app de culture générale sonnerait plaqué.
+sujet où parler d'une app de culture générale sonnerait plaqué.`;
+
+export async function scoreRelevance(input: {
+  caption: string;
+  hookText: string;
+  instructions?: string;
+}): Promise<{ score: number; reason: string }> {
+  const prompt = `${input.instructions ?? DEFAULT_RELEVANCE_PROMPT}
+
+Slideshow candidat :
+Accroche : ${input.hookText || "(inconnue)"}
+Légende : ${input.caption || "(aucune)"}
 
 Réponds uniquement en JSON, sans bloc de code :
 {"score": 0-100, "reason": "une phrase"}`;

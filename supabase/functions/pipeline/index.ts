@@ -1,5 +1,7 @@
 import {
   cleanImage,
+  DEFAULT_RELEVANCE_PROMPT,
+  DEFAULT_TRANSLATE_PROMPT,
   extractAndTranslate,
   integrateSophia,
   scoreRelevance,
@@ -61,6 +63,22 @@ Deno.serve(async (request) => {
   }
 });
 
+const DEFAULT_PROMPTS: Record<string, string> = {
+  translate: DEFAULT_TRANSLATE_PROMPT,
+  relevance: DEFAULT_RELEVANCE_PROMPT,
+};
+
+/** Charge un prompt éditable depuis l'admin, avec repli sur le défaut du code. */
+async function loadPrompt(supabase: Supabase, key: string): Promise<string> {
+  const { data } = await supabase
+    .from("sophia_prompts")
+    .select("content")
+    .eq("key", key)
+    .maybeSingle();
+
+  return data?.content?.trim() || DEFAULT_PROMPTS[key] || "";
+}
+
 async function setStep(supabase: Supabase, id: string, step: string) {
   await supabase
     .from("slideshows")
@@ -96,6 +114,7 @@ async function advanceSlideshow(supabase: Supabase, slideshow: any): Promise<str
       const { score, reason } = await scoreRelevance({
         caption: context,
         hookText: "",
+        instructions: await loadPrompt(supabase, "relevance"),
       });
 
       if (score < RELEVANCE_THRESHOLD) {
@@ -147,10 +166,12 @@ async function advanceSlideshow(supabase: Supabase, slideshow: any): Promise<str
 
     if (toTranslate.length > 0) {
       await setStep(supabase, slideshow.id, "translating");
+      const rules = await loadPrompt(supabase, "translate");
       for (const frame of toTranslate.slice(0, FRAMES_PER_TICK)) {
         const { extracted, translated } = await extractAndTranslate(
           frame.original_url,
           context,
+          rules,
         );
         await supabase
           .from("slideshow_frames")
@@ -160,8 +181,7 @@ async function advanceSlideshow(supabase: Supabase, slideshow: any): Promise<str
       return "translating";
     }
 
-    // 3 — texte pub Sophia sur la dernière slide, là où l'appel à l'action a
-    // le plus de sens dans un slideshow.
+    // 3 — intégration de Sophia : elle remplace un conseil existant.
     await setStep(supabase, slideshow.id, "sophia");
     await generateSophia(supabase, slideshow.id, context);
 
