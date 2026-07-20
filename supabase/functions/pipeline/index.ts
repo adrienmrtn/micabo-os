@@ -37,24 +37,40 @@ Deno.serve(async (request) => {
 
   const supabase = serviceClient();
 
+  // Un slideshowId dans le corps cible ce seul slideshow : c'est ce qui permet
+  // au bouton « Traiter maintenant » de le mener au bout sans toucher aux autres.
+  let onlyId: string | null = null;
   try {
-    // Un slideshow déjà entamé garde la priorité : on le termine avant d'en
-    // ouvrir un nouveau, sinon rien n'aboutit jamais.
-    const { data: candidates } = await supabase
+    const body = await request.json();
+    onlyId = body?.slideshowId ?? null;
+  } catch {
+    // Corps vide : mode file d'attente normal.
+  }
+
+  try {
+    let query = supabase
       .from("slideshows")
       .select("*")
-      .in("auto_pipeline_status", ["running", "pending"])
-      .order("auto_pipeline_status", { ascending: false })
-      .order("created_at")
-      .limit(1);
+      .in("auto_pipeline_status", ["running", "pending"]);
+
+    if (onlyId) {
+      query = query.eq("id", onlyId);
+    } else {
+      // Un slideshow déjà entamé garde la priorité : on le termine avant d'en
+      // ouvrir un nouveau, sinon rien n'aboutit jamais.
+      query = query.order("auto_pipeline_status", { ascending: false }).order("created_at");
+    }
+
+    const { data: candidates } = await query.limit(1);
 
     const slideshow = candidates?.[0];
     if (!slideshow) {
-      return json({ ok: true, idle: true, backfilled: await backfill(supabase) });
+      // En mode ciblé, pas de backfill : un test ne doit rien assigner d'autre.
+      return json({ ok: true, idle: true, backfilled: onlyId ? 0 : await backfill(supabase) });
     }
 
     const step = await advanceSlideshow(supabase, slideshow);
-    const backfilled = await backfill(supabase);
+    const backfilled = onlyId ? 0 : await backfill(supabase);
 
     return json({ ok: true, slideshow: slideshow.id, step, backfilled });
   } catch (error) {

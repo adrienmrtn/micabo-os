@@ -215,6 +215,26 @@ export const fr = {
       toPost: "À poster",
       open: "Ouvrir",
     },
+    test: {
+      title: "Tester un TikTok",
+      subtitle:
+        "Colle un lien de slideshow TikTok : le système le récupère et déroule tout le pipeline devant toi, sans toucher au reste.",
+      url: "Lien du TikTok",
+      account: "Rattacher à un compte (optionnel)",
+      noAccount: "Aucun compte",
+      launch: "Lancer le test",
+      running: "Traitement en cours…",
+      stepScraping: "Récupération du TikTok…",
+      stepScoring: "Évaluation de la pertinence…",
+      stepCleaning: "Nettoyage des visuels…",
+      stepTranslating: "Traduction en français…",
+      stepSophia: "Intégration de Sophia…",
+      stepAssigning: "Finalisation…",
+      done: "Terminé !",
+      seeResult: "Voir le résultat",
+      rejected: "Ce TikTok a été jugé peu pertinent pour une pub Sophia.",
+      noSlideshow: "Aucun slideshow photo trouvé à cette URL.",
+    },
     prompts: {
       relevanceTitle: "Prompt — Pertinence",
       relevanceDesc:

@@ -1,4 +1,4 @@
-import { downloadImage, scrapeProfile } from "../_shared/apify.ts";
+import { downloadImage, scrapePost, scrapeProfile } from "../_shared/apify.ts";
 import { assertAuthorised, json, serviceClient } from "../_shared/supabase.ts";
 
 const POSTS_PER_ACCOUNT = 5;
@@ -19,11 +19,58 @@ Deno.serve(async (request) => {
   // Un accountId dans le corps restreint le scan à ce seul compte : c'est le
   // mode « essai » de l'admin, qui évite de payer un scan complet pour tester.
   let onlyAccountId: string | null = null;
+  let postUrl: string | null = null;
   try {
     const body = await request.json();
     onlyAccountId = body?.accountId ?? null;
+    postUrl = body?.postUrl ?? null;
   } catch {
     // Corps vide ou non-JSON : scan complet.
+  }
+
+  // Mode « tester ce TikTok précis » : un seul post, rattaché au compte choisi
+  // s'il est fourni. Renvoie l'id du slideshow créé pour pouvoir le suivre.
+  if (postUrl) {
+    try {
+      const [post] = await scrapePost(postUrl);
+      if (!post) return json({ ok: false, error: "Aucun slideshow photo trouvé à cette URL" }, 400);
+
+      const { data: existing } = await supabase
+        .from("slideshows")
+        .select("id")
+        .eq("source_url", post.webVideoUrl)
+        .maybeSingle();
+      if (existing) return json({ ok: true, slideshowId: existing.id, reused: true });
+
+      const { data: slideshow, error: insertError } = await supabase
+        .from("slideshows")
+        .insert({
+          tiktok_account_id: onlyAccountId,
+          source_url: post.webVideoUrl,
+          title: post.text.slice(0, 120) || null,
+          audio_url: post.musicUrl,
+          is_auto_generated: true,
+          auto_pipeline_status: "pending",
+        })
+        .select()
+        .single();
+      if (insertError || !slideshow) throw insertError ?? new Error("insert échoué");
+
+      const frames = [];
+      for (const [index, url] of post.imageUrls.entries()) {
+        frames.push({
+          slideshow_id: slideshow.id,
+          position: index + 1,
+          original_url: await storeImage(supabase, slideshow.id, index + 1, url),
+          clean_status: "pending",
+        });
+      }
+      await supabase.from("slideshow_frames").insert(frames);
+
+      return json({ ok: true, slideshowId: slideshow.id, slides: frames.length });
+    } catch (error) {
+      return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 500);
+    }
   }
 
   const { data: run } = await supabase

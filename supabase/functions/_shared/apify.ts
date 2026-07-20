@@ -57,10 +57,7 @@ export async function downloadImage(url: string): Promise<Uint8Array> {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-export async function scrapeProfile(
-  handle: string,
-  resultsPerPage: number,
-): Promise<ScrapedPost[]> {
+async function runActor(input: Record<string, unknown>): Promise<ScrapedPost[]> {
   const token = Deno.env.get("APIFY_TOKEN");
   if (!token) throw new Error("APIFY_TOKEN manquant");
 
@@ -70,12 +67,11 @@ export async function scrapeProfile(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        profiles: [handle],
-        resultsPerPage,
         shouldDownloadSlideshowImages: true,
         shouldDownloadVideos: false,
         shouldDownloadCovers: false,
         proxyCountryCode: "None",
+        ...input,
       }),
     },
   );
@@ -97,4 +93,13 @@ export async function scrapeProfile(
     }))
     // Seuls les posts photo nous intéressent : une vidéo n'a pas de slides.
     .filter((post) => post.postId && post.imageUrls.length > 0);
+}
+
+export function scrapeProfile(handle: string, resultsPerPage: number) {
+  return runActor({ profiles: [handle], resultsPerPage });
+}
+
+/** Scrape un seul post par son URL, pour tester le pipeline sur un TikTok précis. */
+export function scrapePost(url: string) {
+  return runActor({ postURLs: [url], resultsPerPage: 1 });
 }
