@@ -35,7 +35,7 @@ export const fr = {
       poster: "Poster",
       slideshows: "Slideshows",
       accounts: "Comptes",
-      users: "Utilisateurs",
+      users: "Créateurs",
       prompts: "Prompts",
       today: "Aujourd'hui",
       history: "Historique",
@@ -92,6 +92,22 @@ export const fr = {
       empty: "Aucune assignation pour l'instant.",
       noPosters: "Aucun poster inscrit pour l'instant.",
       limitReached: "Ce poster a atteint la limite de {{max}} comptes.",
+    },
+    creators: {
+      title: "Créer un accès créateur",
+      subtitle:
+        "Crée le compte d'un poster avec son email et son mot de passe, puis transmets-lui ses identifiants.",
+      email: "Email",
+      displayName: "Nom d'affichage",
+      password: "Mot de passe",
+      regenerate: "Regénérer",
+      passwordHint: "8 caractères minimum. Le créateur pourra le changer ensuite.",
+      create: "Créer le compte",
+      done: "Compte créé ✓",
+      transmit: "Note ces identifiants : le mot de passe ne sera plus affiché ensuite.",
+      confirmDelete:
+        "Supprimer définitivement ce compte et toutes ses données ? Action irréversible.",
+      delete: "Supprimer le compte",
     },
     users: {
       title: "Utilisateurs & rôles",

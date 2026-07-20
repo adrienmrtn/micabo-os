@@ -129,37 +129,64 @@ export const DEFAULT_TRANSLATE_PROMPT = `Règles de traduction impératives :
   n'est pas ton rôle de l'ajouter ici.
 - Conserve les URLs et les sources citées telles quelles.`;
 
-export async function extractAndTranslate(
-  imageUrl: string,
-  slideshowContext: string,
-  rules: string = DEFAULT_TRANSLATE_PROMPT,
-): Promise<{ extracted: string; translated: string }> {
+/**
+ * OCR seul, slide par slide : transcrit le texte incrusté en langue d'origine.
+ * La traduction se fait ensuite sur tout le deck d'un coup (translateSlideshow),
+ * seule façon de tenir une persona et un genre cohérents d'une slide à l'autre.
+ */
+export async function ocrFrame(imageUrl: string): Promise<string> {
   const image = await fetchImageAsInline(imageUrl);
 
-  const prompt = `Tu analyses une slide d'un slideshow TikTok.
+  const prompt = `Transcris exactement le texte incrusté sur cette slide TikTok,
+en langue d'origine, sans le corriger ni le traduire.
 
-1. Transcris exactement le texte visible sur l'image.
-2. Traduis-le en français, pour être lu sur TikTok.
+Ignore : logos, marques dans le décor, texte sur les vêtements, barre de statut
+du téléphone. Garde le nom d'une app/d'un podcast si c'est le sujet de la slide.
 
-${rules}
-
-Contexte du slideshow : ${slideshowContext || "(aucun)"}
-
-Réponds uniquement en JSON, sans bloc de code :
-{"extracted": "...", "translated": "..."}`;
+Si la slide ne contient aucun texte incrusté, réponds exactement : (aucun texte)`;
 
   const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }, image]);
+  const text = textOf(parts).trim();
+  return text === "(aucun texte)" ? "" : text;
+}
+
+/**
+ * Traduit tout le slideshow en une passe. Le modèle voit toutes les slides à la
+ * fois, ce que le prompt de traduction exige pour fixer le genre et la persona
+ * une bonne fois. Renvoie une traduction par position.
+ */
+export async function translateSlideshow(input: {
+  slides: Array<{ position: number; original: string }>;
+  sourceTitle: string;
+  rules?: string;
+}): Promise<Array<{ position: number; translated: string }>> {
+  const deck = input.slides
+    .map((s) => `Slide ${s.position} : "${s.original || "(aucun texte)"}"`)
+    .join("\n");
+
+  const prompt = `${input.rules ?? DEFAULT_TRANSLATE_PROMPT}
+
+Titre de la vidéo source : ${input.sourceTitle || "(aucun)"}
+
+Voici toutes les slides du slideshow, dans l'ordre (slide 1 = couverture) :
+${deck}
+
+Traduis chaque slide en français. Une slide sans texte reste vide.
+
+Réponds uniquement en JSON, sans bloc de code, un objet par slide :
+{"slides":[{"position":1,"translated":"..."}, ...]}`;
+
+  const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }]);
   const raw = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
 
   try {
     const parsed = JSON.parse(raw);
-    return {
-      extracted: String(parsed.extracted ?? ""),
-      translated: String(parsed.translated ?? ""),
-    };
+    return (parsed.slides ?? []).map((s: { position: number; translated: string }) => ({
+      position: Number(s.position),
+      translated: String(s.translated ?? ""),
+    }));
   } catch {
-    // Le modèle a répondu en texte libre : on garde au moins la traduction.
-    return { extracted: "", translated: raw };
+    return [];
   }
 }
 
@@ -215,12 +242,24 @@ Réponds uniquement en JSON, sans bloc de code :
  * substituable et le réécrit au même format, même longueur, même ton — la
  * couture ne doit pas se voir.
  */
+export interface SophiaPlacement {
+  chosenPosition: number;
+  mode: string;
+  variants: string[];
+}
+
+/**
+ * Placement de Sophia selon le prompt maître de l'admin : détecte le mode
+ * grammatical du deck (instructif / confession), choisit la slide à remplacer,
+ * et produit 3 variantes dans ce mode. Le pipeline en retient une, les deux
+ * autres restent disponibles pour l'admin.
+ */
 export async function integrateSophia(input: {
   masterPrompt: string;
   corrections: Array<{ original_text: string | null; corrected_text: string }>;
   slides: Array<{ position: number; text: string }>;
   caption: string;
-}): Promise<{ position: number; text: string } | null> {
+}): Promise<SophiaPlacement | null> {
   const examples = input.corrections
     .slice(0, 40)
     .map((c) =>
@@ -231,48 +270,38 @@ export async function integrateSophia(input: {
     .join("\n");
 
   const slideList = input.slides
-    .map((s) => `${s.position}. ${s.text || "(vide)"}`)
+    .map((s) => `Slide ${s.position} : "${s.text || "(vide)"}"`)
     .join("\n");
 
+  // Le prompt maître (édité par l'admin) porte toute la doctrine ; le code n'y
+  // ajoute que les données du deck et un format de sortie JSON stable.
   const prompt = `${input.masterPrompt}
 
-Voici un slideshow TikTok complet. La slide 1 est l'accroche, les suivantes
-sont des conseils.
-
+--- DONNÉES ---
+Légende de la vidéo : ${input.caption || "(aucune)"}
+Slides du slideshow (slide 1 = couverture) :
 ${slideList}
-
-Légende : ${input.caption || "(aucune)"}
 ${examples ? `\nCorrections passées à respecter :\n${examples}\n` : ""}
-Ta mission : choisir UN conseil (jamais l'accroche, jamais la slide 1) et le
-réécrire pour que Sophia en soit la réponse.
+--- SORTIE ---
+Ne remplace jamais la slide 1 (couverture). Produis 3 variantes, toutes dans le
+même mode grammatical que le reste du deck.
 
-Impératifs :
-- Choisis le conseil où Sophia s'insère le plus naturellement au vu de l'accroche.
-- Le texte réécrit doit avoir la MÊME longueur, le MÊME format et le MÊME ton
-  que les autres slides. Un lecteur ne doit pas pouvoir deviner laquelle a changé.
-- Ça reste un conseil, pas une publicité. Sophia est la façon d'appliquer le
-  conseil, pas le sujet de la phrase.
-- Tutoiement.
-- INTERDIT : le tiret long (—) et le tiret demi-cadratin (–).
-- INTERDIT : le jargon marketing ("libère ton potentiel", "incontournable",
-  "révolutionne", "game changer").
-- Pas de superlatif sur l'app, pas de "télécharge", pas d'appel à l'action.
-
-Réponds uniquement en JSON, sans bloc de code :
-{"position": <numéro de la slide remplacée>, "text": "<le nouveau texte>"}`;
+Réponds UNIQUEMENT en JSON, sans bloc de code ni commentaire :
+{"chosen_position": <numéro de slide>, "mode": "instructif|confession", "variants": ["A","B","C"]}`;
 
   const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }]);
   const raw = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
 
   try {
     const parsed = JSON.parse(raw);
-    const position = Number(parsed.position);
-    const text = String(parsed.text ?? "").trim();
+    const chosenPosition = Number(parsed.chosen_position);
+    const variants = (parsed.variants ?? [])
+      .map((v: unknown) => String(v ?? "").trim())
+      .filter(Boolean);
 
-    // L'accroche porte la promesse du slideshow : la remplacer casserait tout.
-    if (!position || position < 2 || !text) return null;
+    if (!chosenPosition || chosenPosition < 2 || variants.length === 0) return null;
 
-    return { position, text };
+    return { chosenPosition, mode: String(parsed.mode ?? ""), variants };
   } catch {
     return null;
   }

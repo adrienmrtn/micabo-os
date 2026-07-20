@@ -1,10 +1,12 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/features/auth/AuthContext";
-import { useSetUserActive, useSetUserRole, useUsers } from "./hooks";
+import { accountKeys, useSetUserActive, useSetUserRole, useUsers } from "./hooks";
 
 const selectClass =
   "h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
@@ -12,9 +14,25 @@ const selectClass =
 export function UsersPanel() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { data: users, isPending, isError, error } = useUsers();
   const setRole = useSetUserRole();
   const setActive = useSetUserActive();
+
+  const deleteUser = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error: fnError } = await supabase.functions.invoke("manage-users", {
+        body: { action: "delete", userId },
+      });
+      if (fnError) throw fnError;
+      const result = data as { error?: string };
+      if (result?.error) throw new Error(result.error);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: accountKeys.users });
+      queryClient.invalidateQueries({ queryKey: accountKeys.posters });
+    },
+  });
 
   return (
     <Card>
@@ -78,6 +96,21 @@ export function UsersPanel() {
                 >
                   {managedUser.is_active ? t("users.disable") : t("users.enable")}
                 </Button>
+
+                {!isSelf && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                    disabled={deleteUser.isPending}
+                    onClick={() => {
+                      if (window.confirm(t("creators.confirmDelete")))
+                        deleteUser.mutate(managedUser.id);
+                    }}
+                  >
+                    {t("common.delete")}
+                  </Button>
+                )}
               </div>
             </div>
           );

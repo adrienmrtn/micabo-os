@@ -2,9 +2,10 @@ import {
   cleanImage,
   DEFAULT_RELEVANCE_PROMPT,
   DEFAULT_TRANSLATE_PROMPT,
-  extractAndTranslate,
   integrateSophia,
+  ocrFrame,
   scoreRelevance,
+  translateSlideshow,
   verifyClean,
 } from "../_shared/gemini.ts";
 import { assertAuthorised, json, serviceClient, todayIso } from "../_shared/supabase.ts";
@@ -169,35 +170,48 @@ async function advanceSlideshow(supabase: Supabase, slideshow: any): Promise<str
       return "cleaning";
     }
 
-    // 2 — OCR + traduction.
-    //
-    // Toujours sur l'image d'ORIGINALE : le nettoyage vient d'en retirer le
-    // texte, lire l'image nettoyée ne rendrait donc rien.
-    //
-    // Le filtre teste `=== null` et non la falsy-ness : une traduction vide est
-    // une tentative aboutie, la re-sélectionner bouclerait indéfiniment.
-    const toTranslate = frames.filter(
-      (frame) => frame.translated_text === null && frame.original_url,
+    // 2 — OCR, slide par slide, sur l'image d'ORIGINE (le nettoyage vient d'en
+    // retirer le texte). `=== null` et non falsy : un OCR vide est une tentative
+    // aboutie, le re-tester bouclerait à l'infini.
+    const toOcr = frames.filter(
+      (frame) => frame.extracted_text === null && frame.original_url,
     );
 
-    if (toTranslate.length > 0) {
-      await setStep(supabase, slideshow.id, "translating");
-      const rules = await loadPrompt(supabase, "translate");
-      for (const frame of toTranslate.slice(0, FRAMES_PER_TICK)) {
-        const { extracted, translated } = await extractAndTranslate(
-          frame.original_url,
-          context,
-          rules,
-        );
+    if (toOcr.length > 0) {
+      await setStep(supabase, slideshow.id, "ocr");
+      for (const frame of toOcr.slice(0, FRAMES_PER_TICK)) {
+        const extracted = await ocrFrame(frame.original_url);
         await supabase
           .from("slideshow_frames")
-          .update({ extracted_text: extracted, translated_text: translated })
+          .update({ extracted_text: extracted })
+          .eq("id", frame.id);
+      }
+      return "ocr";
+    }
+
+    // 3 — traduction de TOUT le deck en une passe : seule façon de tenir la
+    // persona et le genre d'une slide à l'autre, comme l'exige le prompt.
+    const needsTranslation = frames.some((frame) => frame.translated_text === null);
+    if (needsTranslation) {
+      await setStep(supabase, slideshow.id, "translating");
+      const translations = await translateSlideshow({
+        slides: frames.map((f) => ({ position: f.position, original: f.extracted_text ?? "" })),
+        sourceTitle: context,
+        rules: await loadPrompt(supabase, "translate"),
+      });
+
+      const byPosition = new Map(translations.map((t) => [t.position, t.translated]));
+      for (const frame of frames) {
+        await supabase
+          .from("slideshow_frames")
+          .update({ translated_text: byPosition.get(frame.position) ?? "" })
           .eq("id", frame.id);
       }
       return "translating";
     }
 
-    // 3 — intégration de Sophia : elle remplace un conseil existant.
+    // 4 — placement de Sophia : remplace un conseil par une version où Sophia
+    // est la réponse, en 3 variantes.
     await setStep(supabase, slideshow.id, "sophia");
     await generateSophia(supabase, slideshow.id, context);
 
@@ -383,7 +397,7 @@ async function generateSophia(supabase: Supabase, slideshowId: string, context: 
 
   if (!frames || frames.length < 2) return;
 
-  const choice = await integrateSophia({
+  const placement = await integrateSophia({
     masterPrompt: prompt?.content ?? "",
     corrections: corrections ?? [],
     slides: frames.map((f) => ({
@@ -393,23 +407,26 @@ async function generateSophia(supabase: Supabase, slideshowId: string, context: 
     caption: context,
   });
 
-  if (!choice) return;
+  if (!placement) return;
 
-  const target = frames.find((f) => f.position === choice.position);
+  const target = frames.find((f) => f.position === placement.chosenPosition);
   if (!target) return;
 
-  await supabase.from("sophia_variants").insert({
+  // Les 3 variantes sont conservées ; la première (A) est retenue par défaut,
+  // l'admin pourra basculer sur B ou C depuis l'éditeur.
+  const rows = placement.variants.map((text, index) => ({
     slideshow_id: slideshowId,
     frame_id: target.id,
-    text: choice.text,
+    text,
     original_text: target.translated_text,
-    chosen: true,
-  });
+    chosen: index === 0,
+  }));
+  await supabase.from("sophia_variants").insert(rows);
 
-  // Le poster lit slideshow_frames : c'est donc là que le texte doit atterrir.
+  // Le poster lit slideshow_frames : le texte retenu atterrit donc là.
   await supabase
     .from("slideshow_frames")
-    .update({ translated_text: choice.text, is_sophia_slide: true })
+    .update({ translated_text: placement.variants[0], is_sophia_slide: true })
     .eq("id", target.id);
 }
 
