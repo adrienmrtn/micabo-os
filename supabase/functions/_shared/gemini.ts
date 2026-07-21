@@ -3,11 +3,18 @@ import { downloadImage } from "./apify.ts";
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 /**
- * Modèles utilisés, par ordre de repli. gemini-2.5-pro est volontairement
- * absent : il apparaît dans la liste des modèles mais renvoie 404 « no longer
- * available to new users » sur les clés récentes.
+ * Modèles texte, par ordre de repli.
+ *
+ * gemini-2.5-pro et gemini-2.5-flash sont volontairement absents : ils
+ * apparaissent dans la liste des modèles mais renvoient 404 « no longer
+ * available to new users ». Google en retire régulièrement : la chaîne compte
+ * donc plusieurs familles, et un 503 passager sur l'une bascule sur la suivante.
  */
-export const TEXT_MODELS = ["gemini-2.5-flash", "gemini-3.5-flash"];
+export const TEXT_MODELS = [
+  "gemini-3.5-flash",
+  "gemini-2.0-flash",
+  "gemini-3.1-flash-lite",
+];
 
 /**
  * Le refus de retouche est inconstant : le même modèle accepte une image et en

@@ -89,7 +89,12 @@ async function completerJournee(
   reglages: Reglages,
 ): Promise<number> {
   const enLancement = estEnSemaineUn(compte.demarre_le, jour, reglages.semaine1);
-  const quota = enLancement ? reglages.semaine1.posts_par_jour : reglages.postsParJour;
+
+  // Les réglages du compte l'emportent sur les réglages globaux : c'est ce qui
+  // permet de dédier un compte au seul recopiage sans toucher aux autres.
+  const repartition = compte.repartition ?? reglages.repartition;
+  const parJour = compte.posts_par_jour ?? reglages.postsParJour;
+  const quota = enLancement ? reglages.semaine1.posts_par_jour : parJour;
 
   const { data: existants } = await supabase
     .from("posts")
@@ -106,7 +111,7 @@ async function completerJournee(
     // on force le recyclage de structure, servi par les visuels du compte.
     const type = enLancement && reglages.semaine1.tout_recycle
       ? "recycle"
-      : tirerType(reglages.repartition);
+      : tirerType(repartition);
 
     // On ne crée que la coquille : la fabrication (traduction, placement) est
     // faite ensuite par le drain `composition`, étape par étape. Le post ne

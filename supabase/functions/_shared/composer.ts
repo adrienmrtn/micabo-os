@@ -106,8 +106,13 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
         ? await chargerPrompt(supabase, "traduction")
         : undefined);
 
+      // Consignes propres au type de post : un recopiage doit rester fidèle,
+      // un remaniement doit s'éloigner. Éditables depuis l'admin.
+      const consignesType = await chargerPrompt(supabase, `composition_${post.type}`);
+
       const regles = [
         base,
+        consignesType,
         compte.style_profile ? `Voix propre à ce compte :\n${compte.style_profile}` : null,
       ]
         .filter(Boolean)
@@ -122,15 +127,26 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
       });
       const parPosition = new Map(traductions.map((t) => [t.position, t.translated]));
 
-      await supabase.from("post_slides").insert(
-        slides.map((s) => ({
-          post_id: post.id,
-          position: s.position,
-          media_id: s.media_id,
-          texte_overlay: parPosition.get(s.position) ?? "",
-          position_sophia: false,
-        })),
-      );
+      // Un remaniement rejoue le sujet avec d'AUTRES visuels : reprendre les
+      // mêmes ferait un doublon visuel sur le compte.
+      const visuels = post.type === "remanie"
+        ? await visuelsAlternatifs(supabase, compte, slides)
+        : new Map(slides.map((s) => [s.position, s.media_id]));
+
+      const { data: creees } = await supabase
+        .from("post_slides")
+        .insert(
+          slides.map((s) => ({
+            post_id: post.id,
+            position: s.position,
+            media_id: visuels.get(s.position) ?? s.media_id,
+            texte_overlay: parPosition.get(s.position) ?? "",
+            position_sophia: false,
+          })),
+        )
+        .select("media_id");
+
+      await marquerVisuelsUtilises(supabase, compte.id, post.id, creees ?? []);
 
       return "traduction";
     }
@@ -197,6 +213,66 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
       .eq("id", post.id);
     return "failed";
   }
+}
+
+/**
+ * Cherche, pour chaque slide, un visuel que ce compte n'a pas encore publié.
+ * Sans remplaçant disponible on garde l'original : mieux vaut un doublon visuel
+ * qu'un post sans image.
+ */
+// deno-lint-ignore no-explicit-any
+async function visuelsAlternatifs(
+  supabase: Supabase,
+  compte: any,
+  slides: Slide[],
+): Promise<Map<number, string | null>> {
+  const { data: dejaVus } = await supabase
+    .from("media_usages")
+    .select("media_id")
+    .eq("compte_id", compte.id);
+  const utilises = new Set((dejaVus ?? []).map((u) => u.media_id));
+
+  let query = supabase
+    .from("media_library")
+    .select("id")
+    .order("used_count")
+    .limit(100);
+  if (compte.compte_reference_id) {
+    query = query.eq("compte_reference_id", compte.compte_reference_id);
+  }
+
+  const { data: disponibles } = await query;
+  const libres = (disponibles ?? [])
+    .map((m) => m.id)
+    .filter((id) => !utilises.has(id));
+
+  const choix = new Map<number, string | null>();
+  for (const slide of slides) {
+    const remplacant = libres.shift();
+    choix.set(slide.position, remplacant ?? slide.media_id);
+  }
+  return choix;
+}
+
+/** Journalise l'usage pour que le prochain remaniement pioche ailleurs. */
+async function marquerVisuelsUtilises(
+  supabase: Supabase,
+  compteId: string,
+  postId: string,
+  slides: Array<{ media_id: string | null }>,
+) {
+  const lignes = slides
+    .filter((s) => s.media_id)
+    .map((s) => ({ media_id: s.media_id, compte_id: compteId, post_id: postId }));
+
+  if (lignes.length === 0) return;
+
+  // Un même visuel peut resservir sur un autre post du compte : le conflit sur
+  // (media, compte) est attendu, on l'ignore.
+  await supabase.from("media_usages").upsert(lignes, {
+    onConflict: "media_id,compte_id",
+    ignoreDuplicates: true,
+  });
 }
 
 async function marquer(supabase: Supabase, postId: string, etape: string) {

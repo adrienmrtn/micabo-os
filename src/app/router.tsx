@@ -50,6 +50,12 @@ export function AppRouter() {
         <Route element={<RoleGate allow={["poster"]} />}>
           <Route element={<PosterLayout />}>
             <Route path="/calendrier" element={<PosterCalendrierPage />} />
+          </Route>
+        </Route>
+
+        {/* L'admin doit pouvoir relire un post qu'il vient de tester. */}
+        <Route element={<RoleGate allow={["poster", "admin"]} />}>
+          <Route element={<PosterLayout />}>
             <Route path="/posts/:id" element={<PosterPostPage />} />
           </Route>
         </Route>

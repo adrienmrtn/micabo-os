@@ -31,6 +31,9 @@ export interface Compte {
   style_profile: string | null;
   demarre_le: string;
   is_active: boolean;
+  /** null = suit les réglages globaux. */
+  repartition: { recycle: number; remanie: number; nouveau: number } | null;
+  posts_par_jour: number | null;
 }
 
 export interface CompteAvecDetails extends Compte {

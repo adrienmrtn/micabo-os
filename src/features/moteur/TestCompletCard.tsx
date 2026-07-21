@@ -1,0 +1,164 @@
+import * as React from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import { FlaskConical } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { supabase } from "@/lib/supabase/client";
+import {
+  aujourdhui,
+  lancerAssignation,
+  lancerExtraction,
+  lancerPreparation,
+  listerComptes,
+} from "./api";
+
+const selectClass =
+  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
+/** Bornes de sécurité : un slideshow ne fait jamais autant d'étapes. */
+const MAX_PREPARATION = 30;
+const MAX_COMPOSITION = 10;
+
+/**
+ * Déroule toute la chaîne sur un seul compte, du scrape au post fini, en
+ * pilotant les étapes depuis le navigateur.
+ *
+ * L'orchestration est ici et non côté serveur parce qu'une Edge Function ne
+ * tient pas la chaîne entière : chaque étape est un appel court, enchaîné.
+ */
+export function TestCompletCard() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const comptes = useQuery({ queryKey: ["comptes"], queryFn: listerComptes });
+
+  const [compteId, setCompteId] = React.useState("");
+  const [avecExtraction, setAvecExtraction] = React.useState(false);
+  const [etape, setEtape] = React.useState<string | null>(null);
+  const [erreur, setErreur] = React.useState<string | null>(null);
+  const [postId, setPostId] = React.useState<string | null>(null);
+
+  async function lancer() {
+    setErreur(null);
+    setPostId(null);
+
+    try {
+      const compte = comptes.data?.find((c) => c.id === compteId);
+      if (!compte) throw new Error(t("test.choisirCompte"));
+
+      if (avecExtraction && compte.compte_reference_id) {
+        setEtape(t("test.extraction"));
+        await lancerExtraction(compte.compte_reference_id);
+      }
+
+      // On prépare jusqu'à obtenir au moins un sujet exploitable.
+      setEtape(t("test.preparation"));
+      for (let i = 0; i < MAX_PREPARATION; i += 1) {
+        const { count } = await supabase
+          .from("sujets")
+          .select("*", { count: "exact", head: true })
+          .eq("preparation_statut", "done")
+          .eq("statut", "retenu");
+        if ((count ?? 0) > 0) break;
+
+        const r = await lancerPreparation();
+        if (r.idle) break;
+      }
+
+      setEtape(t("test.assignation"));
+      await lancerAssignation(compteId);
+
+      // Le post créé est une coquille : on la remplit pas à pas.
+      setEtape(t("test.composition"));
+      let dernier: string | null = null;
+      for (let i = 0; i < MAX_COMPOSITION; i += 1) {
+        const { data } = await supabase
+          .from("posts")
+          .select("id, pipeline_statut")
+          .eq("compte_id", compteId)
+          .eq("date_publication_prevue", aujourdhui())
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        const post = data?.[0];
+        if (!post) break;
+        dernier = post.id;
+        if (post.pipeline_statut === "done") break;
+        if (post.pipeline_statut === "failed") throw new Error(t("test.echecPipeline"));
+
+        await supabase.functions.invoke("composition", { body: { postId: post.id } });
+      }
+
+      if (!dernier) throw new Error(t("test.aucunPost"));
+      setPostId(dernier);
+      setEtape(null);
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : String(e));
+      setEtape(null);
+    }
+  }
+
+  return (
+    <Card className="border-primary/30">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FlaskConical className="size-4 text-primary" />
+          {t("test.title")}
+        </CardTitle>
+        <CardDescription>{t("test.subtitle")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="testCompte">{t("test.compte")}</Label>
+          <select
+            id="testCompte"
+            className={selectClass}
+            value={compteId}
+            onChange={(e) => setCompteId(e.target.value)}
+          >
+            <option value="">{t("common.none")}</option>
+            {comptes.data?.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.persona_nom ?? c.handle_tiktok ?? c.id.slice(0, 8)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={avecExtraction}
+            onChange={(e) => setAvecExtraction(e.target.checked)}
+          />
+          {t("test.avecExtraction")}
+        </label>
+
+        <Button disabled={!compteId || etape !== null} onClick={lancer}>
+          {etape ? t("pilotage.running") : t("test.lancer")}
+        </Button>
+
+        {etape && (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="size-2 animate-pulse rounded-full bg-primary" />
+            {etape}
+          </p>
+        )}
+        {erreur && <p className="text-sm text-destructive">{erreur}</p>}
+        {postId && (
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-success">{t("test.termine")}</p>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/posts/${postId}`)}>
+              {t("test.voir")}
+            </Button>
+          </div>
+        )}
+
+        <p className="text-xs text-muted-foreground">{t("test.cout")}</p>
+      </CardContent>
+    </Card>
+  );
+}

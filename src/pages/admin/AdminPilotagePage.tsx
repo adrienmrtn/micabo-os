@@ -22,6 +22,7 @@ import {
   listerSujets,
 } from "@/features/moteur/api";
 import type { Sujet } from "@/features/moteur/types";
+import { TestCompletCard } from "@/features/moteur/TestCompletCard";
 
 async function compter(table: string): Promise<number> {
   const { count } = await supabase.from(table).select("*", { count: "exact", head: true });
@@ -97,6 +98,8 @@ export function AdminPilotagePage() {
 
   return (
     <div className="space-y-6">
+      <TestCompletCard />
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Compteur label={t("pilotage.sujets")} valeur={stats.data?.sujets} />
         <Compteur label={t("pilotage.posts")} valeur={stats.data?.posts} />

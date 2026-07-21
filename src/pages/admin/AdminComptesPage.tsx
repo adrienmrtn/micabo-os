@@ -171,6 +171,98 @@ function GenerationPersona({ compte }: { compte: CompteAvecDetails }) {
   );
 }
 
+/**
+ * Réglages propres à un compte. Tant qu'ils sont vides, le compte suit les
+ * réglages globaux ; les renseigner permet par exemple de dédier un compte au
+ * seul recopiage sans toucher aux autres.
+ */
+function ReglagesCompte({ compte }: { compte: CompteAvecDetails }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const surcharge = compte.repartition !== null || compte.posts_par_jour !== null;
+
+  const [repartition, setRepartition] = React.useState(
+    compte.repartition ?? { recycle: 60, remanie: 20, nouveau: 20 },
+  );
+  const [parJour, setParJour] = React.useState(compte.posts_par_jour ?? 2);
+
+  const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["comptes"] });
+  const enregistrer = useMutation({
+    mutationFn: () =>
+      majCompte(compte.id, { repartition, posts_par_jour: parJour }),
+    onSuccess: rafraichir,
+  });
+  const reinitialiser = useMutation({
+    mutationFn: () => majCompte(compte.id, { repartition: null, posts_par_jour: null }),
+    onSuccess: rafraichir,
+  });
+
+  const total = repartition.recycle + repartition.remanie + repartition.nouveau;
+  const totalValide = total === 100;
+
+  return (
+    <div className="space-y-3 rounded-lg border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium">{t("comptes.reglagesPropres")}</p>
+        <Badge variant={surcharge ? "default" : "outline"}>
+          {surcharge ? t("comptes.surcharge") : t("comptes.suitGlobal")}
+        </Badge>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-4">
+        {(["recycle", "remanie", "nouveau"] as const).map((cle) => (
+          <div key={cle} className="space-y-1">
+            <Label htmlFor={`${cle}-${compte.id}`} className="text-xs">
+              {t(`reglages.${cle}`)}
+            </Label>
+            <Input
+              id={`${cle}-${compte.id}`}
+              type="number"
+              min={0}
+              value={repartition[cle]}
+              onChange={(e) =>
+                setRepartition({ ...repartition, [cle]: Number(e.target.value) })
+              }
+            />
+          </div>
+        ))}
+        <div className="space-y-1">
+          <Label htmlFor={`jour-${compte.id}`} className="text-xs">
+            {t("reglages.postsParJour")}
+          </Label>
+          <Input
+            id={`jour-${compte.id}`}
+            type="number"
+            min={1}
+            value={parJour}
+            onChange={(e) => setParJour(Number(e.target.value))}
+          />
+        </div>
+      </div>
+
+      {!totalValide && (
+        <p className="text-xs text-destructive">{t("reglages.totalInvalide")}</p>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          disabled={!totalValide || enregistrer.isPending}
+          onClick={() => enregistrer.mutate()}
+        >
+          {enregistrer.isPending ? t("common.saving") : t("comptes.activerSurcharge")}
+        </Button>
+        {surcharge && (
+          <Button size="sm" variant="outline" onClick={() => reinitialiser.mutate()}>
+            {t("comptes.retirerSurcharge")}
+          </Button>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">{t("comptes.reglagesHint")}</p>
+    </div>
+  );
+}
+
 function LigneCompte({ compte }: { compte: CompteAvecDetails }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -229,6 +321,8 @@ function LigneCompte({ compte }: { compte: CompteAvecDetails }) {
       <ChoixAvatar compte={compte} />
 
       <GenerationPersona compte={compte} />
+
+      <ReglagesCompte compte={compte} />
 
       <div className="space-y-2">
         <Label htmlFor={`voix-${compte.id}`}>{t("comptes.styleProfile")}</Label>
