@@ -1,4 +1,4 @@
-import { downloadImage, scrapePost, scrapeProfile } from "../_shared/apify.ts";
+import { downloadImage, listerDiaporamas, scrapePost, scrapeProfile } from "../_shared/apify.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
@@ -78,7 +78,7 @@ Deno.serve(async (request) => {
         .single();
 
       try {
-        const posts = await scrapeProfile(compte.handle_tiktok, POSTS_PAR_COMPTE);
+        const posts = await recupererPosts(supabase, compte.handle_tiktok);
         let crees = 0;
         let restants = false;
 
@@ -133,6 +133,65 @@ interface PostScrape {
   text: string;
   imageUrls: string[];
   musicUrl: string | null;
+}
+
+/**
+ * Récupère les diaporamas d'un compte, avec un repli.
+ *
+ * L'acteur Apify cale parfois sur un compte précis — 500 à répétition, ou zéro
+ * post alors que la page en affiche seize. Dans ce cas on lit la page publique
+ * pour lister les diaporamas, puis on les scrape un par un : un post isolé
+ * passe là où le compte entier échoue.
+ *
+ * Le repli ne traite que quelques posts par passage. Chaque post est un run
+ * Apify à lui seul, et le worker n'en supporte pas davantage ; le cron repasse
+ * chaque minute pour la suite.
+ */
+async function recupererPosts(
+  supabase: Supabase,
+  handle: string,
+): Promise<PostScrape[]> {
+  let direct: PostScrape[] = [];
+  let echec: string | null = null;
+
+  try {
+    direct = await scrapeProfile(handle, POSTS_PAR_COMPTE);
+  } catch (error) {
+    echec = messageErreur(error);
+  }
+
+  if (direct.length > 0) return direct;
+
+  const urls = await listerDiaporamas(handle);
+
+  // Les posts déjà en base ne valent pas un run Apify de plus. On rapproche sur
+  // l'identifiant du post et non sur l'URL entière : celle que reconstruit le
+  // repli et celle que renvoie Apify ne s'écrivent pas toujours pareil, et
+  // comparer les chaînes ferait re-scraper les mêmes posts à chaque passage.
+  const idDe = (url: string) => url.match(/\/(?:photo|video)\/(\d+)/)?.[1] ?? url;
+
+  const { data: connus } = await supabase
+    .from("sujets")
+    .select("source_url")
+    .ilike("source_url", `%/@${handle}/%`);
+  const dejaVus = new Set((connus ?? []).map((s) => idDe(s.source_url ?? "")));
+
+  const aFaire = urls
+    .filter((u) => !dejaVus.has(idDe(u)))
+    .slice(0, SUJETS_PAR_PASSAGE);
+
+  if (aFaire.length === 0) {
+    if (echec) throw new Error(`${echec} — et la page ne liste aucun diaporama inédit`);
+    return [];
+  }
+
+  const recuperes: PostScrape[] = [];
+  for (const url of aFaire) {
+    const [post] = await scrapePost(url);
+    if (post) recuperes.push(post);
+  }
+
+  return recuperes;
 }
 
 /**

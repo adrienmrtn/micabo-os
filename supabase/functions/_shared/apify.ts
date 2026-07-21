@@ -114,6 +114,33 @@ export function scrapeProfile(handle: string, resultsPerPage: number) {
   return runActor({ profiles: [handle], resultsPerPage });
 }
 
+/**
+ * Liste les diaporamas d'un compte en lisant sa page publique.
+ *
+ * Sert de filet quand l'acteur Apify cale sur un compte précis : il a renvoyé
+ * des 500 à répétition sur l'un des nôtres alors que la page, elle, affichait
+ * seize diaporamas. On récupère juste les identifiants ici, puis chaque post
+ * est scrapé un par un — un post isolé passe là où le compte entier échoue.
+ */
+export async function listerDiaporamas(handle: string): Promise<string[]> {
+  const response = await fetch(`https://www.tiktok.com/@${handle}`, {
+    headers: {
+      // Sans en-tête de navigateur, TikTok sert une page vide aux robots.
+      "user-agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+      "accept-language": "fr-FR,fr;q=0.9,en;q=0.8",
+    },
+  });
+  if (!response.ok) throw new Error(`Page TikTok ${response.status} pour @${handle}`);
+
+  const html = await response.text();
+  const motif = new RegExp(`/@${handle}/photo/(\\d+)`, "g");
+  const ids = new Set<string>();
+  for (const trouve of html.matchAll(motif)) ids.add(trouve[1]);
+
+  return [...ids].map((id) => `https://www.tiktok.com/@${handle}/photo/${id}`);
+}
+
 /** Relève les performances d'un compte : tous les posts, photo ou non. */
 export function scrapeStats(handle: string, resultsPerPage: number) {
   return runActor({ profiles: [handle], resultsPerPage }, false);
