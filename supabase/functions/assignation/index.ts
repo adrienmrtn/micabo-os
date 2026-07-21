@@ -1,4 +1,4 @@
-import { composerPost } from "../_shared/composer.ts";
+import { creerPost as creerCoquille } from "../_shared/composer.ts";
 import { assertAuthorised, json, serviceClient, todayIso } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
@@ -108,12 +108,12 @@ async function completerJournee(
       ? "recycle"
       : tirerType(reglages.repartition);
 
+    // On ne crée que la coquille : la fabrication (traduction, placement) est
+    // faite ensuite par le drain `composition`, étape par étape. Le post ne
+    // passe en « assigné » qu'une fois prêt, donc il n'apparaît pas chez le
+    // poster tant qu'il est vide.
     const postId = await creerPost(supabase, compte, jour, type);
     if (!postId) break; // plus de matière disponible, inutile d'insister
-
-    // Assigné : c'est ce statut qui le fait apparaître dans le calendrier du
-    // poster. Un post composé mais non assigné resterait invisible pour lui.
-    await supabase.from("posts").update({ statut: "assigne" }).eq("id", postId);
     crees += 1;
   }
 
@@ -163,14 +163,64 @@ async function creerPost(
     if (recycle) return recycle;
   }
 
+  if (type === "remanie") {
+    const remanie = await remanierPost(supabase, compte, jour);
+    if (remanie) return remanie;
+  }
+
   const sujet = await choisirSujet(supabase, compte);
   if (!sujet) return null;
 
-  return await composerPost(supabase, {
+  return await creerCoquille(supabase, {
     compteId: compte.id,
     sujetId: sujet.id,
     type,
     date: jour,
+  });
+}
+
+/**
+ * Remanie un post existant : on reprend son sujet et ses visuels, mais tout le
+ * texte est régénéré avec une consigne de reformulation. C'est ce qui distingue
+ * un remanié d'un recyclé (copie à l'identique) et d'un nouveau (sujet inédit).
+ *
+ * Sans post antérieur à remanier, on renvoie null et l'appelant retombe sur une
+ * composition normale.
+ */
+// deno-lint-ignore no-explicit-any
+async function remanierPost(
+  supabase: Supabase,
+  compte: any,
+  jour: string,
+): Promise<string | null> {
+  const { data: anciens } = await supabase
+    .from("posts")
+    .select("id, sujet_id")
+    .eq("compte_id", compte.id)
+    .not("sujet_id", "is", null)
+    .in("statut", ["publie", "valide_par_poster"])
+    .order("created_at")
+    .limit(20);
+
+  if (!anciens || anciens.length === 0) return null;
+
+  // On évite de remanier deux fois le même aîné tant qu'il en reste d'autres.
+  const { data: dejaRemanies } = await supabase
+    .from("posts")
+    .select("source_post_id")
+    .eq("compte_id", compte.id)
+    .eq("type", "remanie")
+    .not("source_post_id", "is", null);
+
+  const dejaVus = new Set((dejaRemanies ?? []).map((p) => p.source_post_id));
+  const source = anciens.find((p) => !dejaVus.has(p.id)) ?? anciens[0];
+
+  return await creerCoquille(supabase, {
+    compteId: compte.id,
+    sujetId: source.sujet_id!,
+    type: "remanie",
+    date: jour,
+    sourcePostId: source.id,
   });
 }
 
@@ -209,7 +259,9 @@ async function recyclerMeilleurPost(
       compte_id: compte.id,
       sujet_id: source.sujet_id,
       type: "recycle",
-      statut: "brouillon",
+      // Le recyclage copie les slides telles quelles : rien à fabriquer, donc
+      // il ne passe pas par le drain de composition et est assigné d'emblée.
+      statut: "assigne",
       date_publication_prevue: jour,
       source_post_id: source.id,
       musique_url: source.musique_url,

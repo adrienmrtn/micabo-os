@@ -111,21 +111,26 @@ export async function fetchImageAsInline(url: string): Promise<Part> {
 /** Règles de traduction par défaut, surchargeables depuis l'admin (clé
  *  `translate`). Le format de sortie JSON, lui, reste fixé dans le code pour
  *  qu'une édition ne casse jamais le parsing. */
+/**
+ * Règles de repli, volontairement indépendantes de toute langue : elles servent
+ * quand aucun prompt dédié n'existe pour la langue du compte. Pour une vraie
+ * finesse, l'admin écrit un prompt `traduction_<langue>`.
+ */
 export const DEFAULT_TRANSLATE_PROMPT = `Règles de traduction impératives :
-- Tutoiement systématique ("tu"), jamais "vous".
+- Adresse-toi au lecteur de façon directe et familière, jamais avec la forme de
+  politesse formelle de la langue cible.
 - Écris comme un humain parle, pas comme un site de marketing.
 - Phrases courtes. On lit au pouce, en une seconde.
 - INTERDIT : le tiret long (—) et le tiret demi-cadratin (–). Utilise une
   virgule, un point ou deux-points. Ces tirets trahissent un texte d'IA.
-- INTERDIT : "plonge dans", "libère ton potentiel", "révolutionne",
-  "incontournable", "game changer", "booste", "transforme ta vie", et tout
-  autre mot creux de ce registre.
+- INTERDIT : le vocabulaire creux de la publicité (équivalents locaux de
+  "libère ton potentiel", "révolutionne", "incontournable", "booste",
+  "transforme ta vie").
 - Pas de point d'exclamation en rafale, pas d'emoji ajouté.
-- Voix cohérente avec le reste du slideshow.
+- Voix cohérente d'une slide à l'autre, genre fixé une fois pour toutes.
 - Aucune mention d'un produit tiers : ni application, ni site, ni logiciel, ni
-  "outil d'IA", ni marque. Réécris le conseil comme une action pure ("entraîne
-  ton élocution à voix haute", pas "utilise une appli pour t'entraîner"). Le
-  seul produit qui a le droit d'exister dans ce slideshow, c'est Sophia, et ce
+  "outil d'IA", ni marque. Réécris le conseil comme une action pure. Le seul
+  produit qui a le droit d'exister dans ce slideshow est l'appli Sophia, et ce
   n'est pas ton rôle de l'ajouter ici.
 - Conserve les URLs et les sources citées telles quelles.`;
 
@@ -155,23 +160,58 @@ Si la slide ne contient aucun texte incrusté, réponds exactement : (aucun text
  * fois, ce que le prompt de traduction exige pour fixer le genre et la persona
  * une bonne fois. Renvoie une traduction par position.
  */
+const LANGUES: Record<string, string> = {
+  fr: "français",
+  en: "anglais",
+  es: "espagnol",
+  it: "italien",
+  de: "allemand",
+  pt: "portugais",
+};
+
 export async function translateSlideshow(input: {
   slides: Array<{ position: number; original: string }>;
   sourceTitle: string;
   rules?: string;
+  /** Langue cible du compte de publication. */
+  langue?: string;
+  /** Demande une formulation différente : c'est ce qui distingue un post
+   *  remanié d'une simple copie de son aîné. */
+  variation?: boolean;
 }): Promise<Array<{ position: number; translated: string }>> {
   const deck = input.slides
     .map((s) => `Slide ${s.position} : "${s.original || "(aucun texte)"}"`)
     .join("\n");
 
-  const prompt = `${input.rules ?? DEFAULT_TRANSLATE_PROMPT}
+  const code = input.langue ?? "fr";
+  const langue = LANGUES[code] ?? code;
+
+  // La langue cible ouvre ET ferme le prompt : placée seulement à la fin, elle
+  // se faisait écraser par les règles de style, souvent longues et rédigées
+  // pour une langue donnée.
+  const prompt = `LANGUE DE SORTIE : ${langue.toUpperCase()}.
+Tout le texte que tu produis doit être en ${langue}, sans exception, quelle que
+soit la langue dans laquelle les consignes ci-dessous sont rédigées.
+
+${input.rules ?? DEFAULT_TRANSLATE_PROMPT}
 
 Titre de la vidéo source : ${input.sourceTitle || "(aucun)"}
 
 Voici toutes les slides du slideshow, dans l'ordre (slide 1 = couverture) :
 ${deck}
 
-Traduis chaque slide en français. Une slide sans texte reste vide.
+Traduis chaque slide en ${langue}. Une slide sans texte reste vide.${
+    input.variation
+      ? `
+
+Ce slideshow a déjà été publié sous une autre formulation. Reformule-le
+entièrement : mêmes idées et même ordre, mais tournures, rythme et exemples
+différents. Un lecteur qui aurait vu les deux ne doit pas avoir l'impression de
+relire le même texte.`
+      : ""
+  }
+
+Rappel : la sortie est en ${langue}.
 
 Réponds uniquement en JSON, sans bloc de code, un objet par slide :
 {"slides":[{"position":1,"translated":"..."}, ...]}`;
@@ -261,6 +301,8 @@ export async function integrateSophia(input: {
   corrections: Array<{ original_text: string | null; corrected_text: string }>;
   slides: Array<{ position: number; text: string }>;
   caption: string;
+  /** Langue du compte : la slide Sophia doit parler comme ses voisines. */
+  langue?: string;
 }): Promise<SophiaPlacement | null> {
   const examples = input.corrections
     .slice(0, 40)
@@ -275,9 +317,19 @@ export async function integrateSophia(input: {
     .map((s) => `Slide ${s.position} : "${s.text || "(vide)"}"`)
     .join("\n");
 
+  const code = input.langue ?? "fr";
+  const langue = LANGUES[code] ?? code;
+
   // Le prompt maître (édité par l'admin) porte toute la doctrine ; le code n'y
   // ajoute que les données du deck et un format de sortie JSON stable.
-  const prompt = `${input.masterPrompt}
+  //
+  // La langue ouvre le prompt : une slide Sophia rédigée dans une autre langue
+  // que ses voisines se repère immédiatement et ruine l'intégration.
+  const prompt = `LANGUE DE SORTIE : ${langue.toUpperCase()}.
+Les variantes que tu écris doivent être en ${langue}, quelle que soit la langue
+des consignes ci-dessous.
+
+${input.masterPrompt}
 
 --- DONNÉES ---
 Légende de la vidéo : ${input.caption || "(aucune)"}
@@ -290,6 +342,8 @@ même mode grammatical que le reste du deck. Puis applique l'autocontrôle et
 désigne la MEILLEURE des trois (celle qui respecte le mieux toutes les règles :
 mode, zéro tiret, zéro jargon, simplicité, format des slides voisines). Indique
 son index (0, 1 ou 2) dans "best".
+
+Rappel : les trois variantes sont en ${langue}.
 
 Réponds UNIQUEMENT en JSON, sans bloc de code ni commentaire :
 {"chosen_position": <numéro de slide>, "mode": "instructif|confession", "variants": ["A","B","C"], "best": 0}`;

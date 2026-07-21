@@ -1,36 +1,43 @@
-import { composerPost } from "../_shared/composer.ts";
+import { avancerPost } from "../_shared/composer.ts";
 import { assertAuthorised, json, serviceClient } from "../_shared/supabase.ts";
 
 /**
- * Composition manuelle d'un post, pour l'admin qui veut fabriquer ou refaire un
- * post précis sans attendre le cron.
+ * Fait avancer un post en cours de fabrication d'une étape, puis rend la main.
+ * L'assignation ne fait que créer les coquilles ; c'est ce drain, appelé chaque
+ * minute par le cron, qui les remplit.
  *
- *   { compteId, sujetId, type?, date? }
+ *   {}           → le post le plus ancien restant à fabriquer
+ *   { postId }   → ce post précis (essai admin)
  */
 Deno.serve(async (request) => {
   const denied = await assertAuthorised(request);
   if (denied) return denied;
 
-  let body: Record<string, string>;
+  const supabase = serviceClient();
+
+  let postId: string | null = null;
   try {
-    body = await request.json();
+    const body = await request.json();
+    postId = body?.postId ?? null;
   } catch {
-    return json({ error: "corps JSON attendu" }, 400);
-  }
-
-  if (!body.compteId || !body.sujetId) {
-    return json({ error: "compteId et sujetId requis" }, 400);
+    // Corps vide : on prend la file.
   }
 
   try {
-    const postId = await composerPost(serviceClient(), {
-      compteId: body.compteId,
-      sujetId: body.sujetId,
-      type: (body.type as "recycle" | "remanie" | "nouveau") ?? "nouveau",
-      date: body.date ?? null,
-    });
+    let query = supabase
+      .from("posts")
+      .select("*")
+      .in("pipeline_statut", ["running", "pending"]);
 
-    return json({ ok: true, postId });
+    if (postId) query = query.eq("id", postId);
+    else query = query.order("pipeline_statut", { ascending: false }).order("created_at");
+
+    const { data: posts } = await query.limit(1);
+    const post = posts?.[0];
+    if (!post) return json({ ok: true, idle: true });
+
+    const etape = await avancerPost(supabase, post);
+    return json({ ok: true, postId: post.id, etape });
   } catch (error) {
     return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 500);
   }

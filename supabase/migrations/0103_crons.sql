@@ -48,6 +48,18 @@ select cron.schedule('preparation-nuit', '* 18-23,0-5 * * *', $$
   );
 $$);
 
+-- Composition : chaque minute. L'assignation ne crée que des coquilles vides,
+-- c'est ce drain qui les remplit (traduction, puis placement Sophia, un pas par
+-- passage). Sans lui, aucun post n'atteindrait jamais le poster.
+select cron.schedule('composition-nuit', '* 18-23,0-6 * * *', $$
+  select net.http_post(
+    url := 'https://mbikecieskoobeizixig.supabase.co/functions/v1/composition',
+    headers := jsonb_build_object('content-type','application/json','x-cron-secret','<CRON_SECRET>'),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 55000
+  );
+$$);
+
 -- Assignation à minuit Paris, puis rattrapage au petit matin pour les sujets
 -- préparés trop tard. Idempotente : elle ne complète que ce qui manque.
 select cron.schedule('assignation-minuit', '0 22 * * *', $$
@@ -72,6 +84,7 @@ $$);
 --   select cron.unschedule('metriques-soir');
 --   select cron.unschedule('extraction-soir');
 --   select cron.unschedule('preparation-nuit');
+--   select cron.unschedule('composition-nuit');
 --   select cron.unschedule('assignation-minuit');
 --   select cron.unschedule('assignation-rattrapage');
 --
