@@ -22,8 +22,8 @@ export const TEXT_MODELS = [
  * refuse une autre. On enchaîne donc plusieurs modèles avant d'abandonner.
  */
 export const IMAGE_MODELS = [
-  "gemini-2.5-flash-image",
   "gemini-3.1-flash-image",
+  "gemini-2.5-flash-image",
   "gemini-3-pro-image",
 ];
 
@@ -52,11 +52,22 @@ function apiKey(): string {
   return key;
 }
 
-async function call(model: string, parts: Part[]): Promise<Part[]> {
+interface GenConfig {
+  temperature?: number;
+  // Les modèles d'image ne renvoient une image QUE si on la réclame
+  // explicitement ; sans ça ils décrivent la retouche en texte, ce que le
+  // reste du code prenait à tort pour un refus.
+  responseModalities?: string[];
+}
+
+async function call(model: string, parts: Part[], config?: GenConfig): Promise<Part[]> {
   const response = await fetch(`${BASE}/${model}:generateContent?key=${apiKey()}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ contents: [{ role: "user", parts }] }),
+    body: JSON.stringify({
+      contents: [{ role: "user", parts }],
+      ...(config ? { generationConfig: config } : {}),
+    }),
   });
 
   if (!response.ok) {
@@ -386,37 +397,44 @@ Réponds UNIQUEMENT en JSON, sans bloc de code ni commentaire :
  * aucun n'a rendu d'image — l'appelant conserve alors l'original plutôt que de
  * casser le slideshow.
  */
+const PROMPT_NETTOYAGE = `Tu fais une restauration photo subtile.
+1. Retire uniquement les éléments ajoutés PAR-DESSUS la photo : textes, sous-titres, stickers, watermarks, noms d'utilisateur, boutons, appels à l'action, logos d'interface, watermark TikTok.
+2. Reconstitue l'arrière-plan sous ces éléments de façon naturelle et invisible.
+3. Ne modifie JAMAIS la personne, le visage, les mains, les vêtements, les objets réels, le fond, la lumière, les couleurs, ni le cadrage.
+4. Ne génère aucun texte, logo, badge ou watermark supplémentaire.
+5. Renvoie uniquement l'image nettoyée.`;
+
 export async function cleanImage(imageUrl: string): Promise<string | null> {
   const image = await fetchImageAsInline(imageUrl);
 
-  // Instruction volontairement courte : les consignes longues sur l'intégrité
-  // du contenu font nettement plus souvent basculer le modèle vers un refus.
-  const prompt =
-    "Retire tous les textes incrustés de cette image en reconstituant " +
-    "l'arrière-plan de façon naturelle. Ne change ni le cadrage, ni les " +
-    "couleurs, ni le sujet.";
+  // Ordre imposé par l'édition d'image : la source d'ABORD, la consigne
+  // ensuite. Le modèle traite la première image comme le sujet à retoucher.
+  const parts: Part[] = [image, { text: PROMPT_NETTOYAGE }];
 
-  const refus: string[] = [];
+  // temperature basse = sortie stable, moins d'hallucinations ; responseModalities
+  // force une sortie image et non une description.
+  const config: GenConfig = { temperature: 0.2, responseModalities: ["IMAGE"] };
+
+  // On essaie CHAQUE modèle, pas seulement le premier : un même visuel est
+  // bloqué par l'un (`IMAGE_OTHER`) et nettoyé par l'autre. Diagnostic à
+  // l'appui — 2.5-flash-image bloque une photo de personne que 3.1-flash-image
+  // nettoie sans broncher. Abandonner au premier échec, c'était rater le bon.
+  const echecs: string[] = [];
 
   for (const model of IMAGE_MODELS) {
     try {
-      const parts = await call(model, [{ text: prompt }, image]);
-      const data = imageDataOf(parts);
+      const sortie = await call(model, parts, config);
+      const data = imageDataOf(sortie);
       if (data) return data;
-
-      // Réponse valide mais sans image : le modèle a décliné la retouche. Les
-      // autres modèles déclineront pour la même raison, insister coûterait
-      // deux générations de plus pour rien. On s'arrête et on remonte le motif.
-      const motif = textOf(parts).trim();
-      refus.push(`${model}: ${motif.slice(0, 200) || "réponse sans image"}`);
-      throw new RefusRetouche(refus.join(" | "));
+      echecs.push(`${model}: ${textOf(sortie).slice(0, 120) || "bloqué (aucune image)"}`);
     } catch (error) {
-      if (error instanceof RefusRetouche) throw error;
-      // Modèle indisponible ou en erreur réseau : celui-là, on peut le remplacer.
+      echecs.push(`${model}: ${messageErreur(error)}`);
     }
   }
 
-  return null;
+  // Aucun modèle n'a rendu d'image : refus réel. L'appelant gardera l'original
+  // (texte compris) et le motif remonte en base pour qu'on sache pourquoi.
+  throw new RefusRetouche(echecs.join(" | "));
 }
 
 /**
