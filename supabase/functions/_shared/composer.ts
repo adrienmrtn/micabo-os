@@ -1,5 +1,5 @@
 import { integrateSophia, translateSlideshow } from "./gemini.ts";
-import { chargerPrompt, serviceClient } from "./supabase.ts";
+import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
 
@@ -211,7 +211,7 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
       .from("posts")
       .update({
         pipeline_statut: "failed",
-        pipeline_erreur: error instanceof Error ? error.message : String(error),
+        pipeline_erreur: messageErreur(error),
       })
       .eq("id", post.id);
     return "failed";

@@ -69,6 +69,30 @@ export async function chargerPrompt(
   return data?.contenu?.trim() || undefined;
 }
 
+/**
+ * Message lisible pour n'importe quoi qui a été jeté.
+ *
+ * `String(erreur)` sur une erreur Supabase donne « [object Object] » : le
+ * pipeline enregistrait ça en base, et on ne pouvait plus savoir ce qui avait
+ * échoué. On va donc chercher les champs que Postgrest et Storage remplissent.
+ */
+export function messageErreur(erreur: unknown): string {
+  if (erreur instanceof Error) return erreur.message;
+
+  if (erreur && typeof erreur === "object") {
+    const e = erreur as Record<string, unknown>;
+    const parts = [e.message, e.details, e.hint, e.code].filter(Boolean);
+    if (parts.length > 0) return parts.join(" · ");
+    try {
+      return JSON.stringify(erreur).slice(0, 400);
+    } catch {
+      // Objet non sérialisable (cycle) : on retombe sur String().
+    }
+  }
+
+  return String(erreur);
+}
+
 export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,

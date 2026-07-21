@@ -5,7 +5,7 @@ import {
   scoreRelevance,
   verifyClean,
 } from "../_shared/gemini.ts";
-import { assertAuthorised, chargerPrompt, json, serviceClient } from "../_shared/supabase.ts";
+import { assertAuthorised, chargerPrompt, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
 
@@ -61,7 +61,7 @@ Deno.serve(async (request) => {
     const etape = await avancer(supabase, sujet);
     return json({ ok: true, sujetId: sujet.id, etape });
   } catch (error) {
-    return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 500);
+    return json({ ok: false, error: messageErreur(error) }, 500);
   }
 });
 
@@ -137,7 +137,7 @@ async function avancer(supabase: Supabase, sujet: any): Promise<string> {
       .from("sujets")
       .update({
         preparation_statut: "failed",
-        preparation_erreur: error instanceof Error ? error.message : String(error),
+        preparation_erreur: messageErreur(error),
       })
       .eq("id", sujet.id);
     return "failed";

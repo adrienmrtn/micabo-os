@@ -1,5 +1,5 @@
 import { scrapeStats } from "../_shared/apify.ts";
-import { assertAuthorised, json, serviceClient } from "../_shared/supabase.ts";
+import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
 
@@ -52,14 +52,14 @@ Deno.serve(async (request) => {
         resultats.push({
           compteId: compte.id,
           releves: 0,
-          erreur: error instanceof Error ? error.message : String(error),
+          erreur: messageErreur(error),
         });
       }
     }
 
     return json({ ok: true, resultats });
   } catch (error) {
-    return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 500);
+    return json({ ok: false, error: messageErreur(error) }, 500);
   }
 });
 

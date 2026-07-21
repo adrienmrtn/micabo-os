@@ -1,5 +1,5 @@
 import { downloadImage, scrapePost, scrapeProfile } from "../_shared/apify.ts";
-import { assertAuthorised, json, serviceClient } from "../_shared/supabase.ts";
+import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
 
@@ -115,7 +115,7 @@ Deno.serve(async (request) => {
           .update({
             statut: "failed",
             termine_at: new Date().toISOString(),
-            erreur: error instanceof Error ? error.message : String(error),
+            erreur: messageErreur(error),
           })
           .eq("id", run?.id);
       }
@@ -123,7 +123,7 @@ Deno.serve(async (request) => {
 
     return json({ ok: true, comptes: comptes?.length ?? 0, sujetsCrees });
   } catch (error) {
-    return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 500);
+    return json({ ok: false, error: messageErreur(error) }, 500);
   }
 });
 

@@ -1,5 +1,5 @@
 import { creerPost as creerCoquille } from "../_shared/composer.ts";
-import { assertAuthorised, json, serviceClient, todayIso } from "../_shared/supabase.ts";
+import { assertAuthorised, json, messageErreur, serviceClient, todayIso } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
 type TypePost = "recycle" | "remanie" | "nouveau";
@@ -64,14 +64,14 @@ Deno.serve(async (request) => {
         resultats.push({
           compteId: compte.id,
           crees: 0,
-          erreur: error instanceof Error ? error.message : String(error),
+          erreur: messageErreur(error),
         });
       }
     }
 
     return json({ ok: true, jour, resultats });
   } catch (error) {
-    return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 500);
+    return json({ ok: false, error: messageErreur(error) }, 500);
   }
 });
 

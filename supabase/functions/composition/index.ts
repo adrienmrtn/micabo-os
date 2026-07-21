@@ -1,5 +1,5 @@
 import { avancerPost, creerPost } from "../_shared/composer.ts";
-import { assertAuthorised, json, serviceClient } from "../_shared/supabase.ts";
+import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 /**
  * Fait avancer un post en cours de fabrication d'une étape, puis rend la main.
@@ -53,6 +53,6 @@ Deno.serve(async (request) => {
     const etape = await avancerPost(supabase, post);
     return json({ ok: true, postId: post.id, etape });
   } catch (error) {
-    return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 500);
+    return json({ ok: false, error: messageErreur(error) }, 500);
   }
 });

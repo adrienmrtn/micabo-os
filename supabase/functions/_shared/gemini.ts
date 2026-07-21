@@ -1,4 +1,5 @@
 import { downloadImage } from "./apify.ts";
+import { messageErreur } from "./supabase.ts";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -85,7 +86,7 @@ async function callWithFallback(models: string[], parts: Part[]): Promise<Part[]
     try {
       return await call(model, parts);
     } catch (error) {
-      failures.push(error instanceof Error ? error.message : String(error));
+      failures.push(messageErreur(error));
     }
   }
 

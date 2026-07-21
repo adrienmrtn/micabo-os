@@ -1,5 +1,5 @@
 import { genererPersona } from "../_shared/gemini.ts";
-import { assertAuthorised, json, serviceClient } from "../_shared/supabase.ts";
+import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
 
@@ -80,7 +80,7 @@ Deno.serve(async (request) => {
       applique: appliquer && pseudos.length > 0,
     });
   } catch (error) {
-    return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 500);
+    return json({ ok: false, error: messageErreur(error) }, 500);
   }
 });
 
