@@ -313,7 +313,11 @@ export function PosterPostPage() {
               <Music className="size-4" />
               {t("posts.musique")}
             </CardTitle>
-            <CardDescription>{donnees.musique_titre ?? donnees.musique_url}</CardDescription>
+            {/* Une URL TikTok n'a aucune espace : sans césure forcée elle
+                déborde de la carte et élargit toute la page sur mobile. */}
+            <CardDescription className="break-all">
+              {donnees.musique_titre ?? donnees.musique_url}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             <Button asChild size="lg" className="w-full">
