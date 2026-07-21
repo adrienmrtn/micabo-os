@@ -52,6 +52,23 @@ export async function assertAuthorised(request: Request): Promise<Response | nul
   return null;
 }
 
+/**
+ * Charge un prompt éditable depuis l'admin. Renvoie undefined si absent, pour
+ * que l'appelant retombe sur le défaut codé plutôt que d'envoyer un prompt vide.
+ */
+export async function chargerPrompt(
+  supabase: ReturnType<typeof serviceClient>,
+  cle: string,
+): Promise<string | undefined> {
+  const { data } = await supabase
+    .from("prompts")
+    .select("contenu")
+    .eq("cle", cle)
+    .maybeSingle();
+
+  return data?.contenu?.trim() || undefined;
+}
+
 export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,

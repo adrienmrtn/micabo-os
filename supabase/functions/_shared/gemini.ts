@@ -347,6 +347,33 @@ export async function cleanImage(imageUrl: string): Promise<string | null> {
   return null;
 }
 
+/**
+ * Un visuel montrant un visage identifiable ne peut pas servir de photo de
+ * profil : le compte est public et la personne n'a rien demandé. Renvoie null
+ * si le modèle n'a pas su trancher — l'appelant traite alors le doute comme un
+ * refus.
+ */
+export async function contientVisageIdentifiable(imageUrl: string): Promise<boolean | null> {
+  try {
+    const image = await fetchImageAsInline(imageUrl);
+    const parts = await callWithFallback(TEXT_MODELS, [
+      {
+        text: `Cette image montre-t-elle le visage d'une personne réelle, reconnaissable ?
+Un visage flou, de dos, de très loin, partiellement masqué ou dessiné ne compte pas.
+Réponds uniquement par OUI ou NON.`,
+      },
+      image,
+    ]);
+
+    const answer = textOf(parts).toUpperCase();
+    if (answer.includes("OUI")) return true;
+    if (answer.includes("NON")) return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Vérifie qu'il ne reste pas de texte incrusté après nettoyage. */
 export async function verifyClean(base64Image: string, mimeType: string): Promise<boolean> {
   const parts = await callWithFallback(TEXT_MODELS, [
