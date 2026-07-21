@@ -190,7 +190,9 @@ export async function lirePost(id: string): Promise<Post | null> {
 export async function listerSlides(postId: string): Promise<PostSlide[]> {
   const { data, error } = await supabase
     .from("post_slides")
-    .select("*, media_library(url)")
+    // storage_path distingue une photo nettoyée (`propre/…`) d'un original
+    // gardé faute de nettoyage (`brut/…`), qui porte encore son texte.
+    .select("*, media_library(url, storage_path)")
     .eq("post_id", postId)
     .order("position");
   if (error) throw error;

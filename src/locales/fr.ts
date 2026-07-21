@@ -256,6 +256,7 @@ export const fr = {
       ouvrirMusique: "Accéder à la musique",
       musiqueFavori: "Ajoute-la à tes favoris TikTok",
       photoManquante: "Photo non nettoyée",
+      photoAvecTexte: "Photo à poster ⚠ texte non retiré",
       photoManquanteAide: "À refaire ou à sauter — ne la poste pas telle quelle.",
       slidesNonNettoyees_one: "{{count}} photo n'a pas pu être nettoyée, vérifie-la avant de publier.",
       slidesNonNettoyees_other:

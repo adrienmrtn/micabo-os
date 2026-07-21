@@ -34,6 +34,15 @@ function nomFichier(postId: string, position: number) {
   return `${postId.slice(0, 8)}-${String(position).padStart(2, "0")}.jpg`;
 }
 
+/**
+ * Une slide n'est publiable que si sa photo a été nettoyée : `storage_path`
+ * commençant par `propre/`. Un `brut/` porte encore le texte d'origine, un
+ * media absent n'a rien du tout — les deux sont à signaler, pas à enregistrer.
+ */
+function estPropre(slide: PostSlide): boolean {
+  return Boolean(slide.media_library?.storage_path?.startsWith("propre/"));
+}
+
 /** Zone de texte entièrement tapable : sur mobile, viser un petit bouton est
  * pénible, et la sélection manuelle d'un texte multiligne encore plus. */
 function TexteCopiable({ texte, label }: { texte: string; label?: string }) {
@@ -192,8 +201,11 @@ export function PosterPostPage() {
     queryFn: async () => {
       const resultats: File[] = [];
       for (const slide of liste) {
-        const url = slide.media_library?.url;
-        if (url) resultats.push(await recupererFichier(url, nomFichier(id!, slide.position)));
+        // On ne précharge que les photos nettoyées : enregistrer un visuel au
+        // texte encore incrusté reviendrait à le faire publier tel quel.
+        if (!estPropre(slide)) continue;
+        const url = slide.media_library!.url;
+        resultats.push(await recupererFichier(url, nomFichier(id!, slide.position)));
       }
       return resultats;
     },
@@ -284,9 +296,9 @@ export function PosterPostPage() {
   const tousLesTextes = texteComplet(donnees, liste);
 
   const nbPhotos = (fichiers.data ?? []).length;
-  // Slides dont la photo n'a pas pu être nettoyée : on le signale plutôt que de
-  // laisser un poster publier une image au texte anglais encore incrusté.
-  const slidesNonNettoyees = liste.filter((s) => !s.media_library?.url).length;
+  // Slides dont la photo n'est pas nettoyée : absente OU gardée avec son texte.
+  // On le signale plutôt que de laisser publier une image au texte incrusté.
+  const slidesNonNettoyees = liste.filter((s) => !estPropre(s)).length;
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 pb-10">
@@ -401,15 +413,37 @@ export function PosterPostPage() {
               {/* La photo à poster et l'originale côte à côte : c'est en les
                   comparant que le poster retrouve où placer son texte. */}
               <div className="grid gap-3 sm:grid-cols-2">
-                {slide.media_library?.url ? (
+                {estPropre(slide) ? (
                   <Visuel
-                    url={slide.media_library.url}
+                    url={slide.media_library!.url}
                     legende={t("posts.photoAPoster")}
                     onZoom={() => setLoupe(slide.media_library!.url)}
                   />
+                ) : slide.media_library?.url ? (
+                  // Photo présente mais jamais nettoyée : elle porte encore son
+                  // texte. On la montre pour ne pas cacher le problème, mais on
+                  // la barre d'un avertissement et on n'en propose pas l'enreg.
+                  <figure className="space-y-1.5">
+                    <figcaption className="text-xs font-medium uppercase tracking-wide text-warning">
+                      {t("posts.photoAvecTexte")}
+                    </figcaption>
+                    <button
+                      type="button"
+                      onClick={() => setLoupe(slide.media_library!.url)}
+                      className="block w-full"
+                    >
+                      <img
+                        src={slide.media_library.url}
+                        alt=""
+                        className="w-full rounded-lg border-2 border-warning/60 object-contain"
+                      />
+                    </button>
+                    <p className="text-[11px] text-muted-foreground">
+                      {t("posts.photoManquanteAide")}
+                    </p>
+                  </figure>
                 ) : (
-                  // Pas de version nettoyée : on ne montre pas un trou, on
-                  // signale que cette photo est à refaire ou à sauter.
+                  // Aucune version : on ne montre pas un trou, on signale.
                   <div className="flex flex-col justify-center gap-1 rounded-lg border border-dashed border-warning/50 bg-warning/5 p-4 text-center">
                     <span className="text-xs font-medium text-warning">
                       {t("posts.photoManquante")}
@@ -428,7 +462,7 @@ export function PosterPostPage() {
                 )}
               </div>
 
-              {slide.media_library?.url && (
+              {estPropre(slide) && (
                 <Button
                   variant="outline"
                   className="w-full"
