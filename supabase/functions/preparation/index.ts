@@ -1,6 +1,6 @@
 import {
   cleanImage,
-  contientVisageIdentifiable,
+  RefusRetouche,
   ocrFrame,
   scoreRelevance,
   verifyClean,
@@ -164,7 +164,20 @@ async function nettoyerVersBibliotheque(
   let propreBase64: string | null = null;
 
   for (let essai = 0; essai < TENTATIVES_NETTOYAGE && !propreBase64; essai += 1) {
-    const candidat = await cleanImage(slide.raw_url);
+    let candidat: string | null;
+    try {
+      candidat = await cleanImage(slide.raw_url);
+    } catch (error) {
+      if (error instanceof RefusRetouche) {
+        // Un refus ne se retente pas : le modèle répondra pareil. On garde
+        // l'original — le visuel reste exploitable, texte incrusté compris —
+        // et on trace le motif, seul moyen de savoir ce qui bloque vraiment.
+        console.warn(`[nettoyage refusé] sujet=${sujet.id} slide=${slide.position} ${error.message}`);
+        break;
+      }
+      throw error;
+    }
+
     if (!candidat) continue;
     if (await verifyClean(candidat, "image/png")) propreBase64 = candidat;
     else if (essai === TENTATIVES_NETTOYAGE - 1) propreBase64 = candidat;
@@ -184,9 +197,12 @@ async function nettoyerVersBibliotheque(
     url = slide.raw_url;
   }
 
-  // Le doute vaut refus : null (indécis) sera traité comme « visage présent »
-  // par la sélection d'avatar.
-  const visage = await contientVisageIdentifiable(url);
+  // La détection de visage ne servait qu'au choix d'une photo de profil — une
+  // fois par compte — mais tournait sur CHAQUE slide préparée, soit un appel
+  // facturé sur des centaines de visuels qui ne deviendront jamais un avatar.
+  // On laisse le champ à null : la sélection d'avatar traite déjà l'indécision
+  // comme « visage présent », donc elle reste prudente par défaut et fera le
+  // test elle-même, sur la poignée de photos qu'elle examine.
 
   // Upsert et non insert : `storage_path` est unique, et une reprise après un
   // worker tué retomberait sinon sur un doublon. Le chemin identifie déjà le
@@ -200,7 +216,7 @@ async function nettoyerVersBibliotheque(
         url,
         source: "nettoye_reference",
         langue: sujet.langue,
-        visage_identifiable: visage === null ? true : visage,
+        visage_identifiable: null,
       },
       { onConflict: "storage_path" },
     )

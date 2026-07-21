@@ -1,4 +1,4 @@
-import { genererPersona } from "../_shared/gemini.ts";
+import { contientVisageIdentifiable, genererPersona } from "../_shared/gemini.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
@@ -124,19 +124,51 @@ async function filtrerPseudos(
   return sansEcho.filter((pseudo) => !dejaPris.has(pseudo));
 }
 
-/** Le moins utilisé parmi les visuels sans visage identifiable. */
+/**
+ * Le moins utilisé parmi les visuels sans visage identifiable.
+ *
+ * Le test de visage se fait ICI, et non à la préparation : il ne sert qu'au
+ * choix d'une photo de profil, une fois par compte, alors qu'à la préparation
+ * il tournait sur chaque slide — des centaines d'appels facturés pour des
+ * visuels qui ne deviendront jamais un avatar. On examine donc quelques
+ * candidats à la demande, et on garde le verdict pour ne pas le repayer.
+ */
+const CANDIDATS_AVATAR = 6;
+
 async function choisirAvatar(supabase: Supabase, compteReferenceId: string | null) {
-  let query = supabase
+  // Déjà jugés sans visage : utilisables tels quels, aucun appel à passer.
+  let connus = supabase
     .from("media_library")
     .select("id, url, used_count")
-    // `is false` et non `not is true` : une valeur indécise (null) reste exclue,
-    // le doute vaut refus pour une photo de profil.
     .eq("visage_identifiable", false)
     .order("used_count")
     .limit(1);
+  if (compteReferenceId) connus = connus.eq("compte_reference_id", compteReferenceId);
 
-  if (compteReferenceId) query = query.eq("compte_reference_id", compteReferenceId);
+  const { data: dejaSur } = await connus;
+  if (dejaSur?.[0]) return dejaSur[0];
 
-  const { data } = await query;
-  return data?.[0] ?? null;
+  // Sinon on juge quelques visuels encore non examinés.
+  let aJuger = supabase
+    .from("media_library")
+    .select("id, url, used_count")
+    .is("visage_identifiable", null)
+    .order("used_count")
+    .limit(CANDIDATS_AVATAR);
+  if (compteReferenceId) aJuger = aJuger.eq("compte_reference_id", compteReferenceId);
+
+  const { data: candidats } = await aJuger;
+
+  for (const media of candidats ?? []) {
+    const visage = await contientVisageIdentifiable(media.url);
+    // Le doute vaut refus : un indécis est marqué comme portant un visage.
+    await supabase
+      .from("media_library")
+      .update({ visage_identifiable: visage === null ? true : visage })
+      .eq("id", media.id);
+
+    if (visage === false) return media;
+  }
+
+  return null;
 }

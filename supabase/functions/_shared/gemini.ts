@@ -396,17 +396,39 @@ export async function cleanImage(imageUrl: string): Promise<string | null> {
     "l'arrière-plan de façon naturelle. Ne change ni le cadrage, ni les " +
     "couleurs, ni le sujet.";
 
+  const refus: string[] = [];
+
   for (const model of IMAGE_MODELS) {
     try {
       const parts = await call(model, [{ text: prompt }, image]);
       const data = imageDataOf(parts);
       if (data) return data;
-    } catch {
-      // Modèle indisponible ou en erreur : on passe au suivant.
+
+      // Réponse valide mais sans image : le modèle a décliné la retouche. Les
+      // autres modèles déclineront pour la même raison, insister coûterait
+      // deux générations de plus pour rien. On s'arrête et on remonte le motif.
+      const motif = textOf(parts).trim();
+      refus.push(`${model}: ${motif.slice(0, 200) || "réponse sans image"}`);
+      throw new RefusRetouche(refus.join(" | "));
+    } catch (error) {
+      if (error instanceof RefusRetouche) throw error;
+      // Modèle indisponible ou en erreur réseau : celui-là, on peut le remplacer.
     }
   }
 
   return null;
+}
+
+/**
+ * Le modèle a répondu mais refusé de retoucher l'image. À distinguer d'une
+ * panne : changer de modèle n'y changera rien, et le motif mérite d'être
+ * remonté jusqu'en base plutôt que d'être avalé silencieusement.
+ */
+export class RefusRetouche extends Error {
+  constructor(motif: string) {
+    super(`Retouche refusée — ${motif}`);
+    this.name = "RefusRetouche";
+  }
 }
 
 export interface PersonaProposee {

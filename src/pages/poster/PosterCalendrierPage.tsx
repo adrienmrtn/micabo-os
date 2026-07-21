@@ -1,7 +1,8 @@
+import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, CalendarCheck, CheckCircle2 } from "lucide-react";
+import { ArrowRight, CalendarCheck, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { Card, CardContent, EmptyState } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase/client";
 import { aujourdhui } from "@/features/moteur/api";
 import { useAuth } from "@/features/auth/AuthContext";
+import { cn } from "@/lib/utils";
 
 interface PostCalendrier {
   id: string;
@@ -27,9 +29,32 @@ async function mesPosts(): Promise<PostCalendrier[]> {
     .from("posts_poster")
     .select("*")
     .order("date_publication_prevue", { ascending: false, nullsFirst: false })
-    .limit(60);
+    .limit(200);
   if (error) throw error;
   return data as PostCalendrier[];
+}
+
+/** `YYYY-MM-DD` local, sans passer par l'UTC qui décalerait d'un jour. */
+function isoDuJour(annee: number, mois: number, jour: number): string {
+  return `${annee}-${String(mois + 1).padStart(2, "0")}-${String(jour).padStart(2, "0")}`;
+}
+
+/**
+ * Grille du mois, lundi en première colonne.
+ *
+ * `getDay()` compte à partir de dimanche : on décale pour coller à la semaine
+ * française, sinon tout le mois glisse d'un cran.
+ */
+function grilleDuMois(annee: number, mois: number) {
+  const premier = new Date(annee, mois, 1);
+  const decalage = (premier.getDay() + 6) % 7;
+  const joursDansLeMois = new Date(annee, mois + 1, 0).getDate();
+
+  const cases: Array<number | null> = Array.from({ length: decalage }, () => null);
+  for (let jour = 1; jour <= joursDansLeMois; jour += 1) cases.push(jour);
+  while (cases.length % 7 !== 0) cases.push(null);
+
+  return cases;
 }
 
 function CartePost({ post, creneau }: { post: PostCalendrier; creneau?: number }) {
@@ -55,7 +80,7 @@ function CartePost({ post, creneau }: { post: PostCalendrier; creneau?: number }
 
         <Button asChild size="lg" className="w-full" variant={publie ? "outline" : "default"}>
           <Link to={`/posts/${post.id}`}>
-            {publie ? t("posts.apercu") : t("posts.valider")}
+            {t("calendrier.voirPost")}
             <ArrowRight />
           </Link>
         </Button>
@@ -73,17 +98,45 @@ export function PosterCalendrierPage() {
     enabled: Boolean(user?.id),
   });
 
+  const jour = aujourdhui();
+  const maintenant = new Date();
+  const [mois, setMois] = React.useState(() => ({
+    annee: maintenant.getFullYear(),
+    mois: maintenant.getMonth(),
+  }));
+
+  // Un jour peut porter plusieurs posts : la case affiche donc une liste.
+  const parJour = React.useMemo(() => {
+    const carte = new Map<string, PostCalendrier[]>();
+    for (const post of posts ?? []) {
+      const date = post.date_publication_prevue;
+      if (!date) continue;
+      carte.set(date, [...(carte.get(date) ?? []), post]);
+    }
+    return carte;
+  }, [posts]);
+
   if (isPending) {
     return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   }
 
-  const jour = aujourdhui();
-  const duJour = (posts ?? []).filter((p) => p.date_publication_prevue === jour);
-  const aVenir = (posts ?? []).filter(
-    (p) => p.date_publication_prevue && p.date_publication_prevue > jour,
-  );
-  const passe = (posts ?? []).filter(
-    (p) => p.date_publication_prevue && p.date_publication_prevue < jour,
+  const duJour = parJour.get(jour) ?? [];
+  const cases = grilleDuMois(mois.annee, mois.mois);
+  const nomDuMois = new Date(mois.annee, mois.mois, 1).toLocaleDateString(i18n.language, {
+    month: "long",
+    year: "numeric",
+  });
+
+  const decaler = (pas: number) =>
+    setMois((actuel) => {
+      const date = new Date(actuel.annee, actuel.mois + pas, 1);
+      return { annee: date.getFullYear(), mois: date.getMonth() };
+    });
+
+  // Noms de jours tirés de la locale plutôt que codés en dur : une bascule en
+  // anglais ne doit pas laisser « lun mar mer » dans la grille.
+  const enTetes = Array.from({ length: 7 }, (_, index) =>
+    new Date(2024, 0, index + 1).toLocaleDateString(i18n.language, { weekday: "short" }),
   );
 
   return (
@@ -101,50 +154,105 @@ export function PosterCalendrierPage() {
         )}
       </section>
 
-      {aVenir.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold tracking-tight">{t("calendrier.aVenir")}</h2>
-          <div className="space-y-2">
-            {aVenir.map((post) => (
-              <Link
-                key={post.id}
-                to={`/posts/${post.id}`}
-                className="flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors hover:bg-muted"
-              >
-                <span className="min-w-0 truncate text-sm">
-                  {post.sujet_titre ?? t("posts.title")}
-                </span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {new Date(post.date_publication_prevue!).toLocaleDateString(i18n.language)}
-                </span>
-              </Link>
-            ))}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold capitalize tracking-tight">{nomDuMois}</h2>
+          <div className="flex items-center gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label={t("calendrier.moisPrecedent")}
+              onClick={() => decaler(-1)}
+            >
+              <ChevronLeft />
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                setMois({ annee: maintenant.getFullYear(), mois: maintenant.getMonth() })
+              }
+            >
+              {t("calendrier.revenirAujourdhui")}
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label={t("calendrier.moisSuivant")}
+              onClick={() => decaler(1)}
+            >
+              <ChevronRight />
+            </Button>
           </div>
-        </section>
-      )}
+        </div>
 
-      {passe.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold tracking-tight">{t("calendrier.passe")}</h2>
-          <div className="space-y-2">
-            {passe.map((post) => (
-              <Link
-                key={post.id}
-                to={`/posts/${post.id}`}
-                className="flex items-center justify-between gap-3 rounded-lg border p-3 text-muted-foreground transition-colors hover:bg-muted"
+        <div className="overflow-hidden rounded-lg border">
+          <div className="grid grid-cols-7 border-b bg-muted/40">
+            {enTetes.map((nom) => (
+              <div
+                key={nom}
+                className="p-2 text-center text-xs font-medium uppercase text-muted-foreground"
               >
-                <span className="min-w-0 truncate text-sm">
-                  {post.sujet_titre ?? t("posts.title")}
-                </span>
-                <span className="flex shrink-0 items-center gap-2 text-xs">
-                  {post.publie_at && <CheckCircle2 className="size-4 text-success" />}
-                  {new Date(post.date_publication_prevue!).toLocaleDateString(i18n.language)}
-                </span>
-              </Link>
+                {nom}
+              </div>
             ))}
           </div>
-        </section>
-      )}
+
+          <div className="grid grid-cols-7">
+            {cases.map((numero, index) => {
+              if (numero === null) {
+                return <div key={`vide-${index}`} className="min-h-20 border-b border-r bg-muted/20" />;
+              }
+
+              const date = isoDuJour(mois.annee, mois.mois, numero);
+              const duJourCase = parJour.get(date) ?? [];
+              const estAujourdhui = date === jour;
+
+              return (
+                <div
+                  key={date}
+                  className={cn(
+                    // min-w-0 : sans lui, une pastille au texte long force la
+                    // colonne à s'élargir et fait déborder toute la grille.
+                    "min-h-20 min-w-0 space-y-1 border-b border-r p-1.5",
+                    estAujourdhui && "bg-primary/5",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-flex size-6 items-center justify-center rounded-full text-xs",
+                      estAujourdhui
+                        ? "bg-primary font-semibold text-primary-foreground"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {numero}
+                  </span>
+
+                  {duJourCase.map((post) => (
+                    <Link
+                      key={post.id}
+                      to={`/posts/${post.id}`}
+                      title={post.sujet_titre ?? undefined}
+                      className={cn(
+                        "block w-full max-w-full truncate rounded px-1.5 py-1 text-[11px] leading-tight transition-colors",
+                        post.publie_at
+                          ? "bg-success/15 text-success hover:bg-success/25"
+                          : "bg-primary/15 text-primary hover:bg-primary/25",
+                      )}
+                    >
+                      {post.publie_at ? "✓ " : ""}
+                      {post.sujet_titre ?? t("posts.title")}
+                    </Link>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground">{t("calendrier.legende")}</p>
+      </section>
     </div>
   );
 }

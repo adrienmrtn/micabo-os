@@ -309,6 +309,13 @@ export const fr = {
       passe: "Passé",
       rien: "Rien de prévu aujourd'hui.",
       creneau: "Créneau {{n}}",
+      voirPost: "Voir le post",
+      moisPrecedent: "Mois précédent",
+      moisSuivant: "Mois suivant",
+      revenirAujourdhui: "Aujourd'hui",
+      publie: "Publié",
+      aFaire: "À faire",
+      legende: "Clique sur un jour pour ouvrir son post.",
     },
   },
 };
