@@ -1,6 +1,16 @@
 import { Outlet } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { AtSign, Gauge, Images, MessageSquareQuote, Settings, Users, UserSquare } from "lucide-react";
+import {
+  AtSign,
+  BarChart3,
+  CalendarRange,
+  Gauge,
+  Images,
+  MessageSquareQuote,
+  Settings,
+  Users,
+  UserSquare,
+} from "lucide-react";
 
 import { AppShell } from "./AppShell";
 
@@ -11,6 +21,8 @@ export function AdminLayout() {
       navLabel={t("nav.admin")}
       navItems={[
         { to: "/admin", label: t("nav.pilotage"), icon: Gauge },
+        { to: "/admin/analytics", label: t("nav.analytics"), icon: BarChart3 },
+        { to: "/admin/posts", label: t("nav.posts"), icon: CalendarRange },
         { to: "/admin/sources", label: t("nav.sources"), icon: AtSign },
         { to: "/admin/comptes", label: t("nav.comptes"), icon: UserSquare },
         { to: "/admin/posters", label: t("nav.posters"), icon: Users },

@@ -128,3 +128,36 @@ export interface Reglages {
     tout_recycle: boolean;
   };
 }
+
+export interface StatsCompte {
+  compte_id: string;
+  persona_nom: string | null;
+  handle_tiktok: string | null;
+  langue: string;
+  is_active: boolean;
+  poster_prenom: string | null;
+  poster_nom: string | null;
+  posts_total: number;
+  posts_publies: number;
+  posts_en_attente: number;
+  vues_totales: number;
+  likes_totaux: number;
+  vues_moyennes: number;
+}
+
+export interface StatsPost {
+  id: string;
+  compte_id: string;
+  persona_nom: string | null;
+  handle_tiktok: string | null;
+  type: PostType;
+  statut: PostStatut;
+  date_publication_prevue: string | null;
+  publie_at: string | null;
+  publie_url: string | null;
+  sujet_titre: string | null;
+  vues: number | null;
+  likes: number | null;
+  commentaires: number | null;
+  partages: number | null;
+}

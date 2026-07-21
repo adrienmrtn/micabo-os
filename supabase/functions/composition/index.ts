@@ -1,4 +1,4 @@
-import { avancerPost } from "../_shared/composer.ts";
+import { avancerPost, creerPost } from "../_shared/composer.ts";
 import { assertAuthorised, json, serviceClient } from "../_shared/supabase.ts";
 
 /**
@@ -6,8 +6,9 @@ import { assertAuthorised, json, serviceClient } from "../_shared/supabase.ts";
  * L'assignation ne fait que créer les coquilles ; c'est ce drain, appelé chaque
  * minute par le cron, qui les remplit.
  *
- *   {}           → le post le plus ancien restant à fabriquer
- *   { postId }   → ce post précis (essai admin)
+ *   {}                       → le post le plus ancien restant à fabriquer
+ *   { postId }               → ce post précis (essai admin)
+ *   { compteId, sujetId }    → crée la coquille à la main, hors assignation
  */
 Deno.serve(async (request) => {
   const denied = await assertAuthorised(request);
@@ -15,15 +16,28 @@ Deno.serve(async (request) => {
 
   const supabase = serviceClient();
 
-  let postId: string | null = null;
+  // deno-lint-ignore no-explicit-any
+  let body: any = null;
   try {
-    const body = await request.json();
-    postId = body?.postId ?? null;
+    body = await request.json();
   } catch {
     // Corps vide : on prend la file.
   }
+  const postId: string | null = body?.postId ?? null;
 
   try {
+    // Création manuelle : l'admin choisit lui-même compte, sujet et date. La
+    // coquille rejoint la file, le drain la remplit comme les autres.
+    if (!postId && body?.compteId && body?.sujetId) {
+      const cree = await creerPost(supabase, {
+        compteId: body.compteId,
+        sujetId: body.sujetId,
+        type: body.type ?? "nouveau",
+        date: body.date ?? new Date().toISOString().slice(0, 10),
+      });
+      return json({ ok: true, postId: cree, cree: true });
+    }
+
     let query = supabase
       .from("posts")
       .select("*")

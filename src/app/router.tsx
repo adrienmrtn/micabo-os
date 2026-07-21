@@ -14,6 +14,8 @@ import { AdminPostersPage } from "@/pages/admin/AdminPostersPage";
 import { AdminBibliothequePage } from "@/pages/admin/AdminBibliothequePage";
 import { AdminReglagesPage } from "@/pages/admin/AdminReglagesPage";
 import { AdminPromptsPage } from "@/pages/admin/AdminPromptsPage";
+import { AdminAnalyticsPage } from "@/pages/admin/AdminAnalyticsPage";
+import { AdminPostsPage } from "@/pages/admin/AdminPostsPage";
 import { PosterCalendrierPage } from "@/pages/poster/PosterCalendrierPage";
 import { PosterPostPage } from "@/pages/poster/PosterPostPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
@@ -38,6 +40,8 @@ export function AppRouter() {
         <Route element={<RoleGate allow={["admin"]} />}>
           <Route element={<AdminLayout />}>
             <Route path="/admin" element={<AdminPilotagePage />} />
+            <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
+            <Route path="/admin/posts" element={<AdminPostsPage />} />
             <Route path="/admin/sources" element={<AdminSourcesPage />} />
             <Route path="/admin/comptes" element={<AdminComptesPage />} />
             <Route path="/admin/posters" element={<AdminPostersPage />} />

@@ -1,6 +1,8 @@
 import { supabase } from "@/lib/supabase/client";
 import type {
   Compte,
+  StatsCompte,
+  StatsPost,
   CompteAvecDetails,
   CompteReference,
   Media,
@@ -209,6 +211,51 @@ export async function reordonnerSlides(slides: PostSlide[]): Promise<void> {
 export async function majPost(id: string, patch: Partial<Post>): Promise<void> {
   const { error } = await supabase.from("posts").update(patch).eq("id", id);
   if (error) throw error;
+}
+
+// --- Analyse ----------------------------------------------------------------
+
+export async function statsComptes(): Promise<StatsCompte[]> {
+  const { data, error } = await supabase
+    .from("stats_comptes")
+    .select("*")
+    .order("vues_totales", { ascending: false });
+  if (error) throw error;
+  return data as StatsCompte[];
+}
+
+export async function statsPosts(compteId?: string): Promise<StatsPost[]> {
+  let query = supabase
+    .from("stats_posts")
+    .select("*")
+    .order("vues", { ascending: false, nullsFirst: false })
+    .limit(100);
+  if (compteId) query = query.eq("compte_id", compteId);
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data as StatsPost[];
+}
+
+/** Réassignation manuelle : change le compte destinataire et/ou la date. */
+export async function reassignerPost(
+  id: string,
+  patch: { compte_id?: string; date_publication_prevue?: string | null },
+): Promise<void> {
+  const { error } = await supabase.from("posts").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+export async function sujetsDisponibles(): Promise<Array<{ id: string; titre: string }>> {
+  const { data, error } = await supabase
+    .from("sujets")
+    .select("id, titre")
+    .eq("preparation_statut", "done")
+    .in("statut", ["retenu", "utilise"])
+    .order("pertinence_score", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return data as Array<{ id: string; titre: string }>;
 }
 
 // --- Réglages et prompts ----------------------------------------------------
