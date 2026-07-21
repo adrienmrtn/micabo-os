@@ -412,21 +412,22 @@ async function generateSophia(supabase: Supabase, slideshowId: string, context: 
   const target = frames.find((f) => f.position === placement.chosenPosition);
   if (!target) return;
 
-  // Les 3 variantes sont conservées ; la première (A) est retenue par défaut,
-  // l'admin pourra basculer sur B ou C depuis l'éditeur.
+  // Le modèle a désigné la meilleure des 3 selon le prompt ; c'est elle qu'on
+  // applique. Les 2 autres restent en base pour trace et retour arrière.
+  const best = placement.bestIndex;
   const rows = placement.variants.map((text, index) => ({
     slideshow_id: slideshowId,
     frame_id: target.id,
     text,
     original_text: target.translated_text,
-    chosen: index === 0,
+    chosen: index === best,
   }));
   await supabase.from("sophia_variants").insert(rows);
 
   // Le poster lit slideshow_frames : le texte retenu atterrit donc là.
   await supabase
     .from("slideshow_frames")
-    .update({ translated_text: placement.variants[0], is_sophia_slide: true })
+    .update({ translated_text: placement.variants[best], is_sophia_slide: true })
     .eq("id", target.id);
 }
 

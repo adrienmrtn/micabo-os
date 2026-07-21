@@ -246,6 +246,8 @@ export interface SophiaPlacement {
   chosenPosition: number;
   mode: string;
   variants: string[];
+  /** Index (0-2) de la variante que le modèle juge la meilleure selon le prompt. */
+  bestIndex: number;
 }
 
 /**
@@ -284,10 +286,13 @@ ${slideList}
 ${examples ? `\nCorrections passées à respecter :\n${examples}\n` : ""}
 --- SORTIE ---
 Ne remplace jamais la slide 1 (couverture). Produis 3 variantes, toutes dans le
-même mode grammatical que le reste du deck.
+même mode grammatical que le reste du deck. Puis applique l'autocontrôle et
+désigne la MEILLEURE des trois (celle qui respecte le mieux toutes les règles :
+mode, zéro tiret, zéro jargon, simplicité, format des slides voisines). Indique
+son index (0, 1 ou 2) dans "best".
 
 Réponds UNIQUEMENT en JSON, sans bloc de code ni commentaire :
-{"chosen_position": <numéro de slide>, "mode": "instructif|confession", "variants": ["A","B","C"]}`;
+{"chosen_position": <numéro de slide>, "mode": "instructif|confession", "variants": ["A","B","C"], "best": 0}`;
 
   const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }]);
   const raw = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
@@ -301,7 +306,11 @@ Réponds UNIQUEMENT en JSON, sans bloc de code ni commentaire :
 
     if (!chosenPosition || chosenPosition < 2 || variants.length === 0) return null;
 
-    return { chosenPosition, mode: String(parsed.mode ?? ""), variants };
+    // Le modèle a désigné la meilleure ; on borne au cas où l'index déborde.
+    const best = Number(parsed.best);
+    const bestIndex = Number.isInteger(best) && best >= 0 && best < variants.length ? best : 0;
+
+    return { chosenPosition, mode: String(parsed.mode ?? ""), variants, bestIndex };
   } catch {
     return null;
   }
