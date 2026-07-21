@@ -5,6 +5,13 @@ type Supabase = ReturnType<typeof serviceClient>;
 
 const BUCKET = "medias";
 const POSTS_PAR_COMPTE = 5;
+/**
+ * Nombre de sujets créés par passage. Le scrape lui-même est léger, mais
+ * rapatrier les visuels ne l'est pas : sept images par post, et le worker
+ * s'épuise avant la fin. On en crée deux, et le passage suivant prend la suite
+ * — la déduplication sur source_url garantit qu'on ne repasse pas dessus.
+ */
+const SUJETS_PAR_PASSAGE = 2;
 
 /**
  * Extraction : récupère les posts passés d'un compte de référence (propriété de
@@ -44,10 +51,18 @@ Deno.serve(async (request) => {
       return json({ ok: true, sujetId, reused: sujetId === null });
     }
 
+    // Une source par passage. Scraper les huit d'un coup faisait plusieurs
+    // centaines de téléchargements dans la même invocation et épuisait le
+    // worker ; le cron repasse chaque minute et prend la suivante.
+    //
+    // La moins récemment scrapée d'abord, `nulls first` pour que celles jamais
+    // vues soient servies avant les autres.
     let query = supabase
       .from("comptes_reference")
       .select("id, handle_tiktok")
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .order("dernier_scrape_at", { ascending: true, nullsFirst: true })
+      .limit(1);
     if (compteReferenceId) query = query.eq("id", compteReferenceId);
 
     const { data: comptes, error } = await query;
@@ -65,7 +80,13 @@ Deno.serve(async (request) => {
       try {
         const posts = await scrapeProfile(compte.handle_tiktok, POSTS_PAR_COMPTE);
         let crees = 0;
+        let restants = false;
+
         for (const post of posts) {
+          if (crees >= SUJETS_PAR_PASSAGE) {
+            restants = true;
+            break;
+          }
           if (await creerSujet(supabase, post, compte.id)) crees += 1;
         }
         sujetsCrees += crees;
@@ -80,10 +101,14 @@ Deno.serve(async (request) => {
           })
           .eq("id", run?.id);
 
-        await supabase
-          .from("comptes_reference")
-          .update({ dernier_scrape_at: new Date().toISOString() })
-          .eq("id", compte.id);
+        // On ne date le scrape qu'une fois la source épuisée : tant qu'il reste
+        // des posts à rapatrier, elle doit rester en tête de file.
+        if (!restants) {
+          await supabase
+            .from("comptes_reference")
+            .update({ dernier_scrape_at: new Date().toISOString() })
+            .eq("id", compte.id);
+        }
       } catch (error) {
         await supabase
           .from("extractions")

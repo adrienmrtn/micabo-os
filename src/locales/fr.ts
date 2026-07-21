@@ -143,12 +143,13 @@ export const fr = {
     },
     posters: {
       title: "Posters",
-      subtitle: "Crée les accès de tes freelances. Le mot de passe s'affiche une seule fois.",
+      subtitle:
+        "Crée les accès de tes freelances. Le poster devra choisir son propre mot de passe à sa première connexion.",
       prenom: "Prénom",
       nom: "Nom",
       emailGenere: "Email généré",
       password: "Mot de passe",
-      regenerate: "Regénérer",
+      regenerate: "Par défaut",
       create: "Créer le poster",
       done: "Poster créé",
       transmit: "Note ces identifiants, le mot de passe ne sera plus affiché.",

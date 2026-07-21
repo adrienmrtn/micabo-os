@@ -40,7 +40,12 @@ Deno.serve(async (request) => {
       user_metadata: { prenom },
     });
 
-    if (error) return json({ error: error.message }, 400);
+    if (error) {
+      // `error.message` remonte parfois vide sur l'API admin : sans le code ni
+      // le statut, le message affiché à l'admin est inexploitable.
+      const detail = [error.message, error.code, error.status].filter(Boolean).join(" · ");
+      return json({ error: detail || `Création refusée pour ${email}` }, 400);
+    }
 
     // Le trigger a posé le profil et le rôle poster. On complète l'état civil
     // et on active le compte : c'est l'admin qui l'a créé, il est validé.

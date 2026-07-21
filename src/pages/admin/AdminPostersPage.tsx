@@ -18,12 +18,12 @@ import {
 import { useAuth } from "@/features/auth/AuthContext";
 import { creerPoster, listerPosters, majPoster, supprimerPoster } from "@/features/moteur/api";
 
-/** Mot de passe transmis de vive voix : lisible, sans caractères ambigus. */
-function motDePasseAleatoire() {
-  const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const octets = crypto.getRandomValues(new Uint8Array(12));
-  return Array.from(octets, (o) => chars[o % chars.length]).join("");
-}
+/**
+ * Mot de passe initial commun, simple à dicter. Il ne reste jamais en place :
+ * `must_change_password` force le poster à en choisir un autre à sa première
+ * connexion, avant d'accéder à quoi que ce soit.
+ */
+const MOT_DE_PASSE_INITIAL = "12345678";
 
 export function AdminPostersPage() {
   const { t } = useTranslation();
@@ -33,7 +33,7 @@ export function AdminPostersPage() {
 
   const [prenom, setPrenom] = React.useState("");
   const [nom, setNom] = React.useState("");
-  const [password, setPassword] = React.useState(motDePasseAleatoire());
+  const [password, setPassword] = React.useState(MOT_DE_PASSE_INITIAL);
   const [cree, setCree] = React.useState<{ email: string; password: string } | null>(null);
 
   const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["posters"] });
@@ -44,7 +44,7 @@ export function AdminPostersPage() {
       setCree({ email: r.email, password });
       setPrenom("");
       setNom("");
-      setPassword(motDePasseAleatoire());
+      setPassword(MOT_DE_PASSE_INITIAL);
       rafraichir();
     },
   });
@@ -100,7 +100,7 @@ export function AdminPostersPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setPassword(motDePasseAleatoire())}
+                  onClick={() => setPassword(MOT_DE_PASSE_INITIAL)}
                 >
                   {t("posters.regenerate")}
                 </Button>
