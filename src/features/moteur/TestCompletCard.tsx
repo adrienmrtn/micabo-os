@@ -37,6 +37,8 @@ export function TestCompletCard() {
 
   const [compteId, setCompteId] = React.useState("");
   const [avecExtraction, setAvecExtraction] = React.useState(false);
+  const [type, setType] = React.useState("");
+  const [typeProduit, setTypeProduit] = React.useState<string | null>(null);
   const [etape, setEtape] = React.useState<string | null>(null);
   const [erreur, setErreur] = React.useState<string | null>(null);
   const [postId, setPostId] = React.useState<string | null>(null);
@@ -44,6 +46,7 @@ export function TestCompletCard() {
   async function lancer() {
     setErreur(null);
     setPostId(null);
+    setTypeProduit(null);
 
     try {
       const compte = comptes.data?.find((c) => c.id === compteId);
@@ -69,7 +72,10 @@ export function TestCompletCard() {
       }
 
       setEtape(t("test.assignation"));
-      await lancerAssignation(compteId);
+      const assignation = await lancerAssignation(compteId, type || undefined, true);
+      // Le type réellement produit peut différer du type demandé : sans
+      // historique, un recopiage devient un nouveau.
+      setTypeProduit(assignation.resultats?.[0]?.types?.[0] ?? null);
 
       // Le post créé est une coquille : on la remplit pas à pas.
       setEtape(t("test.composition"));
@@ -128,6 +134,22 @@ export function TestCompletCard() {
           </select>
         </div>
 
+        <div className="space-y-2">
+          <Label htmlFor="testType">{t("test.type")}</Label>
+          <select
+            id="testType"
+            className={selectClass}
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+          >
+            <option value="">{t("test.typeAuto")}</option>
+            <option value="recycle">{t("type.recycle")}</option>
+            <option value="remanie">{t("type.remanie")}</option>
+            <option value="nouveau">{t("type.nouveau")}</option>
+          </select>
+          <p className="text-xs text-muted-foreground">{t("test.typeHint")}</p>
+        </div>
+
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -148,9 +170,17 @@ export function TestCompletCard() {
           </p>
         )}
         {erreur && <p className="text-sm text-destructive">{erreur}</p>}
+        {typeProduit && typeProduit.includes("→") && (
+          <p className="text-sm text-warning">
+            {t("test.repli", { type: typeProduit.split("→")[0] })}
+          </p>
+        )}
         {postId && (
           <div className="flex items-center gap-3">
-            <p className="text-sm text-success">{t("test.termine")}</p>
+            <p className="text-sm text-success">
+              {t("test.termine")}
+              {typeProduit ? ` (${typeProduit})` : ""}
+            </p>
             <Button size="sm" variant="outline" onClick={() => navigate(`/posts/${postId}`)}>
               {t("test.voir")}
             </Button>

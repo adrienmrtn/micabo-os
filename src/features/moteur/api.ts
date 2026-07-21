@@ -261,10 +261,16 @@ export const lancerExtraction = (compteReferenceId?: string) =>
 export const lancerPreparation = (sujetId?: string) =>
   invoke<{ etape?: string; idle?: boolean }>("preparation", { sujetId: sujetId ?? null });
 
-export const lancerAssignation = (compteId?: string) =>
-  invoke<{ resultats: Array<{ compteId: string; crees: number }> }>("assignation", {
-    compteId: compteId ?? null,
-  });
+export const lancerAssignation = (
+  compteId?: string,
+  type?: string,
+  /** Mode test : crée un post même si le quota du jour est atteint. */
+  forcer = false,
+) =>
+  invoke<{ resultats: Array<{ compteId: string; crees: number; types?: string[] }> }>(
+    "assignation",
+    { compteId: compteId ?? null, type: type ?? null, forcer },
+  );
 
 export const genererPersona = (compteId: string, appliquer = false) =>
   invoke<{ pseudos: string[]; bio: string; avatarUrl: string | null; applique: boolean }>(

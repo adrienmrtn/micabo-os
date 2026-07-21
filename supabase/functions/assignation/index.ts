@@ -22,10 +22,16 @@ Deno.serve(async (request) => {
 
   let compteId: string | null = null;
   let date: string | null = null;
+  let typeForce: TypePost | null = null;
+  let forcer = false;
   try {
     const body = await request.json();
     compteId = body?.compteId ?? null;
     date = body?.date ?? null;
+    typeForce = body?.type ?? null;
+    // Mode test : on crée un post même si le quota du jour est déjà atteint,
+    // sinon un second essai le même jour ne produirait rien.
+    forcer = Boolean(body?.forcer);
   } catch {
     // Corps vide : tous les comptes, aujourd'hui.
   }
@@ -41,12 +47,19 @@ Deno.serve(async (request) => {
     const { data: comptes, error } = await query;
     if (error) throw error;
 
-    const resultats: Array<{ compteId: string; crees: number; erreur?: string }> = [];
+    const resultats: Array<{
+      compteId: string;
+      crees: number;
+      types?: string[];
+      erreur?: string;
+    }> = [];
 
     for (const compte of comptes ?? []) {
       try {
-        const crees = await completerJournee(supabase, compte, jour, reglages);
-        resultats.push({ compteId: compte.id, crees });
+        const types = await completerJournee(
+          supabase, compte, jour, reglages, typeForce, forcer,
+        );
+        resultats.push({ compteId: compte.id, crees: types.length, types });
       } catch (error) {
         resultats.push({
           compteId: compte.id,
@@ -87,7 +100,9 @@ async function completerJournee(
   compte: any,
   jour: string,
   reglages: Reglages,
-): Promise<number> {
+  typeForce: TypePost | null,
+  forcer: boolean,
+): Promise<string[]> {
   const enLancement = estEnSemaineUn(compte.demarre_le, jour, reglages.semaine1);
 
   // Les réglages du compte l'emportent sur les réglages globaux : c'est ce qui
@@ -102,27 +117,31 @@ async function completerJournee(
     .eq("compte_id", compte.id)
     .eq("date_publication_prevue", jour);
 
-  const manquants = quota - (existants?.length ?? 0);
-  if (manquants <= 0) return 0;
+  const manquants = forcer ? 1 : quota - (existants?.length ?? 0);
+  if (manquants <= 0) return [];
 
-  let crees = 0;
+  // On renvoie le type RÉELLEMENT produit : recopiage et remaniement retombent
+  // sur une composition normale quand le compte n'a pas d'historique, et
+  // masquer ce repli rendrait un test trompeur.
+  const produits: string[] = [];
   for (let i = 0; i < manquants; i += 1) {
     // Pendant la semaine de lancement le compte n'a pas d'historique propre :
     // on force le recyclage de structure, servi par les visuels du compte.
-    const type = enLancement && reglages.semaine1.tout_recycle
-      ? "recycle"
-      : tirerType(repartition);
+    const type = typeForce
+      ?? (enLancement && reglages.semaine1.tout_recycle
+        ? "recycle"
+        : tirerType(repartition));
 
     // On ne crée que la coquille : la fabrication (traduction, placement) est
     // faite ensuite par le drain `composition`, étape par étape. Le post ne
     // passe en « assigné » qu'une fois prêt, donc il n'apparaît pas chez le
     // poster tant qu'il est vide.
-    const postId = await creerPost(supabase, compte, jour, type);
-    if (!postId) break; // plus de matière disponible, inutile d'insister
-    crees += 1;
+    const resultat = await creerPost(supabase, compte, jour, type);
+    if (!resultat) break; // plus de matière disponible, inutile d'insister
+    produits.push(resultat.typeReel);
   }
 
-  return crees;
+  return produits;
 }
 
 function estEnSemaineUn(
@@ -162,26 +181,31 @@ async function creerPost(
   compte: any,
   jour: string,
   type: TypePost,
-): Promise<string | null> {
+): Promise<{ postId: string; typeReel: string } | null> {
   if (type === "recycle") {
     const recycle = await recyclerMeilleurPost(supabase, compte, jour);
-    if (recycle) return recycle;
+    if (recycle) return { postId: recycle, typeReel: "recycle" };
   }
 
   if (type === "remanie") {
     const remanie = await remanierPost(supabase, compte, jour);
-    if (remanie) return remanie;
+    if (remanie) return { postId: remanie, typeReel: "remanie" };
   }
 
   const sujet = await choisirSujet(supabase, compte);
   if (!sujet) return null;
 
-  return await creerCoquille(supabase, {
+  // Faute d'historique, un recopiage ou un remaniement devient un nouveau : on
+  // le dit, plutôt que d'étiqueter un post avec un type qu'il n'a pas.
+  const typeReel = type === "nouveau" ? type : `${type}→nouveau`;
+
+  const postId = await creerCoquille(supabase, {
     compteId: compte.id,
     sujetId: sujet.id,
-    type,
+    type: "nouveau",
     date: jour,
   });
+  return { postId, typeReel };
 }
 
 /**

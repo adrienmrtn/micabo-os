@@ -200,6 +200,11 @@ export const fr = {
       compte: "Compte à tester",
       avecExtraction: "Extraire d'abord de nouvelles sources (coûte du crédit Apify)",
       lancer: "Lancer le test",
+      type: "Type de post à tester",
+      typeAuto: "Automatique (selon les ratios)",
+      typeHint:
+        "Recopiage et remanié ont besoin d'un post antérieur sur ce compte. Sans historique, ils deviennent un nouveau.",
+      repli: "Pas d'historique : le {{type}} a été produit comme un nouveau.",
       extraction: "Extraction des sources…",
       preparation: "Préparation d'un sujet…",
       assignation: "Assignation…",
