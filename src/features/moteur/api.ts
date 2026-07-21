@@ -266,6 +266,12 @@ export const lancerAssignation = (compteId?: string) =>
     compteId: compteId ?? null,
   });
 
+export const genererPersona = (compteId: string, appliquer = false) =>
+  invoke<{ pseudos: string[]; bio: string; avatarUrl: string | null; applique: boolean }>(
+    "persona",
+    { compteId, appliquer },
+  );
+
 export const lancerMetriques = (compteId?: string) =>
   invoke<{ resultats: Array<{ compteId: string; releves: number }> }>("metriques", {
     compteId: compteId ?? null,

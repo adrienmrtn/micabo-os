@@ -128,6 +128,12 @@ export const fr = {
       choisirAvatar: "Choisir un avatar",
       avatarInterdit: "Écarté : visage identifiable",
       avatarAucun: "Aucun visuel sans visage disponible pour l'instant.",
+      genererPersona: "Générer une identité",
+      generation: "Génération…",
+      pseudosProposes: "Pseudos proposés",
+      bioProposee: "Bio proposée",
+      appliquer: "Appliquer",
+      personaVide: "Aucun pseudo utilisable proposé, relance la génération.",
     },
     posters: {
       title: "Posters",

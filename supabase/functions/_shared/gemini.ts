@@ -347,6 +347,55 @@ export async function cleanImage(imageUrl: string): Promise<string | null> {
   return null;
 }
 
+export interface PersonaProposee {
+  pseudos: string[];
+  bio: string;
+}
+
+/**
+ * Propose des pseudos et une bio pour un nouveau compte de publication.
+ *
+ * Le compte de référence n'est jamais transmis au modèle : on ne lui donne que
+ * la niche. C'est ce qui empêche les propositions de ressembler à la source et
+ * de trahir d'où vient la matière.
+ */
+export async function genererPersona(input: {
+  niche: string;
+  langue: string;
+}): Promise<PersonaProposee | null> {
+  const prompt = `Tu crées l'identité d'un nouveau compte TikTok qui publiera du
+contenu de culture générale dans la niche : ${input.niche || "culture générale"}.
+
+Propose 4 pseudos et une bio, en ${input.langue === "fr" ? "français" : input.langue}.
+
+Règles pour les pseudos :
+- Courts, faciles à retenir et à taper, en minuscules.
+- Uniquement lettres, chiffres, points et underscores.
+- Crédibles pour un vrai compte tenu par une personne, pas une marque.
+- Quatre directions différentes, pas quatre variantes du même mot.
+
+Règles pour la bio :
+- Deux lignes maximum, ton naturel, tutoiement.
+- Pas de jargon marketing, pas de tiret cadratin, pas d'emoji en rafale.
+
+Réponds uniquement en JSON, sans bloc de code :
+{"pseudos": ["...", "...", "...", "..."], "bio": "..."}`;
+
+  const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }]);
+  const raw = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
+
+  try {
+    const parsed = JSON.parse(raw);
+    const pseudos = (parsed.pseudos ?? [])
+      .map((p: unknown) => String(p ?? "").trim().toLowerCase())
+      .filter(Boolean);
+    if (pseudos.length === 0) return null;
+    return { pseudos, bio: String(parsed.bio ?? "").trim() };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Un visuel montrant un visage identifiable ne peut pas servir de photo de
  * profil : le compte est public et la personne n'a rien demandé. Renvoie null

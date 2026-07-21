@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import {
   creerCompte,
+  genererPersona,
   listerComptes,
   listerMedias,
   listerPosters,
@@ -98,6 +99,78 @@ function ChoixAvatar({ compte }: { compte: CompteAvecDetails }) {
   );
 }
 
+/**
+ * Génère une identité (pseudos, bio, avatar) à partir de la seule niche. Les
+ * pseudos évoquant le compte de référence sont écartés côté serveur, et
+ * l'avatar ne peut venir que d'un visuel sans visage identifiable.
+ */
+function GenerationPersona({ compte }: { compte: CompteAvecDetails }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+
+  const proposition = useMutation({
+    mutationFn: () => genererPersona(compte.id),
+  });
+  const appliquer = useMutation({
+    mutationFn: () => genererPersona(compte.id, true),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["comptes"] }),
+  });
+
+  const enCours = proposition.isPending || appliquer.isPending;
+  const resultat = proposition.data;
+
+  return (
+    <div className="space-y-3 rounded-lg border border-dashed p-3">
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" disabled={enCours} onClick={() => proposition.mutate()}>
+          {proposition.isPending ? t("comptes.generation") : t("comptes.genererPersona")}
+        </Button>
+        {resultat && resultat.pseudos.length > 0 && (
+          <Button size="sm" disabled={enCours} onClick={() => appliquer.mutate()}>
+            {appliquer.isPending ? t("common.saving") : t("comptes.appliquer")}
+          </Button>
+        )}
+      </div>
+
+      {resultat && resultat.pseudos.length === 0 && (
+        <p className="text-sm text-warning">{t("comptes.personaVide")}</p>
+      )}
+
+      {resultat && resultat.pseudos.length > 0 && (
+        <div className="space-y-2 text-sm">
+          <div>
+            <p className="text-xs text-muted-foreground">{t("comptes.pseudosProposes")}</p>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {resultat.pseudos.map((pseudo) => (
+                <Badge key={pseudo} variant="secondary">
+                  @{pseudo}
+                </Badge>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{t("comptes.bioProposee")}</p>
+            <p className="whitespace-pre-wrap pt-1">{resultat.bio}</p>
+          </div>
+          {resultat.avatarUrl && (
+            <img
+              src={resultat.avatarUrl}
+              alt=""
+              className="size-16 rounded-full border object-cover"
+            />
+          )}
+        </div>
+      )}
+
+      {(proposition.isError || appliquer.isError) && (
+        <p className="text-sm text-destructive">
+          {((proposition.error ?? appliquer.error) as Error).message}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function LigneCompte({ compte }: { compte: CompteAvecDetails }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -154,6 +227,8 @@ function LigneCompte({ compte }: { compte: CompteAvecDetails }) {
       </div>
 
       <ChoixAvatar compte={compte} />
+
+      <GenerationPersona compte={compte} />
 
       <div className="space-y-2">
         <Label htmlFor={`voix-${compte.id}`}>{t("comptes.styleProfile")}</Label>
