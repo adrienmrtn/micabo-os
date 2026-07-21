@@ -283,12 +283,24 @@ export function PosterPostPage() {
   const publie = Boolean(donnees.publie_at);
   const tousLesTextes = texteComplet(donnees, liste);
 
-  const actions = (
-    <>
+  const nbPhotos = (fichiers.data ?? []).length;
+  // Slides dont la photo n'a pas pu être nettoyée : on le signale plutôt que de
+  // laisser un poster publier une image au texte anglais encore incrusté.
+  const slidesNonNettoyees = liste.filter((s) => !s.media_library?.url).length;
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-4 pb-10">
+      {loupe && <Loupe url={loupe} onClose={() => setLoupe(null)} />}
+
+      <Button variant="outline" size="sm" asChild>
+        <Link to="/calendrier">{t("common.back")}</Link>
+      </Button>
+
+      {/* 1 — Enregistrer toutes les photos d'un coup, en tête. */}
       <Card>
-        <CardHeader className="pb-3">
+        <CardContent className="space-y-3 pt-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className="text-base">{t("posts.title")}</CardTitle>
+            <span className="text-sm font-medium">{t("posts.title")}</span>
             <div className="flex gap-1.5">
               <Badge variant="secondary">{t(`type.${donnees.type}`)}</Badge>
               <Badge variant={publie ? "success" : "outline"}>
@@ -296,21 +308,25 @@ export function PosterPostPage() {
               </Badge>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
+
           <Button
             size="lg"
             className="w-full"
-            disabled={enCours || fichiers.isPending || (fichiers.data ?? []).length === 0}
+            disabled={enCours || fichiers.isPending || nbPhotos === 0}
             onClick={() => toutEnregistrer(donnees)}
           >
             {peutPartager(fichiers.data ?? []) ? <Share /> : <Download />}
             {fichiers.isPending
               ? t("posts.preparation")
-              : t("posts.enregistrerPhotos", { count: (fichiers.data ?? []).length })}
+              : t("posts.enregistrerPhotos", { count: nbPhotos })}
           </Button>
           <p className="text-xs text-muted-foreground">{t("posts.enregistrerAide")}</p>
 
+          {slidesNonNettoyees > 0 && (
+            <p className="rounded-md bg-warning/15 px-3 py-2 text-xs text-warning">
+              {t("posts.slidesNonNettoyees", { count: slidesNonNettoyees })}
+            </p>
+          )}
           {fichiers.isError && (
             <p className="text-sm text-destructive">{(fichiers.error as Error).message}</p>
           )}
@@ -327,32 +343,111 @@ export function PosterPostPage() {
         </CardContent>
       </Card>
 
+      {/* 2 — Passer sur le téléphone, seulement utile sur ordinateur. */}
       <CarteQr url={window.location.href} />
 
+      {/* 3 — Musique : juste l'accès, sans afficher le lien à rallonge. */}
       {donnees.musique_url && (
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Music className="size-4" />
-              {t("posts.musique")}
-            </CardTitle>
-            {/* Une URL TikTok n'a aucune espace : sans césure forcée elle
-                déborde de la carte et élargit toute la page sur mobile. */}
-            <CardDescription className="break-all">
-              {donnees.musique_titre ?? donnees.musique_url}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Button asChild className="w-full">
+          <CardContent className="flex flex-wrap items-center gap-3 pt-5">
+            <Music className="size-5 shrink-0 text-primary" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">{t("posts.musique")}</p>
+              <p className="text-xs text-muted-foreground">{t("posts.musiqueFavori")}</p>
+            </div>
+            <Button asChild className="shrink-0">
               <a href={donnees.musique_url} target="_blank" rel="noreferrer">
                 {t("posts.ouvrirMusique")}
               </a>
             </Button>
-            <TexteCopiable texte={donnees.musique_url} label={t("posts.lienMusique")} />
           </CardContent>
         </Card>
       )}
 
+      {/* 4 — Les slides : photo à poster, photo d'origine, texte. */}
+      <div className="space-y-4">
+        {liste.map((slide, index) => (
+          <Card key={slide.id}>
+            <CardContent className="space-y-3 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  {t("posts.slide", { position: slide.position })}
+                  {slide.position_sophia && <Badge>{t("posts.sophia")}</Badge>}
+                </span>
+                {!publie && (
+                  <div className="flex gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={t("posts.monterSlide")}
+                      disabled={index === 0 || deplacer.isPending}
+                      onClick={() => deplacer.mutate({ index, delta: -1 })}
+                    >
+                      <ArrowUp />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={t("posts.descendreSlide")}
+                      disabled={index === liste.length - 1 || deplacer.isPending}
+                      onClick={() => deplacer.mutate({ index, delta: 1 })}
+                    >
+                      <ArrowDown />
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* La photo à poster et l'originale côte à côte : c'est en les
+                  comparant que le poster retrouve où placer son texte. */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                {slide.media_library?.url ? (
+                  <Visuel
+                    url={slide.media_library.url}
+                    legende={t("posts.photoAPoster")}
+                    onZoom={() => setLoupe(slide.media_library!.url)}
+                  />
+                ) : (
+                  // Pas de version nettoyée : on ne montre pas un trou, on
+                  // signale que cette photo est à refaire ou à sauter.
+                  <div className="flex flex-col justify-center gap-1 rounded-lg border border-dashed border-warning/50 bg-warning/5 p-4 text-center">
+                    <span className="text-xs font-medium text-warning">
+                      {t("posts.photoManquante")}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {t("posts.photoManquanteAide")}
+                    </span>
+                  </div>
+                )}
+                {slide.reference_url && (
+                  <Visuel
+                    url={slide.reference_url}
+                    legende={t("posts.placementTitre")}
+                    onZoom={() => setLoupe(slide.reference_url!)}
+                  />
+                )}
+              </div>
+
+              {slide.media_library?.url && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => enregistrerUne(slide)}
+                >
+                  <Share />
+                  {t("posts.enregistrerPhoto")}
+                </Button>
+              )}
+
+              {slide.texte_overlay && (
+                <TexteCopiable texte={slide.texte_overlay} label={t("posts.texteSlide")} />
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* 5 — Validation et publication, en dernier. */}
       <Card>
         <CardContent className="space-y-3 pt-5">
           {publie ? (
@@ -397,94 +492,6 @@ export function PosterPostPage() {
           )}
         </CardContent>
       </Card>
-    </>
-  );
-
-  return (
-    <div className="space-y-4 pb-10">
-      {loupe && <Loupe url={loupe} onClose={() => setLoupe(null)} />}
-
-      <Button variant="outline" size="sm" asChild>
-        <Link to="/calendrier">{t("common.back")}</Link>
-      </Button>
-
-      {/* Sur ordinateur les actions passent dans une colonne collante : le
-          poster fait défiler ses slides sans perdre le QR ni le bouton de
-          publication. Sur mobile tout retombe dans une seule colonne. */}
-      <div className="gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-        <div className="space-y-4">
-          {liste.map((slide, index) => (
-            <Card key={slide.id}>
-              <CardContent className="space-y-3 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 text-sm font-medium">
-                    {t("posts.slide", { position: slide.position })}
-                    {slide.position_sophia && <Badge>{t("posts.sophia")}</Badge>}
-                  </span>
-                  {!publie && (
-                    <div className="flex gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={t("posts.monterSlide")}
-                        disabled={index === 0 || deplacer.isPending}
-                        onClick={() => deplacer.mutate({ index, delta: -1 })}
-                      >
-                        <ArrowUp />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={t("posts.descendreSlide")}
-                        disabled={index === liste.length - 1 || deplacer.isPending}
-                        onClick={() => deplacer.mutate({ index, delta: 1 })}
-                      >
-                        <ArrowDown />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
-                {/* La photo à poster et l'originale côte à côte : c'est en les
-                    comparant que le poster retrouve où placer son texte. */}
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {slide.media_library?.url && (
-                    <Visuel
-                      url={slide.media_library.url}
-                      legende={t("posts.photoAPoster")}
-                      onZoom={() => setLoupe(slide.media_library!.url)}
-                    />
-                  )}
-                  {slide.reference_url && (
-                    <Visuel
-                      url={slide.reference_url}
-                      legende={t("posts.placementTitre")}
-                      onZoom={() => setLoupe(slide.reference_url!)}
-                    />
-                  )}
-                </div>
-
-                {slide.media_library?.url && (
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => enregistrerUne(slide)}
-                  >
-                    <Share />
-                    {t("posts.enregistrerPhoto")}
-                  </Button>
-                )}
-
-                {slide.texte_overlay && (
-                  <TexteCopiable texte={slide.texte_overlay} label={t("posts.texteSlide")} />
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        <div className="mt-4 space-y-4 lg:sticky lg:top-6 lg:mt-0">{actions}</div>
-      </div>
     </div>
   );
 }
