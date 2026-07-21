@@ -104,6 +104,8 @@ export interface PostSlide {
   media_id: string | null;
   texte_overlay: string | null;
   position_sophia: boolean;
+  /** Visuel d'origine, texte encore incrusté : modèle de placement. */
+  reference_url: string | null;
   media_library: { url: string } | null;
 }
 

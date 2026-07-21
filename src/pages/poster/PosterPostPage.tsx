@@ -2,7 +2,18 @@ import * as React from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ArrowDown, ArrowUp, Download, QrCode } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Copy,
+  Download,
+  Eye,
+  Music,
+  QrCode,
+  Share,
+  X,
+} from "lucide-react";
 import JSZip from "jszip";
 import QRCode from "qrcode";
 
@@ -11,30 +22,83 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { lirePost, listerSlides, majPost, reordonnerSlides } from "@/features/moteur/api";
 import {
-  lirePost,
-  listerSlides,
-  majPost,
-  reordonnerSlides,
-} from "@/features/moteur/api";
-import type { PostSlide } from "@/features/moteur/types";
+  partagerFichiers,
+  peutPartager,
+  recupererFichier,
+  telechargerFichier,
+} from "@/features/moteur/telechargement";
+import type { Post, PostSlide } from "@/features/moteur/types";
 
-function BoutonCopier({ texte }: { texte: string }) {
+function nomFichier(postId: string, position: number) {
+  return `${postId.slice(0, 8)}-${String(position).padStart(2, "0")}.jpg`;
+}
+
+/** Zone de texte entièrement tapable : sur mobile, viser un petit bouton est
+ * pénible, et la sélection manuelle d'un texte multiligne encore plus. */
+function TexteCopiable({ texte, label }: { texte: string; label?: string }) {
   const { t } = useTranslation();
   const [copie, setCopie] = React.useState(false);
 
+  async function copier() {
+    try {
+      await navigator.clipboard.writeText(texte);
+      setCopie(true);
+      window.setTimeout(() => setCopie(false), 2000);
+    } catch {
+      // Clipboard refusé (contexte non sécurisé) : le texte reste sélectionnable.
+    }
+  }
+
   return (
-    <Button
-      size="sm"
-      variant="outline"
-      onClick={async () => {
-        await navigator.clipboard.writeText(texte);
-        setCopie(true);
-        window.setTimeout(() => setCopie(false), 2000);
-      }}
+    <button
+      type="button"
+      onClick={copier}
+      className="w-full rounded-lg border bg-muted/60 p-4 text-left transition active:scale-[0.99]"
     >
-      {copie ? t("posts.copie") : t("posts.copier")}
-    </Button>
+      {label && (
+        <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </span>
+      )}
+      <span className="block whitespace-pre-wrap break-words text-base leading-relaxed">
+        {texte}
+      </span>
+      <span className="mt-2 flex items-center gap-1.5 text-xs font-medium text-primary">
+        {copie ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+        {copie ? t("posts.copie") : t("posts.taperPourCopier")}
+      </span>
+    </button>
+  );
+}
+
+/** Plein écran : le placement du texte se juge sur une image lisible. */
+function Loupe({ url, onClose }: { url: string; onClose: () => void }) {
+  const { t } = useTranslation();
+
+  React.useEffect(() => {
+    const echap = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", echap);
+    return () => window.removeEventListener("keydown", echap);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-3"
+      onClick={onClose}
+    >
+      <Button
+        size="icon"
+        variant="secondary"
+        aria-label={t("common.cancel")}
+        className="absolute right-3 top-3"
+        onClick={onClose}
+      >
+        <X />
+      </Button>
+      <img src={url} alt="" className="max-h-full max-w-full object-contain" />
+    </div>
   );
 }
 
@@ -72,7 +136,9 @@ export function PosterPostPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [lienPublie, setLienPublie] = React.useState("");
-  const [zipEnCours, setZipEnCours] = React.useState(false);
+  const [loupe, setLoupe] = React.useState<string | null>(null);
+  const [erreurPartage, setErreurPartage] = React.useState<string | null>(null);
+  const [enCours, setEnCours] = React.useState(false);
 
   const post = useQuery({
     queryKey: ["post", id],
@@ -85,6 +151,24 @@ export function PosterPostPage() {
     enabled: Boolean(id),
   });
 
+  const liste = React.useMemo(() => slides.data ?? [], [slides.data]);
+
+  // Préchargement des visuels : `navigator.share` doit être appelé dans la
+  // foulée du tap, il ne peut pas attendre un fetch.
+  const fichiers = useQuery({
+    queryKey: ["fichiers", id, liste.map((s) => s.media_library?.url).join("|")],
+    enabled: liste.length > 0,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const resultats: File[] = [];
+      for (const slide of liste) {
+        const url = slide.media_library?.url;
+        if (url) resultats.push(await recupererFichier(url, nomFichier(id!, slide.position)));
+      }
+      return resultats;
+    },
+  });
+
   const rafraichir = () => {
     queryClient.invalidateQueries({ queryKey: ["post", id] });
     queryClient.invalidateQueries({ queryKey: ["slides", id] });
@@ -93,11 +177,11 @@ export function PosterPostPage() {
 
   const deplacer = useMutation({
     mutationFn: async (input: { index: number; delta: number }) => {
-      const liste = [...(slides.data ?? [])];
+      const ordre = [...liste];
       const cible = input.index + input.delta;
-      if (cible < 0 || cible >= liste.length) return;
-      [liste[input.index], liste[cible]] = [liste[cible], liste[input.index]];
-      await reordonnerSlides(liste);
+      if (cible < 0 || cible >= ordre.length) return;
+      [ordre[input.index], ordre[cible]] = [ordre[cible], ordre[input.index]];
+      await reordonnerSlides(ordre);
     },
     onSuccess: rafraichir,
   });
@@ -117,37 +201,44 @@ export function PosterPostPage() {
     onSuccess: rafraichir,
   });
 
-  /** Récupère les visuels et les textes en une archive, prête pour TikTok. */
-  async function telechargerTout(liste: PostSlide[]) {
-    setZipEnCours(true);
+  /** Tout d'un coup : feuille de partage sur mobile, ZIP sur ordinateur. */
+  async function toutEnregistrer(donnees: Post) {
+    setErreurPartage(null);
+    const prets = fichiers.data ?? [];
+
     try {
+      if (peutPartager(prets)) {
+        await partagerFichiers(prets, t("posts.title"));
+        return;
+      }
+
+      setEnCours(true);
       const zip = new JSZip();
-      const textes: string[] = [];
-
-      for (const slide of liste) {
-        const url = slide.media_library?.url;
-        if (url) {
-          const reponse = await fetch(url);
-          zip.file(`${slide.position}.jpg`, await reponse.blob());
-        }
-        if (slide.texte_overlay) {
-          textes.push(`Slide ${slide.position}\n${slide.texte_overlay}\n`);
-        }
-      }
-
-      if (post.data?.musique_url) {
-        textes.push(`\nMusique : ${post.data.musique_url}`);
-      }
-      zip.file("textes.txt", textes.join("\n"));
-
-      const blob = await zip.generateAsync({ type: "blob" });
-      const lien = document.createElement("a");
-      lien.href = URL.createObjectURL(blob);
-      lien.download = `post-${id}.zip`;
-      lien.click();
-      URL.revokeObjectURL(lien.href);
+      prets.forEach((f) => zip.file(f.name, f));
+      zip.file("textes.txt", texteComplet(donnees, liste));
+      telechargerFichier(await zip.generateAsync({ type: "blob" }), `post-${id}.zip`);
+    } catch (e) {
+      setErreurPartage(e instanceof Error ? e.message : String(e));
     } finally {
-      setZipEnCours(false);
+      setEnCours(false);
+    }
+  }
+
+  /** Une seule photo : même logique, à l'échelle de la slide. */
+  async function enregistrerUne(slide: PostSlide) {
+    setErreurPartage(null);
+    const nom = nomFichier(id!, slide.position);
+    const dejaPret = (fichiers.data ?? []).find((f) => f.name === nom);
+
+    try {
+      const fichier = dejaPret ?? (await recupererFichier(slide.media_library!.url, nom));
+      if (peutPartager([fichier])) {
+        await partagerFichiers([fichier], nom);
+        return;
+      }
+      telechargerFichier(fichier, nom);
+    } catch (e) {
+      setErreurPartage(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -158,11 +249,14 @@ export function PosterPostPage() {
     return <p className="text-sm text-destructive">{t("common.notFoundTitle")}</p>;
   }
 
-  const liste = slides.data ?? [];
-  const publie = Boolean(post.data.publie_at);
+  const donnees = post.data;
+  const publie = Boolean(donnees.publie_at);
+  const tousLesTextes = texteComplet(donnees, liste);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-10">
+      {loupe && <Loupe url={loupe} onClose={() => setLoupe(null)} />}
+
       <Button variant="outline" size="sm" asChild>
         <Link to="/calendrier">{t("common.back")}</Link>
       </Button>
@@ -172,40 +266,62 @@ export function PosterPostPage() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle>{t("posts.title")}</CardTitle>
             <div className="flex gap-1.5">
-              <Badge variant="secondary">{t(`type.${post.data.type}`)}</Badge>
+              <Badge variant="secondary">{t(`type.${donnees.type}`)}</Badge>
               <Badge variant={publie ? "success" : "outline"}>
-                {t(`statut.${post.data.statut}`)}
+                {t(`statut.${donnees.statut}`)}
               </Badge>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <Button
-            disabled={zipEnCours || liste.length === 0}
-            onClick={() => telechargerTout(liste)}
+            size="lg"
+            className="w-full"
+            disabled={enCours || fichiers.isPending || (fichiers.data ?? []).length === 0}
+            onClick={() => toutEnregistrer(donnees)}
           >
-            <Download />
-            {zipEnCours ? t("common.saving") : t("posts.telechargerTout")}
+            {peutPartager(fichiers.data ?? []) ? <Share /> : <Download />}
+            {fichiers.isPending
+              ? t("posts.preparation")
+              : t("posts.enregistrerPhotos", { count: (fichiers.data ?? []).length })}
           </Button>
+          <p className="text-xs text-muted-foreground">{t("posts.enregistrerAide")}</p>
 
-          {post.data.musique_url && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium">{t("posts.musique")}</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <a
-                  href={post.data.musique_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="min-w-0 flex-1 truncate text-sm underline underline-offset-4"
-                >
-                  {post.data.musique_titre ?? post.data.musique_url}
-                </a>
-                <BoutonCopier texte={post.data.musique_url} />
-              </div>
-            </div>
+          {fichiers.isError && (
+            <p className="text-sm text-destructive">{(fichiers.error as Error).message}</p>
           )}
+          {erreurPartage && <p className="text-sm text-destructive">{erreurPartage}</p>}
+
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => navigator.clipboard.writeText(tousLesTextes)}
+          >
+            <Copy />
+            {t("posts.copierTout")}
+          </Button>
         </CardContent>
       </Card>
+
+      {donnees.musique_url && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Music className="size-4" />
+              {t("posts.musique")}
+            </CardTitle>
+            <CardDescription>{donnees.musique_titre ?? donnees.musique_url}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Button asChild size="lg" className="w-full">
+              <a href={donnees.musique_url} target="_blank" rel="noreferrer">
+                {t("posts.ouvrirMusique")}
+              </a>
+            </Button>
+            <TexteCopiable texte={donnees.musique_url} label={t("posts.lienMusique")} />
+          </CardContent>
+        </Card>
+      )}
 
       <CarteQr url={window.location.href} />
 
@@ -247,23 +363,51 @@ export function PosterPostPage() {
                   <img
                     src={slide.media_library.url}
                     alt=""
-                    className="w-full rounded-md border object-contain"
+                    className="w-full rounded-lg border object-contain"
+                    onClick={() => setLoupe(slide.media_library!.url)}
                   />
-                  <Button asChild size="sm" variant="outline" className="w-full">
-                    <a href={slide.media_library.url} download target="_blank" rel="noreferrer">
-                      {t("posts.telecharger")}
-                    </a>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => enregistrerUne(slide)}
+                  >
+                    <Share />
+                    {t("posts.enregistrerPhoto")}
                   </Button>
                 </>
               )}
 
               {slide.texte_overlay && (
-                <div className="space-y-2">
-                  <p className="whitespace-pre-wrap rounded-md bg-muted p-3 text-sm">
-                    {slide.texte_overlay}
-                  </p>
-                  <BoutonCopier texte={slide.texte_overlay} />
-                </div>
+                <TexteCopiable texte={slide.texte_overlay} label={t("posts.texteSlide")} />
+              )}
+
+              {/* Le visuel d'origine porte encore son texte : c'est le modèle de
+                  placement à reproduire dans l'éditeur TikTok. */}
+              {slide.reference_url && (
+                <details className="rounded-lg border">
+                  <summary className="flex cursor-pointer items-center gap-2 p-3 text-sm font-medium">
+                    <Eye className="size-4" />
+                    {t("posts.voirPlacement")}
+                  </summary>
+                  <div className="space-y-2 border-t p-3">
+                    <p className="text-xs text-muted-foreground">{t("posts.placementAide")}</p>
+                    <img
+                      src={slide.reference_url}
+                      alt=""
+                      className="w-full rounded-md border object-contain"
+                      onClick={() => setLoupe(slide.reference_url!)}
+                    />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full"
+                      onClick={() => setLoupe(slide.reference_url!)}
+                    >
+                      {t("posts.agrandir")}
+                    </Button>
+                  </div>
+                </details>
               )}
             </CardContent>
           </Card>
@@ -275,12 +419,12 @@ export function PosterPostPage() {
           {publie ? (
             <p className="text-sm text-success">
               {t("posts.publieLe", {
-                date: new Date(post.data.publie_at!).toLocaleString(i18n.language),
+                date: new Date(donnees.publie_at!).toLocaleString(i18n.language),
               })}
             </p>
           ) : (
             <>
-              {post.data.statut !== "valide_par_poster" && (
+              {donnees.statut !== "valide_par_poster" && (
                 <Button
                   variant="outline"
                   disabled={valider.isPending}
@@ -295,6 +439,7 @@ export function PosterPostPage() {
                 <Input
                   id="lien"
                   type="url"
+                  inputMode="url"
                   placeholder="https://www.tiktok.com/@..."
                   value={lienPublie}
                   onChange={(e) => setLienPublie(e.target.value)}
@@ -310,4 +455,12 @@ export function PosterPostPage() {
       </Card>
     </div>
   );
+}
+
+function texteComplet(post: Post, slides: PostSlide[]): string {
+  const lignes = slides
+    .filter((s) => s.texte_overlay)
+    .map((s) => `Slide ${s.position}\n${s.texte_overlay}`);
+  if (post.musique_url) lignes.push(`Musique : ${post.musique_url}`);
+  return lignes.join("\n\n");
 }

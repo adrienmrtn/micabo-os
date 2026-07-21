@@ -142,6 +142,9 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
             media_id: visuels.get(s.position) ?? s.media_id,
             texte_overlay: parPosition.get(s.position) ?? "",
             position_sophia: false,
+            // Le visuel d'origine, texte encore incrusté : c'est le modèle de
+            // placement que le poster recopie dans TikTok.
+            reference_url: s.raw_url ?? null,
           })),
         )
         .select("media_id");
