@@ -252,6 +252,9 @@ export function PosterPostPage() {
   const donnees = post.data;
   const publie = Boolean(donnees.publie_at);
   const tousLesTextes = texteComplet(donnees, liste);
+  // Recyclé et remanié rejouent un TikTok existant : le poster doit voir
+  // l'original sans avoir à le déplier.
+  const reprise = donnees.type === "recycle" || donnees.type === "remanie";
 
   return (
     <div className="space-y-6 pb-10">
@@ -383,14 +386,17 @@ export function PosterPostPage() {
               )}
 
               {/* Le visuel d'origine porte encore son texte : c'est le modèle de
-                  placement à reproduire dans l'éditeur TikTok. */}
-              {slide.reference_url && (
-                <details className="rounded-lg border">
-                  <summary className="flex cursor-pointer items-center gap-2 p-3 text-sm font-medium">
-                    <Eye className="size-4" />
-                    {t("posts.voirPlacement")}
-                  </summary>
-                  <div className="space-y-2 border-t p-3">
+                  placement à reproduire dans l'éditeur TikTok. Sur un post qui
+                  reprend un TikTok existant il est indispensable, donc affiché
+                  d'emblée sous le texte ; sur un post inédit il n'est qu'une
+                  référence de style, et reste replié. */}
+              {slide.reference_url &&
+                (reprise ? (
+                  <div className="space-y-2 rounded-lg border p-3">
+                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      <Eye className="size-3.5" />
+                      {t("posts.placementTitre")}
+                    </p>
                     <p className="text-xs text-muted-foreground">{t("posts.placementAide")}</p>
                     <img
                       src={slide.reference_url}
@@ -407,8 +413,23 @@ export function PosterPostPage() {
                       {t("posts.agrandir")}
                     </Button>
                   </div>
-                </details>
-              )}
+                ) : (
+                  <details className="rounded-lg border">
+                    <summary className="flex cursor-pointer items-center gap-2 p-3 text-sm font-medium">
+                      <Eye className="size-4" />
+                      {t("posts.voirPlacement")}
+                    </summary>
+                    <div className="space-y-2 border-t p-3">
+                      <p className="text-xs text-muted-foreground">{t("posts.placementAide")}</p>
+                      <img
+                        src={slide.reference_url}
+                        alt=""
+                        className="w-full rounded-md border object-contain"
+                        onClick={() => setLoupe(slide.reference_url!)}
+                      />
+                    </div>
+                  </details>
+                ))}
             </CardContent>
           </Card>
         ))}

@@ -256,6 +256,7 @@ export const fr = {
       ouvrirMusique: "Ouvrir la musique",
       lienMusique: "Lien de la musique",
       voirPlacement: "Voir où poser le texte",
+      placementTitre: "Photo d'origine",
       placementAide:
         "Visuel d'origine : reproduis la même position et la même taille de texte dans TikTok.",
       agrandir: "Agrandir",
