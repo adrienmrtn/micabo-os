@@ -52,7 +52,10 @@ Deno.serve(async (request) => {
     if (data.user) {
       await supabase
         .from("profiles")
-        .update({ prenom, nom: nom || null, is_active: true, must_change_password: true })
+        // Pas de changement de mot de passe imposé : le mot de passe reste
+        // 12345678 pour tout le monde, c'est un choix assumé sur un outil
+        // interne où l'admin dicte les accès de vive voix.
+        .update({ prenom, nom: nom || null, is_active: true, must_change_password: false })
         .eq("id", data.user.id);
     }
 

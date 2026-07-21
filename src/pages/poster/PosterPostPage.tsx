@@ -8,7 +8,6 @@ import {
   Check,
   Copy,
   Download,
-  Eye,
   Music,
   QrCode,
   Share,
@@ -102,13 +101,18 @@ function Loupe({ url, onClose }: { url: string; onClose: () => void }) {
   );
 }
 
-/** QR pointant vers cette même page : le poster passe de l'ordi au téléphone. */
+/**
+ * QR pointant vers cette même page : sur ordinateur, enregistrer les photos ne
+ * sert à rien puisqu'il faut les poster depuis le téléphone. Le poster relit
+ * tout au calme sur grand écran, puis scanne pour récupérer les fichiers.
+ * Masqué sur mobile, où l'on est déjà sur le bon appareil.
+ */
 function CarteQr({ url }: { url: string }) {
   const { t } = useTranslation();
   const [image, setImage] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    QRCode.toDataURL(url, { width: 220, margin: 1 })
+    QRCode.toDataURL(url, { width: 320, margin: 1 })
       .then(setImage)
       .catch(() => setImage(null));
   }, [url]);
@@ -116,18 +120,44 @@ function CarteQr({ url }: { url: string }) {
   if (!image) return null;
 
   return (
-    <Card className="hidden sm:block">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <QrCode className="size-4" />
+    <Card className="hidden border-primary/30 sm:block">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <QrCode className="size-4 text-primary" />
           {t("posts.qrTitle")}
         </CardTitle>
         <CardDescription>{t("posts.qrBody")}</CardDescription>
       </CardHeader>
       <CardContent>
-        <img src={image} alt="QR code" className="rounded-lg border" />
+        <img src={image} alt="QR code" className="mx-auto w-full max-w-[220px] rounded-lg border" />
       </CardContent>
     </Card>
+  );
+}
+
+/** Une photo cliquable, légendée, qui s'ouvre en plein écran. */
+function Visuel({
+  url,
+  legende,
+  onZoom,
+}: {
+  url: string;
+  legende: string;
+  onZoom: () => void;
+}) {
+  return (
+    <figure className="space-y-1.5">
+      <figcaption className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {legende}
+      </figcaption>
+      <button type="button" onClick={onZoom} className="block w-full">
+        <img
+          src={url}
+          alt=""
+          className="w-full rounded-lg border object-contain transition hover:opacity-90"
+        />
+      </button>
+    </figure>
   );
 }
 
@@ -252,22 +282,13 @@ export function PosterPostPage() {
   const donnees = post.data;
   const publie = Boolean(donnees.publie_at);
   const tousLesTextes = texteComplet(donnees, liste);
-  // Recyclé et remanié rejouent un TikTok existant : le poster doit voir
-  // l'original sans avoir à le déplier.
-  const reprise = donnees.type === "recycle" || donnees.type === "remanie";
 
-  return (
-    <div className="space-y-6 pb-10">
-      {loupe && <Loupe url={loupe} onClose={() => setLoupe(null)} />}
-
-      <Button variant="outline" size="sm" asChild>
-        <Link to="/calendrier">{t("common.back")}</Link>
-      </Button>
-
+  const actions = (
+    <>
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle>{t("posts.title")}</CardTitle>
+            <CardTitle className="text-base">{t("posts.title")}</CardTitle>
             <div className="flex gap-1.5">
               <Badge variant="secondary">{t(`type.${donnees.type}`)}</Badge>
               <Badge variant={publie ? "success" : "outline"}>
@@ -306,10 +327,12 @@ export function PosterPostPage() {
         </CardContent>
       </Card>
 
+      <CarteQr url={window.location.href} />
+
       {donnees.musique_url && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
               <Music className="size-4" />
               {t("posts.musique")}
             </CardTitle>
@@ -320,7 +343,7 @@ export function PosterPostPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Button asChild size="lg" className="w-full">
+            <Button asChild className="w-full">
               <a href={donnees.musique_url} target="_blank" rel="noreferrer">
                 {t("posts.ouvrirMusique")}
               </a>
@@ -329,115 +352,6 @@ export function PosterPostPage() {
           </CardContent>
         </Card>
       )}
-
-      <CarteQr url={window.location.href} />
-
-      <div className="space-y-4">
-        {liste.map((slide, index) => (
-          <Card key={slide.id}>
-            <CardContent className="space-y-3 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2 text-sm font-medium">
-                  {t("posts.slide", { position: slide.position })}
-                  {slide.position_sophia && <Badge>{t("posts.sophia")}</Badge>}
-                </span>
-                {!publie && (
-                  <div className="flex gap-1">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={t("posts.monterSlide")}
-                      disabled={index === 0 || deplacer.isPending}
-                      onClick={() => deplacer.mutate({ index, delta: -1 })}
-                    >
-                      <ArrowUp />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={t("posts.descendreSlide")}
-                      disabled={index === liste.length - 1 || deplacer.isPending}
-                      onClick={() => deplacer.mutate({ index, delta: 1 })}
-                    >
-                      <ArrowDown />
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {slide.media_library?.url && (
-                <>
-                  <img
-                    src={slide.media_library.url}
-                    alt=""
-                    className="w-full rounded-lg border object-contain"
-                    onClick={() => setLoupe(slide.media_library!.url)}
-                  />
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => enregistrerUne(slide)}
-                  >
-                    <Share />
-                    {t("posts.enregistrerPhoto")}
-                  </Button>
-                </>
-              )}
-
-              {slide.texte_overlay && (
-                <TexteCopiable texte={slide.texte_overlay} label={t("posts.texteSlide")} />
-              )}
-
-              {/* Le visuel d'origine porte encore son texte : c'est le modèle de
-                  placement à reproduire dans l'éditeur TikTok. Sur un post qui
-                  reprend un TikTok existant il est indispensable, donc affiché
-                  d'emblée sous le texte ; sur un post inédit il n'est qu'une
-                  référence de style, et reste replié. */}
-              {slide.reference_url &&
-                (reprise ? (
-                  <div className="space-y-2 rounded-lg border p-3">
-                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      <Eye className="size-3.5" />
-                      {t("posts.placementTitre")}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{t("posts.placementAide")}</p>
-                    <img
-                      src={slide.reference_url}
-                      alt=""
-                      className="w-full rounded-md border object-contain"
-                      onClick={() => setLoupe(slide.reference_url!)}
-                    />
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="w-full"
-                      onClick={() => setLoupe(slide.reference_url!)}
-                    >
-                      {t("posts.agrandir")}
-                    </Button>
-                  </div>
-                ) : (
-                  <details className="rounded-lg border">
-                    <summary className="flex cursor-pointer items-center gap-2 p-3 text-sm font-medium">
-                      <Eye className="size-4" />
-                      {t("posts.voirPlacement")}
-                    </summary>
-                    <div className="space-y-2 border-t p-3">
-                      <p className="text-xs text-muted-foreground">{t("posts.placementAide")}</p>
-                      <img
-                        src={slide.reference_url}
-                        alt=""
-                        className="w-full rounded-md border object-contain"
-                        onClick={() => setLoupe(slide.reference_url!)}
-                      />
-                    </div>
-                  </details>
-                ))}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
 
       <Card>
         <CardContent className="space-y-3 pt-5">
@@ -452,6 +366,7 @@ export function PosterPostPage() {
               {donnees.statut !== "valide_par_poster" && (
                 <Button
                   variant="outline"
+                  className="w-full"
                   disabled={valider.isPending}
                   onClick={() => valider.mutate()}
                 >
@@ -471,13 +386,105 @@ export function PosterPostPage() {
                 />
               </div>
 
-              <Button disabled={publier.isPending} onClick={() => publier.mutate()}>
+              <Button
+                className="w-full"
+                disabled={publier.isPending}
+                onClick={() => publier.mutate()}
+              >
                 {publier.isPending ? t("common.saving") : t("posts.marquerPublie")}
               </Button>
             </>
           )}
         </CardContent>
       </Card>
+    </>
+  );
+
+  return (
+    <div className="space-y-4 pb-10">
+      {loupe && <Loupe url={loupe} onClose={() => setLoupe(null)} />}
+
+      <Button variant="outline" size="sm" asChild>
+        <Link to="/calendrier">{t("common.back")}</Link>
+      </Button>
+
+      {/* Sur ordinateur les actions passent dans une colonne collante : le
+          poster fait défiler ses slides sans perdre le QR ni le bouton de
+          publication. Sur mobile tout retombe dans une seule colonne. */}
+      <div className="gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+        <div className="space-y-4">
+          {liste.map((slide, index) => (
+            <Card key={slide.id}>
+              <CardContent className="space-y-3 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    {t("posts.slide", { position: slide.position })}
+                    {slide.position_sophia && <Badge>{t("posts.sophia")}</Badge>}
+                  </span>
+                  {!publie && (
+                    <div className="flex gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={t("posts.monterSlide")}
+                        disabled={index === 0 || deplacer.isPending}
+                        onClick={() => deplacer.mutate({ index, delta: -1 })}
+                      >
+                        <ArrowUp />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={t("posts.descendreSlide")}
+                        disabled={index === liste.length - 1 || deplacer.isPending}
+                        onClick={() => deplacer.mutate({ index, delta: 1 })}
+                      >
+                        <ArrowDown />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                {/* La photo à poster et l'originale côte à côte : c'est en les
+                    comparant que le poster retrouve où placer son texte. */}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {slide.media_library?.url && (
+                    <Visuel
+                      url={slide.media_library.url}
+                      legende={t("posts.photoAPoster")}
+                      onZoom={() => setLoupe(slide.media_library!.url)}
+                    />
+                  )}
+                  {slide.reference_url && (
+                    <Visuel
+                      url={slide.reference_url}
+                      legende={t("posts.placementTitre")}
+                      onZoom={() => setLoupe(slide.reference_url!)}
+                    />
+                  )}
+                </div>
+
+                {slide.media_library?.url && (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => enregistrerUne(slide)}
+                  >
+                    <Share />
+                    {t("posts.enregistrerPhoto")}
+                  </Button>
+                )}
+
+                {slide.texte_overlay && (
+                  <TexteCopiable texte={slide.texte_overlay} label={t("posts.texteSlide")} />
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="mt-4 space-y-4 lg:sticky lg:top-6 lg:mt-0">{actions}</div>
+      </div>
     </div>
   );
 }

@@ -19,9 +19,8 @@ import { useAuth } from "@/features/auth/AuthContext";
 import { creerPoster, listerPosters, majPoster, supprimerPoster } from "@/features/moteur/api";
 
 /**
- * Mot de passe initial commun, simple à dicter. Il ne reste jamais en place :
- * `must_change_password` force le poster à en choisir un autre à sa première
- * connexion, avant d'accéder à quoi que ce soit.
+ * Mot de passe commun à tous les posters, simple à dicter au téléphone. Il
+ * reste en place : on ne demande à personne d'en choisir un autre.
  */
 const MOT_DE_PASSE_INITIAL = "12345678";
 

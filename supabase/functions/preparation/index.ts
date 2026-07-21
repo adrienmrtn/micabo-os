@@ -119,11 +119,16 @@ async function avancer(supabase: Supabase, sujet: any): Promise<string> {
     if (aNettoyer.length > 0) {
       for (const slide of aNettoyer.slice(0, SLIDES_PAR_PASSAGE)) {
         slide.media_id = await nettoyerVersBibliotheque(supabase, sujet, slide);
+        // On enregistre slide par slide, pas à la fin du lot : le worker est
+        // régulièrement tué en cours de route (WORKER_RESOURCE_LIMIT), et le
+        // média était alors déjà en base sans que son id soit retenu. Le
+        // passage suivant reprenait la même slide et butait sur l'unicité de
+        // storage_path, ce qui condamnait le sujet.
+        await supabase
+          .from("sujets")
+          .update({ structure_slides: slides })
+          .eq("id", sujet.id);
       }
-      await supabase
-        .from("sujets")
-        .update({ structure_slides: slides })
-        .eq("id", sujet.id);
       return "nettoyage";
     }
 
@@ -183,16 +188,22 @@ async function nettoyerVersBibliotheque(
   // par la sélection d'avatar.
   const visage = await contientVisageIdentifiable(url);
 
+  // Upsert et non insert : `storage_path` est unique, et une reprise après un
+  // worker tué retomberait sinon sur un doublon. Le chemin identifie déjà le
+  // visuel de façon stable, réécrire la ligne est sans effet de bord.
   const { data: media, error } = await supabase
     .from("media_library")
-    .insert({
-      compte_reference_id: sujet.compte_reference_id,
-      storage_path: propreBase64 ? path : `brut/${sujet.id}/${slide.position}`,
-      url,
-      source: "nettoye_reference",
-      langue: sujet.langue,
-      visage_identifiable: visage === null ? true : visage,
-    })
+    .upsert(
+      {
+        compte_reference_id: sujet.compte_reference_id,
+        storage_path: propreBase64 ? path : `brut/${sujet.id}/${slide.position}`,
+        url,
+        source: "nettoye_reference",
+        langue: sujet.langue,
+        visage_identifiable: visage === null ? true : visage,
+      },
+      { onConflict: "storage_path" },
+    )
     .select()
     .single();
 

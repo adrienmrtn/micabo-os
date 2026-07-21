@@ -320,6 +320,18 @@ async function recyclerMeilleurPost(
 /** Un sujet préparé, retenu, encore inutilisé, tiré de la source du compte. */
 // deno-lint-ignore no-explicit-any
 async function choisirSujet(supabase: Supabase, compte: any) {
+  // Un sujet n'est marqué « utilisé » qu'à la fin de la fabrication, bien après
+  // l'assignation. Se fier à ce seul statut faisait repiocher le même sujet
+  // pour les deux posts du jour : le compte recevait deux fois le même
+  // diaporama. On écarte donc tout sujet déjà porté par un post du compte.
+  const { data: dejaPris } = await supabase
+    .from("posts")
+    .select("sujet_id")
+    .eq("compte_id", compte.id)
+    .not("sujet_id", "is", null);
+
+  const exclus = (dejaPris ?? []).map((p) => p.sujet_id);
+
   let query = supabase
     .from("sujets")
     .select("id")
@@ -330,6 +342,9 @@ async function choisirSujet(supabase: Supabase, compte: any) {
 
   if (compte.compte_reference_id) {
     query = query.eq("compte_reference_id", compte.compte_reference_id);
+  }
+  if (exclus.length > 0) {
+    query = query.not("id", "in", `(${exclus.join(",")})`);
   }
 
   const { data } = await query;

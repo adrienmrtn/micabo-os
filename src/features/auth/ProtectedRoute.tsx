@@ -31,8 +31,9 @@ export function ProtectedRoute() {
   if (profil && !profil.is_active) return <EnAttente />;
   if (!role) return <EnAttente />;
 
-  // Le mot de passe vient de l'admin : on force son remplacement avant d'ouvrir
-  // quoi que ce soit d'autre.
+  // Le mot de passe reste celui donné par l'admin, le même pour tous : la
+  // création de compte ne lève donc jamais ce drapeau. Le passage est conservé
+  // pour qu'un admin puisse forcer un changement sur un compte précis.
   if (profil?.must_change_password) return <ChangePasswordPage />;
 
   return <Outlet />;

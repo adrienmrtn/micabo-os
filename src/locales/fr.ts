@@ -257,6 +257,7 @@ export const fr = {
       lienMusique: "Lien de la musique",
       voirPlacement: "Voir où poser le texte",
       placementTitre: "Photo d'origine",
+      photoAPoster: "Photo à poster",
       placementAide:
         "Visuel d'origine : reproduis la même position et la même taille de texte dans TikTok.",
       agrandir: "Agrandir",
@@ -268,8 +269,9 @@ export const fr = {
       monterSlide: "Monter",
       descendreSlide: "Descendre",
       reorganiser: "Réorganiser les slides",
-      qrTitle: "Ouvrir sur mon téléphone",
-      qrBody: "Scanne ce code pour récupérer le post sur mobile.",
+      qrTitle: "Passer sur mon téléphone",
+      qrBody:
+        "Scanne ce code pour rouvrir ce post sur ton mobile et enregistrer les photos.",
       tous: "Tous les posts",
       tousDesc: "Change le compte assigné ou la date de publication prévue.",
       creerManuel: "Créer un post à la main",
