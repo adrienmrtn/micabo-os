@@ -1,86 +1,57 @@
-# Sophia Marketing Orga
+# Sophia — Moteur de contenu TikTok
 
-Plateforme interne d'industrialisation de slideshows TikTok pour la promotion de
-l'app Sophia.
-
-## Rôles
-
-- **Admin** — gère les comptes TikTok de référence, les assignations, les
-  utilisateurs, les slideshows et le prompt Sophia.
-- **Poster** — reçoit ses slideshows du jour, copie les textes, télécharge les
-  visuels et la musique, publie sur TikTok.
-
-Le poster ne voit **jamais** le compte de référence dont provient un slideshow.
-Cette règle est appliquée au niveau des données : les vues `poster_slideshows`
-et `poster_accounts` n'exposent pas la colonne, et `tiktok_accounts` est
-admin-only en RLS.
+Application interne : des posters freelances publient chaque jour des carrousels
+TikTok faisant la promotion de l'appli Sophia (culture générale). Le moteur
+extrait la matière des comptes de référence de l'entreprise, la nettoie, la
+traduit, y place l'appli Sophia, et assigne les posts aux posters.
 
 ## Démarrage
 
 ```bash
 npm install
-cp .env.example .env   # renseigner VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
+cp .env.example .env   # VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
 npm run dev
 ```
 
-## Base de données
+## Le moteur
 
-Migrations dans `supabase/migrations/`, appliquées dans l'ordre numérique.
+Quatre Edge Functions, chacune volontairement courte : une fonction Supabase ne
+survit pas à des dizaines d'appels Gemini d'affilée, donc le travail avance par
+petits lots et le cron reprend là où il s'est arrêté.
 
-| Table | Rôle |
+| Fonction | Rôle |
 |---|---|
-| `profiles` | profil utilisateur (jamais le rôle) |
-| `user_roles` | rôle applicatif, enum `app_role`, lu via `has_role()` |
-| `tiktok_accounts` | comptes de référence + pseudo à créer |
-| `assignments` | poster ↔ compte (max 4, imposé par trigger) |
-| `slideshows` | contenu produit, statut de pipeline, assignation datée |
-| `slideshow_frames` | slides, textes extraits et traduits |
-| `sophia_variants` | textes pub générés |
-| `sophia_corrections` | 40 dernières corrections, réinjectées en few-shot |
-| `sophia_prompts` | master prompt éditable |
-| `mobile_tokens` | liens de livraison mobile |
-| `discovery_runs` | journal des scans Apify |
+| `extraction` | Scrape un compte de référence via Apify, rapatrie les visuels, crée un `sujet` par post. Aucun appel IA. |
+| `preparation` | Par passage : OCR du visuel brut, puis notation de pertinence, puis nettoyage vers la bibliothèque. |
+| `composition` | Traduit tout le deck d'une traite, place l'appli Sophia sur une slide, crée le post. |
+| `assignation` | Complète la journée de chaque compte selon les ratios. Idempotente. |
+
+L'ordre de `preparation` est délibéré : la pertinence est jugée **avant** tout
+nettoyage, pour ne pas payer du Gemini sur un sujet hors-sujet.
+
+Deux appelants autorisés : pg_cron via l'en-tête `x-cron-secret`, ou un admin
+depuis l'interface via son JWT (le rôle est revérifié côté serveur).
+
+## Règles produit tenues par la base
+
+- Le compte de référence est **admin-only** en RLS : un poster ne peut pas
+  remonter à la source de sa matière, même en forgeant une requête.
+- `media_library.visage_identifiable` : tout visuel entrant est examiné, le
+  doute vaut refus, et seuls les visuels sans visage sont proposés comme avatar.
+- Les ratios (60/20/20), la fréquence et la règle de semaine 1 vivent dans
+  `reglages` et s'éditent depuis l'admin. Rien n'est figé dans le code.
 
 ## Secrets
 
-Les clés d'API vivent dans les **secrets Supabase** (Edge Functions), jamais
-dans le `.env` du frontend — tout ce qui est préfixé `VITE_` est exposé au
-navigateur.
+Côté Supabase (jamais dans le dépôt ni le bundle) : `APIFY_TOKEN`,
+`GEMINI_API_KEY`, `CRON_SECRET`. Côté client, uniquement l'URL du projet et la
+clé anon.
 
-- `APIFY_TOKEN` — scraping des comptes de référence
-- `GEMINI_API_KEY` — nettoyage d'images, OCR, traduction, génération Sophia
+## Points ouverts
 
-## Edge Functions
-
-Déployées sur le projet, dans `supabase/functions/` :
-
-- **`discovery`** — scanne les comptes de référence via Apify, crée les
-  slideshows et leurs slides. Priorise les comptes dont le poster n'a rien
-  aujourd'hui.
-- **`pipeline`** — nettoyage Gemini (+ vérification et retry), OCR, traduction
-  FR en tutoiement, génération du texte Sophia, assignation, puis backfill.
-
-Deux appelants autorisés : pg_cron via l'en-tête `x-cron-secret`, ou un admin
-depuis l'interface via son JWT (le rôle est revérifié côté serveur). Test :
-
-```bash
-curl -X POST "$SUPABASE_URL/functions/v1/discovery" -H "x-cron-secret: $CRON_SECRET"
-```
-
-## État
-
-**Fait** — schéma + RLS, auth et rôles, écrans admin (slideshows, comptes,
-assignations, utilisateurs, prompts), import manuel, éditeur de slides,
-dashboard poster, page de livraison, onboarding poster, Edge Functions
-discovery et pipeline déployées et déclenchables depuis l'admin.
-
-**À faire** — activer les crons (`0005_crons.sql.disabled`, volontairement non
-appliqué : dépense récurrente), livraison mobile par token (`m/:token`) et
-export ZIP, écrans annexes (analytics, messages, calendrier).
-
-## Scripts
-
-- `npm run dev` — serveur de développement
-- `npm run build` — typecheck + build de production
-- `npm run test` — tests
-- `npm run lint` — lint
+- **Métriques** : le recyclage « sur les meilleures perfs » suppose de scraper
+  les comptes des posters. Tant que `post_metrics` est vide, le recyclage
+  retombe sur une composition normale.
+- **Fuseau horaire** : pg_cron tourne en UTC sans fuseau par job ; les heures
+  visent Paris en été et décalent d'une heure en hiver.
+- Génération IA de la persona (nom, bio) à la création d'un compte.
