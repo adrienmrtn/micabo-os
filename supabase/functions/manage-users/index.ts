@@ -79,8 +79,12 @@ function normaliser(valeur: string): string {
 }
 
 /**
- * `prenom + première lettre du nom @domaine`, suffixé d'un numéro si l'adresse
- * est déjà prise — deux homonymes ne doivent pas se bloquer mutuellement.
+ * `prenom` collé à la première lettre du nom, puis `@domaine` — sans aucun
+ * séparateur : `Test Poster` donne `testp@sophia.com`. `normaliser` retire
+ * accents et ponctuation, un `+` ou un point ne peut donc pas s'y glisser.
+ *
+ * Suffixé d'un numéro si l'adresse est déjà prise : deux homonymes ne doivent
+ * pas se bloquer mutuellement.
  */
 async function emailDisponible(
   supabase: ReturnType<typeof serviceClient>,
