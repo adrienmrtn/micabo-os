@@ -8,9 +8,24 @@ import { signOut } from "@/features/auth/api";
 import { SUPPORTED_LANGUAGES } from "@/locales";
 import { MobileDrawer, Sidebar, type NavItem } from "./Sidebar";
 
-function initials(name: string | null | undefined) {
-  if (!name) return "?";
-  return name
+interface ProfilAffiche {
+  prenom: string | null;
+  nom: string | null;
+  email: string | null;
+}
+
+/** Prénom + nom si on les a, sinon l'email : un poster doit toujours se
+ *  reconnaître dans la barre latérale. */
+function nomAffiche(profil: ProfilAffiche | null): string | null {
+  if (!profil) return null;
+  const complet = [profil.prenom, profil.nom].filter(Boolean).join(" ");
+  return complet || profil.email;
+}
+
+function initiales(profil: ProfilAffiche | null): string {
+  const nom = nomAffiche(profil);
+  if (!nom) return "?";
+  return nom
     .split(/\s+/)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
@@ -18,14 +33,14 @@ function initials(name: string | null | undefined) {
 }
 
 function UserBlock() {
-  const { profile } = useAuth();
+  const { profil } = useAuth();
   return (
     <div className="flex items-center gap-2.5 px-2 py-1">
       <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-active/25 text-xs font-semibold text-white">
-        {initials(profile?.display_name)}
+        {initiales(profil)}
       </div>
       <span className="min-w-0 flex-1 truncate text-sm text-sidebar-foreground">
-        {profile?.display_name ?? "—"}
+        {nomAffiche(profil) ?? "—"}
       </span>
     </div>
   );

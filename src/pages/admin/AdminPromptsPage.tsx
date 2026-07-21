@@ -1,0 +1,81 @@
+import * as React from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ecrirePrompt, lirePrompt } from "@/features/moteur/api";
+
+/** Les trois prompts qui pilotent le moteur, modifiables sans redéploiement. */
+const PROMPTS = [
+  { cle: "pertinence", titre: "prompts.pertinenceTitle", desc: "prompts.pertinenceDesc" },
+  { cle: "placement_sophia", titre: "prompts.placementTitle", desc: "prompts.placementDesc" },
+  { cle: "traduction", titre: "prompts.traductionTitle", desc: "prompts.traductionDesc" },
+] as const;
+
+function EditeurPrompt({ cle, titre, desc }: { cle: string; titre: string; desc: string }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const { data, isPending } = useQuery({
+    queryKey: ["prompt", cle],
+    queryFn: () => lirePrompt(cle),
+  });
+
+  const [brouillon, setBrouillon] = React.useState<string | null>(null);
+  const valeur = brouillon ?? data ?? "";
+  const modifie = brouillon !== null && brouillon !== (data ?? "");
+
+  const enregistrer = useMutation({
+    mutationFn: () => ecrirePrompt(cle, valeur),
+    onSuccess: () => {
+      setBrouillon(null);
+      queryClient.invalidateQueries({ queryKey: ["prompt", cle] });
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{titre}</CardTitle>
+        <CardDescription>{desc}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isPending ? (
+          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+        ) : (
+          <>
+            <Textarea
+              rows={14}
+              className="font-mono text-xs"
+              value={valeur}
+              onChange={(e) => setBrouillon(e.target.value)}
+            />
+            <div className="flex items-center gap-3">
+              <Button disabled={!modifie || enregistrer.isPending} onClick={() => enregistrer.mutate()}>
+                {enregistrer.isPending ? t("common.saving") : t("common.save")}
+              </Button>
+              {enregistrer.isSuccess && !modifie && (
+                <span className="text-sm text-success">{t("prompts.saved")}</span>
+              )}
+            </div>
+            {enregistrer.isError && (
+              <p className="text-sm text-destructive">{(enregistrer.error as Error).message}</p>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function AdminPromptsPage() {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-6">
+      {PROMPTS.map((p) => (
+        <EditeurPrompt key={p.cle} cle={p.cle} titre={t(p.titre)} desc={t(p.desc)} />
+      ))}
+    </div>
+  );
+}

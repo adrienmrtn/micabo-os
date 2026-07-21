@@ -1,5 +1,4 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -38,14 +37,6 @@ export function LoginPage() {
     <AuthLayout
       title={t("auth.loginTitle")}
       description={t("auth.loginSubtitle")}
-      footer={
-        <>
-          {t("auth.noAccount")}{" "}
-          <Link to="/signup" className="font-medium text-primary hover:underline">
-            {t("auth.signupSubmit")}
-          </Link>
-        </>
-      }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">

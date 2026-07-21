@@ -1,0 +1,295 @@
+import * as React from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+} from "@/components/ui/card";
+import {
+  creerCompte,
+  listerComptes,
+  listerMedias,
+  listerPosters,
+  listerSources,
+  majCompte,
+  supprimerCompte,
+} from "@/features/moteur/api";
+import type { CompteAvecDetails } from "@/features/moteur/types";
+
+const selectClass =
+  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
+/**
+ * Sélecteur d'avatar. Les visuels portant un visage identifiable sont exclus :
+ * le compte est public et la personne photographiée n'a rien demandé.
+ */
+function ChoixAvatar({ compte }: { compte: CompteAvecDetails }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [ouvert, setOuvert] = React.useState(false);
+
+  const medias = useQuery({
+    queryKey: ["medias", compte.compte_reference_id],
+    queryFn: () => listerMedias(compte.compte_reference_id ?? undefined),
+    enabled: ouvert,
+  });
+
+  const choisir = useMutation({
+    mutationFn: (url: string) =>
+      majCompte(compte.id, { avatar_url: url, avatar_source: "bibliotheque" }),
+    onSuccess: () => {
+      setOuvert(false);
+      queryClient.invalidateQueries({ queryKey: ["comptes"] });
+    },
+  });
+
+  const utilisables = (medias.data ?? []).filter((m) => m.visage_identifiable === false);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        {compte.avatar_url ? (
+          <img
+            src={compte.avatar_url}
+            alt=""
+            className="size-10 rounded-full border object-cover"
+          />
+        ) : (
+          <div className="size-10 rounded-full border bg-muted" />
+        )}
+        <Button size="sm" variant="outline" onClick={() => setOuvert((o) => !o)}>
+          {t("comptes.choisirAvatar")}
+        </Button>
+      </div>
+
+      {ouvert && (
+        <div className="rounded-lg border p-3">
+          {medias.isPending && (
+            <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+          )}
+          {medias.data && utilisables.length === 0 && (
+            <p className="text-sm text-muted-foreground">{t("comptes.avatarAucun")}</p>
+          )}
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+            {utilisables.map((media) => (
+              <button
+                key={media.id}
+                type="button"
+                onClick={() => choisir.mutate(media.url)}
+                className="overflow-hidden rounded-md border transition-opacity hover:opacity-80"
+              >
+                <img src={media.url} alt="" className="aspect-square w-full object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LigneCompte({ compte }: { compte: CompteAvecDetails }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [voix, setVoix] = React.useState(compte.style_profile ?? "");
+
+  const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["comptes"] });
+  const enregistrer = useMutation({
+    mutationFn: () => majCompte(compte.id, { style_profile: voix || null }),
+    onSuccess: rafraichir,
+  });
+  const retirer = useMutation({
+    mutationFn: () => supprimerCompte(compte.id),
+    onSuccess: rafraichir,
+  });
+
+  const modifie = voix !== (compte.style_profile ?? "");
+
+  return (
+    <div className="space-y-3 rounded-lg border p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-medium">
+            {compte.persona_nom ?? compte.handle_tiktok ?? "—"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {[
+              compte.profiles
+                ? [compte.profiles.prenom, compte.profiles.nom].filter(Boolean).join(" ")
+                : null,
+              compte.handle_tiktok ? `@${compte.handle_tiktok}` : null,
+              compte.langue.toUpperCase(),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {compte.comptes_reference && (
+            // Visible ici seulement : l'admin doit savoir d'où vient la matière,
+            // le poster ne le voit jamais.
+            <Badge variant="outline">@{compte.comptes_reference.handle_tiktok}</Badge>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-destructive hover:text-destructive"
+            onClick={() => {
+              if (window.confirm(t("comptes.confirmDelete"))) retirer.mutate();
+            }}
+          >
+            {t("common.delete")}
+          </Button>
+        </div>
+      </div>
+
+      <ChoixAvatar compte={compte} />
+
+      <div className="space-y-2">
+        <Label htmlFor={`voix-${compte.id}`}>{t("comptes.styleProfile")}</Label>
+        <Textarea
+          id={`voix-${compte.id}`}
+          rows={3}
+          className="text-xs"
+          value={voix}
+          onChange={(e) => setVoix(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">{t("comptes.styleProfileHint")}</p>
+        {modifie && (
+          <Button size="sm" disabled={enregistrer.isPending} onClick={() => enregistrer.mutate()}>
+            {enregistrer.isPending ? t("common.saving") : t("common.save")}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function AdminComptesPage() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const comptes = useQuery({ queryKey: ["comptes"], queryFn: listerComptes });
+  const posters = useQuery({ queryKey: ["posters"], queryFn: listerPosters });
+  const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
+
+  const [posterId, setPosterId] = React.useState("");
+  const [sourceId, setSourceId] = React.useState("");
+  const [persona, setPersona] = React.useState("");
+  const [handle, setHandle] = React.useState("");
+
+  const ajouter = useMutation({
+    mutationFn: () =>
+      creerCompte({
+        posterId,
+        compteReferenceId: sourceId || null,
+        langue: "fr",
+        personaNom: persona,
+        handleTiktok: handle,
+      }),
+    onSuccess: () => {
+      setPersona("");
+      setHandle("");
+      queryClient.invalidateQueries({ queryKey: ["comptes"] });
+    },
+  });
+
+  const posterEligibles = (posters.data ?? []).filter((p) => p.role === "poster");
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("comptes.title")}</CardTitle>
+          <CardDescription>{t("comptes.subtitle")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (posterId) ajouter.mutate();
+            }}
+            className="grid gap-4 sm:grid-cols-2"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="poster">{t("comptes.poster")}</Label>
+              <select
+                id="poster"
+                className={selectClass}
+                required
+                value={posterId}
+                onChange={(e) => setPosterId(e.target.value)}
+              >
+                <option value="">{t("common.none")}</option>
+                {posterEligibles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {[p.prenom, p.nom].filter(Boolean).join(" ") || p.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="source">{t("comptes.source")}</Label>
+              <select
+                id="source"
+                className={selectClass}
+                value={sourceId}
+                onChange={(e) => setSourceId(e.target.value)}
+              >
+                <option value="">{t("common.none")}</option>
+                {sources.data?.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    @{s.handle_tiktok}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="persona">{t("comptes.persona")}</Label>
+              <Input
+                id="persona"
+                value={persona}
+                onChange={(e) => setPersona(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="handle">{t("comptes.handle")}</Label>
+              <Input id="handle" value={handle} onChange={(e) => setHandle(e.target.value)} />
+            </div>
+
+            <div className="sm:col-span-2">
+              <Button type="submit" disabled={ajouter.isPending}>
+                {ajouter.isPending ? t("common.saving") : t("comptes.add")}
+              </Button>
+              {ajouter.isError && (
+                <p className="mt-2 text-sm text-destructive">
+                  {(ajouter.error as Error).message}
+                </p>
+              )}
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <div className="space-y-3">
+        {comptes.isPending && (
+          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+        )}
+        {comptes.data?.length === 0 && <EmptyState title={t("comptes.empty")} />}
+        {comptes.data?.map((compte) => <LigneCompte key={compte.id} compte={compte} />)}
+      </div>
+    </div>
+  );
+}

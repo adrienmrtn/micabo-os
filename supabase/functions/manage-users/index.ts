@@ -1,11 +1,12 @@
 import { assertAuthorised, json, serviceClient } from "../_shared/supabase.ts";
 
+const DOMAINE = "sophia.com";
+
 /**
- * Gestion des comptes poster par l'admin. Créer un compte avec mot de passe
- * exige le service_role (supabase.auth.admin), donc ça vit forcément ici et
- * jamais dans le navigateur. assertAuthorised garantit que seul un admin appelle.
+ * Gestion des posters par l'admin. Créer un compte avec mot de passe exige le
+ * service_role, donc ça vit ici et jamais dans le navigateur.
  *
- *   { action: "create", email, password, displayName }
+ *   { action: "create", prenom, nom, password }
  *   { action: "delete", userId }
  */
 Deno.serve(async (request) => {
@@ -22,45 +23,76 @@ Deno.serve(async (request) => {
   }
 
   if (body.action === "create") {
-    const email = (body.email ?? "").trim().toLowerCase();
+    const prenom = (body.prenom ?? "").trim();
+    const nom = (body.nom ?? "").trim();
     const password = body.password ?? "";
-    const displayName = (body.displayName ?? "").trim();
 
-    if (!email || password.length < 8) {
-      return json({ error: "Email requis et mot de passe d'au moins 8 caractères" }, 400);
+    if (!prenom || password.length < 8) {
+      return json({ error: "Prénom requis et mot de passe d'au moins 8 caractères" }, 400);
     }
+
+    const email = await emailDisponible(supabase, prenom, nom);
 
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { display_name: displayName || email.split("@")[0] },
+      user_metadata: { prenom },
     });
 
-    if (error) {
-      const taken = error.message.toLowerCase().includes("already");
-      return json({ error: taken ? "Un compte existe déjà avec cet email" : error.message }, 400);
-    }
+    if (error) return json({ error: error.message }, 400);
 
-    // Le trigger a créé le profil (inactif par défaut) et le rôle poster.
-    // Un compte créé par l'admin est validé d'emblée : on l'active.
+    // Le trigger a posé le profil et le rôle poster. On complète l'état civil
+    // et on active le compte : c'est l'admin qui l'a créé, il est validé.
     if (data.user) {
-      await supabase.from("profiles").update({ is_active: true }).eq("id", data.user.id);
+      await supabase
+        .from("profiles")
+        .update({ prenom, nom: nom || null, is_active: true, must_change_password: true })
+        .eq("id", data.user.id);
     }
 
-    return json({ ok: true, userId: data.user?.id });
+    return json({ ok: true, userId: data.user?.id, email });
   }
 
   if (body.action === "delete") {
-    const userId = body.userId;
-    if (!userId) return json({ error: "userId requis" }, 400);
-
-    const { error } = await supabase.auth.admin.deleteUser(userId);
+    if (!body.userId) return json({ error: "userId requis" }, 400);
+    const { error } = await supabase.auth.admin.deleteUser(body.userId);
     if (error) return json({ error: error.message }, 400);
-
-    // Le cascade sur profiles/user_roles/assignments nettoie le reste.
     return json({ ok: true });
   }
 
   return json({ error: "action inconnue" }, 400);
 });
+
+/** Retire accents et caractères parasites : un email doit rester saisissable. */
+function normaliser(valeur: string): string {
+  return valeur
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * `prenom + première lettre du nom @domaine`, suffixé d'un numéro si l'adresse
+ * est déjà prise — deux homonymes ne doivent pas se bloquer mutuellement.
+ */
+async function emailDisponible(
+  supabase: ReturnType<typeof serviceClient>,
+  prenom: string,
+  nom: string,
+): Promise<string> {
+  const base = normaliser(prenom) + normaliser(nom).slice(0, 1);
+
+  for (let suffixe = 0; suffixe < 50; suffixe += 1) {
+    const email = `${base}${suffixe || ""}@${DOMAINE}`;
+    const { data } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+    if (!data) return email;
+  }
+
+  return `${base}${Date.now()}@${DOMAINE}`;
+}

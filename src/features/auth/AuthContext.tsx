@@ -5,51 +5,44 @@ import { supabase } from "@/lib/supabase/client";
 
 export type Role = "admin" | "poster";
 
-export interface Profile {
+export interface Profil {
   id: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  account_setup_done: boolean;
+  prenom: string | null;
+  nom: string | null;
+  email: string | null;
+  langues: string[];
   is_active: boolean;
-  locale: string;
+  must_change_password: boolean;
 }
 
 interface AuthState {
   session: Session | null;
   user: User | null;
   role: Role | null;
-  profile: Profile | null;
+  profil: Profil | null;
   loading: boolean;
   refresh: () => void;
 }
 
 const AuthContext = React.createContext<AuthState | undefined>(undefined);
 
-/**
- * Roles live in their own table, never on the profile — a role column on a
- * self-editable row would be a privilege escalation waiting to happen. An
- * admin row wins over a poster row if somehow both exist.
- */
-async function fetchRole(userId: string): Promise<Role | null> {
-  const { data } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId);
-
-  const roles = (data ?? []).map((row) => row.role as Role);
+/** Le rôle vit dans sa propre table : une colonne sur un profil éditable par
+ *  son propriétaire serait une escalade de privilèges en attente. */
+async function chargerRole(userId: string): Promise<Role | null> {
+  const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+  const roles = (data ?? []).map((r) => r.role as Role);
   if (roles.includes("admin")) return "admin";
   if (roles.includes("poster")) return "poster";
   return null;
 }
 
-async function fetchProfile(userId: string): Promise<Profile | null> {
+async function chargerProfil(userId: string): Promise<Profil | null> {
   const { data } = await supabase
     .from("profiles")
-    .select("id, display_name, avatar_url, account_setup_done, is_active, locale")
+    .select("id, prenom, nom, email, langues, is_active, must_change_password")
     .eq("id", userId)
     .single();
-
-  return (data as Profile) ?? null;
+  return (data as Profil) ?? null;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -57,71 +50,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     session: null,
     user: null,
     role: null,
-    profile: null,
+    profil: null,
     loading: true,
   });
-  const [reloadToken, setReloadToken] = React.useState(0);
+  const [jeton, setJeton] = React.useState(0);
 
-  const refresh = React.useCallback(() => setReloadToken((n) => n + 1), []);
+  const refresh = React.useCallback(() => setJeton((n) => n + 1), []);
 
   React.useEffect(() => {
-    let isMounted = true;
+    let monte = true;
 
-    async function loadFromSession(session: Session | null) {
+    async function charger(session: Session | null) {
       if (!session?.user) {
-        if (isMounted)
-          setState({
-            session: null,
-            user: null,
-            role: null,
-            profile: null,
-            loading: false,
-          });
+        if (monte) {
+          setState({ session: null, user: null, role: null, profil: null, loading: false });
+        }
         return;
       }
 
-      const [role, profile] = await Promise.all([
-        fetchRole(session.user.id),
-        fetchProfile(session.user.id),
+      const [role, profil] = await Promise.all([
+        chargerRole(session.user.id),
+        chargerProfil(session.user.id),
       ]);
 
-      if (isMounted)
-        setState({ session, user: session.user, role, profile, loading: false });
+      if (monte) setState({ session, user: session.user, role, profil, loading: false });
     }
 
     supabase.auth
       .getSession()
-      .then(({ data }) => loadFromSession(data.session))
+      .then(({ data }) => charger(data.session))
       .catch(() => {
-        if (isMounted)
-          setState({
-            session: null,
-            user: null,
-            role: null,
-            profile: null,
-            loading: false,
-          });
+        if (monte) {
+          setState({ session: null, user: null, role: null, profil: null, loading: false });
+        }
       });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        loadFromSession(session);
-      },
-    );
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => charger(session));
 
     return () => {
-      isMounted = false;
-      subscription.subscription.unsubscribe();
+      monte = false;
+      sub.subscription.unsubscribe();
     };
-  }, [reloadToken]);
+  }, [jeton]);
 
   const value = React.useMemo(() => ({ ...state, refresh }), [state, refresh]);
-
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
   const ctx = React.useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
+  if (!ctx) throw new Error("useAuth doit être utilisé dans un AuthProvider");
   return ctx;
 }

@@ -4,13 +4,11 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { FullPageLoader } from "@/components/layout/FullPageLoader";
 import { signOut } from "./api";
+import { ChangePasswordPage } from "./ChangePasswordPage";
 import { useAuth } from "./AuthContext";
 
-/**
- * Compte créé mais pas encore validé par un admin. L'inscription étant
- * ouverte, c'est ce mur qui empêche un inconnu tombé sur l'URL d'entrer.
- */
-function PendingApproval() {
+/** Compte existant mais pas encore activé par un admin. */
+function EnAttente() {
   const { t } = useTranslation();
   return (
     <div className="surface-gradient flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
@@ -24,14 +22,18 @@ function PendingApproval() {
 }
 
 export function ProtectedRoute() {
-  const { user, profile, role, loading } = useAuth();
+  const { user, profil, role, loading } = useAuth();
 
   if (loading) return <FullPageLoader />;
   if (!user) return <Navigate to="/login" replace />;
 
-  // profile null = provisioning en cours, on laisse passer le temps du chargement.
-  if (profile && !profile.is_active) return <PendingApproval />;
-  if (!role) return <PendingApproval />;
+  // profil null = provisioning encore en cours, on laisse passer le chargement.
+  if (profil && !profil.is_active) return <EnAttente />;
+  if (!role) return <EnAttente />;
+
+  // Le mot de passe vient de l'admin : on force son remplacement avant d'ouvrir
+  // quoi que ce soit d'autre.
+  if (profil?.must_change_password) return <ChangePasswordPage />;
 
   return <Outlet />;
 }
