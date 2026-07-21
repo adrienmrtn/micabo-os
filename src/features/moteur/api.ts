@@ -266,6 +266,11 @@ export const lancerAssignation = (compteId?: string) =>
     compteId: compteId ?? null,
   });
 
+export const lancerMetriques = (compteId?: string) =>
+  invoke<{ resultats: Array<{ compteId: string; releves: number }> }>("metriques", {
+    compteId: compteId ?? null,
+  });
+
 export const lancerComposition = (input: {
   compteId: string;
   sujetId: string;

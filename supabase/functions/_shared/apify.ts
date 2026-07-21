@@ -7,6 +7,7 @@ export interface ScrapedPost {
   imageUrls: string[];
   musicUrl: string | null;
   createTime: number | null;
+  stats: { vues: number; likes: number; commentaires: number; partages: number };
 }
 
 interface ApifyItem {
@@ -18,6 +19,10 @@ interface ApifyItem {
   imageUrlList?: string[];
   slideshowImageLinks?: Array<string | { downloadLink?: string; url?: string }>;
   musicMeta?: { playUrl?: string };
+  playCount?: number;
+  diggCount?: number;
+  commentCount?: number;
+  shareCount?: number;
 }
 
 function normaliseImageLink(link: string | { downloadLink?: string; url?: string }) {
@@ -57,7 +62,12 @@ export async function downloadImage(url: string): Promise<Uint8Array> {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-async function runActor(input: Record<string, unknown>): Promise<ScrapedPost[]> {
+async function runActor(
+  input: Record<string, unknown>,
+  // Le pipeline ne veut que des posts photo ; la collecte de métriques, elle,
+  // doit voir tout ce que le compte a publié.
+  photosSeulement = true,
+): Promise<ScrapedPost[]> {
   const token = Deno.env.get("APIFY_TOKEN");
   if (!token) throw new Error("APIFY_TOKEN manquant");
 
@@ -90,13 +100,23 @@ async function runActor(input: Record<string, unknown>): Promise<ScrapedPost[]> 
       imageUrls: mergeImageUrls(item),
       musicUrl: item.musicMeta?.playUrl ?? null,
       createTime: item.createTime ?? null,
+      stats: {
+        vues: item.playCount ?? 0,
+        likes: item.diggCount ?? 0,
+        commentaires: item.commentCount ?? 0,
+        partages: item.shareCount ?? 0,
+      },
     }))
-    // Seuls les posts photo nous intéressent : une vidéo n'a pas de slides.
-    .filter((post) => post.postId && post.imageUrls.length > 0);
+    .filter((post) => post.postId && (!photosSeulement || post.imageUrls.length > 0));
 }
 
 export function scrapeProfile(handle: string, resultsPerPage: number) {
   return runActor({ profiles: [handle], resultsPerPage });
+}
+
+/** Relève les performances d'un compte : tous les posts, photo ou non. */
+export function scrapeStats(handle: string, resultsPerPage: number) {
+  return runActor({ profiles: [handle], resultsPerPage }, false);
 }
 
 /** Scrape un seul post par son URL, pour tester le pipeline sur un TikTok précis. */

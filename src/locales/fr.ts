@@ -74,6 +74,7 @@ export const fr = {
       extraction: "Extraire les sources",
       preparation: "Préparer un sujet",
       assignation: "Assigner la journée",
+      metriques: "Relever les performances",
       running: "En cours…",
       sujets: "Sujets",
       posts: "Posts",

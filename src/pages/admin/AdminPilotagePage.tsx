@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Download, Sparkles, Wand2 } from "lucide-react";
+import { BarChart3, Download, Sparkles, Wand2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { supabase } from "@/lib/supabase/client";
 import {
   lancerAssignation,
   lancerExtraction,
+  lancerMetriques,
   lancerPreparation,
   listerSujets,
 } from "@/features/moteur/api";
@@ -79,9 +80,20 @@ export function AdminPilotagePage() {
       setMessage(`${r.resultats.reduce((s, x) => s + x.crees, 0)} post(s)`),
   });
 
+  const metriques = useMutation({
+    onSettled: rafraichir,
+    mutationFn: () => lancerMetriques(),
+    onSuccess: (r) =>
+      setMessage(`${r.resultats.reduce((s, x) => s + x.releves, 0)} relevé(s)`),
+  });
+
   const enCours =
-    extraction.isPending || preparation.isPending || assignation.isPending;
-  const echec = extraction.error ?? preparation.error ?? assignation.error;
+    extraction.isPending ||
+    preparation.isPending ||
+    assignation.isPending ||
+    metriques.isPending;
+  const echec =
+    extraction.error ?? preparation.error ?? assignation.error ?? metriques.error;
 
   return (
     <div className="space-y-6">
@@ -110,6 +122,10 @@ export function AdminPilotagePage() {
             <Button variant="outline" disabled={enCours} onClick={() => assignation.mutate()}>
               <Sparkles />
               {assignation.isPending ? t("pilotage.running") : t("pilotage.assignation")}
+            </Button>
+            <Button variant="outline" disabled={enCours} onClick={() => metriques.mutate()}>
+              <BarChart3 />
+              {metriques.isPending ? t("pilotage.running") : t("pilotage.metriques")}
             </Button>
           </div>
 

@@ -15,6 +15,17 @@
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
+-- Métriques avant tout : le recyclage tire sur les meilleures performances,
+-- il lui faut des chiffres à jour.
+select cron.schedule('metriques-soir', '0 17 * * *', $$
+  select net.http_post(
+    url := 'https://mbikecieskoobeizixig.supabase.co/functions/v1/metriques',
+    headers := jsonb_build_object('content-type','application/json','x-cron-secret','<CRON_SECRET>'),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 280000
+  );
+$$);
+
 -- Extraction tôt le soir : la préparation a besoin de plusieurs heures pour
 -- drainer (2 visuels par passage, un passage par minute).
 select cron.schedule('extraction-soir', '0 18 * * *', $$
@@ -58,6 +69,7 @@ select cron.schedule('assignation-rattrapage', '0 4 * * *', $$
 $$);
 
 -- Pour tout arrêter :
+--   select cron.unschedule('metriques-soir');
 --   select cron.unschedule('extraction-soir');
 --   select cron.unschedule('preparation-nuit');
 --   select cron.unschedule('assignation-minuit');
