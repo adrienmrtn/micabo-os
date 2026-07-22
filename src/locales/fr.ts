@@ -47,6 +47,7 @@ export const fr = {
       prompts: "Prompts",
       calendrier: "Calendrier",
       reviews: "Reviews",
+      tests: "Tests",
       hiring: "Recrutement",
       embauche: "Créer un poster",
     },
@@ -62,6 +63,7 @@ export const fr = {
     },
     navSection: {
       production: "Production",
+      tests: "Tests",
       suivi: "Suivi",
       config: "Configuration",
     },
@@ -78,7 +80,23 @@ export const fr = {
       reglages: "Ratios d'assignation et cadence",
       prompts: "Éditer les prompts de l'IA (traduction, Sophia…)",
       reviews: "Retours aux créateurs (pop-up à leur connexion)",
+      tests: "Tester un TikTok, le scrape, la chaîne complète",
       embauche: "Créer des posters, l'IA fait le reste",
+    },
+    tests: {
+      title: "Tests",
+      subtitle:
+        "Tout ce qui sert à tester, au même endroit. Rien ici ne touche la production (les calendriers des créateurs).",
+      tiktokTitre: "Tester un TikTok précis",
+      tiktokDesc:
+        "Colle un lien TikTok : on le nettoie, on y intègre Sophia, et on te sort un post à télécharger (QR). Il n'apparaît sur aucun calendrier.",
+      langueVia: "Langue / style (via un compte)",
+      tiktokLancer: "Tester ce TikTok",
+      tiktokOk: "Test lancé — il se fabrique en arrière-plan.",
+      enCours: "En cours…",
+      nettoyageTitre: "Tester le nettoyage d'une photo",
+      nettoyageDesc: "Voir le rendu du nettoyage sur tes photos, sans rien modifier.",
+      nettoyageBouton: "Ouvrir",
     },
     testScrape: {
       title: "Tester le scrape",

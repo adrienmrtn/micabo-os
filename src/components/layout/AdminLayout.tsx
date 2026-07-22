@@ -5,6 +5,7 @@ import {
   BarChart3,
   CalendarDays,
   CalendarRange,
+  FlaskConical,
   Gauge,
   Images,
   MessageSquareQuote,
@@ -50,6 +51,12 @@ export function AdminLayout() {
               icon: Images,
               description: t("navDesc.bibliotheque"),
             },
+          ],
+        },
+        {
+          title: t("navSection.tests"),
+          items: [
+            { to: "/admin/tests", label: t("nav.tests"), icon: FlaskConical, description: t("navDesc.tests") },
             {
               to: "/admin/test-nettoyage",
               label: t("nav.testNettoyage"),
