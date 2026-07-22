@@ -182,6 +182,11 @@ export async function effacerTexte(
  * part en data-URI, l'image publique par son URL. Convention LaMa : blanc =
  * zone à effacer.
  */
+// Version figée du modèle allenhooo/lama (récupérée via l'API Replicate).
+// Un modèle communautaire s'appelle par son hash de version sur /v1/predictions,
+// et non par /models/{slug}/predictions (réservé aux modèles officiels).
+const LAMA_VERSION = "cdac78a1bec5b23c07fd29692fb70baa513ea403a39e643c48ec5edadb15fe72";
+
 async function lamaReplicate(
   jeton: string,
   imageUrl: string,
@@ -189,14 +194,17 @@ async function lamaReplicate(
 ): Promise<string> {
   const maskDataUri = `data:image/png;base64,${enBase64(masque)}`;
 
-  const res = await fetch("https://api.replicate.com/v1/models/allenhooo/lama/predictions", {
+  const res = await fetch("https://api.replicate.com/v1/predictions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${jeton}`,
       "Content-Type": "application/json",
       Prefer: "wait",
     },
-    body: JSON.stringify({ input: { image: imageUrl, mask: maskDataUri } }),
+    body: JSON.stringify({
+      version: LAMA_VERSION,
+      input: { image: imageUrl, mask: maskDataUri },
+    }),
   });
   if (!res.ok) {
     throw new Error(`Replicate ${res.status}: ${(await res.text()).slice(0, 250)}`);
