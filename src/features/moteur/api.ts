@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client";
+import { LANGUES_CIBLES } from "@/features/moteur/langues";
 import type { Role } from "@/features/auth/AuthContext";
 import type {
   Compte,
@@ -299,14 +300,11 @@ export function creerPoster(input: {
 
 /** Langues distinctes des comptes de référence actifs (pour le hiring manager
  *  et l'admin : on ne propose que des langues qui ont de la matière). */
+/** Langues proposées pour un poster = langues CIBLES supportées (ce dans quoi il
+ *  publie), pas les langues des comptes sources. Un slideshow source stocké est
+ *  re-traduit vers n'importe laquelle de ces langues. */
 export async function listerLanguesReference(): Promise<string[]> {
-  const { data, error } = await supabase
-    .from("comptes_reference")
-    .select("langue")
-    .eq("is_active", true);
-  if (error) throw error;
-  const langues = new Set((data ?? []).map((r) => r.langue).filter(Boolean));
-  return [...langues].sort();
+  return [...LANGUES_CIBLES];
 }
 
 /** Définit LE rôle d'un utilisateur (admin uniquement, via RLS). On remplace :

@@ -29,6 +29,7 @@ import {
   majUpwork,
   supprimerPoster,
 } from "@/features/moteur/api";
+import { nomLangue } from "@/features/moteur/langues";
 import type { CompteAvecDetails, PosterProfil } from "@/features/moteur/types";
 
 const selectClass =
@@ -260,7 +261,7 @@ export function AdminPostersPage() {
                 <option value="">{t("posters.sansCompte")}</option>
                 {langues.data?.map((l) => (
                   <option key={l} value={l}>
-                    {l.toUpperCase()}
+                    {nomLangue(l)}
                   </option>
                 ))}
               </select>
@@ -352,7 +353,7 @@ export function AdminPostersPage() {
                 <option value="">{t("common.none")}</option>
                 {langues.data?.map((l) => (
                   <option key={l} value={l}>
-                    {l.toUpperCase()}
+                    {nomLangue(l)}
                   </option>
                 ))}
               </select>
@@ -452,7 +453,7 @@ export function AdminPostersPage() {
                         >
                           {langues.data?.map((l) => (
                             <option key={l} value={l}>
-                              {l.toUpperCase()}
+                              {nomLangue(l)}
                             </option>
                           ))}
                         </select>

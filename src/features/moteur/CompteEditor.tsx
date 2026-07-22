@@ -15,6 +15,7 @@ import {
   majUpwork,
   supprimerCompte,
 } from "@/features/moteur/api";
+import { nomLangue } from "@/features/moteur/langues";
 import type { CompteAvecDetails } from "@/features/moteur/types";
 
 const selectClass =
@@ -301,7 +302,7 @@ function InfosCompte({ compte }: { compte: CompteAvecDetails }) {
         >
           {languesOpts.map((l) => (
             <option key={l} value={l}>
-              {l.toUpperCase()}
+              {nomLangue(l)}
             </option>
           ))}
         </select>
