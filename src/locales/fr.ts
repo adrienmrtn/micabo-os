@@ -361,6 +361,8 @@ export const fr = {
       datePrevue: "Date prévue",
       sansDate: "Sans date",
       creer: "Créer le post",
+      creerHint: "Choisis un compte ET un sujet pour activer le bouton.",
+      voirLePost: "Voir le post →",
       creeAttente: "Post créé. La fabrication se termine au prochain passage du cron.",
       importLien: "Importer un slideshow depuis un lien TikTok",
       importLienDesc:

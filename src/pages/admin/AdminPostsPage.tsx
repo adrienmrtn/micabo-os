@@ -303,16 +303,26 @@ export function AdminPostsPage() {
             </div>
 
             <div className="sm:col-span-2">
-              <Button type="submit" disabled={creer.isPending}>
+              <Button type="submit" disabled={creer.isPending || !compteId || !sujetId}>
                 {creer.isPending ? t("common.saving") : t("posts.creer")}
               </Button>
+              {(!compteId || !sujetId) && (
+                <p className="mt-2 text-xs text-muted-foreground">{t("posts.creerHint")}</p>
+              )}
               {creer.isError && (
                 <p className="mt-2 text-sm text-destructive">
                   {(creer.error as Error).message}
                 </p>
               )}
               {creer.isSuccess && (
-                <p className="mt-2 text-sm text-success">{t("posts.creeAttente")}</p>
+                <p className="mt-2 text-sm text-success">
+                  {t("posts.creeAttente")}{" "}
+                  {creer.data?.postId && (
+                    <Link to={`/posts/${creer.data.postId}`} className="underline underline-offset-2">
+                      {t("posts.voirLePost")}
+                    </Link>
+                  )}
+                </p>
               )}
             </div>
           </form>
