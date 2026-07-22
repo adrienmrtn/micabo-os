@@ -1,8 +1,11 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { Sparkles, Trash2 } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -11,13 +14,90 @@ import {
   CardTitle,
   EmptyState,
 } from "@/components/ui/card";
-import { listerMedias, listerSources } from "@/features/moteur/api";
+import {
+  listerMedias,
+  listerSources,
+  nettoyerMedia,
+  supprimerMedia,
+} from "@/features/moteur/api";
+import type { Media } from "@/features/moteur/types";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:w-64";
 
+function estPropre(media: Media): boolean {
+  return media.storage_path.startsWith("propre/");
+}
+
+function VignetteMedia({ media, onChange }: { media: Media; onChange: () => void }) {
+  const { t } = useTranslation();
+  const propre = estPropre(media);
+
+  const nettoyer = useMutation({ mutationFn: () => nettoyerMedia(media.id), onSuccess: onChange });
+  const supprimer = useMutation({ mutationFn: () => supprimerMedia(media.id), onSuccess: onChange });
+
+  return (
+    <div className="space-y-1.5">
+      <div className="relative">
+        <img
+          src={media.url}
+          alt=""
+          className={cn(
+            "aspect-[3/4] w-full rounded-md border object-cover",
+            !propre && "border-2 border-warning/60",
+          )}
+        />
+        {!propre && (
+          <span className="absolute inset-x-0 bottom-0 rounded-b-md bg-warning/85 py-0.5 text-center text-[10px] font-medium text-warning-foreground">
+            {t("bibliotheque.texteRestant")}
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-1">
+        {propre ? (
+          <Badge variant="success">{t("bibliotheque.nettoyee")}</Badge>
+        ) : (
+          <Badge variant="warning">{t("bibliotheque.aNettoyer")}</Badge>
+        )}
+      </div>
+
+      <div className="flex gap-1">
+        {!propre && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 flex-1 px-2 text-xs"
+            disabled={nettoyer.isPending}
+            onClick={() => nettoyer.mutate()}
+          >
+            <Sparkles className="size-3" />
+            {nettoyer.isPending ? t("bibliotheque.nettoyageEnCours") : t("bibliotheque.nettoyer")}
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+          disabled={supprimer.isPending}
+          onClick={() => {
+            if (window.confirm(t("bibliotheque.confirmSuppr"))) supprimer.mutate();
+          }}
+        >
+          <Trash2 className="size-3" />
+        </Button>
+      </div>
+
+      {nettoyer.data && !nettoyer.data.nettoyee && (
+        <p className="text-[11px] text-destructive">{t("bibliotheque.nettoyageEchec")}</p>
+      )}
+    </div>
+  );
+}
+
 export function AdminBibliothequePage() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [sourceId, setSourceId] = React.useState("");
 
   const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
@@ -26,11 +106,16 @@ export function AdminBibliothequePage() {
     queryFn: () => listerMedias(sourceId || undefined),
   });
 
+  const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["medias"] });
+  const aNettoyer = (medias.data ?? []).filter((m) => !estPropre(m)).length;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t("bibliotheque.title")}</CardTitle>
-        <CardDescription>{t("bibliotheque.subtitle")}</CardDescription>
+        <CardDescription>
+          {aNettoyer > 0 ? t("bibliotheque.compteur", { count: aNettoyer }) : t("bibliotheque.subtitle")}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <select
@@ -47,28 +132,12 @@ export function AdminBibliothequePage() {
           ))}
         </select>
 
-        {medias.isPending && (
-          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
-        )}
+        {medias.isPending && <p className="text-sm text-muted-foreground">{t("common.loading")}</p>}
         {medias.data?.length === 0 && <EmptyState title={t("bibliotheque.empty")} />}
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
           {medias.data?.map((media) => (
-            <div key={media.id} className="space-y-1.5">
-              <img
-                src={media.url}
-                alt=""
-                className="aspect-[3/4] w-full rounded-md border object-cover"
-              />
-              <div className="flex flex-wrap gap-1">
-                <Badge variant="outline">{t(`bibliotheque.source.${media.source}`)}</Badge>
-                {media.visage_identifiable ? (
-                  <Badge variant="warning">{t("bibliotheque.visage")}</Badge>
-                ) : (
-                  <Badge variant="success">{t("bibliotheque.sansVisage")}</Badge>
-                )}
-              </div>
-            </div>
+            <VignetteMedia key={media.id} media={media} onChange={rafraichir} />
           ))}
         </div>
       </CardContent>

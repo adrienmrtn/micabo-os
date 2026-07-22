@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Check, ImageUp, Sparkles, X } from "lucide-react";
+import { Check, ImageUp, Sparkles, Trash2, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
   majMediaSlide,
   majTexteSlide,
   renettoyerSlide,
+  retirerPhotoSlide,
 } from "@/features/moteur/api";
 import type { Media, PostSlide } from "@/features/moteur/types";
 
@@ -114,6 +115,10 @@ function SlideAdmin({
       rafraichir();
     },
   });
+  const retirer = useMutation({
+    mutationFn: () => retirerPhotoSlide(slide.id),
+    onSuccess: rafraichir,
+  });
 
   const propre = estPropre(slide);
   const photoUrl = slide.media_library?.url ?? null;
@@ -179,6 +184,21 @@ function SlideAdmin({
             <ImageUp />
             {remplacer.isPending ? t("common.saving") : t("adminPost.remplacerPhoto")}
           </Button>
+
+          {photoUrl && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              disabled={retirer.isPending}
+              onClick={() => {
+                if (window.confirm(t("adminPost.confirmRetirerPhoto"))) retirer.mutate();
+              }}
+            >
+              <Trash2 />
+              {t("adminPost.retirerPhoto")}
+            </Button>
+          )}
         </div>
 
         {picker && (

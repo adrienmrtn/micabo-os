@@ -325,6 +325,27 @@ export async function majMediaSlide(slideId: string, mediaId: string): Promise<v
   if (error) throw error;
 }
 
+/** Retire la photo d'une slide (le visuel reste en bibliothèque, seul le lien
+ *  saute). La slide affiche alors « photo manquante », à recharger. */
+export async function retirerPhotoSlide(slideId: string): Promise<void> {
+  const { error } = await supabase
+    .from("post_slides")
+    .update({ media_id: null })
+    .eq("id", slideId);
+  if (error) throw error;
+}
+
+/** Nettoie une photo de la bibliothèque à la demande (bouton admin). */
+export const nettoyerMedia = (mediaId: string) =>
+  invoke<{ ok: boolean; nettoyee: boolean; erreur?: string }>("nettoyer-media", { mediaId });
+
+/** Supprime un visuel de la bibliothèque. Les slides qui l'utilisaient
+ *  repassent à « photo manquante » (media_id mis à null par la FK). */
+export async function supprimerMedia(mediaId: string): Promise<void> {
+  const { error } = await supabase.from("media_library").delete().eq("id", mediaId);
+  if (error) throw error;
+}
+
 /** Le compte de référence dont dépend un post — pour filtrer sa bibliothèque. */
 export async function compteReferenceDuPost(postId: string): Promise<string | null> {
   const { data, error } = await supabase
