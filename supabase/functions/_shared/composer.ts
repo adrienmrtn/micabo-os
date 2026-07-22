@@ -181,9 +181,22 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
       });
       const parPosition = new Map(traductions.map((t) => [t.position, t.translated]));
 
-      // Un remaniement rejoue le sujet avec d'AUTRES visuels : reprendre les
-      // mêmes ferait un doublon visuel sur le compte.
-      const visuels = post.type === "remanie"
+      // REPRISE : un slideshow déjà tombé (un post antérieur porte le même sujet)
+      // est rejoué en GARDANT le texte mais avec d'AUTRES images de la bibliothèque
+      // — pour que deux parutions du même contenu ne soient jamais visuellement
+      // identiques. Un remaniement fait pareil côté visuels (et varie le texte).
+      let estReprise = false;
+      if (post.sujet_id) {
+        const { count } = await supabase
+          .from("posts")
+          .select("id", { count: "exact", head: true })
+          .eq("sujet_id", post.sujet_id)
+          .neq("id", post.id)
+          .lt("created_at", post.created_at);
+        estReprise = (count ?? 0) > 0;
+      }
+
+      const visuels = post.type === "remanie" || estReprise
         ? await visuelsAlternatifs(supabase, compte, slides)
         : new Map(slides.map((s) => [s.position, s.media_id]));
 

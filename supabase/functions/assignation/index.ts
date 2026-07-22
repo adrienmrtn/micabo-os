@@ -199,7 +199,7 @@ async function creerPost(
     if (remanie) return { postId: remanie, typeReel: "remanie" };
   }
 
-  const sujet = await choisirSujet(supabase, compte);
+  const sujet = await choisirSujet(supabase, compte, jour);
   if (!sujet) return null;
 
   // Faute d'historique, un recopiage ou un remaniement devient un nouveau : on
@@ -324,47 +324,74 @@ async function recyclerMeilleurPost(
   return nouveau.id;
 }
 
-/** Un sujet préparé, retenu, encore inutilisé, tiré de la source du compte. */
+/**
+ * Choisit un sujet préparé pour ce compte, selon les règles de réutilisation :
+ *  - fenêtre de 14 jours PAR POSTER : un slideshow déjà servi à CE compte il y a
+ *    moins de 14 jours est écarté (variété dans le feed du poster) ;
+ *  - priorité à la source du compte, puis au POOL COMMUN (n'importe quelle source
+ *    — il n'y a qu'à re-traduire) ;
+ *  - JAMAIS 0 post : si tout a été vu récemment, on relâche les 14 j et on reprend
+ *    le sujet vu le MOINS récemment (jamais vu d'abord). La reprise garde le texte
+ *    et change les images (géré à la composition).
+ */
 // deno-lint-ignore no-explicit-any
-async function choisirSujet(supabase: Supabase, compte: any) {
-  // Un sujet n'est marqué « utilisé » qu'à la fin de la fabrication, bien après
-  // l'assignation. Se fier à ce seul statut faisait repiocher le même sujet
-  // pour les deux posts du jour : le compte recevait deux fois le même
-  // diaporama. On écarte donc tout sujet déjà porté par un post du compte.
-  const { data: dejaPris } = await supabase
+async function choisirSujet(supabase: Supabase, compte: any, jour: string) {
+  // Historique de CE compte : dernière parution par sujet.
+  const { data: usages } = await supabase
     .from("posts")
-    .select("sujet_id")
+    .select("sujet_id, date_publication_prevue")
     .eq("compte_id", compte.id)
     .not("sujet_id", "is", null);
 
-  const exclus = (dejaPris ?? []).map((p) => p.sujet_id);
+  const derniereVue = new Map<string, string>();
+  for (const u of usages ?? []) {
+    const d = u.date_publication_prevue ?? "";
+    const prev = derniereVue.get(u.sujet_id);
+    if (!prev || d > prev) derniereVue.set(u.sujet_id, d);
+  }
 
-  // Un slideshow préparé (images nettoyées + texte, dans l'ordre) est RÉUTILISABLE
-  // par un autre compte / une autre langue : il n'y a qu'à re-traduire. On accepte
-  // donc aussi les sujets déjà « utilise » — l'exclusion `dejaPris` empêche qu'un
-  // même compte reçoive deux fois le même. Sans ça, un slideshow servait une seule
-  // fois puis restait bloqué, alors qu'on veut le décliner dans chaque langue.
-  const base = () => {
+  // Seuil « il y a 14 jours » (par rapport au jour d'assignation).
+  const limite = new Date(`${jour}T00:00:00Z`);
+  limite.setUTCDate(limite.getUTCDate() - 14);
+  const seuil = limite.toISOString().slice(0, 10);
+  const vuRecemment = (id: string) => {
+    const d = derniereVue.get(id);
+    return d !== undefined && d >= seuil;
+  };
+
+  // Sujets préparés (retenu/utilise), triés par pertinence. `ownSourceOnly` limite
+  // à la source du compte.
+  const candidats = async (ownSourceOnly: boolean): Promise<string[]> => {
     let q = supabase
       .from("sujets")
       .select("id")
       .eq("preparation_statut", "done")
       .in("statut", ["retenu", "utilise"])
-      .order("pertinence_score", { ascending: false })
-      .limit(1);
-    if (exclus.length > 0) q = q.not("id", "in", `(${exclus.join(",")})`);
-    return q;
+      .order("pertinence_score", { ascending: false });
+    if (ownSourceOnly && compte.compte_reference_id) {
+      q = q.eq("compte_reference_id", compte.compte_reference_id);
+    }
+    const { data } = await q;
+    return (data ?? []).map((s) => s.id as string);
   };
 
-  // 1) D'abord la source liée au compte (sa niche).
-  if (compte.compte_reference_id) {
-    const { data } = await base().eq("compte_reference_id", compte.compte_reference_id);
-    if (data?.[0]) return data[0];
-  }
+  const source = compte.compte_reference_id ? await candidats(true) : [];
+  const tous = await candidats(false);
 
-  // 2) Repli sur le POOL COMMUN : n'importe quelle source. Sans ça, un poster dont
-  //    la source n'a plus de sujet frais se retrouvait à 0 post alors que du stock
-  //    déjà nettoyé existe ailleurs — il n'y a qu'à le re-traduire dans sa langue.
-  const { data } = await base();
-  return data?.[0] ?? null;
+  // 1) Source du compte, hors fenêtre 14 j.
+  const fraisSource = source.find((id) => !vuRecemment(id));
+  if (fraisSource) return { id: fraisSource };
+
+  // 2) Pool commun, hors fenêtre 14 j.
+  const fraisPool = tous.find((id) => !vuRecemment(id));
+  if (fraisPool) return { id: fraisPool };
+
+  // 3) JAMAIS 0 : on relâche les 14 j. Jamais vu par ce compte d'abord, sinon le
+  //    vu le moins récemment.
+  const jamaisVu = tous.find((id) => !derniereVue.has(id));
+  if (jamaisVu) return { id: jamaisVu };
+  const parAnciennete = tous
+    .slice()
+    .sort((a, b) => (derniereVue.get(a) ?? "").localeCompare(derniereVue.get(b) ?? ""));
+  return parAnciennete[0] ? { id: parAnciennete[0] } : null;
 }
