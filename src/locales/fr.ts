@@ -175,7 +175,7 @@ export const fr = {
       texteRestant: "Texte présent",
       nettoyer: "Nettoyer",
       nettoyageEnCours: "Nettoyage…",
-      nettoyageEchec: "Image refusée par les deux services (souvent un still de film). Remplace-la.",
+      nettoyageEchec: "Le nettoyage n'a pas abouti (Gemini surchargé, ou image trop chargée en texte). Réessaie, ou supprime la photo.",
       confirmSuppr: "Supprimer cette photo de la bibliothèque ?",
       compteur_one: "{{count}} visuel porte encore du texte à nettoyer.",
       compteur_other: "{{count}} visuels portent encore du texte à nettoyer.",
@@ -346,7 +346,7 @@ export const fr = {
       renettoyer: "Re-nettoyer la photo",
       nettoyageEnCours: "Nettoyage…",
       nettoyageEchec:
-        "Image refusée par les deux services (souvent un still de film sous copyright). Remplace-la par une autre photo.",
+        "Le nettoyage n'a pas abouti sur cette photo (Gemini surchargé, ou texte trop dense). Réessaie, ou remplace-la.",
       nettoyageTexteResiduel: "Nettoyée, mais du texte semble subsister — revérifie.",
       photoRemplacee: "Nettoyage impossible : photo remplacée par une autre propre du compte.",
       remplacerPhoto: "Remplacer la photo",
