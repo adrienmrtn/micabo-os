@@ -207,17 +207,16 @@ async function fluxFillReplicate(
       input: {
         image: imageUrl,
         mask: maskDataUri,
-        // Prompt vide : on ne veut rien inventer, seulement prolonger le décor
-        // existant là où le texte a été effacé.
-        prompt: "",
-        // Sortie ~1 Mpx : net et photoréaliste, largement assez pour TikTok,
-        // et surtout assez léger pour que l'Edge Function tienne (match_input
-        // sur une source 8 Mpx faisait exploser la mémoire du worker).
+        // Un prompt VIDE poussait Flux à « continuer » le texte qu'il voyait
+        // autour et à halluciner du charabia. On lui décrit donc explicitement
+        // ce qu'on veut : le décor prolongé, sans aucune lettre.
+        prompt:
+          "clean photo background, natural continuation of the scene, no text, no letters, no words, no captions, no watermark, photorealistic, seamless",
+        // Sortie ~1 Mpx : net, largement assez pour TikTok, et assez léger pour
+        // que l'Edge Function tienne (match_input sur 8 Mpx faisait sauter le worker).
         megapixels: "1",
         output_format: "png",
-        num_inference_steps: 28,
-        // Contenu maison (photos lifestyle) : on coupe le checker de sortie
-        // pour éviter un faux positif qui bloquerait un nettoyage légitime.
+        num_inference_steps: 30,
         disable_safety_checker: true,
       },
     }),

@@ -44,7 +44,13 @@ Deno.serve(async (request) => {
     const propreBase64 = await cleanImage(slide.reference_url);
     if (!propreBase64) return json({ ok: false, nettoyee: false, motif: "aucune image renvoyée" });
 
+    // On REFUSE de stocker un résultat encore texté (Flux hallucine parfois du
+    // charabia à la place du texte) : mieux vaut garder l'original signalé que
+    // ranger une image ratée en « propre ». L'admin peut relancer ou remplacer.
     const sansTexte = await verifyClean(propreBase64, "image/png");
+    if (!sansTexte) {
+      return json({ ok: false, nettoyee: false, motif: "texte encore présent après nettoyage" });
+    }
 
     // Chemin stable par slide : re-nettoyer deux fois écrase, pas d'accumulation.
     const path = `propre/manuel/${slide.id}.png`;
