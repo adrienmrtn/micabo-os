@@ -426,18 +426,19 @@ const PROMPT_NETTOYAGE = `Tu fais une restauration photo subtile.
 export async function cleanImage(imageUrl: string): Promise<string | null> {
   const image = await fetchImageAsInline(imageUrl);
 
-  // Ordre imposé par l'édition d'image : la source d'ABORD, la consigne
-  // ensuite. Le modèle traite la première image comme le sujet à retoucher.
+  // 1 — INPAINTING D'ABORD. C'est la voie principale : il n'efface que la zone
+  // du texte, ne juge jamais le contenu (aucun refus sur les visages) et ne
+  // régénère pas la personne (donc aucune dérive du cadrage ou des couleurs).
+  // Il évite aussi les tentatives Gemini image, les plus chères. Renvoie null
+  // si aucune zone de texte détectée, pas de clé Stability, ou erreur.
+  const parInpaint = await inpaintFallback(image);
+  if (parInpaint) return parInpaint;
+
+  // 2 — REPLI GEMINI GÉNÉRATIF, seulement si l'inpainting n'a rien pu faire.
+  // La source d'ABORD, la consigne ensuite ; température basse et sortie image
+  // forcée.
   const parts: Part[] = [image, { text: PROMPT_NETTOYAGE }];
-
-  // temperature basse = sortie stable, moins d'hallucinations ; responseModalities
-  // force une sortie image et non une description.
   const config: GenConfig = { temperature: 0.2, responseModalities: ["IMAGE"] };
-
-  // On essaie CHAQUE modèle, pas seulement le premier : un même visuel est
-  // bloqué par l'un (`IMAGE_OTHER`) et nettoyé par l'autre. Diagnostic à
-  // l'appui — 2.5-flash-image bloque une photo de personne que 3.1-flash-image
-  // nettoie sans broncher. Abandonner au premier échec, c'était rater le bon.
   const echecs: string[] = [];
 
   for (const model of IMAGE_MODELS) {
@@ -450,13 +451,6 @@ export async function cleanImage(imageUrl: string): Promise<string | null> {
       echecs.push(`${model}: ${messageErreur(error)}`);
     }
   }
-
-  // Tous les modèles Gemini ont refusé (typiquement un visage réel). Filet de
-  // secours : effacement par masque, qui ne juge pas le contenu. Inerte tant
-  // qu'aucune clé d'inpainting n'est configurée — renvoie alors null et on
-  // relance le refus normal.
-  const parInpaint = await inpaintFallback(image);
-  if (parInpaint) return parInpaint;
 
   throw new RefusRetouche(echecs.join(" | "));
 }
