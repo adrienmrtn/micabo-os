@@ -147,7 +147,8 @@ export async function inpaintTexte(
   mime: string,
   zones: Zone[],
 ): Promise<string | null> {
-  const key = Deno.env.get("STABILITY_API_KEY");
+  // On accepte les deux noms : la clé a été posée sous STABILITY_KEY.
+  const key = Deno.env.get("STABILITY_KEY") ?? Deno.env.get("STABILITY_API_KEY");
   if (!key || zones.length === 0) return null;
 
   const dims = dimensionsImage(imageBytes);

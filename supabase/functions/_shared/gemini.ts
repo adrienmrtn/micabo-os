@@ -364,6 +364,11 @@ Ne remplace jamais la slide 1 (couverture). Choisis UNE slide (position ≥ 2) e
   MÊME. Ne change jamais le numéro, ne saute pas de numéro.
 - faire une longueur comparable à ce texte (à ±20 % du nombre de caractères) :
   ni beaucoup plus courte, ni plus longue — elle occupe la même place à l'écran.
+- COPIER la mise en forme des slides voisines : la MÊME casse (si elles sont
+  tout en minuscules, reste tout en minuscules ; pas de majuscule d'emphase ni
+  de Title Case qu'elles n'ont pas), la même ponctuation, les mêmes emojis ou
+  retours à la ligne éventuels. La slide Sophia doit être indistinguable des
+  autres au premier coup d'œil.
 - rester dans le même mode grammatical et le même ton que les slides voisines,
   pour s'enchaîner sans rupture.
 
