@@ -209,14 +209,14 @@ function SlideAdmin({
           />
         )}
 
-        {renettoyer.data && !renettoyer.data.nettoyee && (
+        {renettoyer.data?.remplacee && (
+          <p className="text-xs text-warning">{t("adminPost.photoRemplacee")}</p>
+        )}
+        {renettoyer.data && !renettoyer.data.nettoyee && !renettoyer.data.remplacee && (
           <p className="text-xs text-destructive">
             {t("adminPost.nettoyageEchec")}
-            {renettoyer.data.erreur ? ` — ${renettoyer.data.erreur}` : ""}
+            {renettoyer.data.motif ? ` — ${renettoyer.data.motif}` : ""}
           </p>
-        )}
-        {renettoyer.data?.nettoyee && renettoyer.data.verifie_sans_texte === false && (
-          <p className="text-xs text-warning">{t("adminPost.nettoyageTexteResiduel")}</p>
         )}
 
         <div className="space-y-2">

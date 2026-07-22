@@ -35,11 +35,12 @@ export async function nettoyerViaProxy(imageUrl: string): Promise<string | null>
   const base64 = enBase64(new Uint8Array(await resImg.arrayBuffer()));
   const corpsRequete = JSON.stringify({ image_base64: base64, strip_metadata: true });
 
-  // Jusqu'à 4 essais avec attente croissante : les 503 « Service temporarily
-  // unavailable » de Gemini sont fréquents mais passagers, réessayer suffit.
+  // 3 essais avec attente croissante : les 503 « Service temporarily
+  // unavailable » de Gemini sont fréquents mais passagers. On borne à 3 pour
+  // ne pas faire tourner le spinner trop longtemps sur une image qui coince.
   let dernier = "";
-  for (let essai = 0; essai < 4; essai += 1) {
-    if (essai > 0) await new Promise((r) => setTimeout(r, 2500 * essai));
+  for (let essai = 0; essai < 3; essai += 1) {
+    if (essai > 0) await new Promise((r) => setTimeout(r, 1500 * essai));
 
     const res = await fetch(PROXY_URL, {
       method: "POST",

@@ -1,14 +1,16 @@
 import { cleanImage, verifyClean } from "../_shared/gemini.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
+type Supabase = ReturnType<typeof serviceClient>;
 const BUCKET = "medias";
 
 /**
  * Re-nettoie la photo d'UNE slide, à la demande de l'admin.
  *
- * Jamais appelé par un cron : c'est une action manuelle, sur un seul visuel,
- * quand le nettoyage automatique a laissé du texte ou rien produit. On repart
- * toujours de l'original (`reference_url`), jamais d'une version déjà retouchée.
+ * On repart toujours de l'original (`reference_url`). Si le nettoyage échoue
+ * vraiment (refus, texte résiduel, aucune image), on NE laisse pas la slide en
+ * plan : on la remplace par un autre visuel DÉJÀ propre de la bibliothèque du
+ * compte de référence. Le poster a toujours une photo utilisable.
  *
  *   { postSlideId }
  */
@@ -33,58 +35,89 @@ Deno.serve(async (request) => {
       .eq("id", postSlideId)
       .single();
     if (!slide) return json({ error: "slide introuvable" }, 404);
-    if (!slide.reference_url) return json({ error: "pas d'original à nettoyer" }, 400);
 
     const { data: post } = await supabase
       .from("posts")
-      .select("compte_id")
+      .select("compte_id, comptes(compte_reference_id)")
       .eq("id", slide.post_id)
       .single();
+    // deno-lint-ignore no-explicit-any
+    const refId = (post as any)?.comptes?.compte_reference_id ?? null;
 
-    const propreBase64 = await cleanImage(slide.reference_url);
-    if (!propreBase64) return json({ ok: false, nettoyee: false, motif: "aucune image renvoyée" });
+    // 1 — Tentative de nettoyage (proxy Lovable en priorité, cf. cleanImage).
+    if (slide.reference_url) {
+      try {
+        const propreBase64 = await cleanImage(slide.reference_url);
+        if (propreBase64 && (await verifyClean(propreBase64, "image/png"))) {
+          const path = `propre/manuel/${slide.id}.png`;
+          const bytes = Uint8Array.from(atob(propreBase64), (c) => c.charCodeAt(0));
+          const { error: upErr } = await supabase.storage
+            .from(BUCKET)
+            .upload(path, bytes, { contentType: "image/png", upsert: true });
+          if (upErr) throw upErr;
 
-    // On REFUSE de stocker un résultat encore texté (Flux hallucine parfois du
-    // charabia à la place du texte) : mieux vaut garder l'original signalé que
-    // ranger une image ratée en « propre ». L'admin peut relancer ou remplacer.
-    const sansTexte = await verifyClean(propreBase64, "image/png");
-    if (!sansTexte) {
-      return json({ ok: false, nettoyee: false, motif: "texte encore présent après nettoyage" });
+          const url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+          const { data: media, error: insErr } = await supabase
+            .from("media_library")
+            .upsert(
+              { compte_id: post?.compte_id ?? null, storage_path: path, url, source: "nettoye_reference", visage_identifiable: null },
+              { onConflict: "storage_path" },
+            )
+            .select("id")
+            .single();
+          if (insErr) throw insErr;
+
+          await supabase.from("post_slides").update({ media_id: media.id }).eq("id", slide.id);
+          return json({ ok: true, nettoyee: true });
+        }
+      } catch (error) {
+        console.warn(`[renettoyer] nettoyage échoué, on remplace : ${messageErreur(error)}`);
+      }
     }
 
-    // Chemin stable par slide : re-nettoyer deux fois écrase, pas d'accumulation.
-    const path = `propre/manuel/${slide.id}.png`;
-    const bytes = Uint8Array.from(atob(propreBase64), (c) => c.charCodeAt(0));
-    const { error: upErr } = await supabase.storage
-      .from(BUCKET)
-      .upload(path, bytes, { contentType: "image/png", upsert: true });
-    if (upErr) throw upErr;
+    // 2 — Le nettoyage n'a rien donné : on remplace par un visuel déjà propre
+    // de la bibliothèque du compte.
+    const alt = await visuelPropreDeSecours(supabase, refId, slide.post_id);
+    if (alt) {
+      await supabase.from("post_slides").update({ media_id: alt }).eq("id", slide.id);
+      return json({ ok: true, nettoyee: false, remplacee: true });
+    }
 
-    const url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-
-    const { data: media, error: insErr } = await supabase
-      .from("media_library")
-      .upsert(
-        {
-          compte_id: post?.compte_id ?? null,
-          storage_path: path,
-          url,
-          source: "nettoye_reference",
-          visage_identifiable: null,
-        },
-        { onConflict: "storage_path" },
-      )
-      .select("id")
-      .single();
-    if (insErr) throw insErr;
-
-    await supabase
-      .from("post_slides")
-      .update({ media_id: media.id })
-      .eq("id", slide.id);
-
-    return json({ ok: true, nettoyee: true, verifie_sans_texte: sansTexte, url });
+    return json({
+      ok: false,
+      nettoyee: false,
+      motif: "nettoyage impossible et aucune photo propre de rechange dans la bibliothèque du compte",
+    });
   } catch (error) {
     return json({ ok: false, nettoyee: false, erreur: messageErreur(error) }, 500);
   }
 });
+
+/**
+ * Un visuel DÉJÀ nettoyé de la bibliothèque du compte de référence, de
+ * préférence pas déjà utilisé sur ce post (pour éviter un doublon visuel) et le
+ * moins utilisé possible.
+ */
+async function visuelPropreDeSecours(
+  supabase: Supabase,
+  refId: string | null,
+  postId: string,
+): Promise<string | null> {
+  const { data: slides } = await supabase
+    .from("post_slides")
+    .select("media_id")
+    .eq("post_id", postId);
+  const dejaUtilises = new Set((slides ?? []).map((s) => s.media_id).filter(Boolean));
+
+  let query = supabase
+    .from("media_library")
+    .select("id")
+    .like("storage_path", "propre/%")
+    .order("used_count", { ascending: true })
+    .limit(30);
+  if (refId) query = query.eq("compte_reference_id", refId);
+
+  const { data } = await query;
+  const liste = (data ?? []).map((m) => m.id);
+  return liste.find((id) => !dejaUtilises.has(id)) ?? liste[0] ?? null;
+}

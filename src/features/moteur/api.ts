@@ -309,12 +309,18 @@ export async function majTexteSlide(slideId: string, texte: string): Promise<voi
   if (error) throw error;
 }
 
-/** Relance le nettoyage d'une seule photo (déclenché à la main par l'admin). */
+/** Relance le nettoyage d'une seule photo (déclenché à la main par l'admin).
+ *  `remplacee` = le nettoyage a échoué mais la photo a été remplacée par une
+ *  autre déjà propre de la bibliothèque du compte. */
 export const renettoyerSlide = (postSlideId: string) =>
-  invoke<{ ok: boolean; nettoyee: boolean; verifie_sans_texte?: boolean; erreur?: string }>(
-    "renettoyer",
-    { postSlideId },
-  );
+  invoke<{
+    ok: boolean;
+    nettoyee: boolean;
+    remplacee?: boolean;
+    verifie_sans_texte?: boolean;
+    erreur?: string;
+    motif?: string;
+  }>("renettoyer", { postSlideId });
 
 /** Fait pointer une slide vers un autre visuel déjà en bibliothèque. */
 export async function majMediaSlide(slideId: string, mediaId: string): Promise<void> {

@@ -7,11 +7,24 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { mediasBrutsParSource, nettoyerTest, type MediaTest } from "@/features/moteur/api";
 
+/** Borne le temps d'attente : le spinner ne doit jamais tourner indéfiniment,
+ *  même si le nettoyage d'une image coince côté serveur. */
+function avecTimeout<T>(promesse: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promesse,
+    new Promise<T>((_, rejeter) =>
+      setTimeout(() => rejeter(new Error("Trop long — réessaie.")), ms),
+    ),
+  ]);
+}
+
 /** Une vignette : image d'origine, bouton test, résultat nettoyé à côté. */
 function CarteTest({ media }: { media: MediaTest }) {
   const { t } = useTranslation();
 
-  const nettoyer = useMutation({ mutationFn: () => nettoyerTest(media.url) });
+  const nettoyer = useMutation({
+    mutationFn: () => avecTimeout(nettoyerTest(media.url), 90000),
+  });
   const resultat = nettoyer.data;
 
   return (
@@ -35,7 +48,9 @@ function CarteTest({ media }: { media: MediaTest }) {
             <img src={resultat.url} alt="" className="aspect-[3/4] w-full rounded border object-cover" />
           ) : (
             <div className="flex aspect-[3/4] items-center justify-center rounded border border-dashed bg-muted/20 p-1 text-center text-[10px] text-muted-foreground">
-              {resultat ? t("testNet.echec") : t("testNet.pasEncore")}
+              {nettoyer.isError || (resultat && !resultat.ok)
+                ? t("testNet.echec")
+                : t("testNet.pasEncore")}
             </div>
           )}
         </figure>
@@ -52,9 +67,11 @@ function CarteTest({ media }: { media: MediaTest }) {
         {nettoyer.isPending ? t("testNet.enCours") : t("testNet.tester")}
       </Button>
 
-      {resultat && !resultat.ok && (
-        <p className="text-[10px] text-destructive">{resultat.erreur ?? resultat.motif}</p>
-      )}
+      {(resultat && !resultat.ok) || nettoyer.isError ? (
+        <p className="text-[10px] text-destructive">
+          {resultat?.erreur ?? resultat?.motif ?? (nettoyer.error as Error)?.message}
+        </p>
+      ) : null}
     </div>
   );
 }

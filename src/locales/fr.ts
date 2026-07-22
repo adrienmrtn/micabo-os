@@ -348,6 +348,7 @@ export const fr = {
       nettoyageEchec:
         "Image refusée par les deux services (souvent un still de film sous copyright). Remplace-la par une autre photo.",
       nettoyageTexteResiduel: "Nettoyée, mais du texte semble subsister — revérifie.",
+      photoRemplacee: "Nettoyage impossible : photo remplacée par une autre propre du compte.",
       remplacerPhoto: "Remplacer la photo",
       nettoyerTout_one: "Nettoyer la photo à vérifier",
       nettoyerTout_other: "Nettoyer les {{count}} photos à vérifier",
