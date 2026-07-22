@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { UserPlus } from "lucide-react";
+import { Plus, UserPlus, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -130,6 +130,10 @@ export function AdminPostersPage() {
   const posters = useQuery({ queryKey: ["posters"], queryFn: listerPosters });
   const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
 
+  // Panneau d'ajout replié par défaut : la liste reste la vedette. On choisit
+  // d'abord « poster » ou « recruteur », puis le formulaire correspondant s'ouvre.
+  const [ajout, setAjout] = React.useState<"ferme" | "poster" | "recruteur">("ferme");
+
   const [prenom, setPrenom] = React.useState("");
   const [nom, setNom] = React.useState("");
   const [langue, setLangue] = React.useState("");
@@ -184,9 +188,8 @@ export function AdminPostersPage() {
     onSuccess: rafraichir,
   });
 
-  return (
-    <div className="space-y-6">
-      <Card>
+  const formulairePoster = (
+    <Card className="border-primary/30">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UserPlus className="size-4" />
@@ -280,8 +283,10 @@ export function AdminPostersPage() {
           )}
         </CardContent>
       </Card>
+  );
 
-      <Card>
+  const formulaireRecruteur = (
+    <Card className="border-primary/30">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UserPlus className="size-4" />
@@ -339,8 +344,9 @@ export function AdminPostersPage() {
           </form>
         </CardContent>
       </Card>
+  );
 
-      {(() => {
+  const liste = (() => {
         const tous = posters.data ?? [];
         const nomDe = (p: (typeof tous)[number]) =>
           [p.prenom, p.nom].filter(Boolean).join(" ") || p.email || "—";
@@ -503,7 +509,41 @@ export function AdminPostersPage() {
             {admins.length > 0 && section(t("nav.admin"), admins.length, admins)}
           </div>
         );
-      })()}
+  })();
+
+  return (
+    <div className="space-y-6">
+      {/* Barre du haut : titre + un seul « + » pour ajouter un poster OU un
+          recruteur. Le formulaire ne s'affiche que si on clique — la liste
+          reste la vedette. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold">{t("posters.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("posters.subtitle")}</p>
+        </div>
+        {ajout === "ferme" ? (
+          <div className="flex gap-2">
+            <Button onClick={() => { setCree(null); setAjout("poster"); }}>
+              <Plus className="size-4" />
+              {t("posters.ajouterPoster")}
+            </Button>
+            <Button variant="outline" onClick={() => { setRecCree(null); setAjout("recruteur"); }}>
+              <Plus className="size-4" />
+              {t("posters.ajouterRecruteur")}
+            </Button>
+          </div>
+        ) : (
+          <Button variant="ghost" onClick={() => setAjout("ferme")}>
+            <X className="size-4" />
+            {t("common.close")}
+          </Button>
+        )}
+      </div>
+
+      {ajout === "poster" && formulairePoster}
+      {ajout === "recruteur" && formulaireRecruteur}
+
+      {liste}
     </div>
   );
 }

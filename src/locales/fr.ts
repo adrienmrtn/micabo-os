@@ -106,6 +106,14 @@ export const fr = {
       title: "Tests",
       subtitle:
         "Tout ce qui sert à tester, au même endroit. Rien ici ne touche la production (les calendriers des créateurs).",
+      choisir: "Choisis un test — il s'ouvre en dessous. Rien ici ne touche la production.",
+      choisirPlaceholder: "— Choisir un test —",
+      completTitre: "Test complet (un post par compte)",
+      completDesc:
+        "Simule le pipeline complet sur chaque compte : import → nettoyage → traduction → Sophia. Sort un post de test par compte, sans rien assigner ni publier.",
+      scrapeTitre: "Tester le scrape",
+      scrapeDesc:
+        "Regarde ce que le moteur voit sur un compte de référence, trié par vues, avec le score Sophia. Vérifie qu'il reprend les TikToks qui performent ET où Sophia s'intègre. Ne crée rien.",
       tiktokTitre: "Tester un TikTok précis",
       tiktokDesc:
         "Colle un lien TikTok : on le nettoie, on y intègre Sophia, et on te sort un post à télécharger (QR). Il n'apparaît sur aucun calendrier.",
@@ -154,6 +162,7 @@ export const fr = {
       delete: "Supprimer",
       back: "Retour",
       cancel: "Annuler",
+      close: "Fermer",
       none: "Aucun",
       empty: "Rien à afficher.",
       error: "Erreur",
@@ -282,6 +291,8 @@ export const fr = {
       confirmDelete: "Supprimer définitivement ce poster et ses données ?",
       upworkAjouter: "+ Lien Upwork",
       upworkModifier: "Modifier Upwork",
+      ajouterPoster: "Ajouter un poster",
+      ajouterRecruteur: "Ajouter un recruteur",
       creerRecruteur: "Créer un recruteur",
       creerRecruteurDesc:
         "Saisis son nom et sa langue : son espace de recrutement est prêt à sa première connexion.",

@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Link2, Sparkles, Wand2 } from "lucide-react";
+import { FlaskConical, Link2, Sparkles, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,36 +96,71 @@ function TesterUnTikTok() {
   );
 }
 
+/** Le test nettoyage vit sur sa propre page : ici juste un raccourci. */
+function TestNettoyageCard() {
+  const { t } = useTranslation();
+  return (
+    <Card>
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-5">
+        <div className="flex items-center gap-2">
+          <Wand2 className="size-4 text-primary" />
+          <div>
+            <p className="text-sm font-medium">{t("tests.nettoyageTitre")}</p>
+            <p className="text-xs text-muted-foreground">{t("tests.nettoyageDesc")}</p>
+          </div>
+        </div>
+        <Button asChild variant="outline">
+          <Link to="/admin/test-nettoyage">{t("tests.nettoyageBouton")}</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Catalogue des tests : on choisit d'abord ici (chacun est expliqué), puis le
+// test choisi s'affiche seul en dessous — plus de mur de cartes empilées.
+const TESTS = [
+  { value: "minuit", titreKey: "simMinuit.title", descKey: "simMinuit.subtitle", render: () => <SimulerMinuitCard /> },
+  { value: "tiktok", titreKey: "tests.tiktokTitre", descKey: "tests.tiktokDesc", render: () => <TesterUnTikTok /> },
+  { value: "complet", titreKey: "tests.completTitre", descKey: "tests.completDesc", render: () => <TestCompletCard /> },
+  { value: "scrape", titreKey: "tests.scrapeTitre", descKey: "tests.scrapeDesc", render: () => <TestScrapeCard /> },
+  { value: "nettoyage", titreKey: "tests.nettoyageTitre", descKey: "tests.nettoyageDesc", render: () => <TestNettoyageCard /> },
+] as const;
+
 export function AdminTestsPage() {
   const { t } = useTranslation();
+  const [choix, setChoix] = React.useState<string>("");
+  const actif = TESTS.find((x) => x.value === choix);
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>{t("tests.title")}</CardTitle>
-          <CardDescription>{t("tests.subtitle")}</CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <FlaskConical className="size-4 text-primary" />
+            {t("tests.title")}
+          </CardTitle>
+          <CardDescription>{t("tests.choisir")}</CardDescription>
         </CardHeader>
-      </Card>
-
-      <SimulerMinuitCard />
-      <TesterUnTikTok />
-      <TestCompletCard />
-      <TestScrapeCard />
-
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-5">
-          <div className="flex items-center gap-2">
-            <Wand2 className="size-4 text-primary" />
-            <div>
-              <p className="text-sm font-medium">{t("tests.nettoyageTitre")}</p>
-              <p className="text-xs text-muted-foreground">{t("tests.nettoyageDesc")}</p>
-            </div>
-          </div>
-          <Button asChild variant="outline">
-            <Link to="/admin/test-nettoyage">{t("tests.nettoyageBouton")}</Link>
-          </Button>
+        <CardContent className="space-y-3">
+          <select
+            aria-label={t("tests.choisir")}
+            className={selectClass}
+            value={choix}
+            onChange={(e) => setChoix(e.target.value)}
+          >
+            <option value="">{t("tests.choisirPlaceholder")}</option>
+            {TESTS.map((x) => (
+              <option key={x.value} value={x.value}>
+                {t(x.titreKey)}
+              </option>
+            ))}
+          </select>
+          {actif && <p className="text-sm text-muted-foreground">{t(actif.descKey)}</p>}
         </CardContent>
       </Card>
+
+      {actif ? actif.render() : null}
     </div>
   );
 }
