@@ -16,7 +16,17 @@ import {
   EmptyState,
 } from "@/components/ui/card";
 import { useAuth } from "@/features/auth/AuthContext";
-import { creerPoster, listerPosters, majPoster, supprimerPoster } from "@/features/moteur/api";
+import {
+  creerPoster,
+  definirRole,
+  listerLanguesReference,
+  listerPosters,
+  majPoster,
+  supprimerPoster,
+} from "@/features/moteur/api";
+
+const selectClass =
+  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
 /**
  * Mot de passe commun à tous les posters, simple à dicter au téléphone. Il
@@ -29,16 +39,18 @@ export function AdminPostersPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const posters = useQuery({ queryKey: ["posters"], queryFn: listerPosters });
+  const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
 
   const [prenom, setPrenom] = React.useState("");
   const [nom, setNom] = React.useState("");
+  const [langue, setLangue] = React.useState("");
   const [password, setPassword] = React.useState(MOT_DE_PASSE_INITIAL);
   const [cree, setCree] = React.useState<{ email: string; password: string } | null>(null);
 
   const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["posters"] });
 
   const creer = useMutation({
-    mutationFn: () => creerPoster({ prenom, nom, password }),
+    mutationFn: () => creerPoster({ prenom, nom, password, langue: langue || undefined }),
     onSuccess: (r) => {
       setCree({ email: r.email, password });
       setPrenom("");
@@ -46,6 +58,11 @@ export function AdminPostersPage() {
       setPassword(MOT_DE_PASSE_INITIAL);
       rafraichir();
     },
+  });
+  const changerRole = useMutation({
+    mutationFn: (input: { id: string; role: "poster" | "hiring_manager" }) =>
+      definirRole(input.id, input.role),
+    onSuccess: rafraichir,
   });
   const basculer = useMutation({
     mutationFn: (input: { id: string; actif: boolean }) =>
@@ -85,6 +102,23 @@ export function AdminPostersPage() {
             <div className="space-y-2">
               <Label htmlFor="nom">{t("posters.nom")}</Label>
               <Input id="nom" value={nom} onChange={(e) => setNom(e.target.value)} />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="langue">{t("hiring.langue")}</Label>
+              <select
+                id="langue"
+                className={selectClass}
+                value={langue}
+                onChange={(e) => setLangue(e.target.value)}
+              >
+                <option value="">{t("posters.sansCompte")}</option>
+                {langues.data?.map((l) => (
+                  <option key={l} value={l}>
+                    {l.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">{t("posters.langueAide")}</p>
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="mdp">{t("posters.password")}</Label>
@@ -155,6 +189,9 @@ export function AdminPostersPage() {
                     </span>
                     {soiMeme && <Badge variant="outline">{t("posters.you")}</Badge>}
                     {poster.role === "admin" && <Badge>{t("nav.admin")}</Badge>}
+                    {poster.role === "hiring_manager" && (
+                      <Badge variant="secondary">{t("hiring.badge")}</Badge>
+                    )}
                     {!poster.is_active && (
                       <Badge variant="secondary">{t("posters.disabled")}</Badge>
                     )}
@@ -163,7 +200,24 @@ export function AdminPostersPage() {
                 </div>
 
                 {!soiMeme && (
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {poster.role !== "admin" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={changerRole.isPending}
+                        onClick={() =>
+                          changerRole.mutate({
+                            id: poster.id,
+                            role: poster.role === "hiring_manager" ? "poster" : "hiring_manager",
+                          })
+                        }
+                      >
+                        {poster.role === "hiring_manager"
+                          ? t("hiring.revoke")
+                          : t("hiring.promote")}
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"

@@ -117,7 +117,7 @@ export interface PosterProfil {
   langues: string[];
   is_active: boolean;
   must_change_password: boolean;
-  role: "admin" | "poster" | null;
+  role: "admin" | "poster" | "hiring_manager" | null;
 }
 
 export interface Reglages {

@@ -1,17 +1,26 @@
-import { assertAuthorised, json, serviceClient } from "../_shared/supabase.ts";
+import { assertRole, json, serviceClient } from "../_shared/supabase.ts";
 
+type Supabase = ReturnType<typeof serviceClient>;
 const DOMAINE = "sophia.com";
 
 /**
- * Gestion des posters par l'admin. Créer un compte avec mot de passe exige le
- * service_role, donc ça vit ici et jamais dans le navigateur.
+ * Gestion des posters. Créer un compte avec mot de passe exige le service_role,
+ * donc ça vit ici et jamais dans le navigateur.
  *
- *   { action: "create", prenom, nom, password }
- *   { action: "delete", userId }
+ * Deux appelants : l'admin, et le HIRING MANAGER (dont c'est le seul pouvoir).
+ * Le hiring manager peut créer un poster mais pas en supprimer.
+ *
+ *   { action: "create", prenom, nom, password, langue? }
+ *   { action: "delete", userId }        (admin uniquement)
+ *
+ * À la création, si une `langue` est fournie, tout ce qui concerne le compte de
+ * publication est AUTOMATISÉ : on rattache un compte de référence de cette
+ * langue (le moins chargé) et on génère la persona (pseudo, bio, avatar) via
+ * l'IA, en s'inspirant du compte de référence.
  */
 Deno.serve(async (request) => {
-  const denied = await assertAuthorised(request);
-  if (denied) return denied;
+  const acces = await assertRole(request, ["admin", "hiring_manager"]);
+  if (acces instanceof Response) return acces;
 
   const supabase = serviceClient();
 
@@ -26,6 +35,7 @@ Deno.serve(async (request) => {
     const prenom = (body.prenom ?? "").trim();
     const nom = (body.nom ?? "").trim();
     const password = body.password ?? "";
+    const langue = (body.langue ?? "").trim().toLowerCase();
 
     if (!prenom || password.length < 8) {
       return json({ error: "Prénom requis et mot de passe d'au moins 8 caractères" }, 400);
@@ -48,7 +58,7 @@ Deno.serve(async (request) => {
     }
 
     // Le trigger a posé le profil et le rôle poster. On complète l'état civil
-    // et on active le compte : c'est l'admin qui l'a créé, il est validé.
+    // et on active le compte : c'est un accès validé de vive voix.
     if (data.user) {
       await supabase
         .from("profiles")
@@ -59,10 +69,18 @@ Deno.serve(async (request) => {
         .eq("id", data.user.id);
     }
 
-    return json({ ok: true, userId: data.user?.id, email });
+    // Automatisation IA du compte de publication, si une langue est donnée.
+    let compte: { id: string; reference: string | null; persona: boolean } | null = null;
+    if (data.user && langue) {
+      compte = await preparerCompte(supabase, request, data.user.id, langue);
+    }
+
+    return json({ ok: true, userId: data.user?.id, email, compte });
   }
 
   if (body.action === "delete") {
+    // Suppression réservée à l'admin : un hiring manager ne défait pas.
+    if (acces.role !== "admin") return json({ error: "forbidden" }, 403);
     if (!body.userId) return json({ error: "userId requis" }, 400);
     const { error } = await supabase.auth.admin.deleteUser(body.userId);
     if (error) return json({ error: error.message }, 400);
@@ -107,4 +125,92 @@ async function emailDisponible(
   }
 
   return `${base}${Date.now()}@${DOMAINE}`;
+}
+
+/**
+ * Prépare le compte de publication d'un poster tout juste créé : rattache un
+ * compte de référence de la bonne langue et génère la persona via l'IA.
+ *
+ * Best-effort : si aucun compte de référence n'existe pour la langue, on crée
+ * quand même le compte (référence nulle) ; si la persona échoue, le compte
+ * existe et l'admin pourra la (re)générer. On ne bloque jamais la création du
+ * poster pour un aléa d'automatisation.
+ */
+async function preparerCompte(
+  supabase: Supabase,
+  request: Request,
+  posterId: string,
+  langue: string,
+): Promise<{ id: string; reference: string | null; persona: boolean }> {
+  const referenceId = await referenceLaMoinsChargee(supabase, langue);
+
+  const { data: compte, error } = await supabase
+    .from("comptes")
+    .insert({ poster_id: posterId, compte_reference_id: referenceId, langue })
+    .select("id")
+    .single();
+  if (error || !compte) {
+    return { id: "", reference: referenceId, persona: false };
+  }
+
+  const persona = await genererPersonaAuto(request, compte.id);
+  return { id: compte.id, reference: referenceId, persona };
+}
+
+/**
+ * Le compte de référence actif de la langue demandée qui porte le moins de
+ * comptes de publication — pour répartir les posters au lieu d'empiler tout le
+ * monde sur le premier. Renvoie null si la langue n'a aucun compte de référence.
+ */
+async function referenceLaMoinsChargee(
+  supabase: Supabase,
+  langue: string,
+): Promise<string | null> {
+  const { data: refs } = await supabase
+    .from("comptes_reference")
+    .select("id")
+    .eq("langue", langue)
+    .eq("is_active", true);
+  if (!refs || refs.length === 0) return null;
+
+  const { data: comptes } = await supabase
+    .from("comptes")
+    .select("compte_reference_id");
+  const charge = new Map<string, number>();
+  for (const c of comptes ?? []) {
+    if (c.compte_reference_id) {
+      charge.set(c.compte_reference_id, (charge.get(c.compte_reference_id) ?? 0) + 1);
+    }
+  }
+
+  return refs
+    .map((r) => r.id)
+    .sort((a, b) => (charge.get(a) ?? 0) - (charge.get(b) ?? 0))[0];
+}
+
+/**
+ * Déclenche la génération de persona (pseudo, bio, avatar) en appelant la
+ * fonction `persona`, qui porte déjà toute la logique (filtrage des pseudos,
+ * choix d'avatar sans visage). On l'appelle en interne avec le secret cron pour
+ * ne pas ré-implémenter tout ça ici. Renvoie true si la persona a été appliquée.
+ */
+async function genererPersonaAuto(request: Request, compteId: string): Promise<boolean> {
+  const secret = Deno.env.get("CRON_SECRET");
+  if (!secret) return false;
+
+  // URL de la fonction voisine, déduite de l'URL de la requête courante.
+  const base = new URL(request.url);
+  const url = `${base.origin}${base.pathname.replace(/manage-users\/?$/, "")}persona`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-cron-secret": secret },
+      body: JSON.stringify({ compteId, appliquer: true }),
+    });
+    const data = await res.json().catch(() => null);
+    return Boolean(data?.applique);
+  } catch {
+    return false;
+  }
 }

@@ -60,6 +60,44 @@ export async function assertAuthorised(request: Request): Promise<Response | nul
 }
 
 /**
+ * Comme assertAuthorised, mais accepte une LISTE de rôles et renvoie celui de
+ * l'appelant (utile quand une même fonction sert admin ET hiring manager, avec
+ * des actions réservées à l'un). Renvoie une Response en cas de refus, sinon
+ * `{ userId, role }`.
+ */
+export async function assertRole(
+  request: Request,
+  roles: string[],
+): Promise<Response | { userId: string; role: string }> {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  const expected = Deno.env.get("CRON_SECRET");
+  if (expected && request.headers.get("x-cron-secret") === expected) {
+    return { userId: "cron", role: "admin" };
+  }
+
+  const authorization = request.headers.get("Authorization") ?? "";
+  const token = authorization.replace(/^Bearer\s+/i, "");
+  if (!token) return json({ error: "unauthorized" }, 401);
+
+  const supabase = serviceClient();
+  const { data: userData, error } = await supabase.auth.getUser(token);
+  if (error || !userData.user) return json({ error: "unauthorized" }, 401);
+
+  const { data: lignes } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userData.user.id);
+
+  const trouve = (lignes ?? []).map((l) => l.role).find((r) => roles.includes(r));
+  if (!trouve) return json({ error: "forbidden" }, 403);
+
+  return { userId: userData.user.id, role: trouve };
+}
+
+/**
  * Charge un prompt éditable depuis l'admin. Renvoie undefined si absent, pour
  * que l'appelant retombe sur le défaut codé plutôt que d'envoyer un prompt vide.
  */

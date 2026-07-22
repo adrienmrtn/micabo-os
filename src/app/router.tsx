@@ -7,6 +7,8 @@ import { RoleGate } from "@/features/auth/RoleGate";
 import { useAuth } from "@/features/auth/AuthContext";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 import { PosterLayout } from "@/components/layout/PosterLayout";
+import { HiringLayout } from "@/components/layout/HiringLayout";
+import { HiringPosterPage } from "@/pages/hiring/HiringPosterPage";
 import { AdminPilotagePage } from "@/pages/admin/AdminPilotagePage";
 import { AdminSourcesPage } from "@/pages/admin/AdminSourcesPage";
 import { AdminComptesPage } from "@/pages/admin/AdminComptesPage";
@@ -26,6 +28,7 @@ import { NotFoundPage } from "@/pages/NotFoundPage";
 function Accueil() {
   const { role } = useAuth();
   if (role === "admin") return <Navigate to="/admin" replace />;
+  if (role === "hiring_manager") return <Navigate to="/embauche" replace />;
   if (role === "poster") return <Navigate to="/calendrier" replace />;
   return <Navigate to="/login" replace />;
 }
@@ -60,6 +63,12 @@ export function AppRouter() {
         <Route element={<RoleGate allow={["poster"]} />}>
           <Route element={<PosterLayout />}>
             <Route path="/calendrier" element={<PosterCalendrierPage />} />
+          </Route>
+        </Route>
+
+        <Route element={<RoleGate allow={["hiring_manager"]} />}>
+          <Route element={<HiringLayout />}>
+            <Route path="/embauche" element={<HiringPosterPage />} />
           </Route>
         </Route>
 

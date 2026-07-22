@@ -37,6 +37,8 @@ export const fr = {
       reglages: "Réglages",
       prompts: "Prompts",
       calendrier: "Calendrier",
+      hiring: "Recrutement",
+      embauche: "Créer un poster",
     },
     common: {
       loading: "Chargement…",
@@ -162,6 +164,24 @@ export const fr = {
       disabled: "Désactivé",
       you: "Toi",
       confirmDelete: "Supprimer définitivement ce poster et ses données ?",
+      sansCompte: "Sans compte de publication (à configurer plus tard)",
+      langueAide:
+        "Choisis une langue : le compte de référence et la persona (pseudo, bio, avatar) sont générés automatiquement.",
+    },
+    hiring: {
+      title: "Créer un poster",
+      subtitle:
+        "Saisis le prénom, le nom et la langue. Le reste — compte de référence et identité TikTok (pseudo, bio, avatar) — est généré automatiquement par l'IA.",
+      langue: "Langue du poster",
+      langueAide: "La matière et l'identité seront tirées d'un compte de référence de cette langue.",
+      aucuneLangue: "Aucune langue disponible",
+      create: "Créer le poster",
+      enCours: "Création…",
+      personaOk: "Compte et identité TikTok générés. Le poster les verra sur son espace.",
+      personaPlusTard: "Compte créé ; l'identité TikTok sera générée sous peu.",
+      badge: "Recruteur",
+      promote: "Faire recruteur",
+      revoke: "Repasser poster",
     },
     bibliotheque: {
       title: "Bibliothèque de médias",

@@ -5,6 +5,7 @@ import { useAuth, type Role } from "./AuthContext";
 const ACCUEIL: Record<Role, string> = {
   admin: "/admin",
   poster: "/calendrier",
+  hiring_manager: "/embauche",
 };
 
 export function RoleGate({ allow }: { allow: Role[] }) {

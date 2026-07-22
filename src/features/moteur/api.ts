@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client";
+import type { Role } from "@/features/auth/AuthContext";
 import type {
   Compte,
   StatsCompte,
@@ -136,11 +137,37 @@ export function creerPoster(input: {
   prenom: string;
   nom: string;
   password: string;
+  langue?: string;
 }) {
-  return invoke<{ userId: string; email: string }>("manage-users", {
+  return invoke<{
+    userId: string;
+    email: string;
+    compte: { id: string; reference: string | null; persona: boolean } | null;
+  }>("manage-users", {
     action: "create",
     ...input,
   });
+}
+
+/** Langues distinctes des comptes de référence actifs (pour le hiring manager
+ *  et l'admin : on ne propose que des langues qui ont de la matière). */
+export async function listerLanguesReference(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("comptes_reference")
+    .select("langue")
+    .eq("is_active", true);
+  if (error) throw error;
+  const langues = new Set((data ?? []).map((r) => r.langue).filter(Boolean));
+  return [...langues].sort();
+}
+
+/** Définit LE rôle d'un utilisateur (admin uniquement, via RLS). On remplace :
+ *  un utilisateur a un seul rôle à la fois dans notre modèle. */
+export async function definirRole(userId: string, role: Role): Promise<void> {
+  const { error: delErr } = await supabase.from("user_roles").delete().eq("user_id", userId);
+  if (delErr) throw delErr;
+  const { error } = await supabase.from("user_roles").insert({ user_id: userId, role });
+  if (error) throw error;
 }
 
 export function supprimerPoster(userId: string) {
