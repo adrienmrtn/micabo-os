@@ -80,18 +80,31 @@ export function TestScrapeCard() {
                   <span className="w-5 text-right text-xs font-semibold tabular-nums text-muted-foreground">
                     {i + 1}
                   </span>
-                  <a
-                    href={p.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="truncate underline-offset-2 hover:underline"
-                  >
-                    {p.texte || t("testScrape.sansTexte")}
-                  </a>
+                  <span className="min-w-0">
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block truncate underline-offset-2 hover:underline"
+                    >
+                      {p.texte || t("testScrape.sansTexte")}
+                    </a>
+                    {p.estPhoto && (
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {p.raison}
+                      </span>
+                    )}
+                  </span>
                 </div>
                 <div className="flex shrink-0 items-center gap-2 tabular-nums">
-                  {!p.estPhoto && <Badge variant="outline">{t("testScrape.pasPhoto")}</Badge>}
-                  {p.dejaVu && <Badge variant="secondary">{t("testScrape.dejaVu")}</Badge>}
+                  {!p.estPhoto ? (
+                    <Badge variant="outline">{t("testScrape.pasPhoto")}</Badge>
+                  ) : p.sophia ? (
+                    <Badge variant="success">{t("testScrape.sophiaOk", { score: p.pertinence })}</Badge>
+                  ) : (
+                    <Badge variant="secondary">{t("testScrape.sophiaNon", { score: p.pertinence })}</Badge>
+                  )}
+                  {p.dejaVu && <Badge variant="outline">{t("testScrape.dejaVu")}</Badge>}
                   <span title={t("analytics.vues")}>👁 {abrege(p.vues)}</span>
                   <span title={t("analytics.likes")}>♥ {abrege(p.likes)}</span>
                 </div>

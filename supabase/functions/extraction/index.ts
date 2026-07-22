@@ -5,9 +5,20 @@ import {
   scrapeProfile,
   type ScrapedPost,
 } from "../_shared/apify.ts";
-import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
+import { scoreRelevance } from "../_shared/gemini.ts";
+import {
+  assertAuthorised,
+  chargerPrompt,
+  json,
+  messageErreur,
+  serviceClient,
+} from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
+
+// En dessous, le thème ne permet pas d'intégrer Sophia naturellement : on ne
+// reprend pas le post (même s'il fait des vues).
+const SEUIL_PERTINENCE = 50;
 
 const BUCKET = "medias";
 // On récupère assez de posts récents pour pouvoir garder les MEILLEURS (par
@@ -70,18 +81,30 @@ Deno.serve(async (request) => {
       const posts = await scrapeProfile(ref.handle_tiktok, POSTS_PAR_COMPTE);
       const { data: connus } = await supabase.from("sujets").select("source_url");
       const dejaVus = new Set((connus ?? []).map((s) => idDe(s.source_url ?? "")));
+      const instructions = await chargerPrompt(supabase, "pertinence");
 
-      const liste = posts
-        .map((p) => ({
-          url: p.webVideoUrl,
-          texte: p.text.slice(0, 80),
-          photos: p.imageUrls.length,
-          vues: p.stats.vues,
-          likes: p.stats.likes,
-          estPhoto: p.imageUrls.length > 0,
-          dejaVu: dejaVus.has(idDe(p.webVideoUrl)),
-        }))
-        .sort((a, b) => b.vues - a.vues);
+      // On note aussi la PERTINENCE THÉMATIQUE (peut-on y intégrer Sophia ?), pas
+      // seulement les vues — c'est le double critère de sélection.
+      const liste = await Promise.all(
+        posts.map(async (p) => {
+          const pert = p.imageUrls.length > 0
+            ? await scoreRelevance({ caption: p.text, hookText: p.text, instructions })
+            : { score: 0, reason: "Vidéo, pas un diaporama" };
+          return {
+            url: p.webVideoUrl,
+            texte: p.text.slice(0, 80),
+            photos: p.imageUrls.length,
+            vues: p.stats.vues,
+            likes: p.stats.likes,
+            estPhoto: p.imageUrls.length > 0,
+            dejaVu: dejaVus.has(idDe(p.webVideoUrl)),
+            pertinence: pert.score,
+            raison: pert.reason,
+            sophia: pert.score >= SEUIL_PERTINENCE,
+          };
+        }),
+      );
+      liste.sort((a, b) => b.vues - a.vues);
 
       return json({ ok: true, handle: ref.handle_tiktok, posts: liste });
     }
@@ -121,7 +144,12 @@ Deno.serve(async (request) => {
         .single();
 
       try {
+        // Posts triés par vues. On ne reprend QUE ceux dont le thème permet
+        // d'intégrer Sophia (culture générale) : un post viral hors-sujet ne sert
+        // à rien. On score la pertinence AVANT de télécharger les images (l'étape
+        // coûteuse), pour ne pas gaspiller sur du hors-thème.
         const posts = await recupererPosts(supabase, compte.handle_tiktok);
+        const instructions = await chargerPrompt(supabase, "pertinence");
         let crees = 0;
         let restants = false;
 
@@ -130,6 +158,15 @@ Deno.serve(async (request) => {
             restants = true;
             break;
           }
+          if (post.imageUrls.length === 0) continue; // pas un post photo
+
+          const { score } = await scoreRelevance({
+            caption: post.text,
+            hookText: post.text,
+            instructions,
+          });
+          if (score < SEUIL_PERTINENCE) continue; // hors thématique Sophia : on saute
+
           if (!(await creerSujet(supabase, post, compte.id)).reused) crees += 1;
         }
         sujetsCrees += crees;

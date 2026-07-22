@@ -709,6 +709,9 @@ export interface PostScrapeTest {
   likes: number;
   estPhoto: boolean;
   dejaVu: boolean;
+  pertinence: number;
+  raison: string;
+  sophia: boolean;
 }
 
 /** Teste le scrape d'un compte de référence : renvoie ses posts avec leurs vues

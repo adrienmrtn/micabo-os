@@ -84,10 +84,12 @@ export const fr = {
       lancer: "Analyser",
       enCours: "Analyse…",
       vide: "Aucun post trouvé sur ce compte.",
-      aide: "Triés par vues. Le moteur reprend en priorité les posts photo les plus vus, non déjà repris.",
+      aide: "Triés par vues. Le moteur reprend les posts photo qui font des vues ET où Sophia s'intègre (badge vert). Le hors-thème est écarté même s'il est viral.",
       sansTexte: "(sans texte)",
       pasPhoto: "Vidéo",
       dejaVu: "Déjà repris",
+      sophiaOk: "Sophia ✓ {{score}}",
+      sophiaNon: "Hors-thème {{score}}",
     },
     reviews: {
       title: "Reviews des créateurs",
