@@ -1,9 +1,4 @@
-import {
-  cleanImage,
-  RefusRetouche,
-  ocrFrame,
-  scoreRelevance,
-} from "../_shared/gemini.ts";
+import { cleanImage, ocrFrame, scoreRelevance } from "../_shared/gemini.ts";
 import { assertAuthorised, chargerPrompt, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
@@ -13,13 +8,20 @@ const BUCKET = "medias";
  *  lots et le cron reprend là où on s'est arrêté. */
 const SLIDES_PAR_PASSAGE = 2;
 const SEUIL_PERTINENCE = 50;
-const TENTATIVES_NETTOYAGE = 3;
+// Une seule tentative de nettoyage PAR PASSAGE : cleanImage réessaie déjà le
+// proxy 5× avec backoff. Ce qui aide vraiment contre la surcharge, c'est
+// d'espacer les reprises dans le TEMPS — on retente donc au passage suivant du
+// cron (chaque minute), jusqu'à MAX_TENTATIVES_NETTOYAGE passages, ce qui laisse
+// Gemini se dégager entre deux. Le brut n'est versé qu'en tout dernier recours.
+const MAX_TENTATIVES_NETTOYAGE = 4;
 
 interface Slide {
   position: number;
   raw_url: string;
   texte_original: string | null;
   media_id: string | null;
+  /** Nettoyages tentés sur cette slide, cumulés sur les passages du cron. */
+  tentatives?: number;
 }
 
 /**
@@ -117,7 +119,21 @@ async function avancer(supabase: Supabase, sujet: any): Promise<string> {
     const aNettoyer = slides.filter((s) => s.media_id === null);
     if (aNettoyer.length > 0) {
       for (const slide of aNettoyer.slice(0, SLIDES_PAR_PASSAGE)) {
-        slide.media_id = await nettoyerVersBibliotheque(supabase, sujet, slide);
+        const propre = await nettoyerVersBibliotheque(supabase, sujet, slide);
+        if (propre) {
+          slide.media_id = propre;
+          slide.tentatives = undefined;
+        } else {
+          // Échec passager (Gemini surchargé) : on NE fige PAS le brut. On laisse
+          // media_id à null pour RE-TENTER le vrai nettoyage au passage suivant.
+          slide.tentatives = (slide.tentatives ?? 0) + 1;
+          if (slide.tentatives >= MAX_TENTATIVES_NETTOYAGE) {
+            // Tout dernier recours après plusieurs passages : on verse le brut
+            // pour ne pas bloquer le sujet. Il reste signalé, et la composition
+            // tentera de le remplacer par un visuel propre de la bibliothèque.
+            slide.media_id = await stockerBrut(supabase, sujet, slide);
+          }
+        }
         // On enregistre slide par slide, pas à la fin du lot : le worker est
         // régulièrement tué en cours de route (WORKER_RESOURCE_LIMIT), et le
         // média était alors déjà en base sans que son id soit retenu. Le
@@ -149,10 +165,12 @@ async function avancer(supabase: Supabase, sujet: any): Promise<string> {
 }
 
 /**
- * Nettoie un visuel et l'ajoute à la bibliothèque. Le modèle refuse parfois la
- * retouche ; on réessaie, et en dernier recours on verse l'original — un visuel
- * exploitable vaut mieux qu'un trou dans la bibliothèque, et le champ
- * `visage_identifiable` protège de toute façon l'usage en avatar.
+ * Nettoie un visuel et l'ajoute à la bibliothèque. Renvoie l'id du média propre
+ * en cas de SUCCÈS, ou `null` en cas d'échec de nettoyage (surcharge, refus).
+ *
+ * Un échec de nettoyage n'est PAS fatal : on renvoie null (l'appelant re-tentera
+ * au passage suivant) au lieu de laisser l'erreur condamner tout le sujet. Seule
+ * une vraie erreur d'infrastructure (upload, base) remonte.
  */
 // deno-lint-ignore no-explicit-any
 async function nettoyerVersBibliotheque(
@@ -160,63 +178,64 @@ async function nettoyerVersBibliotheque(
   sujet: any,
   slide: Slide,
 ): Promise<string | null> {
-  let propreBase64: string | null = null;
-
-  for (let essai = 0; essai < TENTATIVES_NETTOYAGE && !propreBase64; essai += 1) {
-    let candidat: string | null;
-    try {
-      candidat = await cleanImage(slide.raw_url);
-    } catch (error) {
-      if (error instanceof RefusRetouche) {
-        // Un refus ne se retente pas : le modèle répondra pareil. On garde
-        // l'original — le visuel reste exploitable, texte incrusté compris —
-        // et on trace le motif, seul moyen de savoir ce qui bloque vraiment.
-        console.warn(`[nettoyage refusé] sujet=${sujet.id} slide=${slide.position} ${error.message}`);
-        break;
-      }
-      throw error;
-    }
-
-    if (!candidat) continue;
-    // cleanImage rend une sortie de confiance (proxy) ou déjà vérifiée en
-    // interne (repli inpaint/génératif). On la retient telle quelle : la double
-    // vérification rejetait à tort des images denses en texte pourtant bien
-    // nettoyées par le proxy. Les échecs durs versent l'original (brut/), qui
-    // reste signalé « non nettoyé » côté poster et côté admin.
-    propreBase64 = candidat;
+  let propreBase64: string | null;
+  try {
+    // cleanImage rend une sortie de confiance (proxy) ou déjà vérifiée en interne
+    // (repli inpaint/génératif). Elle réessaie déjà le proxy 5× avec backoff.
+    propreBase64 = await cleanImage(slide.raw_url);
+  } catch (error) {
+    // Surcharge Gemini/proxy ou refus : échec de CE passage, pas du sujet. On
+    // renvoie null pour re-tenter plus tard, quand Gemini se sera dégagé.
+    console.warn(`[nettoyage échec] sujet=${sujet.id} slide=${slide.position} ${messageErreur(error)}`);
+    return null;
   }
+  if (!propreBase64) return null;
 
   const path = `propre/${sujet.id}/${slide.position}.png`;
-  let url: string;
-
-  if (propreBase64) {
-    const bytes = Uint8Array.from(atob(propreBase64), (c) => c.charCodeAt(0));
-    const { error } = await supabase.storage
-      .from(BUCKET)
-      .upload(path, bytes, { contentType: "image/png", upsert: true });
-    if (error) throw error;
-    url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-  } else {
-    url = slide.raw_url;
-  }
-
-  // La détection de visage ne servait qu'au choix d'une photo de profil — une
-  // fois par compte — mais tournait sur CHAQUE slide préparée, soit un appel
-  // facturé sur des centaines de visuels qui ne deviendront jamais un avatar.
-  // On laisse le champ à null : la sélection d'avatar traite déjà l'indécision
-  // comme « visage présent », donc elle reste prudente par défaut et fera le
-  // test elle-même, sur la poignée de photos qu'elle examine.
+  const bytes = Uint8Array.from(atob(propreBase64), (c) => c.charCodeAt(0));
+  const { error: upErr } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, bytes, { contentType: "image/png", upsert: true });
+  if (upErr) throw upErr;
+  const url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 
   // Upsert et non insert : `storage_path` est unique, et une reprise après un
-  // worker tué retomberait sinon sur un doublon. Le chemin identifie déjà le
-  // visuel de façon stable, réécrire la ligne est sans effet de bord.
+  // worker tué retomberait sinon sur un doublon.
   const { data: media, error } = await supabase
     .from("media_library")
     .upsert(
       {
         compte_reference_id: sujet.compte_reference_id,
-        storage_path: propreBase64 ? path : `brut/${sujet.id}/${slide.position}`,
+        storage_path: path,
         url,
+        source: "nettoye_reference",
+        langue: sujet.langue,
+        visage_identifiable: null,
+      },
+      { onConflict: "storage_path" },
+    )
+    .select()
+    .single();
+
+  if (error) throw error;
+  return media.id;
+}
+
+/**
+ * Dernier recours après plusieurs passages de nettoyage ratés : verse l'original
+ * (texte incrusté compris) comme média `brut/`, pour ne pas bloquer le sujet
+ * indéfiniment. Il reste signalé « texte non retiré », et la composition tentera
+ * de lui substituer un visuel propre de la bibliothèque du compte.
+ */
+// deno-lint-ignore no-explicit-any
+async function stockerBrut(supabase: Supabase, sujet: any, slide: Slide): Promise<string> {
+  const { data: media, error } = await supabase
+    .from("media_library")
+    .upsert(
+      {
+        compte_reference_id: sujet.compte_reference_id,
+        storage_path: `brut/${sujet.id}/${slide.position}`,
+        url: slide.raw_url,
         source: "nettoye_reference",
         langue: sujet.langue,
         visage_identifiable: null,

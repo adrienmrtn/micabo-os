@@ -3,6 +3,12 @@ import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
 
+/** Nombre d'essais de placement Sophia répartis sur les passages du cron (1/min)
+ *  avant de renoncer au VRAI placement. 15 minutes de reprises absorbent large
+ *  n'importe quel pic de surcharge Gemini ; le repli par défaut ne sert donc
+ *  qu'en cas de panne Gemini durable, quasi jamais. */
+const MAX_TENTATIVES_SOPHIA = 15;
+
 /**
  * Texte Sophia de repli, par langue, quand l'intégration intelligente échoue.
  * Volontairement simple et honnête (une accroche + l'appli) : mieux vaut une
@@ -214,11 +220,27 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
           })
           .eq("id", cible.id);
       } else {
-        // REPLI GARANTI : Sophia doit TOUJOURS être présente sur un post promo.
-        // Quand l'intégration intelligente échoue (Gemini surchargé, réponse
-        // illisible), on ne laisse plus le post sans mention : on pose un texte
-        // Sophia par défaut sur la dernière slide (place de CTA naturelle) et on
-        // le signale pour que l'admin le personnalise s'il le souhaite.
+        // L'intégration a échoué (Gemini surchargé, réponse illisible). On
+        // n'ABANDONNE PAS : on relaisse le post en attente pour RE-TENTER le VRAI
+        // placement au passage suivant du cron (chaque minute), le temps que
+        // Gemini se dégage. C'est ça qui fait que Sophia finit toujours par être
+        // intégrée pour de vrai, sans texte bidon.
+        const tentatives = (post.pipeline_tentatives ?? 0) + 1;
+        if (tentatives < MAX_TENTATIVES_SOPHIA) {
+          await supabase
+            .from("posts")
+            .update({
+              pipeline_tentatives: tentatives,
+              pipeline_statut: "pending",
+              pipeline_etape: "placement_sophia",
+              pipeline_erreur: null,
+            })
+            .eq("id", post.id);
+          return "placement_sophia";
+        }
+        // Dernier recours après de NOMBREUX essais réels (Gemini durablement HS) :
+        // plutôt qu'un post promo sans aucune mention, on pose un texte Sophia par
+        // défaut sur la dernière slide, signalé pour personnalisation.
         const derniere = existantes[existantes.length - 1];
         if (derniere) {
           await supabase
