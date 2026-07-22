@@ -115,6 +115,9 @@ export interface PosterProfil {
   nom: string | null;
   email: string | null;
   langues: string[];
+  nationalite: string | null;
+  upwork_url: string | null;
+  handle_tiktok: string | null;
   is_active: boolean;
   must_change_password: boolean;
   role: "admin" | "poster" | "hiring_manager" | null;

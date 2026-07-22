@@ -22,11 +22,85 @@ import {
   listerLanguesReference,
   listerPosters,
   majPoster,
+  majUpwork,
   supprimerPoster,
 } from "@/features/moteur/api";
+import type { PosterProfil } from "@/features/moteur/types";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
+/** Liens directs pour checker vite un créateur : son compte TikTok (déduit du
+ *  pseudo) et sa conversation Upwork (saisie par l'admin, éditable en ligne). */
+function CreateurLiens({
+  poster,
+  onSave,
+}: {
+  poster: PosterProfil;
+  onSave: (url: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [edit, setEdit] = React.useState(false);
+  const [url, setUrl] = React.useState(poster.upwork_url ?? "");
+  const tiktok = poster.handle_tiktok
+    ? `https://www.tiktok.com/@${poster.handle_tiktok.replace(/^@/, "")}`
+    : null;
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+      {tiktok && (
+        <a href={tiktok} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+          TikTok ↗
+        </a>
+      )}
+      {!edit && poster.upwork_url && (
+        <a
+          href={poster.upwork_url}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2"
+        >
+          Upwork ↗
+        </a>
+      )}
+      {!edit && (
+        <button
+          type="button"
+          onClick={() => {
+            setUrl(poster.upwork_url ?? "");
+            setEdit(true);
+          }}
+          className="text-muted-foreground underline underline-offset-2"
+        >
+          {poster.upwork_url ? t("posters.upworkModifier") : t("posters.upworkAjouter")}
+        </button>
+      )}
+      {edit && (
+        <span className="flex items-center gap-1">
+          <Input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://www.upwork.com/…"
+            className="h-7 w-56 text-xs"
+          />
+          <Button
+            size="sm"
+            className="h-7"
+            onClick={() => {
+              onSave(url);
+              setEdit(false);
+            }}
+          >
+            {t("common.save")}
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7" onClick={() => setEdit(false)}>
+            {t("common.cancel")}
+          </Button>
+        </span>
+      )}
+    </div>
+  );
+}
 
 /**
  * Mot de passe commun à tous les posters, simple à dicter au téléphone. Il
@@ -75,6 +149,10 @@ export function AdminPostersPage() {
     onSuccess: rafraichir,
   });
   const retirer = useMutation({ mutationFn: supprimerPoster, onSuccess: rafraichir });
+  const enregistrerUpwork = useMutation({
+    mutationFn: (input: { id: string; url: string }) => majUpwork(input.id, input.url),
+    onSuccess: rafraichir,
+  });
 
   return (
     <div className="space-y-6">
@@ -202,6 +280,10 @@ export function AdminPostersPage() {
                     )}
                   </div>
                   <p className="truncate text-xs text-muted-foreground">{poster.email}</p>
+                  <CreateurLiens
+                    poster={poster}
+                    onSave={(url) => enregistrerUpwork.mutate({ id: poster.id, url })}
+                  />
                 </div>
 
                 {!soiMeme && (

@@ -120,17 +120,36 @@ export async function supprimerCompte(id: string): Promise<void> {
 export async function listerPosters(): Promise<PosterProfil[]> {
   const { data: profils, error } = await supabase
     .from("profiles")
-    .select("id, prenom, nom, email, langues, is_active, must_change_password")
+    .select("id, prenom, nom, email, langues, nationalite, upwork_url, is_active, must_change_password")
     .order("created_at", { ascending: false });
   if (error) throw error;
 
   const { data: roles } = await supabase.from("user_roles").select("user_id, role");
   const parUtilisateur = new Map((roles ?? []).map((r) => [r.user_id, r.role]));
 
+  // Le pseudo TikTok du poster vit sur son compte de publication : on le rapatrie
+  // pour construire le lien direct vers son compte.
+  const { data: comptes } = await supabase
+    .from("comptes")
+    .select("poster_id, handle_tiktok");
+  const handleParPoster = new Map(
+    (comptes ?? []).filter((c) => c.handle_tiktok).map((c) => [c.poster_id, c.handle_tiktok]),
+  );
+
   return (profils ?? []).map((p) => ({
     ...p,
     role: (parUtilisateur.get(p.id) ?? null) as PosterProfil["role"],
+    handle_tiktok: handleParPoster.get(p.id) ?? null,
   }));
+}
+
+/** Enregistre le lien de la conversation Upwork d'un poster (admin). */
+export async function majUpwork(userId: string, url: string): Promise<void> {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ upwork_url: url.trim() || null })
+    .eq("id", userId);
+  if (error) throw error;
 }
 
 export interface MonCompte {

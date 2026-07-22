@@ -186,6 +186,8 @@ export const fr = {
       disabled: "Désactivé",
       you: "Toi",
       confirmDelete: "Supprimer définitivement ce poster et ses données ?",
+      upworkAjouter: "+ Lien Upwork",
+      upworkModifier: "Modifier Upwork",
       sansCompte: "Sans compte de publication (à configurer plus tard)",
       langueAide:
         "Choisis une langue : le compte de référence et la persona (pseudo, bio, avatar) sont générés automatiquement.",
