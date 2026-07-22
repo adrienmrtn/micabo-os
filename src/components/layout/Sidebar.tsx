@@ -8,12 +8,14 @@ export interface NavItem {
   to: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  /** Courte explication de ce que fait l'écran, montrée sous le libellé. */
+  description?: string;
 }
 
 function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
   return (
-    <nav className="flex flex-col gap-1 px-3">
-      {items.map(({ to, label, icon: Icon }) => (
+    <nav className="flex flex-col gap-0.5 px-3">
+      {items.map(({ to, label, icon: Icon, description }) => (
         <NavLink
           key={to}
           to={to}
@@ -21,15 +23,28 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+              "flex items-start gap-3 rounded-md px-3 py-2 transition-colors",
               isActive
-                ? "bg-sidebar-active/20 font-medium text-white"
+                ? "bg-sidebar-active/20 text-white"
                 : "text-sidebar-foreground hover:bg-white/5 hover:text-white",
             )
           }
         >
-          <Icon className="size-4 shrink-0" />
-          <span className="truncate">{label}</span>
+          {({ isActive }) => (
+            <>
+              <Icon className="mt-0.5 size-4 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className={cn("block truncate text-sm", isActive && "font-medium")}>
+                  {label}
+                </span>
+                {description && (
+                  <span className="mt-0.5 block text-[11px] leading-tight text-sidebar-foreground/55">
+                    {description}
+                  </span>
+                )}
+              </span>
+            </>
+          )}
         </NavLink>
       ))}
     </nav>

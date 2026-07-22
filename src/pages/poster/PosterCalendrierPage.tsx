@@ -2,13 +2,21 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, CalendarCheck, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  ArrowRight,
+  CalendarCheck,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Download,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, EmptyState } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase/client";
-import { aujourdhui } from "@/features/moteur/api";
+import { aujourdhui, monCompte } from "@/features/moteur/api";
 import { useAuth } from "@/features/auth/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -89,6 +97,69 @@ function CartePost({ post, creneau }: { post: PostCalendrier; creneau?: number }
   );
 }
 
+/**
+ * Carte « Ton identité TikTok » : le pseudo, la bio et l'avatar générés
+ * automatiquement à la création du compte, que le poster recopie pour monter son
+ * vrai compte TikTok. Rien à créer ici — juste à afficher ce qui existe déjà.
+ */
+function IdentiteTikTok() {
+  const { t } = useTranslation();
+  const { data: compte } = useQuery({ queryKey: ["mon-compte"], queryFn: monCompte });
+
+  if (!compte || (!compte.persona_nom && !compte.handle_tiktok && !compte.avatar_url)) {
+    return null;
+  }
+
+  const copier = (texte: string) => navigator.clipboard?.writeText(texte);
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-start gap-4">
+          {compte.avatar_url && (
+            <img
+              src={compte.avatar_url}
+              alt=""
+              className="size-16 shrink-0 rounded-full border object-cover"
+            />
+          )}
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {t("identite.titre")}
+            </p>
+            {compte.persona_nom && (
+              <p className="text-sm font-semibold">{compte.persona_nom}</p>
+            )}
+            {compte.handle_tiktok && (
+              <p className="text-sm text-muted-foreground">@{compte.handle_tiktok}</p>
+            )}
+            {compte.persona_bio && (
+              <p className="whitespace-pre-wrap text-sm">{compte.persona_bio}</p>
+            )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              {compte.avatar_url && (
+                <Button asChild size="sm" variant="outline">
+                  <a href={compte.avatar_url} download target="_blank" rel="noreferrer">
+                    <Download className="size-3.5" />
+                    {t("identite.avatar")}
+                  </a>
+                </Button>
+              )}
+              {compte.persona_bio && (
+                <Button size="sm" variant="outline" onClick={() => copier(compte.persona_bio!)}>
+                  <Copy className="size-3.5" />
+                  {t("identite.copierBio")}
+                </Button>
+              )}
+            </div>
+            <p className="pt-1 text-xs text-muted-foreground">{t("identite.aide")}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function PosterCalendrierPage() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
@@ -141,6 +212,8 @@ export function PosterCalendrierPage() {
 
   return (
     <div className="space-y-8">
+      <IdentiteTikTok />
+
       <section className="space-y-4">
         <h2 className="text-lg font-semibold tracking-tight">{t("calendrier.aujourdhui")}</h2>
         {duJour.length === 0 ? (

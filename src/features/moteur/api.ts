@@ -133,6 +133,28 @@ export async function listerPosters(): Promise<PosterProfil[]> {
   }));
 }
 
+export interface MonCompte {
+  persona_nom: string | null;
+  persona_bio: string | null;
+  handle_tiktok: string | null;
+  avatar_url: string | null;
+  langue: string;
+}
+
+/** Le compte de publication du poster connecté : son identité TikTok (pseudo,
+ *  bio, avatar), générée automatiquement à la création. La RLS ne renvoie que
+ *  sa propre ligne. */
+export async function monCompte(): Promise<MonCompte | null> {
+  const { data, error } = await supabase
+    .from("comptes")
+    .select("persona_nom, persona_bio, handle_tiktok, avatar_url, langue")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as MonCompte) ?? null;
+}
+
 export function creerPoster(input: {
   prenom: string;
   nom: string;
@@ -195,9 +217,14 @@ export async function majPoster(id: string, patch: { is_active?: boolean }): Pro
 // --- Bibliothèque -----------------------------------------------------------
 
 export async function listerMedias(compteReferenceId?: string): Promise<Media[]> {
+  // La bibliothèque ne montre QUE les photos nettoyées (propre/) : une image à
+  // texte n'est pas un visuel utilisable, elle n'a rien à y faire. Les brut
+  // restent en base pour le banc de test et comme source de nettoyage, mais pas
+  // ici. C'est aussi ce qui garantit qu'un remplacement pioche une photo propre.
   let query = supabase
     .from("media_library")
     .select("*")
+    .like("storage_path", "propre/%")
     .order("created_at", { ascending: false })
     .limit(200);
   if (compteReferenceId) query = query.eq("compte_reference_id", compteReferenceId);
