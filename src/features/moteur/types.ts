@@ -118,6 +118,8 @@ export interface PosterProfil {
   nationalite: string | null;
   upwork_url: string | null;
   handle_tiktok: string | null;
+  manager_id: string | null;
+  manager_nom: string | null;
   is_active: boolean;
   must_change_password: boolean;
   role: "admin" | "poster" | "hiring_manager" | null;

@@ -36,6 +36,10 @@ Deno.serve(async (request) => {
     const nom = (body.nom ?? "").trim();
     const password = body.password ?? "";
     const langue = (body.langue ?? "").trim().toLowerCase();
+    // Rôle voulu : "poster" (défaut) ou "hiring_manager". Seul l'admin peut
+    // créer un recruteur ; un recruteur ne crée que des posters.
+    const roleVoulu =
+      body.role === "hiring_manager" && acces.role === "admin" ? "hiring_manager" : "poster";
 
     if (!prenom || password.length < 8) {
       return json({ error: "Prénom requis et mot de passe d'au moins 8 caractères" }, 400);
@@ -67,15 +71,32 @@ Deno.serve(async (request) => {
         // interne où l'admin dicte les accès de vive voix.
         .update({ prenom, nom: nom || null, is_active: true, must_change_password: false })
         .eq("id", data.user.id);
+
+      if (roleVoulu === "hiring_manager") {
+        // Recruteur : on remplace le rôle poster par hiring_manager et on pose
+        // sa nationalité (langue par défaut de ses futurs posters).
+        await supabase.from("user_roles").delete().eq("user_id", data.user.id);
+        await supabase.from("user_roles").insert({ user_id: data.user.id, role: "hiring_manager" });
+        if (langue) {
+          await supabase.from("profiles").update({ nationalite: langue }).eq("id", data.user.id);
+        }
+      } else if (acces.role === "hiring_manager" && acces.userId !== "cron") {
+        // Poster créé par un recruteur : on mémorise qui le gère, pour le grouper
+        // sous son recruteur dans la vue admin.
+        await supabase
+          .from("profiles")
+          .update({ manager_id: acces.userId })
+          .eq("id", data.user.id);
+      }
     }
 
-    // Automatisation IA du compte de publication, si une langue est donnée.
+    // Automatisation IA du compte de publication (posters seulement, avec langue).
     let compte: { id: string; reference: string | null; persona: boolean } | null = null;
-    if (data.user && langue) {
+    if (data.user && roleVoulu === "poster" && langue) {
       compte = await preparerCompte(supabase, request, data.user.id, langue);
     }
 
-    return json({ ok: true, userId: data.user?.id, email, compte });
+    return json({ ok: true, userId: data.user?.id, email, compte, role: roleVoulu });
   }
 
   if (body.action === "delete") {

@@ -202,6 +202,12 @@ export const fr = {
       confirmDelete: "Supprimer définitivement ce poster et ses données ?",
       upworkAjouter: "+ Lien Upwork",
       upworkModifier: "Modifier Upwork",
+      creerRecruteur: "Créer un recruteur",
+      creerRecruteurDesc:
+        "Saisis son nom et sa langue : son espace de recrutement est prêt à sa première connexion.",
+      recruteurs: "Recruteurs",
+      sansRecruteur: "Sans recruteur",
+      aucunCreateur: "Aucun créateur.",
       sansCompte: "Sans compte de publication (à configurer plus tard)",
       langueAide:
         "Choisis une langue : le compte de référence et la persona (pseudo, bio, avatar) sont générés automatiquement.",

@@ -120,7 +120,9 @@ export async function supprimerCompte(id: string): Promise<void> {
 export async function listerPosters(): Promise<PosterProfil[]> {
   const { data: profils, error } = await supabase
     .from("profiles")
-    .select("id, prenom, nom, email, langues, nationalite, upwork_url, is_active, must_change_password")
+    .select(
+      "id, prenom, nom, email, langues, nationalite, upwork_url, manager_id, is_active, must_change_password",
+    )
     .order("created_at", { ascending: false });
   if (error) throw error;
 
@@ -129,18 +131,37 @@ export async function listerPosters(): Promise<PosterProfil[]> {
 
   // Le pseudo TikTok du poster vit sur son compte de publication : on le rapatrie
   // pour construire le lien direct vers son compte.
-  const { data: comptes } = await supabase
-    .from("comptes")
-    .select("poster_id, handle_tiktok");
+  const { data: comptes } = await supabase.from("comptes").select("poster_id, handle_tiktok");
   const handleParPoster = new Map(
     (comptes ?? []).filter((c) => c.handle_tiktok).map((c) => [c.poster_id, c.handle_tiktok]),
+  );
+
+  const nomParId = new Map(
+    (profils ?? []).map((p) => [
+      p.id,
+      [p.prenom, p.nom].filter(Boolean).join(" ") || p.email || "—",
+    ]),
   );
 
   return (profils ?? []).map((p) => ({
     ...p,
     role: (parUtilisateur.get(p.id) ?? null) as PosterProfil["role"],
     handle_tiktok: handleParPoster.get(p.id) ?? null,
+    manager_nom: p.manager_id ? (nomParId.get(p.manager_id) ?? null) : null,
   }));
+}
+
+/** Crée directement un recruteur (hiring manager) par son nom + sa langue
+ *  (admin). Son espace est prêt à sa première connexion. */
+export function creerRecruteur(input: { prenom: string; nom: string; langue?: string }) {
+  return invoke<{ userId: string; email: string }>("manage-users", {
+    action: "create",
+    role: "hiring_manager",
+    prenom: input.prenom,
+    nom: input.nom,
+    password: "12345678",
+    langue: input.langue,
+  });
 }
 
 /** Enregistre le lien de la conversation Upwork d'un poster (admin). */

@@ -18,6 +18,7 @@ import {
 import { useAuth } from "@/features/auth/AuthContext";
 import {
   creerPoster,
+  creerRecruteur,
   definirRole,
   listerLanguesReference,
   listerPosters,
@@ -133,6 +134,21 @@ export function AdminPostersPage() {
       rafraichir();
     },
   });
+  // Création directe d'un recruteur (hiring manager) par son nom.
+  const [recPrenom, setRecPrenom] = React.useState("");
+  const [recNom, setRecNom] = React.useState("");
+  const [recLangue, setRecLangue] = React.useState("");
+  const [recCree, setRecCree] = React.useState<{ email: string } | null>(null);
+  const creerRec = useMutation({
+    mutationFn: () => creerRecruteur({ prenom: recPrenom, nom: recNom, langue: recLangue || undefined }),
+    onSuccess: (r) => {
+      setRecCree({ email: r.email });
+      setRecPrenom("");
+      setRecNom("");
+      rafraichir();
+    },
+  });
+
   const [promoId, setPromoId] = React.useState<string | null>(null);
   const [promoLangue, setPromoLangue] = React.useState("");
   const changerRole = useMutation({
@@ -252,19 +268,84 @@ export function AdminPostersPage() {
       </Card>
 
       <Card>
-        <CardContent className="space-y-2 pt-5">
-          {posters.isPending && (
-            <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
-          )}
-          {posters.data?.length === 0 && <EmptyState title={t("posters.empty")} />}
-
-          {posters.data?.map((poster) => {
-            const soiMeme = poster.id === user?.id;
-            return (
-              <div
-                key={poster.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserPlus className="size-4" />
+            {t("posters.creerRecruteur")}
+          </CardTitle>
+          <CardDescription>{t("posters.creerRecruteurDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setRecCree(null);
+              creerRec.mutate();
+            }}
+            className="grid gap-4 sm:grid-cols-3"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="recPrenom">{t("posters.prenom")}</Label>
+              <Input id="recPrenom" required value={recPrenom} onChange={(e) => setRecPrenom(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="recNom">{t("posters.nom")}</Label>
+              <Input id="recNom" value={recNom} onChange={(e) => setRecNom(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="recLangue">{t("hiring.langue")}</Label>
+              <select
+                id="recLangue"
+                className={selectClass}
+                value={recLangue}
+                onChange={(e) => setRecLangue(e.target.value)}
               >
+                <option value="">{t("common.none")}</option>
+                {langues.data?.map((l) => (
+                  <option key={l} value={l}>
+                    {l.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-3">
+              <Button type="submit" disabled={creerRec.isPending || !recPrenom.trim()}>
+                {creerRec.isPending ? t("common.saving") : t("posters.creerRecruteur")}
+              </Button>
+              {creerRec.isError && (
+                <p className="mt-2 text-sm text-destructive">{(creerRec.error as Error).message}</p>
+              )}
+              {recCree && (
+                <p className="mt-2 text-sm text-success">
+                  {t("posters.done")} — <code className="rounded bg-muted px-1">{recCree.email}</code> ·{" "}
+                  <code className="rounded bg-muted px-1">12345678</code>
+                </p>
+              )}
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {(() => {
+        const tous = posters.data ?? [];
+        const nomDe = (p: (typeof tous)[number]) =>
+          [p.prenom, p.nom].filter(Boolean).join(" ") || p.email || "—";
+        const recruteurs = tous.filter((p) => p.role === "hiring_manager");
+        const creators = tous.filter((p) => p.role === "poster");
+        const admins = tous.filter((p) => p.role === "admin");
+        const parManager = new Map<string, typeof tous>();
+        for (const c of creators) {
+          const k = c.manager_id ?? "__none__";
+          parManager.set(k, [...(parManager.get(k) ?? []), c]);
+        }
+
+        const ligne = (poster: (typeof tous)[number]) => {
+          const soiMeme = poster.id === user?.id;
+          return (
+            <div
+              key={poster.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-3"
+            >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium">
@@ -364,11 +445,51 @@ export function AdminPostersPage() {
                     </Button>
                   </div>
                 )}
+            </div>
+          );
+        };
+
+        if (posters.isPending) {
+          return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
+        }
+        if (tous.length === 0) return <EmptyState title={t("posters.empty")} />;
+
+        const section = (titre: string, count: number, membres: typeof tous, badge?: string) => (
+          <Card key={titre}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm">{titre}</CardTitle>
+                <Badge variant="secondary">{count}</Badge>
+                {badge && <Badge variant="outline">{badge}</Badge>}
               </div>
-            );
-          })}
-        </CardContent>
-      </Card>
+            </CardHeader>
+            <CardContent className="space-y-2 pt-0">
+              {membres.length === 0 ? (
+                <p className="text-xs text-muted-foreground">{t("posters.aucunCreateur")}</p>
+              ) : (
+                membres.map(ligne)
+              )}
+            </CardContent>
+          </Card>
+        );
+
+        return (
+          <div className="space-y-4">
+            {recruteurs.length > 0 &&
+              section(t("posters.recruteurs"), recruteurs.length, recruteurs, t("hiring.badge"))}
+            {recruteurs.map((rec) =>
+              section(nomDe(rec), (parManager.get(rec.id) ?? []).length, parManager.get(rec.id) ?? []),
+            )}
+            {(parManager.get("__none__") ?? []).length > 0 &&
+              section(
+                t("posters.sansRecruteur"),
+                (parManager.get("__none__") ?? []).length,
+                parManager.get("__none__") ?? [],
+              )}
+            {admins.length > 0 && section(t("nav.admin"), admins.length, admins)}
+          </div>
+        );
+      })()}
     </div>
   );
 }
