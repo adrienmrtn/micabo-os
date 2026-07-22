@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -21,6 +22,46 @@ import {
   majSource,
   supprimerSource,
 } from "@/features/moteur/api";
+import type { CompteReference } from "@/features/moteur/types";
+
+/**
+ * Prompt adapté à une source : la voix / le ton que la traduction doit prendre
+ * pour cette niche. C'est ici qu'il se règle (pas sur le compte du poster) —
+ * c'est la source qui dicte le registre. Injecté à la traduction de ses sujets.
+ */
+function VoixSource({ source }: { source: CompteReference }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [texte, setTexte] = React.useState(source.style_profile ?? "");
+  const modifie = texte !== (source.style_profile ?? "");
+
+  const enregistrer = useMutation({
+    mutationFn: () => majSource(source.id, { style_profile: texte.trim() || null }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sources"] }),
+  });
+
+  return (
+    <div className="space-y-2 border-t pt-3">
+      <Label htmlFor={`voix-${source.id}`} className="text-xs">
+        {t("sources.voix")}
+      </Label>
+      <Textarea
+        id={`voix-${source.id}`}
+        rows={2}
+        className="text-xs"
+        placeholder={t("sources.voixPlaceholder")}
+        value={texte}
+        onChange={(e) => setTexte(e.target.value)}
+      />
+      <p className="text-xs text-muted-foreground">{t("sources.voixAide")}</p>
+      {modifie && (
+        <Button size="sm" disabled={enregistrer.isPending} onClick={() => enregistrer.mutate()}>
+          {enregistrer.isPending ? t("common.saving") : t("common.save")}
+        </Button>
+      )}
+    </div>
+  );
+}
 
 function BoutonExtraire({ sourceId }: { sourceId: string }) {
   const { t } = useTranslation();
@@ -117,10 +158,8 @@ export function AdminSourcesPage() {
           {sources.data?.length === 0 && <EmptyState title={t("sources.empty")} />}
 
           {sources.data?.map((source) => (
-            <div
-              key={source.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
-            >
+            <div key={source.id} className="space-y-3 rounded-lg border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">@{source.handle_tiktok}</span>
@@ -166,6 +205,9 @@ export function AdminSourcesPage() {
                   {t("common.delete")}
                 </Button>
               </div>
+              </div>
+
+              <VoixSource source={source} />
             </div>
           ))}
         </div>

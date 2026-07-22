@@ -60,6 +60,8 @@ export const fr = {
       setHandle: "Renseigner mon @",
       handleAide:
         "Si le pseudo n'est pas disponible sur TikTok, ajoute des chiffres au hasard. Puis mets ton vrai @ à jour ici pour qu'on ait ton lien.",
+      majUpwork: "Mettre à jour mon lien Upwork",
+      setUpwork: "Renseigner mon lien Upwork",
     },
     navSection: {
       production: "Production",
@@ -192,12 +194,9 @@ export const fr = {
       title: "Pilotage du moteur",
       subtitle:
         "Déclenche les étapes à la main. Chaque passage consomme du crédit Apify ou Gemini.",
-      extraction: "Extraire les sources",
-      preparation: "Préparer un sujet",
-      assignation: "Assigner la journée",
-      metriques: "Relever les performances",
-      reparerMusique: "Réparer les liens musique",
-      musiqueReparee: "{{count}} lien(s) musique réparé(s).",
+      autoTitre: "Le moteur tourne tout seul",
+      autoDesc:
+        "Extraction, nettoyage, traduction, assignation à minuit : tout est automatique (crons de nuit). Pour tester à la main, va sur la page Tests.",
       running: "En cours…",
       sujets: "Sujets",
       posts: "Posts",
@@ -212,6 +211,10 @@ export const fr = {
       niche: "Niche",
       langue: "Langue",
       add: "Ajouter",
+      voix: "Prompt adapté (voix / ton de traduction)",
+      voixPlaceholder: "Ex. : ton complice et direct, tutoiement, phrases courtes, pas d'anglicismes…",
+      voixAide:
+        "Le registre à donner aux traductions de cette source. C'est ici qu'on adapte le ton par niche — pas sur le compte du poster.",
       empty: "Aucun compte de référence.",
       inactive: "Inactif",
       activate: "Activer",
@@ -238,6 +241,8 @@ export const fr = {
       nomAffiche: "Nom affiché",
       pseudo: "Pseudo TikTok (@)",
       upwork: "Lien Upwork",
+      sansSource: "Aucune source liée.",
+      supprimerCompte: "Supprimer le compte",
       identitesTitre: "Identités TikTok à compléter",
       identitesDesc: "{{count}} compte(s) sans pseudo ou sans avatar généré. Le créateur ne voit rien à recréer.",
       completerIdentites: "Compléter les {{count}} identités",
@@ -293,6 +298,9 @@ export const fr = {
       upworkModifier: "Modifier Upwork",
       ajouterPoster: "Ajouter un poster",
       ajouterRecruteur: "Ajouter un recruteur",
+      gererCompte: "Gérer le compte",
+      creerCompte: "Créer le compte de publication",
+      sansCompteCree: "Ce poster n'a pas encore de compte de publication.",
       creerRecruteur: "Créer un recruteur",
       creerRecruteurDesc:
         "Saisis son nom et sa langue : son espace de recrutement est prêt à sa première connexion.",

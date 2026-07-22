@@ -1,10 +1,7 @@
-import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { BarChart3, Download, Music, Sparkles, Wand2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -14,14 +11,7 @@ import {
   EmptyState,
 } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase/client";
-import {
-  lancerAssignation,
-  lancerExtraction,
-  lancerMetriques,
-  lancerPreparation,
-  listerSujets,
-  reparerMusique,
-} from "@/features/moteur/api";
+import { listerSujets } from "@/features/moteur/api";
 import type { Sujet } from "@/features/moteur/types";
 
 async function compter(table: string): Promise<number> {
@@ -47,8 +37,6 @@ function badgeStatut(statut: string) {
 
 export function AdminPilotagePage() {
   const { t, i18n } = useTranslation();
-  const queryClient = useQueryClient();
-  const [message, setMessage] = React.useState<string | null>(null);
 
   const stats = useQuery({
     queryKey: ["stats"],
@@ -62,50 +50,8 @@ export function AdminPilotagePage() {
 
   const sujets = useQuery({ queryKey: ["sujets"], queryFn: listerSujets });
 
-  const rafraichir = () => queryClient.invalidateQueries();
-
-  const extraction = useMutation({
-    onSettled: rafraichir,
-    mutationFn: () => lancerExtraction(),
-    onSuccess: (r) => setMessage(t("sujets.slides", { count: r.sujetsCrees })),
-  });
-  const preparation = useMutation({
-    onSettled: rafraichir,
-    mutationFn: () => lancerPreparation(),
-    onSuccess: (r) => setMessage(r.idle ? "—" : (r.etape ?? "")),
-  });
-  const assignation = useMutation({
-    onSettled: rafraichir,
-    mutationFn: () => lancerAssignation(),
-    onSuccess: (r) =>
-      setMessage(`${r.resultats.reduce((s, x) => s + x.crees, 0)} post(s)`),
-  });
-
-  const metriques = useMutation({
-    onSettled: rafraichir,
-    mutationFn: () => lancerMetriques(),
-    onSuccess: (r) =>
-      setMessage(`${r.resultats.reduce((s, x) => s + x.releves, 0)} relevé(s)`),
-  });
-
-  const musique = useMutation({
-    onSettled: rafraichir,
-    mutationFn: () => reparerMusique(),
-    onSuccess: (r) => setMessage(t("pilotage.musiqueReparee", { count: r.corriges })),
-  });
-
-  const enCours =
-    extraction.isPending ||
-    preparation.isPending ||
-    assignation.isPending ||
-    metriques.isPending ||
-    musique.isPending;
-  const echec =
-    extraction.error ?? preparation.error ?? assignation.error ?? metriques.error;
-
   return (
     <div className="space-y-6">
-
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Compteur label={t("pilotage.sujets")} valeur={stats.data?.sujets} />
         <Compteur label={t("pilotage.posts")} valeur={stats.data?.posts} />
@@ -113,40 +59,13 @@ export function AdminPilotagePage() {
         <Compteur label={t("pilotage.comptes")} valeur={stats.data?.comptes} />
       </div>
 
+      {/* Le moteur tourne tout seul (crons de nuit). Pour tester à la main, tout
+          est regroupé sur la page Tests — pas de boutons bruts ici. */}
       <Card>
         <CardHeader>
-          <CardTitle>{t("pilotage.title")}</CardTitle>
-          <CardDescription>{t("pilotage.subtitle")}</CardDescription>
+          <CardTitle>{t("pilotage.autoTitre")}</CardTitle>
+          <CardDescription>{t("pilotage.autoDesc")}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" disabled={enCours} onClick={() => extraction.mutate()}>
-              <Download />
-              {extraction.isPending ? t("pilotage.running") : t("pilotage.extraction")}
-            </Button>
-            <Button variant="outline" disabled={enCours} onClick={() => preparation.mutate()}>
-              <Wand2 />
-              {preparation.isPending ? t("pilotage.running") : t("pilotage.preparation")}
-            </Button>
-            <Button variant="outline" disabled={enCours} onClick={() => assignation.mutate()}>
-              <Sparkles />
-              {assignation.isPending ? t("pilotage.running") : t("pilotage.assignation")}
-            </Button>
-            <Button variant="outline" disabled={enCours} onClick={() => metriques.mutate()}>
-              <BarChart3 />
-              {metriques.isPending ? t("pilotage.running") : t("pilotage.metriques")}
-            </Button>
-            <Button variant="outline" disabled={enCours} onClick={() => musique.mutate()}>
-              <Music />
-              {musique.isPending ? t("pilotage.running") : t("pilotage.reparerMusique")}
-            </Button>
-          </div>
-
-          {message && <p className="text-sm text-success">{message}</p>}
-          {echec && (
-            <p className="text-sm text-destructive">{(echec as Error).message}</p>
-          )}
-        </CardContent>
       </Card>
 
       <Card>
@@ -158,18 +77,14 @@ export function AdminPilotagePage() {
           {sujets.isPending && (
             <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
           )}
-          {sujets.data?.length === 0 && (
-            <EmptyState title={t("sujets.empty")} />
-          )}
+          {sujets.data?.length === 0 && <EmptyState title={t("sujets.empty")} />}
 
           {sujets.data?.map((sujet: Sujet) => (
             <div key={sujet.id} className="space-y-1.5 rounded-lg border p-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <p className="min-w-0 flex-1 truncate text-sm font-medium">{sujet.titre}</p>
                 <div className="flex shrink-0 gap-1.5">
-                  <Badge variant={badgeStatut(sujet.statut)}>
-                    {t(`statut.${sujet.statut}`)}
-                  </Badge>
+                  <Badge variant={badgeStatut(sujet.statut)}>{t(`statut.${sujet.statut}`)}</Badge>
                   <Badge variant={badgeStatut(sujet.preparation_statut)}>
                     {t(`statut.${sujet.preparation_statut}`)}
                   </Badge>

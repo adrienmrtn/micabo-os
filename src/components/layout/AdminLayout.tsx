@@ -11,7 +11,6 @@ import {
   MessageSquareQuote,
   Settings,
   Users,
-  UserSquare,
   Wand2,
 } from "lucide-react";
 
@@ -39,12 +38,6 @@ export function AdminLayout() {
             },
             { to: "/admin/posts", label: t("nav.posts"), icon: CalendarRange, description: t("navDesc.posts") },
             { to: "/admin/sources", label: t("nav.sources"), icon: AtSign, description: t("navDesc.sources") },
-            {
-              to: "/admin/comptes",
-              label: t("nav.comptes"),
-              icon: UserSquare,
-              description: t("navDesc.comptes"),
-            },
             {
               to: "/admin/bibliotheque",
               label: t("nav.bibliotheque"),

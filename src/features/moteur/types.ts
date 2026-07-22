@@ -13,6 +13,8 @@ export interface CompteReference {
   handle_tiktok: string;
   niche: string | null;
   langue: string;
+  /** Prompt adapté (voix / ton de traduction) propre à cette source. */
+  style_profile: string | null;
   is_active: boolean;
   dernier_scrape_at: string | null;
   created_at: string;

@@ -1,29 +1,15 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Sparkles } from "lucide-react";
 
-import { executerEnLot } from "@/lib/lot";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-} from "@/components/ui/card";
-import {
-  creerCompte,
   genererPersona,
-  listerComptes,
   listerLanguesReference,
   listerMedias,
-  listerPosters,
   listerSources,
   majCompte,
   majUpwork,
@@ -33,6 +19,11 @@ import type { CompteAvecDetails } from "@/features/moteur/types";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
+const rafraichirComptes = (qc: ReturnType<typeof useQueryClient>) => {
+  qc.invalidateQueries({ queryKey: ["comptes"] });
+  qc.invalidateQueries({ queryKey: ["posters"] });
+};
 
 /**
  * Sélecteur d'avatar. Les visuels portant un visage identifiable sont exclus :
@@ -54,7 +45,7 @@ function ChoixAvatar({ compte }: { compte: CompteAvecDetails }) {
       majCompte(compte.id, { avatar_url: url, avatar_source: "bibliotheque" }),
     onSuccess: () => {
       setOuvert(false);
-      queryClient.invalidateQueries({ queryKey: ["comptes"] });
+      rafraichirComptes(queryClient);
     },
   });
 
@@ -64,11 +55,7 @@ function ChoixAvatar({ compte }: { compte: CompteAvecDetails }) {
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         {compte.avatar_url ? (
-          <img
-            src={compte.avatar_url}
-            alt=""
-            className="size-10 rounded-full border object-cover"
-          />
+          <img src={compte.avatar_url} alt="" className="size-10 rounded-full border object-cover" />
         ) : (
           <div className="size-10 rounded-full border bg-muted" />
         )}
@@ -112,12 +99,10 @@ function GenerationPersona({ compte }: { compte: CompteAvecDetails }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
-  const proposition = useMutation({
-    mutationFn: () => genererPersona(compte.id),
-  });
+  const proposition = useMutation({ mutationFn: () => genererPersona(compte.id) });
   const appliquer = useMutation({
     mutationFn: () => genererPersona(compte.id, true),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["comptes"] }),
+    onSuccess: () => rafraichirComptes(queryClient),
   });
 
   const enCours = proposition.isPending || appliquer.isPending;
@@ -157,11 +142,7 @@ function GenerationPersona({ compte }: { compte: CompteAvecDetails }) {
             <p className="whitespace-pre-wrap pt-1">{resultat.bio}</p>
           </div>
           {resultat.avatarUrl && (
-            <img
-              src={resultat.avatarUrl}
-              alt=""
-              className="size-16 rounded-full border object-cover"
-            />
+            <img src={resultat.avatarUrl} alt="" className="size-16 rounded-full border object-cover" />
           )}
         </div>
       )}
@@ -190,10 +171,9 @@ function ReglagesCompte({ compte }: { compte: CompteAvecDetails }) {
   );
   const [parJour, setParJour] = React.useState(compte.posts_par_jour ?? 2);
 
-  const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["comptes"] });
+  const rafraichir = () => rafraichirComptes(queryClient);
   const enregistrer = useMutation({
-    mutationFn: () =>
-      majCompte(compte.id, { repartition, posts_par_jour: parJour }),
+    mutationFn: () => majCompte(compte.id, { repartition, posts_par_jour: parJour }),
     onSuccess: rafraichir,
   });
   const reinitialiser = useMutation({
@@ -224,9 +204,7 @@ function ReglagesCompte({ compte }: { compte: CompteAvecDetails }) {
               type="number"
               min={0}
               value={repartition[cle]}
-              onChange={(e) =>
-                setRepartition({ ...repartition, [cle]: Number(e.target.value) })
-              }
+              onChange={(e) => setRepartition({ ...repartition, [cle]: Number(e.target.value) })}
             />
           </div>
         ))}
@@ -244,16 +222,10 @@ function ReglagesCompte({ compte }: { compte: CompteAvecDetails }) {
         </div>
       </div>
 
-      {!totalValide && (
-        <p className="text-xs text-destructive">{t("reglages.totalInvalide")}</p>
-      )}
+      {!totalValide && <p className="text-xs text-destructive">{t("reglages.totalInvalide")}</p>}
 
       <div className="flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          disabled={!totalValide || enregistrer.isPending}
-          onClick={() => enregistrer.mutate()}
-        >
+        <Button size="sm" disabled={!totalValide || enregistrer.isPending} onClick={() => enregistrer.mutate()}>
           {enregistrer.isPending ? t("common.saving") : t("comptes.activerSurcharge")}
         </Button>
         {surcharge && (
@@ -267,22 +239,25 @@ function ReglagesCompte({ compte }: { compte: CompteAvecDetails }) {
   );
 }
 
-/** Édition des infos d'un créateur : nom affiché, @ TikTok, langue, lien Upwork. */
+/** Infos du compte : nom affiché, @ TikTok, langue, lien Upwork, compte source. */
 function InfosCompte({ compte }: { compte: CompteAvecDetails }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
+  const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
 
   const [nom, setNom] = React.useState(compte.persona_nom ?? "");
   const [handle, setHandle] = React.useState(compte.handle_tiktok ?? "");
   const [langue, setLangue] = React.useState(compte.langue);
   const [upwork, setUpwork] = React.useState(compte.profiles?.upwork_url ?? "");
+  const [source, setSource] = React.useState(compte.compte_reference_id ?? "");
 
   const upworkInitial = compte.profiles?.upwork_url ?? "";
   const modifie =
     nom !== (compte.persona_nom ?? "") ||
     handle !== (compte.handle_tiktok ?? "") ||
     langue !== compte.langue ||
+    source !== (compte.compte_reference_id ?? "") ||
     upwork !== upworkInitial;
 
   const enregistrer = useMutation({
@@ -291,10 +266,11 @@ function InfosCompte({ compte }: { compte: CompteAvecDetails }) {
         persona_nom: nom.trim() || null,
         handle_tiktok: handle.trim().replace(/^@/, "") || null,
         langue,
+        compte_reference_id: source || null,
       });
       if (upwork !== upworkInitial) await majUpwork(compte.poster_id, upwork);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["comptes"] }),
+    onSuccess: () => rafraichirComptes(queryClient),
   });
 
   const opts = langues.data ?? [];
@@ -331,6 +307,22 @@ function InfosCompte({ compte }: { compte: CompteAvecDetails }) {
         </select>
       </div>
       <div className="space-y-1.5">
+        <Label htmlFor={`source-${compte.id}`}>{t("comptes.source")}</Label>
+        <select
+          id={`source-${compte.id}`}
+          className={selectClass}
+          value={source}
+          onChange={(e) => setSource(e.target.value)}
+        >
+          <option value="">{t("common.none")}</option>
+          {sources.data?.map((s) => (
+            <option key={s.id} value={s.id}>
+              @{s.handle_tiktok}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-1.5 sm:col-span-2">
         <Label htmlFor={`upwork-${compte.id}`}>{t("comptes.upwork")}</Label>
         <Input
           id={`upwork-${compte.id}`}
@@ -350,240 +342,46 @@ function InfosCompte({ compte }: { compte: CompteAvecDetails }) {
   );
 }
 
-function LigneCompte({ compte }: { compte: CompteAvecDetails }) {
+/**
+ * Éditeur complet d'un compte de publication (le TikTok que tient un poster) :
+ * identité, avatar, génération d'identité, réglages. La voix/ton de traduction
+ * n'est PAS ici — elle se règle sur le compte source (page Sources).
+ */
+export function CompteEditor({ compte }: { compte: CompteAvecDetails }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [voix, setVoix] = React.useState(compte.style_profile ?? "");
-
-  const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["comptes"] });
-  const enregistrer = useMutation({
-    mutationFn: () => majCompte(compte.id, { style_profile: voix || null }),
-    onSuccess: rafraichir,
-  });
   const retirer = useMutation({
     mutationFn: () => supprimerCompte(compte.id),
-    onSuccess: rafraichir,
+    onSuccess: () => rafraichirComptes(queryClient),
   });
 
-  const modifie = voix !== (compte.style_profile ?? "");
-
   return (
-    <div className="space-y-3 rounded-lg border p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-medium">
-            {compte.persona_nom ?? compte.handle_tiktok ?? "—"}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {[
-              compte.profiles
-                ? [compte.profiles.prenom, compte.profiles.nom].filter(Boolean).join(" ")
-                : null,
-              compte.handle_tiktok ? `@${compte.handle_tiktok}` : null,
-              compte.langue.toUpperCase(),
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {compte.comptes_reference && (
-            // Visible ici seulement : l'admin doit savoir d'où vient la matière,
-            // le poster ne le voit jamais.
-            <Badge variant="outline">@{compte.comptes_reference.handle_tiktok}</Badge>
-          )}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-destructive hover:text-destructive"
-            onClick={() => {
-              if (window.confirm(t("comptes.confirmDelete"))) retirer.mutate();
-            }}
-          >
-            {t("common.delete")}
-          </Button>
-        </div>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        {compte.comptes_reference ? (
+          // L'admin doit savoir d'où vient la matière ; le poster ne le voit jamais.
+          <Badge variant="outline">
+            {t("posters.reference")} @{compte.comptes_reference.handle_tiktok}
+          </Badge>
+        ) : (
+          <span className="text-xs text-muted-foreground">{t("comptes.sansSource")}</span>
+        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-destructive hover:text-destructive"
+          onClick={() => {
+            if (window.confirm(t("comptes.confirmDelete"))) retirer.mutate();
+          }}
+        >
+          {t("comptes.supprimerCompte")}
+        </Button>
       </div>
 
       <InfosCompte compte={compte} />
-
       <ChoixAvatar compte={compte} />
-
       <GenerationPersona compte={compte} />
-
       <ReglagesCompte compte={compte} />
-
-      <div className="space-y-2">
-        <Label htmlFor={`voix-${compte.id}`}>{t("comptes.styleProfile")}</Label>
-        <Textarea
-          id={`voix-${compte.id}`}
-          rows={3}
-          className="text-xs"
-          value={voix}
-          onChange={(e) => setVoix(e.target.value)}
-        />
-        <p className="text-xs text-muted-foreground">{t("comptes.styleProfileHint")}</p>
-        {modifie && (
-          <Button size="sm" disabled={enregistrer.isPending} onClick={() => enregistrer.mutate()}>
-            {enregistrer.isPending ? t("common.saving") : t("common.save")}
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-export function AdminComptesPage() {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const comptes = useQuery({ queryKey: ["comptes"], queryFn: listerComptes });
-  const posters = useQuery({ queryKey: ["posters"], queryFn: listerPosters });
-  const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
-
-  const [posterId, setPosterId] = React.useState("");
-  const [sourceId, setSourceId] = React.useState("");
-  const [persona, setPersona] = React.useState("");
-  const [handle, setHandle] = React.useState("");
-
-  const ajouter = useMutation({
-    mutationFn: () =>
-      creerCompte({
-        posterId,
-        compteReferenceId: sourceId || null,
-        langue: "fr",
-        personaNom: persona,
-        handleTiktok: handle,
-      }),
-    onSuccess: () => {
-      setPersona("");
-      setHandle("");
-      queryClient.invalidateQueries({ queryKey: ["comptes"] });
-    },
-  });
-
-  const posterEligibles = (posters.data ?? []).filter((p) => p.role === "poster");
-
-  // Identités incomplètes : sans pseudo ou sans avatar généré.
-  const [lotPersona, setLotPersona] = React.useState<{ fait: number; total: number } | null>(null);
-  const incompletes = (comptes.data ?? []).filter((c) => !c.persona_nom || !c.avatar_url);
-
-  async function completerIdentites() {
-    setLotPersona({ fait: 0, total: incompletes.length });
-    await executerEnLot(
-      incompletes,
-      (c) => genererPersona(c.id, true),
-      // 1 à la fois : chaque persona = plusieurs appels Gemini (pseudo + avatar) ;
-      // les enchaîner évite de saturer Gemini (et les 500 qui vont avec).
-      { largeur: 1, onProgres: (fait, total) => setLotPersona({ fait, total }) },
-    );
-    setLotPersona(null);
-    queryClient.invalidateQueries({ queryKey: ["comptes"] });
-  }
-
-  return (
-    <div className="space-y-6">
-      {incompletes.length > 0 && (
-        <Card>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-5">
-            <div>
-              <p className="text-sm font-medium">{t("comptes.identitesTitre")}</p>
-              <p className="text-xs text-muted-foreground">
-                {t("comptes.identitesDesc", { count: incompletes.length })}
-              </p>
-            </div>
-            <Button disabled={lotPersona !== null} onClick={completerIdentites}>
-              <Sparkles className="size-4" />
-              {lotPersona
-                ? t("comptes.identitesEnCours", { fait: lotPersona.fait, total: lotPersona.total })
-                : t("comptes.completerIdentites", { count: incompletes.length })}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("comptes.title")}</CardTitle>
-          <CardDescription>{t("comptes.subtitle")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (posterId) ajouter.mutate();
-            }}
-            className="grid gap-4 sm:grid-cols-2"
-          >
-            <div className="space-y-2">
-              <Label htmlFor="poster">{t("comptes.poster")}</Label>
-              <select
-                id="poster"
-                className={selectClass}
-                required
-                value={posterId}
-                onChange={(e) => setPosterId(e.target.value)}
-              >
-                <option value="">{t("common.none")}</option>
-                {posterEligibles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {[p.prenom, p.nom].filter(Boolean).join(" ") || p.email}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="source">{t("comptes.source")}</Label>
-              <select
-                id="source"
-                className={selectClass}
-                value={sourceId}
-                onChange={(e) => setSourceId(e.target.value)}
-              >
-                <option value="">{t("common.none")}</option>
-                {sources.data?.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    @{s.handle_tiktok}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="persona">{t("comptes.persona")}</Label>
-              <Input
-                id="persona"
-                value={persona}
-                onChange={(e) => setPersona(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="handle">{t("comptes.handle")}</Label>
-              <Input id="handle" value={handle} onChange={(e) => setHandle(e.target.value)} />
-            </div>
-
-            <div className="sm:col-span-2">
-              <Button type="submit" disabled={ajouter.isPending}>
-                {ajouter.isPending ? t("common.saving") : t("comptes.add")}
-              </Button>
-              {ajouter.isError && (
-                <p className="mt-2 text-sm text-destructive">
-                  {(ajouter.error as Error).message}
-                </p>
-              )}
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      <div className="space-y-3">
-        {comptes.isPending && (
-          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
-        )}
-        {comptes.data?.length === 0 && <EmptyState title={t("comptes.empty")} />}
-        {comptes.data?.map((compte) => <LigneCompte key={compte.id} compte={compte} />)}
-      </div>
     </div>
   );
 }

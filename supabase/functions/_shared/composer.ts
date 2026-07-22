@@ -152,10 +152,22 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
       // un remaniement doit s'éloigner. Éditables depuis l'admin.
       const consignesType = await chargerPrompt(supabase, `composition_${post.type}`);
 
+      // Le « prompt adapté » (voix/ton) est porté par le compte SOURCE : c'est
+      // sa niche qui dicte le registre, pas le compte de publication du poster.
+      let voixSource: string | null = null;
+      if (sujet.compte_reference_id) {
+        const { data: ref } = await supabase
+          .from("comptes_reference")
+          .select("style_profile")
+          .eq("id", sujet.compte_reference_id)
+          .single();
+        voixSource = ref?.style_profile ?? null;
+      }
+
       const regles = [
         base,
         consignesType,
-        compte.style_profile ? `Voix propre à ce compte :\n${compte.style_profile}` : null,
+        voixSource ? `Voix propre à cette source :\n${voixSource}` : null,
       ]
         .filter(Boolean)
         .join("\n\n");

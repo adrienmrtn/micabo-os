@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Plus, UserPlus, X } from "lucide-react";
+import { Plus, UserPlus, UserSquare, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,17 +16,20 @@ import {
   EmptyState,
 } from "@/components/ui/card";
 import { useAuth } from "@/features/auth/AuthContext";
+import { CompteEditor } from "@/features/moteur/CompteEditor";
 import {
+  creerCompte,
   creerPoster,
   creerRecruteur,
   definirRole,
+  listerComptes,
   listerLanguesReference,
   listerPosters,
   majPoster,
   majUpwork,
   supprimerPoster,
 } from "@/features/moteur/api";
-import type { PosterProfil } from "@/features/moteur/types";
+import type { CompteAvecDetails, PosterProfil } from "@/features/moteur/types";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
@@ -128,7 +131,34 @@ export function AdminPostersPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const posters = useQuery({ queryKey: ["posters"], queryFn: listerPosters });
+  const comptes = useQuery({ queryKey: ["comptes"], queryFn: listerComptes });
   const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
+
+  // Un compte de publication par poster (le TikTok qu'il tient) : on l'édite
+  // directement ici, dépliable — plus besoin d'une page « Comptes » à part.
+  const compteDe = React.useMemo(() => {
+    const m = new Map<string, CompteAvecDetails>();
+    for (const c of comptes.data ?? []) if (!m.has(c.poster_id)) m.set(c.poster_id, c);
+    return m;
+  }, [comptes.data]);
+  const [ouverts, setOuverts] = React.useState<Set<string>>(new Set());
+  const basculerCompte = (id: string) =>
+    setOuverts((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  const creerCompteVide = useMutation({
+    mutationFn: (p: PosterProfil) =>
+      creerCompte({
+        posterId: p.id,
+        compteReferenceId: null,
+        langue: p.langues[0] ?? "fr",
+        personaNom: "",
+        handleTiktok: "",
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["comptes"] }),
+  });
 
   // Panneau d'ajout replié par défaut : la liste reste la vedette. On choisit
   // d'abord « poster » ou « recruteur », puis le formulaire correspondant s'ouvre.
@@ -361,11 +391,12 @@ export function AdminPostersPage() {
 
         const ligne = (poster: (typeof tous)[number]) => {
           const soiMeme = poster.id === user?.id;
+          const estPoster = poster.role === "poster";
+          const compte = compteDe.get(poster.id);
+          const ouvert = ouverts.has(poster.id);
           return (
-            <div
-              key={poster.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-3"
-            >
+            <div key={poster.id} className="rounded-xl border bg-card">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium">
@@ -443,6 +474,16 @@ export function AdminPostersPage() {
                         </Button>
                       </div>
                     )}
+                    {estPoster && (
+                      <Button
+                        size="sm"
+                        variant={ouvert ? "default" : "outline"}
+                        onClick={() => basculerCompte(poster.id)}
+                      >
+                        <UserSquare className="size-4" />
+                        {t("posters.gererCompte")}
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
@@ -465,6 +506,28 @@ export function AdminPostersPage() {
                     </Button>
                   </div>
                 )}
+              </div>
+
+              {estPoster && ouvert && (
+                <div className="border-t p-3">
+                  {compte ? (
+                    <CompteEditor compte={compte} />
+                  ) : comptes.isPending ? (
+                    <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-sm text-muted-foreground">{t("posters.sansCompteCree")}</p>
+                      <Button
+                        size="sm"
+                        disabled={creerCompteVide.isPending}
+                        onClick={() => creerCompteVide.mutate(poster)}
+                      >
+                        {creerCompteVide.isPending ? t("common.saving") : t("posters.creerCompte")}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         };

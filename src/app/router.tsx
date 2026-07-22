@@ -11,7 +11,6 @@ import { HiringLayout } from "@/components/layout/HiringLayout";
 import { HiringPosterPage } from "@/pages/hiring/HiringPosterPage";
 import { AdminPilotagePage } from "@/pages/admin/AdminPilotagePage";
 import { AdminSourcesPage } from "@/pages/admin/AdminSourcesPage";
-import { AdminComptesPage } from "@/pages/admin/AdminComptesPage";
 import { AdminPostersPage } from "@/pages/admin/AdminPostersPage";
 import { AdminBibliothequePage } from "@/pages/admin/AdminBibliothequePage";
 import { AdminReglagesPage } from "@/pages/admin/AdminReglagesPage";
@@ -53,7 +52,6 @@ export function AppRouter() {
             <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
             <Route path="/admin/posts" element={<AdminPostsPage />} />
             <Route path="/admin/sources" element={<AdminSourcesPage />} />
-            <Route path="/admin/comptes" element={<AdminComptesPage />} />
             <Route path="/admin/posters" element={<AdminPostersPage />} />
             <Route path="/admin/reviews" element={<AdminReviewsPage />} />
             <Route path="/admin/bibliotheque" element={<AdminBibliothequePage />} />

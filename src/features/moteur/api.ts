@@ -261,6 +261,26 @@ export async function majMonHandle(handle: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Le poster met à jour SON lien de conversation Upwork depuis son espace. */
+export async function majMonUpwork(url: string): Promise<void> {
+  const { error } = await supabase.rpc("maj_mon_upwork", { nouveau: url });
+  if (error) throw error;
+}
+
+/** Le lien Upwork du poster connecté (sur sa propre ligne profiles). */
+export async function monUpwork(): Promise<string | null> {
+  const { data: sess } = await supabase.auth.getUser();
+  const uid = sess.user?.id;
+  if (!uid) return null;
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("upwork_url")
+    .eq("id", uid)
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.upwork_url as string | null) ?? null;
+}
+
 export function creerPoster(input: {
   prenom: string;
   nom: string;
