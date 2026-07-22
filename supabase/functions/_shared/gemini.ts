@@ -484,30 +484,79 @@ async function inpaintFallback(image: Part, imageUrl: string): Promise<string | 
  * incrustés. Tâche de détection pure, donc non soumise au refus d'édition.
  */
 async function detecterZonesTexte(image: Part): Promise<Zone[]> {
-  const prompt = `Repère TOUS les éléments ajoutés par-dessus la photo : textes, sous-titres, stickers, watermarks, noms d'utilisateur, boutons, logos d'interface.
-Réponds UNIQUEMENT par un tableau JSON de rectangles englobants, coordonnées en fractions de 0 à 1 (origine coin haut-gauche) :
+  const prompt = `Tu localises tout ce qui a été AJOUTÉ par-dessus la photo : textes, sous-titres, légendes, stickers, watermarks, pseudos, boutons, logos d'interface. Il y en a presque toujours.
+Pour chaque élément, donne son rectangle englobant en FRACTIONS de 0 à 1 (origine coin haut-gauche).
+Réponds UNIQUEMENT par un tableau JSON, rien avant ni après :
 [{"x":0.1,"y":0.05,"w":0.8,"h":0.12}]
-Tableau vide [] si aucun élément ajouté. Aucune autre sortie.`;
+Réponds [] seulement si l'image est réellement vierge de tout texte ou sticker.`;
 
-  const parts = await callWithFallback(TEXT_MODELS, [image, { text: prompt }]);
-  const brut = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
+  // Deux tentatives : la détection est le maillon fragile (une réponse vide ou
+  // mal formée bloque tout le nettoyage), mais trois passes faisaient dépasser
+  // le temps de l'Edge Function. Le parseur gère maintenant le JSON en bloc de
+  // code, cas le plus fréquent — une seule passe suffit presque toujours.
+  for (let essai = 0; essai < 2; essai += 1) {
+    const parts = await callWithFallback(TEXT_MODELS, [image, { text: prompt }]);
+    const zones = parserZones(textOf(parts));
+    if (zones.length > 0) return zones;
+  }
+  return [];
+}
 
+/** Extrait le premier tableau JSON de la réponse (même noyé dans du texte). */
+function parserZones(texte: string): Zone[] {
+  const trouve = texte.match(/\[[\s\S]*\]/);
+  if (!trouve) return [];
+  let data: unknown;
   try {
-    const zones = JSON.parse(brut) as Zone[];
-    if (!Array.isArray(zones)) return [];
-    // Un peu de marge autour de chaque zone : le modèle serre souvent trop, et
-    // il vaut mieux effacer quelques pixels de trop que de laisser un liseré.
-    return zones
-      .filter((z) => [z.x, z.y, z.w, z.h].every((n) => typeof n === "number"))
-      .map((z) => ({
-        x: Math.max(0, z.x - 0.01),
-        y: Math.max(0, z.y - 0.01),
-        w: Math.min(1, z.w + 0.02),
-        h: Math.min(1, z.h + 0.02),
-      }));
+    data = JSON.parse(trouve[0]);
   } catch {
     return [];
   }
+  if (!Array.isArray(data)) return [];
+
+  const zones: Zone[] = [];
+  for (const item of data) {
+    const z = normaliserZone(item);
+    if (z) zones.push(z);
+  }
+  return zones;
+}
+
+/**
+ * Accepte les formats rencontrés : {x,y,w,h}, {box_2d:[ymin,xmin,ymax,xmax]},
+ * ou [ymin,xmin,ymax,xmax] brut. Gère l'échelle 0-1000 (convention Gemini) et
+ * ajoute une marge de sécurité autour du texte.
+ */
+// deno-lint-ignore no-explicit-any
+function normaliserZone(item: any): Zone | null {
+  let x: number, y: number, w: number, h: number;
+
+  if (item && typeof item === "object" && !Array.isArray(item)) {
+    if (typeof item.x === "number" && typeof item.w === "number") {
+      ({ x, y, w, h } = item);
+    } else if (Array.isArray(item.box_2d) && item.box_2d.length === 4) {
+      const [ymin, xmin, ymax, xmax] = item.box_2d;
+      x = xmin; y = ymin; w = xmax - xmin; h = ymax - ymin;
+    } else return null;
+  } else if (Array.isArray(item) && item.length === 4) {
+    const [ymin, xmin, ymax, xmax] = item;
+    x = xmin; y = ymin; w = xmax - xmin; h = ymax - ymin;
+  } else return null;
+
+  if ([x, y, w, h].some((n) => typeof n !== "number" || Number.isNaN(n))) return null;
+
+  // Coordonnées en 0-1000 → fractions.
+  if (Math.max(x, y, w, h) > 1.5) {
+    x /= 1000; y /= 1000; w /= 1000; h /= 1000;
+  }
+  if (w <= 0 || h <= 0) return null;
+
+  return {
+    x: Math.max(0, Math.min(1, x - 0.01)),
+    y: Math.max(0, Math.min(1, y - 0.01)),
+    w: Math.max(0, Math.min(1, w + 0.02)),
+    h: Math.max(0, Math.min(1, h + 0.02)),
+  };
 }
 
 /**
