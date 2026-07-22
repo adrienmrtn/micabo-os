@@ -47,8 +47,8 @@ Deno.serve(async (request) => {
       const [post] = await scrapePost(postUrl);
       if (!post) return json({ ok: false, error: "Aucun post photo à cette URL" }, 400);
 
-      const sujetId = await creerSujet(supabase, post, compteReferenceId);
-      return json({ ok: true, sujetId, reused: sujetId === null });
+      const r = await creerSujet(supabase, post, compteReferenceId);
+      return json({ ok: true, sujetId: r.id, reused: r.reused });
     }
 
     // Une source par passage. Scraper les huit d'un coup faisait plusieurs
@@ -87,7 +87,7 @@ Deno.serve(async (request) => {
             restants = true;
             break;
           }
-          if (await creerSujet(supabase, post, compte.id)) crees += 1;
+          if (!(await creerSujet(supabase, post, compte.id)).reused) crees += 1;
         }
         sujetsCrees += crees;
 
@@ -203,13 +203,15 @@ async function creerSujet(
   supabase: Supabase,
   post: PostScrape,
   compteReferenceId: string | null,
-): Promise<string | null> {
+): Promise<{ id: string; reused: boolean }> {
+  // Déjà importé : on renvoie l'id existant (et non null), pour qu'un import
+  // manuel puisse composer dessus sans re-scraper.
   const { data: existant } = await supabase
     .from("sujets")
     .select("id")
     .eq("source_url", post.webVideoUrl)
     .maybeSingle();
-  if (existant) return null;
+  if (existant) return { id: existant.id, reused: true };
 
   // Les visuels d'Apify expirent et exigent un token : on les rapatrie tout de
   // suite dans notre Storage, sinon la bibliothèque pointerait dans le vide.
@@ -238,7 +240,7 @@ async function creerSujet(
     .single();
 
   if (error) throw error;
-  return sujet.id;
+  return { id: sujet.id, reused: false };
 }
 
 /** Rapatrie un visuel ; en cas d'échec on garde l'URL d'origine plutôt que de

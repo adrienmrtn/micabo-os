@@ -117,7 +117,13 @@ async function completerJournee(
     .eq("compte_id", compte.id)
     .eq("date_publication_prevue", jour);
 
-  const manquants = forcer ? 1 : quota - (existants?.length ?? 0);
+  // RÈGLE : si le poster a DÉJÀ un post ce jour-là (par ex. un TikTok assigné à
+  // la main), le cron ne touche à rien — pas d'ajout automatique par-dessus.
+  // Seul le mode test forcé passe outre.
+  const dejaLa = existants?.length ?? 0;
+  if (!forcer && dejaLa > 0) return [];
+
+  const manquants = forcer ? 1 : quota;
   if (manquants <= 0) return [];
 
   // On renvoie le type RÉELLEMENT produit : recopiage et remaniement retombent

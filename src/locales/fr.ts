@@ -386,6 +386,12 @@ export const fr = {
       creerHint: "Choisis un compte ET un sujet pour activer le bouton.",
       voirLePost: "Voir le post →",
       creeAttente: "Post créé. La fabrication se termine au prochain passage du cron.",
+      assignerTikTok: "Assigner un TikTok à un créateur",
+      assignerTikTokDesc:
+        "Colle le lien d'un post photo TikTok, choisis un créateur et une date : on l'importe, on le nettoie, on le traduit et on y intègre Sophia — le post apparaît chez lui à la date choisie.",
+      assigner: "Assigner",
+      assignerEnCours: "Assignation…",
+      assignerOk: "TikTok assigné. Il se fabrique en arrière-plan (nettoyage + traduction + Sophia).",
       importLien: "Importer un slideshow depuis un lien TikTok",
       importLienDesc:
         "Colle le lien d'un post photo TikTok : on le récupère et on en fait un sujet, prêt à composer. Rattache-le au compte de référence pour que ses visuels rejoignent la bonne bibliothèque.",

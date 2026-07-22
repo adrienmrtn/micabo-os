@@ -626,11 +626,41 @@ export const lancerPreparation = (sujetId?: string) =>
  *  post et en fait un sujet, rattaché à un compte de référence (pour que ses
  *  visuels rejoignent la bonne bibliothèque). Le nettoyage et la composition
  *  suivent le cours normal ensuite. */
-export const importerDepuisLien = (postUrl: string, compteReferenceId: string) =>
+export const importerDepuisLien = (postUrl: string, compteReferenceId: string | null) =>
   invoke<{ ok: boolean; sujetId: string | null; reused: boolean; error?: string }>("extraction", {
     postUrl,
     compteReferenceId,
   });
+
+/**
+ * Assigne un TikTok précis à un créateur pour une date : on importe le lien (→
+ * sujet, rattaché au compte de référence du créateur), puis on fabrique le post
+ * pour ce créateur à cette date. Le nettoyage/traduction/Sophia suivent tout
+ * seuls (le post attend la préparation avant de se composer).
+ */
+export async function assignerTikTok(input: {
+  url: string;
+  compteId: string;
+  type?: string;
+  date?: string;
+}): Promise<{ postId: string; reused: boolean }> {
+  const { data: compte } = await supabase
+    .from("comptes")
+    .select("compte_reference_id")
+    .eq("id", input.compteId)
+    .single();
+
+  const imp = await importerDepuisLien(input.url.trim(), compte?.compte_reference_id ?? null);
+  if (!imp.sujetId) throw new Error(imp.error ?? "Aucun post photo trouvé à ce lien.");
+
+  const post = await lancerComposition({
+    compteId: input.compteId,
+    sujetId: imp.sujetId,
+    type: input.type,
+    date: input.date,
+  });
+  return { postId: post.postId, reused: imp.reused };
+}
 
 export const lancerAssignation = (
   compteId?: string,

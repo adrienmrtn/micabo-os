@@ -56,7 +56,10 @@ export async function creerPost(
     .eq("id", demande.sujetId)
     .single();
   if (sujetErreur || !sujet) throw new Error("Sujet introuvable");
-  if (sujet.preparation_statut !== "done") throw new Error("Sujet pas encore préparé");
+  // On crée la coquille même si le sujet n'est pas encore préparé (import
+  // manuel récent) : la fabrication (avancerPost) attendra que la préparation
+  // soit finie avant de créer les slides. Ça permet d'assigner un TikTok à un
+  // créateur immédiatement, sans attendre le nettoyage.
 
   const { data: post, error } = await supabase
     .from("posts")
@@ -112,6 +115,19 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
       .select("id, position, texte_overlay, position_sophia")
       .eq("post_id", post.id)
       .order("position");
+
+    // Garde préparation : si les slides ne sont pas encore créées ET que le
+    // sujet n'est pas encore nettoyé (import manuel récent), on ATTEND. On
+    // relaisse le post en attente ; la préparation finit d'abord, puis la
+    // fabrication reprend au passage suivant. Évite de créer des slides sans
+    // visuel propre.
+    if ((!existantes || existantes.length === 0) && sujet.preparation_statut !== "done") {
+      await supabase
+        .from("posts")
+        .update({ pipeline_statut: "pending", pipeline_etape: "attente_preparation" })
+        .eq("id", post.id);
+      return "attente_preparation";
+    }
 
     // 1 — traduction de tout le deck en une passe : seule façon de tenir la
     // persona et le genre d'une slide à l'autre.

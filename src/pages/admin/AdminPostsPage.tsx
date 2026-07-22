@@ -16,12 +16,11 @@ import {
   EmptyState,
 } from "@/components/ui/card";
 import {
+  assignerTikTok,
   aujourdhui,
-  importerDepuisLien,
   lancerComposition,
   listerComptes,
   listerPosts,
-  listerSources,
   reassignerPost,
   sujetsDisponibles,
 } from "@/features/moteur/api";
@@ -130,15 +129,17 @@ export function AdminPostsPage() {
   const posts = useQuery({ queryKey: ["posts"], queryFn: () => listerPosts() });
   const comptes = useQuery({ queryKey: ["comptes"], queryFn: listerComptes });
   const sujets = useQuery({ queryKey: ["sujets-dispo"], queryFn: sujetsDisponibles });
-  const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
 
   const [compteId, setCompteId] = React.useState("");
   const [sujetId, setSujetId] = React.useState("");
   const [type, setType] = React.useState("nouveau");
   const [date, setDate] = React.useState(aujourdhui());
 
-  const [lien, setLien] = React.useState("");
-  const [sourceImport, setSourceImport] = React.useState("");
+  // Assigner un TikTok précis à un créateur pour une date (import + compo).
+  const [aLien, setALien] = React.useState("");
+  const [aCompte, setACompte] = React.useState("");
+  const [aType, setAType] = React.useState("nouveau");
+  const [aDate, setADate] = React.useState(aujourdhui());
 
   const creer = useMutation({
     mutationFn: () => lancerComposition({ compteId, sujetId, type, date }),
@@ -148,12 +149,12 @@ export function AdminPostsPage() {
     },
   });
 
-  const importer = useMutation({
-    mutationFn: () => importerDepuisLien(lien.trim(), sourceImport),
-    onSuccess: (r) => {
-      if (r.sujetId || r.reused) setLien("");
-      // Le sujet importé doit apparaître dans le menu « Créer à la main ».
-      queryClient.invalidateQueries({ queryKey: ["sujets-dispo"] });
+  const assigner = useMutation({
+    mutationFn: () =>
+      assignerTikTok({ url: aLien, compteId: aCompte, type: aType, date: aDate }),
+    onSuccess: () => {
+      setALien("");
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
     },
   });
 
@@ -167,62 +168,82 @@ export function AdminPostsPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>{t("posts.importLien")}</CardTitle>
-          <CardDescription>{t("posts.importLienDesc")}</CardDescription>
+          <CardTitle>{t("posts.assignerTikTok")}</CardTitle>
+          <CardDescription>{t("posts.assignerTikTokDesc")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (lien.trim() && sourceImport) importer.mutate();
+              if (aLien.trim() && aCompte) assigner.mutate();
             }}
             className="grid gap-4 sm:grid-cols-2"
           >
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="iLien">{t("posts.lienTikTok")}</Label>
+              <Label htmlFor="aLien">{t("posts.lienTikTok")}</Label>
               <Input
-                id="iLien"
+                id="aLien"
                 required
                 placeholder="https://www.tiktok.com/@compte/photo/…"
-                value={lien}
-                onChange={(e) => setLien(e.target.value)}
+                value={aLien}
+                onChange={(e) => setALien(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="iSource">{t("posts.rattacherA")}</Label>
+              <Label htmlFor="aCompte">{t("posts.assignerA")}</Label>
               <select
-                id="iSource"
+                id="aCompte"
                 required
                 className={selectClass}
-                value={sourceImport}
-                onChange={(e) => setSourceImport(e.target.value)}
+                value={aCompte}
+                onChange={(e) => setACompte(e.target.value)}
               >
                 <option value="">{t("common.none")}</option>
-                {sources.data?.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    @{s.handle_tiktok}
+                {listeComptes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.persona_nom ?? c.handle_tiktok ?? c.id.slice(0, 8)}
                   </option>
                 ))}
               </select>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="aDate">{t("posts.datePrevue")}</Label>
+              <Input id="aDate" type="date" value={aDate} onChange={(e) => setADate(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="aType">{t("test.type")}</Label>
+              <select
+                id="aType"
+                className={selectClass}
+                value={aType}
+                onChange={(e) => setAType(e.target.value)}
+              >
+                <option value="nouveau">{t("type.nouveau")}</option>
+                <option value="remanie">{t("type.remanie")}</option>
+                <option value="recycle">{t("type.recycle")}</option>
+              </select>
+            </div>
             <div className="flex items-end">
-              <Button type="submit" disabled={importer.isPending || !lien.trim() || !sourceImport}>
-                {importer.isPending ? t("posts.importEnCours") : t("posts.importer")}
+              <Button type="submit" disabled={assigner.isPending || !aLien.trim() || !aCompte}>
+                {assigner.isPending ? t("posts.assignerEnCours") : t("posts.assigner")}
               </Button>
             </div>
             <div className="sm:col-span-2">
-              {importer.isSuccess && (importer.data.sujetId || importer.data.reused) && (
+              {assigner.isSuccess && (
                 <p className="text-sm text-success">
-                  {importer.data.reused ? t("posts.importDejaLa") : t("posts.importOk")}
+                  {t("posts.assignerOk")}{" "}
+                  {assigner.data?.postId && (
+                    <Link
+                      to={`/posts/${assigner.data.postId}`}
+                      className="underline underline-offset-2"
+                    >
+                      {t("posts.voirLePost")}
+                    </Link>
+                  )}
                 </p>
               )}
-              {importer.isSuccess && !importer.data.sujetId && !importer.data.reused && (
-                <p className="text-sm text-destructive">
-                  {importer.data.error ?? t("posts.importVide")}
-                </p>
-              )}
-              {importer.isError && (
-                <p className="text-sm text-destructive">{(importer.error as Error).message}</p>
+              {assigner.isError && (
+                <p className="text-sm text-destructive">{(assigner.error as Error).message}</p>
               )}
             </div>
           </form>
