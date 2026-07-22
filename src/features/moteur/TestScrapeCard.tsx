@@ -99,6 +99,8 @@ export function TestScrapeCard() {
                 <div className="flex shrink-0 items-center gap-2 tabular-nums">
                   {!p.estPhoto ? (
                     <Badge variant="outline">{t("testScrape.pasPhoto")}</Badge>
+                  ) : p.pertinence < 0 ? (
+                    <Badge variant="outline">{t("testScrape.sophiaIndispo")}</Badge>
                   ) : p.sophia ? (
                     <Badge variant="success">{t("testScrape.sophiaOk", { score: p.pertinence })}</Badge>
                   ) : (

@@ -85,11 +85,19 @@ Deno.serve(async (request) => {
 
       // On note aussi la PERTINENCE THÉMATIQUE (peut-on y intégrer Sophia ?), pas
       // seulement les vues — c'est le double critère de sélection.
+      const noterTheme = async (p: ScrapedPost) => {
+        if (p.imageUrls.length === 0) return { score: 0, reason: "Vidéo, pas un diaporama" };
+        try {
+          return await scoreRelevance({ caption: p.text, hookText: p.text, instructions });
+        } catch {
+          // Un aléa Gemini ne doit pas faire échouer tout le test.
+          return { score: -1, reason: "Score indisponible (réessaie)" };
+        }
+      };
+
       const liste = await Promise.all(
         posts.map(async (p) => {
-          const pert = p.imageUrls.length > 0
-            ? await scoreRelevance({ caption: p.text, hookText: p.text, instructions })
-            : { score: 0, reason: "Vidéo, pas un diaporama" };
+          const pert = await noterTheme(p);
           return {
             url: p.webVideoUrl,
             texte: p.text.slice(0, 80),
@@ -144,12 +152,11 @@ Deno.serve(async (request) => {
         .single();
 
       try {
-        // Posts triés par vues. On ne reprend QUE ceux dont le thème permet
-        // d'intégrer Sophia (culture générale) : un post viral hors-sujet ne sert
-        // à rien. On score la pertinence AVANT de télécharger les images (l'étape
-        // coûteuse), pour ne pas gaspiller sur du hors-thème.
+        // Posts triés par vues : on reprend les plus vus d'abord. Le filtre
+        // THÉMATIQUE (peut-on y intégrer Sophia ?) se fait ensuite à la
+        // PRÉPARATION — là on a le texte du hook (OCR), un signal bien plus fiable
+        // que la seule légende, et un échec IA n'y casse pas l'extraction.
         const posts = await recupererPosts(supabase, compte.handle_tiktok);
-        const instructions = await chargerPrompt(supabase, "pertinence");
         let crees = 0;
         let restants = false;
 
@@ -159,14 +166,6 @@ Deno.serve(async (request) => {
             break;
           }
           if (post.imageUrls.length === 0) continue; // pas un post photo
-
-          const { score } = await scoreRelevance({
-            caption: post.text,
-            hookText: post.text,
-            instructions,
-          });
-          if (score < SEUIL_PERTINENCE) continue; // hors thématique Sophia : on saute
-
           if (!(await creerSujet(supabase, post, compte.id)).reused) crees += 1;
         }
         sujetsCrees += crees;

@@ -126,12 +126,18 @@ export function TestCompletCard() {
             onChange={(e) => setCompteId(e.target.value)}
           >
             <option value="">{t("common.none")}</option>
-            {comptes.data?.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.persona_nom ?? c.handle_tiktok ?? c.id.slice(0, 8)}
-              </option>
-            ))}
+            {comptes.data?.map((c) => {
+              // deno-lint-ignore no-explicit-any
+              const ref = (c as any).comptes_reference?.handle_tiktok as string | undefined;
+              const nom = c.persona_nom ?? c.handle_tiktok ?? c.id.slice(0, 8);
+              return (
+                <option key={c.id} value={c.id}>
+                  {ref ? `${nom} — scrape @${ref}` : nom}
+                </option>
+              );
+            })}
           </select>
+          <p className="text-xs text-muted-foreground">{t("test.compteAide")}</p>
         </div>
 
         <div className="space-y-2">

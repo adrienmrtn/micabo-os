@@ -94,6 +94,7 @@ export const fr = {
       dejaVu: "Déjà repris",
       sophiaOk: "Sophia ✓ {{score}}",
       sophiaNon: "Hors-thème {{score}}",
+      sophiaIndispo: "Thème : à réessayer",
     },
     reviews: {
       title: "Reviews des créateurs",
@@ -318,7 +319,9 @@ export const fr = {
       title: "Test complet",
       subtitle:
         "Déroule toute la chaîne sur un seul compte, du scrape au post fini, sans attendre les crons.",
-      compte: "Compte à tester",
+      compte: "Compte de publication à tester",
+      compteAide:
+        "C'est un compte de PUBLICATION (poster). Le test scrape SON compte de référence (« scrape @… ») et fabrique un post pour lui. Pour tester juste un compte de référence, utilise « Tester le scrape ».",
       avecExtraction: "Extraire d'abord de nouvelles sources (coûte du crédit Apify)",
       lancer: "Lancer le test",
       type: "Type de post à tester",
