@@ -273,6 +273,13 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
       }
     }
 
+    // 3 — RENUMÉROTATION déterministe. On ne fait PAS confiance à l'IA pour les
+    // numéros : les slides qui commencent par un numéro deviennent 1, 2, 3… dans
+    // l'ordre de position. Corrige les décalages (ex. le placement Sophia qui
+    // reprenait « 2. » à la place de « 1. »). La slide d'accroche (sans numéro)
+    // n'est pas touchée.
+    await renumeroterSlides(supabase, post.id);
+
     await supabase
       .from("posts")
       .update({
@@ -348,6 +355,32 @@ async function garantirVisuelsPropres(supabase: Supabase, compte: any, postId: s
       .from("post_slides")
       .update({ media_id: remplacant, reference_url: null })
       .eq("id", slide.id);
+  }
+}
+
+/**
+ * Force une numérotation propre : les slides dont le texte commence par un
+ * numéro (« 2. », « 3) »…) sont renumérotées 1, 2, 3… dans l'ordre de position.
+ * On ne remplace QUE le chiffre, en gardant le séparateur et le reste du texte
+ * intacts. Les slides sans numéro (accroche) sont ignorées. Déterministe : ça
+ * corrige tout décalage laissé par la traduction ou le placement Sophia.
+ */
+async function renumeroterSlides(supabase: Supabase, postId: string) {
+  const { data: slides } = await supabase
+    .from("post_slides")
+    .select("id, texte_overlay")
+    .eq("post_id", postId)
+    .order("position");
+
+  let n = 0;
+  for (const s of slides ?? []) {
+    const texte = s.texte_overlay ?? "";
+    if (!/^\s*\d+\s*[.)]/.test(texte)) continue; // pas de numéro = accroche
+    n += 1;
+    const nouveau = texte.replace(/^(\s*)\d+(\s*[.)])/, `$1${n}$2`);
+    if (nouveau !== texte) {
+      await supabase.from("post_slides").update({ texte_overlay: nouveau }).eq("id", s.id);
+    }
   }
 }
 
