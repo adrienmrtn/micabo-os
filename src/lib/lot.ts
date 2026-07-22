@@ -1,11 +1,18 @@
 /** Nombre d'agents de nettoyage lancés en parallèle par défaut.
  *
- *  Chaque tâche = une invocation Edge Function indépendante : un vrai worker
- *  isolé, avec son propre budget CPU/temps. Cinq en parallèle vident un lot vite
- *  sans trop faire contendre le backend Gemini (au-delà, les 503 « surchargé »
- *  se multiplient plus qu'ils n'accélèrent). Le repli retry+jitter côté serveur
- *  absorbe les collisions résiduelles. */
-export const AGENTS_NETTOYAGE = 5;
+ *  Chaque tâche = une invocation Edge Function indépendante (un vrai worker
+ *  isolé). MAIS le vrai goulot n'est pas le client : c'est le backend du proxy
+ *  (Gemini via Lovable), qui ne tient qu'une poignée de nettoyages à la fois.
+ *  Mesuré : un appel seul passe en ~12 s quand le backend est sain, mais dès
+ *  qu'on en lance plusieurs en même temps, la plupart pendent puis échouent —
+ *  ils se battent pour la même capacité. Deux en parallèle est le compromis
+ *  raisonnable : un peu de débit sans étrangler le proxy. Pour vraiment
+ *  paralléliser davantage, le levier est CÔTÉ PROXY (plus de quota / plusieurs
+ *  clés Gemini / une file), pas ici : monter ce chiffre ne ferait qu'aggraver
+ *  les échecs. Le repli côté serveur (timeout+retry+budget, puis remplacement
+ *  par une photo propre de la bibliothèque) garantit qu'un poster n'est jamais
+ *  bloqué même quand le proxy sature. */
+export const AGENTS_NETTOYAGE = 2;
 
 /**
  * Exécute `tache` sur chaque élément avec un pool borné de workers parallèles.

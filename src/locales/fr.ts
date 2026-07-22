@@ -323,7 +323,7 @@ export const fr = {
     testNet: {
       title: "Test du nettoyage",
       subtitle:
-        "Photos non nettoyées de chaque compte. Clique « Tester » pour voir le rendu du nettoyage, sans rien modifier. « Tout tester » lance plusieurs agents en parallèle.",
+        "Photos non nettoyées de chaque compte. Clique « Tester » pour voir le rendu du nettoyage, sans rien modifier. « Tout tester » enchaîne le lot 2 par 2 (le proxy sature au-delà).",
       vide: "Aucune photo à texte à tester — tout est déjà nettoyé.",
       avant: "Avant",
       apres: "Après",
