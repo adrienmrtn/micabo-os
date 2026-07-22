@@ -234,6 +234,7 @@ export const fr = {
         "Saisis le prénom, le nom et la langue. Le reste — compte de référence et identité TikTok (pseudo, bio, avatar) — est généré automatiquement par l'IA.",
       langue: "Langue du poster",
       langueAide: "La matière et l'identité seront tirées d'un compte de référence de cette langue.",
+      langueVerrouillee: "Tu recrutes dans ta langue — elle est fixée par ton profil.",
       aucuneLangue: "Aucune langue disponible",
       create: "Créer le poster",
       enCours: "Création…",

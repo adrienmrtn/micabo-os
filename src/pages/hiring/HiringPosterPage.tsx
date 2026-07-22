@@ -46,13 +46,16 @@ export function HiringPosterPage() {
   const [langue, setLangue] = React.useState("");
   const [cree, setCree] = React.useState<{ email: string; persona: boolean } | null>(null);
 
-  // Langue par défaut : la nationalité du hiring manager si elle correspond à
-  // une langue disponible, sinon la première.
+  // Un recruteur travaille DANS SA langue : si sa nationalité est posée et
+  // dispo, la langue est verrouillée dessus (il ne crée que des créateurs de sa
+  // langue). Sans nationalité, il choisit (repli).
+  const langueVerrouillee =
+    profil?.nationalite && langues.data?.includes(profil.nationalite) ? profil.nationalite : null;
+
   React.useEffect(() => {
     if (langue || !langues.data?.length) return;
-    const nat = profil?.nationalite;
-    setLangue(nat && langues.data.includes(nat) ? nat : langues.data[0]);
-  }, [langues.data, langue, profil]);
+    setLangue(langueVerrouillee ?? langues.data[0]);
+  }, [langues.data, langue, langueVerrouillee]);
 
   const creer = useMutation({
     mutationFn: () => creerPoster({ prenom, nom, password: MOT_DE_PASSE, langue }),
@@ -93,21 +96,31 @@ export function HiringPosterPage() {
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="langue">{t("hiring.langue")}</Label>
-              <select
-                id="langue"
-                className={selectClass}
-                value={langue}
-                onChange={(e) => setLangue(e.target.value)}
-                required
-              >
-                {langues.data?.length === 0 && <option value="">{t("hiring.aucuneLangue")}</option>}
-                {langues.data?.map((l) => (
-                  <option key={l} value={l}>
-                    {l.toUpperCase()}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">{t("hiring.langueAide")}</p>
+              {langueVerrouillee ? (
+                <div className={`${selectClass} flex items-center bg-muted/40`}>
+                  {langueVerrouillee.toUpperCase()}
+                </div>
+              ) : (
+                <select
+                  id="langue"
+                  className={selectClass}
+                  value={langue}
+                  onChange={(e) => setLangue(e.target.value)}
+                  required
+                >
+                  {langues.data?.length === 0 && (
+                    <option value="">{t("hiring.aucuneLangue")}</option>
+                  )}
+                  {langues.data?.map((l) => (
+                    <option key={l} value={l}>
+                      {l.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {langueVerrouillee ? t("hiring.langueVerrouillee") : t("hiring.langueAide")}
+              </p>
             </div>
             <div className="sm:col-span-2">
               <Button type="submit" disabled={creer.isPending || !langue}>
