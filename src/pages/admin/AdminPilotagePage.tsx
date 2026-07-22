@@ -1,7 +1,10 @@
+import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { Images } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -11,8 +14,66 @@ import {
   EmptyState,
 } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase/client";
-import { listerSujets } from "@/features/moteur/api";
+import { apercuSujet, listerSujets } from "@/features/moteur/api";
 import type { Sujet } from "@/features/moteur/types";
+
+/**
+ * Le slideshow STOCKÉ d'un sujet, dans l'ordre : chaque slide = image nettoyée
+ * (celle que le poster reçoit) + son texte d'origine, prêt à re-traduire. On peut
+ * basculer sur l'image d'origine (avec le texte incrusté) pour comparer.
+ */
+function DiaporamaStocke({ sujetId }: { sujetId: string }) {
+  const { t } = useTranslation();
+  const [avecTexte, setAvecTexte] = React.useState(false);
+  const slides = useQuery({
+    queryKey: ["apercu-sujet", sujetId],
+    queryFn: () => apercuSujet(sujetId),
+  });
+
+  if (slides.isPending) {
+    return <p className="text-xs text-muted-foreground">{t("common.loading")}</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium">{t("sujets.diaporamaStocke")}</p>
+        <button
+          type="button"
+          onClick={() => setAvecTexte((v) => !v)}
+          className="text-xs text-primary underline underline-offset-2"
+        >
+          {avecTexte ? t("sujets.voirNettoyees") : t("sujets.voirOriginales")}
+        </button>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {slides.data?.map((s) => {
+          const url = avecTexte ? s.url_brute ?? s.url_propre : s.url_propre ?? s.url_brute;
+          return (
+            <div key={s.position} className="w-32 shrink-0 space-y-1">
+              <div className="relative aspect-[3/4] overflow-hidden rounded-md border bg-muted">
+                {url ? (
+                  <img src={url} alt="" className="size-full object-cover" />
+                ) : (
+                  <div className="flex size-full items-center justify-center text-xs text-muted-foreground">
+                    {t("sujets.enAttente")}
+                  </div>
+                )}
+                <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 text-xs font-medium text-white">
+                  {s.position}
+                </span>
+              </div>
+              <p className="line-clamp-3 text-[11px] text-muted-foreground">
+                {s.texte_original || t("sujets.sansTexte")}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-muted-foreground">{t("sujets.diaporamaAide")}</p>
+    </div>
+  );
+}
 
 async function compter(table: string): Promise<number> {
   const { count } = await supabase.from(table).select("*", { count: "exact", head: true });
@@ -37,6 +98,7 @@ function badgeStatut(statut: string) {
 
 export function AdminPilotagePage() {
   const { t, i18n } = useTranslation();
+  const [ouvert, setOuvert] = React.useState<string | null>(null);
 
   const stats = useQuery({
     queryKey: ["stats"],
@@ -110,6 +172,24 @@ export function AdminPilotagePage() {
                 <p className="rounded-md bg-destructive/10 p-2 text-xs text-destructive">
                   {sujet.preparation_erreur}
                 </p>
+              )}
+
+              {(sujet.structure_slides?.length ?? 0) > 0 && (
+                <div className="pt-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setOuvert((o) => (o === sujet.id ? null : sujet.id))}
+                  >
+                    <Images className="size-4" />
+                    {ouvert === sujet.id ? t("sujets.masquerDiaporama") : t("sujets.voirDiaporama")}
+                  </Button>
+                  {ouvert === sujet.id && (
+                    <div className="pt-3">
+                      <DiaporamaStocke sujetId={sujet.id} />
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           ))}

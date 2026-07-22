@@ -329,6 +329,50 @@ export async function definirRole(
   }
 }
 
+export interface SlideApercu {
+  position: number;
+  texte_original: string | null;
+  url_propre: string | null;
+  url_brute: string | null;
+}
+
+/** Les slides d'un sujet DANS L'ORDRE, avec l'image nettoyée + l'image d'origine
+ *  (avec texte) + le texte : c'est le slideshow stocké, prêt à re-traduire. */
+export async function apercuSujet(sujetId: string): Promise<SlideApercu[]> {
+  const { data: sujet, error } = await supabase
+    .from("sujets")
+    .select("structure_slides")
+    .eq("id", sujetId)
+    .single();
+  if (error) throw error;
+  const slides = (sujet?.structure_slides ?? []) as Array<{
+    position: number;
+    texte_original: string | null;
+    raw_url: string | null;
+    media_id: string | null;
+  }>;
+
+  const mediaIds = slides.map((s) => s.media_id).filter(Boolean) as string[];
+  const urlParMedia = new Map<string, string>();
+  if (mediaIds.length > 0) {
+    const { data: medias } = await supabase
+      .from("media_library")
+      .select("id, url")
+      .in("id", mediaIds);
+    for (const m of medias ?? []) urlParMedia.set(m.id as string, m.url as string);
+  }
+
+  return slides
+    .slice()
+    .sort((a, b) => a.position - b.position)
+    .map((s) => ({
+      position: s.position,
+      texte_original: s.texte_original,
+      url_propre: s.media_id ? urlParMedia.get(s.media_id) ?? null : null,
+      url_brute: s.raw_url ?? null,
+    }));
+}
+
 export function supprimerPoster(userId: string) {
   return invoke("manage-users", { action: "delete", userId });
 }

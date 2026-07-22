@@ -339,11 +339,16 @@ async function choisirSujet(supabase: Supabase, compte: any) {
 
   const exclus = (dejaPris ?? []).map((p) => p.sujet_id);
 
+  // Un slideshow préparé (images nettoyées + texte, dans l'ordre) est RÉUTILISABLE
+  // par un autre compte / une autre langue : il n'y a qu'à re-traduire. On accepte
+  // donc aussi les sujets déjà « utilise » — l'exclusion `dejaPris` empêche qu'un
+  // même compte reçoive deux fois le même. Sans ça, un slideshow servait une seule
+  // fois puis restait bloqué, alors qu'on veut le décliner dans chaque langue.
   let query = supabase
     .from("sujets")
     .select("id")
     .eq("preparation_statut", "done")
-    .eq("statut", "retenu")
+    .in("statut", ["retenu", "utilise"])
     .order("pertinence_score", { ascending: false })
     .limit(1);
 
