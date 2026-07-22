@@ -385,7 +385,9 @@ export function AdminComptesPage() {
     await executerEnLot(
       incompletes,
       (c) => genererPersona(c.id, true),
-      { largeur: 2, onProgres: (fait, total) => setLotPersona({ fait, total }) },
+      // 1 à la fois : chaque persona = plusieurs appels Gemini (pseudo + avatar) ;
+      // les enchaîner évite de saturer Gemini (et les 500 qui vont avec).
+      { largeur: 1, onProgres: (fait, total) => setLotPersona({ fait, total }) },
     );
     setLotPersona(null);
     queryClient.invalidateQueries({ queryKey: ["comptes"] });

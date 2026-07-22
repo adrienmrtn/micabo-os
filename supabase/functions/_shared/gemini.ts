@@ -92,15 +92,39 @@ function textOf(parts: Part[]): string {
  * remonter que la dernière masquait la cause réelle derrière l'échec du modèle
  * de repli, ce qui a déjà coûté un cycle de diagnostic.
  */
-async function callWithFallback(models: string[], parts: Part[]): Promise<Part[]> {
-  const failures: string[] = [];
+/** Un échec passager de Gemini (surcharge, quota, indispo) : ça vaut un réessai. */
+function estTransitoireGemini(message: string): boolean {
+  return /overload|unavailable|rate.?limit|resource.?exhaust|deadline|timeout|try again|429|500|502|503|504/i.test(
+    message,
+  );
+}
 
-  for (const model of models) {
-    try {
-      return await call(model, parts);
-    } catch (error) {
-      failures.push(messageErreur(error));
+async function callWithFallback(models: string[], parts: Part[]): Promise<Part[]> {
+  // On essaie chaque modèle ; si TOUS échouent pour une raison PASSAGÈRE
+  // (surcharge Gemini), on réessaie après une attente croissante + jitter, au
+  // lieu de remonter une erreur 500 tout de suite. C'est ce qui manquait aux
+  // appels Gemini directs (persona, pertinence, traduction, Sophia…) : ils
+  // plantaient au moindre pic, contrairement au proxy qui, lui, réessaie déjà.
+  const ESSAIS = 4;
+  let failures: string[] = [];
+
+  for (let essai = 0; essai < ESSAIS; essai += 1) {
+    if (essai > 0) {
+      await new Promise((r) => setTimeout(r, 1500 * essai + Math.floor(Math.random() * 1200)));
     }
+
+    failures = [];
+    for (const model of models) {
+      try {
+        return await call(model, parts);
+      } catch (error) {
+        failures.push(`${model}: ${messageErreur(error)}`);
+      }
+    }
+
+    // Tous les modèles ont échoué. Si ce n'est pas une surcharge passagère
+    // (ex. requête invalide, refus), inutile de réessayer.
+    if (!failures.some(estTransitoireGemini)) break;
   }
 
   throw new Error(failures.join(" | "));
