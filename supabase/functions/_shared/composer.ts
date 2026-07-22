@@ -38,6 +38,8 @@ export interface DemandeComposition {
   date: string | null;
   /** Post dont celui-ci est une variante (remaniés). */
   sourcePostId?: string | null;
+  /** Post de TEST : fabriqué pour prévisualiser, pas assigné au calendrier. */
+  estTest?: boolean;
 }
 
 /**
@@ -70,6 +72,7 @@ export async function creerPost(
       statut: "brouillon",
       date_publication_prevue: demande.date,
       source_post_id: demande.sourcePostId ?? null,
+      est_test: demande.estTest ?? false,
       musique_url: sujet.musique_url,
       musique_titre: sujet.musique_titre,
       musique_plateforme: sujet.musique_plateforme,

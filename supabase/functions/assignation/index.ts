@@ -115,7 +115,8 @@ async function completerJournee(
     .from("posts")
     .select("id")
     .eq("compte_id", compte.id)
-    .eq("date_publication_prevue", jour);
+    .eq("date_publication_prevue", jour)
+    .eq("est_test", false); // les posts de test ne bloquent pas l'assignation
 
   // RÈGLE : si le poster a DÉJÀ un post ce jour-là (par ex. un TikTok assigné à
   // la main), le cron ne touche à rien — pas d'ajout automatique par-dessus.

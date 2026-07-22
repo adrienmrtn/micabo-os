@@ -643,6 +643,7 @@ export async function assignerTikTok(input: {
   compteId: string;
   type?: string;
   date?: string;
+  estTest?: boolean;
 }): Promise<{ postId: string; reused: boolean }> {
   const { data: compte } = await supabase
     .from("comptes")
@@ -658,6 +659,7 @@ export async function assignerTikTok(input: {
     sujetId: imp.sujetId,
     type: input.type,
     date: input.date,
+    estTest: input.estTest,
   });
   return { postId: post.postId, reused: imp.reused };
 }
@@ -696,4 +698,23 @@ export const lancerComposition = (input: {
   sujetId: string;
   type?: string;
   date?: string;
+  estTest?: boolean;
 }) => invoke<{ postId: string }>("composition", input);
+
+export interface PostScrapeTest {
+  url: string;
+  texte: string;
+  photos: number;
+  vues: number;
+  likes: number;
+  estPhoto: boolean;
+  dejaVu: boolean;
+}
+
+/** Teste le scrape d'un compte de référence : renvoie ses posts avec leurs vues
+ *  (triés par vues), SANS rien créer — pour vérifier que le moteur repère bien
+ *  les TikToks qui performent. */
+export const testerScrape = (compteReferenceId: string) =>
+  invoke<{ ok: boolean; handle: string; posts: PostScrapeTest[]; error?: string }>("extraction", {
+    testScrape: compteReferenceId,
+  });

@@ -76,6 +76,19 @@ export const fr = {
       reviews: "Retours aux créateurs (pop-up à leur connexion)",
       embauche: "Créer des posters, l'IA fait le reste",
     },
+    testScrape: {
+      title: "Tester le scrape",
+      subtitle:
+        "Regarde ce que le moteur voit sur un compte de référence, trié par vues — pour vérifier qu'il reprend bien les TikToks qui performent. Ne crée rien.",
+      compte: "Compte de référence",
+      lancer: "Analyser",
+      enCours: "Analyse…",
+      vide: "Aucun post trouvé sur ce compte.",
+      aide: "Triés par vues. Le moteur reprend en priorité les posts photo les plus vus, non déjà repris.",
+      sansTexte: "(sans texte)",
+      pasPhoto: "Vidéo",
+      dejaVu: "Déjà repris",
+    },
     reviews: {
       title: "Reviews des créateurs",
       subtitle:
@@ -393,6 +406,9 @@ export const fr = {
       assigner: "Assigner",
       assignerEnCours: "Assignation…",
       assignerOk: "TikTok assigné. Il se fabrique en arrière-plan (nettoyage + traduction + Sophia).",
+      tester: "Tester",
+      modeTest: "Mode test : juste prévisualiser (n'apparaît pas sur le calendrier du créateur)",
+      testerOk: "Test lancé. Il se fabrique en arrière-plan — ouvre-le pour le QR et le téléchargement.",
       importLien: "Importer un slideshow depuis un lien TikTok",
       importLienDesc:
         "Colle le lien d'un post photo TikTok : on le récupère et on en fait un sujet, prêt à composer. Rattache-le au compte de référence pour que ses visuels rejoignent la bonne bibliothèque.",

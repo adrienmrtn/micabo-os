@@ -1,10 +1,21 @@
-import { downloadImage, listerDiaporamas, scrapePost, scrapeProfile } from "../_shared/apify.ts";
+import {
+  downloadImage,
+  listerDiaporamas,
+  scrapePost,
+  scrapeProfile,
+  type ScrapedPost,
+} from "../_shared/apify.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
 
 const BUCKET = "medias";
-const POSTS_PAR_COMPTE = 5;
+// On récupère assez de posts récents pour pouvoir garder les MEILLEURS (par
+// vues), pas juste les derniers publiés.
+const POSTS_PAR_COMPTE = 15;
+
+/** Identifiant numérique stable d'un post, quelle que soit la forme de l'URL. */
+const idDe = (url: string) => url.match(/\/(?:photo|video)\/(\d+)/)?.[1] ?? url;
 /**
  * Nombre de sujets créés par passage. Le scrape lui-même est léger, mais
  * rapatrier les visuels ne l'est pas : sept images par post, et le worker
@@ -34,15 +45,47 @@ Deno.serve(async (request) => {
 
   let compteReferenceId: string | null = null;
   let postUrl: string | null = null;
+  let testScrape: string | null = null;
   try {
     const body = await request.json();
     compteReferenceId = body?.compteReferenceId ?? null;
     postUrl = body?.postUrl ?? null;
+    testScrape = body?.testScrape ?? null;
   } catch {
     // Corps vide : extraction complète.
   }
 
   try {
+    // TEST DU SCRAPE : on scrape le profil et on RENVOIE les posts avec leurs
+    // vues, SANS rien créer — pour vérifier que le moteur repère bien les TikToks
+    // qui performent. Trié par vues décroissantes (l'ordre de sélection réel).
+    if (testScrape) {
+      const { data: ref } = await supabase
+        .from("comptes_reference")
+        .select("handle_tiktok")
+        .eq("id", testScrape)
+        .single();
+      if (!ref) return json({ error: "Compte de référence introuvable" }, 404);
+
+      const posts = await scrapeProfile(ref.handle_tiktok, POSTS_PAR_COMPTE);
+      const { data: connus } = await supabase.from("sujets").select("source_url");
+      const dejaVus = new Set((connus ?? []).map((s) => idDe(s.source_url ?? "")));
+
+      const liste = posts
+        .map((p) => ({
+          url: p.webVideoUrl,
+          texte: p.text.slice(0, 80),
+          photos: p.imageUrls.length,
+          vues: p.stats.vues,
+          likes: p.stats.likes,
+          estPhoto: p.imageUrls.length > 0,
+          dejaVu: dejaVus.has(idDe(p.webVideoUrl)),
+        }))
+        .sort((a, b) => b.vues - a.vues);
+
+      return json({ ok: true, handle: ref.handle_tiktok, posts: liste });
+    }
+
     if (postUrl) {
       const [post] = await scrapePost(postUrl);
       if (!post) return json({ ok: false, error: "Aucun post photo à cette URL" }, 400);
@@ -152,7 +195,7 @@ async function recupererPosts(
   supabase: Supabase,
   handle: string,
 ): Promise<PostScrape[]> {
-  let direct: PostScrape[] = [];
+  let direct: ScrapedPost[] = [];
   let echec: string | null = null;
 
   try {
@@ -161,16 +204,16 @@ async function recupererPosts(
     echec = messageErreur(error);
   }
 
-  if (direct.length > 0) return direct;
+  if (direct.length > 0) {
+    // On garde les MEILLEURS d'abord : tri décroissant par vues. Le compte ne
+    // reprend donc pas ses derniers posts au hasard, mais ceux qui performent.
+    return [...direct].sort((a, b) => (b.stats?.vues ?? 0) - (a.stats?.vues ?? 0));
+  }
 
   const urls = await listerDiaporamas(handle);
 
   // Les posts déjà en base ne valent pas un run Apify de plus. On rapproche sur
-  // l'identifiant du post et non sur l'URL entière : celle que reconstruit le
-  // repli et celle que renvoie Apify ne s'écrivent pas toujours pareil, et
-  // comparer les chaînes ferait re-scraper les mêmes posts à chaque passage.
-  const idDe = (url: string) => url.match(/\/(?:photo|video)\/(\d+)/)?.[1] ?? url;
-
+  // l'identifiant du post et non sur l'URL entière (cf. idDe module).
   const { data: connus } = await supabase
     .from("sujets")
     .select("source_url")

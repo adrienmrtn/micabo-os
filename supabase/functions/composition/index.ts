@@ -34,6 +34,7 @@ Deno.serve(async (request) => {
         sujetId: body.sujetId,
         type: body.type ?? "nouveau",
         date: body.date ?? new Date().toISOString().slice(0, 10),
+        estTest: Boolean(body.estTest),
       });
       return json({ ok: true, postId: cree, cree: true });
     }

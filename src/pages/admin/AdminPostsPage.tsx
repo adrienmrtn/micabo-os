@@ -140,6 +140,7 @@ export function AdminPostsPage() {
   const [aCompte, setACompte] = React.useState("");
   const [aType, setAType] = React.useState("nouveau");
   const [aDate, setADate] = React.useState(aujourdhui());
+  const [aTest, setATest] = React.useState(false);
 
   const creer = useMutation({
     mutationFn: () => lancerComposition({ compteId, sujetId, type, date }),
@@ -151,7 +152,7 @@ export function AdminPostsPage() {
 
   const assigner = useMutation({
     mutationFn: () =>
-      assignerTikTok({ url: aLien, compteId: aCompte, type: aType, date: aDate }),
+      assignerTikTok({ url: aLien, compteId: aCompte, type: aType, date: aDate, estTest: aTest }),
     onSuccess: () => {
       setALien("");
       queryClient.invalidateQueries({ queryKey: ["posts"] });
@@ -225,13 +226,21 @@ export function AdminPostsPage() {
             </div>
             <div className="flex items-end">
               <Button type="submit" disabled={assigner.isPending || !aLien.trim() || !aCompte}>
-                {assigner.isPending ? t("posts.assignerEnCours") : t("posts.assigner")}
+                {assigner.isPending
+                  ? t("posts.assignerEnCours")
+                  : aTest
+                    ? t("posts.tester")
+                    : t("posts.assigner")}
               </Button>
             </div>
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input type="checkbox" checked={aTest} onChange={(e) => setATest(e.target.checked)} />
+              {t("posts.modeTest")}
+            </label>
             <div className="sm:col-span-2">
               {assigner.isSuccess && (
                 <p className="text-sm text-success">
-                  {t("posts.assignerOk")}{" "}
+                  {aTest ? t("posts.testerOk") : t("posts.assignerOk")}{" "}
                   {assigner.data?.postId && (
                     <Link
                       to={`/posts/${assigner.data.postId}`}
