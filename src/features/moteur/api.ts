@@ -250,6 +250,7 @@ export async function reassignerPost(
 
 export interface PostCalendrierAdmin {
   id: string;
+  compte_id: string;
   date_publication_prevue: string | null;
   type: string;
   statut: string;
@@ -258,20 +259,19 @@ export interface PostCalendrierAdmin {
   persona_nom: string | null;
   handle_tiktok: string | null;
   poster_prenom: string | null;
+  poster_nom: string | null;
   sujet_titre: string | null;
 }
 
 /** Tous les posts, pour le calendrier admin. RLS admin = accès complet. */
 export async function postsCalendrierAdmin(): Promise<PostCalendrierAdmin[]> {
-  // Pas d'embed `profiles` sous `comptes` : comptes.poster_id pointe vers
-  // auth.users, pas vers public.profiles, donc PostgREST ne sait pas résoudre
-  // la relation (la requête partait en 400). persona_nom suffit à identifier
-  // le compte sur le calendrier.
+  // L'embed profiles sous comptes fonctionne depuis la FK
+  // comptes.poster_id → profiles.id (migration 0109).
   const { data, error } = await supabase
     .from("posts")
     .select(
-      "id, date_publication_prevue, type, statut, pipeline_statut, publie_at, " +
-        "sujets(titre), comptes(persona_nom, handle_tiktok)",
+      "id, compte_id, date_publication_prevue, type, statut, pipeline_statut, publie_at, " +
+        "sujets(titre), comptes(persona_nom, handle_tiktok, profiles(prenom, nom))",
     )
     .order("date_publication_prevue", { ascending: false, nullsFirst: false })
     .limit(400);
@@ -280,6 +280,7 @@ export async function postsCalendrierAdmin(): Promise<PostCalendrierAdmin[]> {
   // deno-lint-ignore no-explicit-any
   return (data as any[]).map((p) => ({
     id: p.id,
+    compte_id: p.compte_id,
     date_publication_prevue: p.date_publication_prevue,
     type: p.type,
     statut: p.statut,
@@ -287,9 +288,16 @@ export async function postsCalendrierAdmin(): Promise<PostCalendrierAdmin[]> {
     publie_at: p.publie_at,
     persona_nom: p.comptes?.persona_nom ?? null,
     handle_tiktok: p.comptes?.handle_tiktok ?? null,
-    poster_prenom: null,
+    poster_prenom: p.comptes?.profiles?.prenom ?? null,
+    poster_nom: p.comptes?.profiles?.nom ?? null,
     sujet_titre: p.sujets?.titre ?? null,
   }));
+}
+
+/** Supprime un post et ses slides (cascade). Action admin, depuis le calendrier. */
+export async function supprimerPost(id: string): Promise<void> {
+  const { error } = await supabase.from("posts").delete().eq("id", id);
+  if (error) throw error;
 }
 
 /** Modifie le texte d'une slide. Édition manuelle admin, aucun appel IA. */

@@ -179,8 +179,12 @@ async function nettoyerVersBibliotheque(
     }
 
     if (!candidat) continue;
+    // On ne retient QUE si la vérification confirme l'absence de texte. Garder
+    // la dernière tentative « faute de mieux » remplissait la bibliothèque de
+    // visuels rangés dans propre/ — donc marqués « Nettoyé » — qui portaient
+    // encore leur texte. Mieux vaut honnêtement garder l'original (brut/) : au
+    // moins il est signalé comme non nettoyé côté poster et côté admin.
     if (await verifyClean(candidat, "image/png")) propreBase64 = candidat;
-    else if (essai === TENTATIVES_NETTOYAGE - 1) propreBase64 = candidat;
   }
 
   const path = `propre/${sujet.id}/${slide.position}.png`;

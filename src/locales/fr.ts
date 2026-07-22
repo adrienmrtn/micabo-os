@@ -310,7 +310,8 @@ export const fr = {
     },
     adminCal: {
       legende:
-        "Vert = publié, orange = en cours de fabrication, violet = prêt. Clique un post pour l'éditer.",
+        "Une couleur par créateur. Clique un post pour l'éditer, glisse-le sur un autre jour pour le déplacer, ✕ pour le supprimer. Estompé = en cours de fabrication.",
+      confirmSuppr: "Supprimer le post de {{nom}} ? Cette action est définitive.",
     },
     adminPost: {
       title: "Détail du post",
