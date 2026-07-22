@@ -1,7 +1,36 @@
 import { contientVisageIdentifiable, genererPersona } from "../_shared/gemini.ts";
+import { scrapeProfile } from "../_shared/apify.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
+
+/**
+ * Le pseudo est-il libre sur TikTok ? On scrape le profil : s'il renvoie des
+ * posts, le compte existe déjà (pris). Erreur / vide = on le considère libre.
+ * Best-effort (un compte réel sans aucun post passerait pour libre), mais suffit
+ * à éviter les collisions courantes.
+ */
+async function handleLibre(handle: string): Promise<boolean> {
+  try {
+    const posts = await scrapeProfile(handle, 1);
+    return posts.length === 0;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Un pseudo LIBRE sur TikTok : on part du pseudo choisi ; si TikTok l'a déjà, on
+ * ajoute quelques chiffres au hasard jusqu'à en trouver un de libre.
+ */
+async function trouverHandleLibre(base: string): Promise<string> {
+  if (await handleLibre(base)) return base;
+  for (let i = 0; i < 4; i += 1) {
+    const candidat = `${base}${Math.floor(Math.random() * 900) + 100}`; // 3 chiffres
+    if (await handleLibre(candidat)) return candidat;
+  }
+  return `${base}${Math.floor(Math.random() * 9000) + 1000}`; // dernier recours
+}
 
 /**
  * Propose une identité pour un compte de publication : pseudos, bio, avatar.
@@ -52,12 +81,18 @@ Deno.serve(async (request) => {
 
     const avatar = await choisirAvatar(supabase, compte.compte_reference_id);
 
+    // Le @ RÉELLEMENT posé : le pseudo choisi, mais garanti LIBRE sur TikTok
+    // (sinon on ajoute des chiffres). Calculé seulement si on applique.
+    let handleApplique: string | null = null;
+
     if (appliquer && pseudos.length > 0) {
+      handleApplique = await trouverHandleLibre(pseudos[0]);
+
       await supabase
         .from("comptes")
         .update({
-          handle_tiktok: pseudos[0],
-          persona_nom: compte.persona_nom ?? pseudos[0],
+          handle_tiktok: handleApplique,
+          persona_nom: compte.persona_nom ?? handleApplique,
           persona_bio: proposition.bio,
           avatar_url: avatar?.url ?? compte.avatar_url,
           avatar_source: avatar ? "bibliotheque" : compte.avatar_source,
@@ -77,6 +112,7 @@ Deno.serve(async (request) => {
       pseudos,
       bio: proposition.bio,
       avatarUrl: avatar?.url ?? null,
+      handle: handleApplique,
       applique: appliquer && pseudos.length > 0,
     });
   } catch (error) {
