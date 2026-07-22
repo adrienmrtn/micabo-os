@@ -18,6 +18,7 @@ import {
   majTexteSlide,
   renettoyerSlide,
   retirerPhotoSlide,
+  supprimerSlide,
 } from "@/features/moteur/api";
 import type { Media, PostSlide } from "@/features/moteur/types";
 
@@ -120,6 +121,10 @@ function SlideAdmin({
     mutationFn: () => retirerPhotoSlide(slide.id),
     onSuccess: rafraichir,
   });
+  const supprimer = useMutation({
+    mutationFn: () => supprimerSlide(slide.id),
+    onSuccess: rafraichir,
+  });
 
   const propre = estPropre(slide);
   const photoUrl = slide.media_library?.url ?? null;
@@ -200,6 +205,19 @@ function SlideAdmin({
               {t("adminPost.retirerPhoto")}
             </Button>
           )}
+
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-destructive hover:text-destructive"
+            disabled={supprimer.isPending}
+            onClick={() => {
+              if (window.confirm(t("adminPost.confirmSupprimerSlide"))) supprimer.mutate();
+            }}
+          >
+            <Trash2 />
+            {t("adminPost.supprimerSlide")}
+          </Button>
         </div>
 
         {picker && (

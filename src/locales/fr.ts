@@ -520,6 +520,8 @@ export const fr = {
       biblioVide: "Aucune photo dans la bibliothèque de ce compte.",
       retirerPhoto: "Retirer la photo",
       confirmRetirerPhoto: "Retirer la photo de cette slide ?",
+      supprimerSlide: "Supprimer la slide",
+      confirmSupprimerSlide: "Supprimer cette slide entière du post ? Les suivantes seront renumérotées.",
     },
     calendrier: {
       title: "Mon calendrier",

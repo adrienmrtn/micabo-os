@@ -514,6 +514,31 @@ export async function retirerPhotoSlide(slideId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Supprime une slide ENTIÈRE d'un post, puis renumérote les suivantes pour que
+ *  les positions restent contiguës (1, 2, 3…). */
+export async function supprimerSlide(slideId: string): Promise<void> {
+  const { data: slide } = await supabase
+    .from("post_slides")
+    .select("post_id, position")
+    .eq("id", slideId)
+    .single();
+
+  const { error } = await supabase.from("post_slides").delete().eq("id", slideId);
+  if (error) throw error;
+
+  if (slide) {
+    const { data: apres } = await supabase
+      .from("post_slides")
+      .select("id, position")
+      .eq("post_id", slide.post_id)
+      .gt("position", slide.position)
+      .order("position");
+    for (const s of apres ?? []) {
+      await supabase.from("post_slides").update({ position: s.position - 1 }).eq("id", s.id);
+    }
+  }
+}
+
 /** Nettoie une photo de la bibliothèque à la demande (bouton admin). */
 export const nettoyerMedia = (mediaId: string) =>
   invoke<{ ok: boolean; nettoyee: boolean; erreur?: string }>("nettoyer-media", { mediaId });
