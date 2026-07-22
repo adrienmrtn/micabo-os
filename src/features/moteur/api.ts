@@ -714,6 +714,38 @@ export const lancerAssignation = (
     { compteId: compteId ?? null, type: type ?? null, forcer },
   );
 
+/** Simule le cron de minuit : assigne la journée à TOUS les comptes actifs pour
+ *  la date choisie (comme minuit). */
+export const lancerAssignationJour = (date: string) =>
+  invoke<{ resultats: Array<{ compteId: string; crees: number; types?: string[] }> }>(
+    "assignation",
+    { date },
+  );
+
+/** Un pas de fabrication pour un post précis (avance le pipeline d'une étape). */
+export const avancerUnPost = (postId: string) =>
+  invoke<{ ok: boolean; etape?: string }>("composition", { postId });
+
+/** Les posts d'une date donnée avec leur avancement, pour suivre en direct la
+ *  simulation de minuit. */
+export async function postsDuJour(date: string): Promise<
+  Array<{ id: string; statut: string; nom: string }>
+> {
+  const { data, error } = await supabase
+    .from("posts")
+    .select("id, pipeline_statut, comptes(persona_nom, handle_tiktok)")
+    .eq("date_publication_prevue", date)
+    .eq("est_test", false)
+    .order("created_at");
+  if (error) throw error;
+  // deno-lint-ignore no-explicit-any
+  return (data ?? []).map((p: any) => ({
+    id: p.id,
+    statut: p.pipeline_statut,
+    nom: p.comptes?.persona_nom ?? p.comptes?.handle_tiktok ?? p.id.slice(0, 8),
+  }));
+}
+
 export const genererPersona = (compteId: string, appliquer = false) =>
   invoke<{ pseudos: string[]; bio: string; avatarUrl: string | null; applique: boolean }>(
     "persona",

@@ -83,6 +83,24 @@ export const fr = {
       tests: "Tester un TikTok, le scrape, la chaîne complète",
       embauche: "Créer des posters, l'IA fait le reste",
     },
+    simMinuit: {
+      title: "Simuler minuit",
+      subtitle:
+        "Choisis une date : on assigne la journée à TOUS les créateurs (comme le cron de minuit) et tu vois chaque post se fabriquer en direct.",
+      date: "Date d'assignation",
+      lancer: "Lancer l'assignation",
+      enCours: "En cours…",
+      assignation: "Assignation de la journée…",
+      fabrication: "Fabrication des posts…",
+      prets: "prêts",
+      voir: "Voir →",
+      etat: {
+        pending: "En attente",
+        running: "En cours",
+        attente_preparation: "Nettoyage en cours",
+      },
+      cout: "Chaque post consomme du crédit Gemini. Les posts « test » (lien) n'y sont pas comptés.",
+    },
     tests: {
       title: "Tests",
       subtitle:

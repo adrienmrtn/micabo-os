@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { assignerTikTok, listerComptes } from "@/features/moteur/api";
+import { SimulerMinuitCard } from "@/features/moteur/SimulerMinuitCard";
 import { TestCompletCard } from "@/features/moteur/TestCompletCard";
 import { TestScrapeCard } from "@/features/moteur/TestScrapeCard";
 
@@ -106,6 +107,7 @@ export function AdminTestsPage() {
         </CardHeader>
       </Card>
 
+      <SimulerMinuitCard />
       <TesterUnTikTok />
       <TestCompletCard />
       <TestScrapeCard />
