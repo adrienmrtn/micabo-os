@@ -182,6 +182,7 @@ export const fr = {
       badge: "Recruteur",
       promote: "Faire recruteur",
       revoke: "Repasser poster",
+      valider: "Valider",
     },
     bibliotheque: {
       title: "Bibliothèque de médias",

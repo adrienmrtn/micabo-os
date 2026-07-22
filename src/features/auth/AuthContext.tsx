@@ -11,6 +11,7 @@ export interface Profil {
   nom: string | null;
   email: string | null;
   langues: string[];
+  nationalite: string | null;
   is_active: boolean;
   must_change_password: boolean;
 }
@@ -40,7 +41,7 @@ async function chargerRole(userId: string): Promise<Role | null> {
 async function chargerProfil(userId: string): Promise<Profil | null> {
   const { data } = await supabase
     .from("profiles")
-    .select("id, prenom, nom, email, langues, is_active, must_change_password")
+    .select("id, prenom, nom, email, langues, nationalite, is_active, must_change_password")
     .eq("id", userId)
     .single();
   return (data as Profil) ?? null;

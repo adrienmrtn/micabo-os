@@ -50,7 +50,7 @@ export function HiringPosterPage() {
   // une langue disponible, sinon la première.
   React.useEffect(() => {
     if (langue || !langues.data?.length) return;
-    const nat = (profil as { nationalite?: string } | null)?.nationalite;
+    const nat = profil?.nationalite;
     setLangue(nat && langues.data.includes(nat) ? nat : langues.data[0]);
   }, [langues.data, langue, profil]);
 

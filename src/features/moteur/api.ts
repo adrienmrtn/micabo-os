@@ -162,12 +162,25 @@ export async function listerLanguesReference(): Promise<string[]> {
 }
 
 /** Définit LE rôle d'un utilisateur (admin uniquement, via RLS). On remplace :
- *  un utilisateur a un seul rôle à la fois dans notre modèle. */
-export async function definirRole(userId: string, role: Role): Promise<void> {
+ *  un utilisateur a un seul rôle à la fois dans notre modèle. La `nationalite`,
+ *  quand elle est fournie (promotion en recruteur), sert de langue par défaut à
+ *  la création de posters. */
+export async function definirRole(
+  userId: string,
+  role: Role,
+  nationalite?: string,
+): Promise<void> {
   const { error: delErr } = await supabase.from("user_roles").delete().eq("user_id", userId);
   if (delErr) throw delErr;
   const { error } = await supabase.from("user_roles").insert({ user_id: userId, role });
   if (error) throw error;
+  if (nationalite !== undefined) {
+    const { error: natErr } = await supabase
+      .from("profiles")
+      .update({ nationalite: nationalite || null })
+      .eq("id", userId);
+    if (natErr) throw natErr;
+  }
 }
 
 export function supprimerPoster(userId: string) {

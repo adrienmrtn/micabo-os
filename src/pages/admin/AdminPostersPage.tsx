@@ -59,10 +59,15 @@ export function AdminPostersPage() {
       rafraichir();
     },
   });
+  const [promoId, setPromoId] = React.useState<string | null>(null);
+  const [promoLangue, setPromoLangue] = React.useState("");
   const changerRole = useMutation({
-    mutationFn: (input: { id: string; role: "poster" | "hiring_manager" }) =>
-      definirRole(input.id, input.role),
-    onSuccess: rafraichir,
+    mutationFn: (input: { id: string; role: "poster" | "hiring_manager"; nationalite?: string }) =>
+      definirRole(input.id, input.role, input.nationalite),
+    onSuccess: () => {
+      setPromoId(null);
+      rafraichir();
+    },
   });
   const basculer = useMutation({
     mutationFn: (input: { id: string; actif: boolean }) =>
@@ -201,22 +206,59 @@ export function AdminPostersPage() {
 
                 {!soiMeme && (
                   <div className="flex flex-wrap gap-2">
-                    {poster.role !== "admin" && (
+                    {poster.role === "hiring_manager" && (
                       <Button
                         size="sm"
                         variant="outline"
                         disabled={changerRole.isPending}
-                        onClick={() =>
-                          changerRole.mutate({
-                            id: poster.id,
-                            role: poster.role === "hiring_manager" ? "poster" : "hiring_manager",
-                          })
-                        }
+                        onClick={() => changerRole.mutate({ id: poster.id, role: "poster" })}
                       >
-                        {poster.role === "hiring_manager"
-                          ? t("hiring.revoke")
-                          : t("hiring.promote")}
+                        {t("hiring.revoke")}
                       </Button>
+                    )}
+                    {poster.role === "poster" && promoId !== poster.id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setPromoId(poster.id);
+                          setPromoLangue(langues.data?.[0] ?? "");
+                        }}
+                      >
+                        {t("hiring.promote")}
+                      </Button>
+                    )}
+                    {poster.role === "poster" && promoId === poster.id && (
+                      <div className="flex items-center gap-1">
+                        <select
+                          aria-label={t("hiring.langue")}
+                          className={`${selectClass} h-8 w-24`}
+                          value={promoLangue}
+                          onChange={(e) => setPromoLangue(e.target.value)}
+                        >
+                          {langues.data?.map((l) => (
+                            <option key={l} value={l}>
+                              {l.toUpperCase()}
+                            </option>
+                          ))}
+                        </select>
+                        <Button
+                          size="sm"
+                          disabled={changerRole.isPending || !promoLangue}
+                          onClick={() =>
+                            changerRole.mutate({
+                              id: poster.id,
+                              role: "hiring_manager",
+                              nationalite: promoLangue,
+                            })
+                          }
+                        >
+                          {t("hiring.valider")}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setPromoId(null)}>
+                          {t("common.cancel")}
+                        </Button>
+                      </div>
                     )}
                     <Button
                       size="sm"
