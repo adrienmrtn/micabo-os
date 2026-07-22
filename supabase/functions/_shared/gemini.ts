@@ -1,5 +1,6 @@
 import { downloadImage } from "./apify.ts";
 import { messageErreur } from "./supabase.ts";
+import { inpaintTexte, type Zone } from "./inpaint.ts";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -432,9 +433,67 @@ export async function cleanImage(imageUrl: string): Promise<string | null> {
     }
   }
 
-  // Aucun modèle n'a rendu d'image : refus réel. L'appelant gardera l'original
-  // (texte compris) et le motif remonte en base pour qu'on sache pourquoi.
+  // Tous les modèles Gemini ont refusé (typiquement un visage réel). Filet de
+  // secours : effacement par masque, qui ne juge pas le contenu. Inerte tant
+  // qu'aucune clé d'inpainting n'est configurée — renvoie alors null et on
+  // relance le refus normal.
+  const parInpaint = await inpaintFallback(image);
+  if (parInpaint) return parInpaint;
+
   throw new RefusRetouche(echecs.join(" | "));
+}
+
+/**
+ * Détecte les zones de texte incrusté, puis les efface par inpainting. La
+ * détection est une simple lecture (jamais bloquée), l'effacement ne touche que
+ * les zones repérées.
+ */
+async function inpaintFallback(image: Part): Promise<string | null> {
+  try {
+    const base64 = image.inline_data?.data ?? image.inlineData?.data;
+    const mime = image.inline_data?.mime_type ?? image.inlineData?.mimeType ?? "image/jpeg";
+    if (!base64) return null;
+
+    const zones = await detecterZonesTexte(image);
+    if (zones.length === 0) return null;
+
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    return await inpaintTexte(bytes, mime, zones);
+  } catch (error) {
+    console.warn(`[inpaint fallback] ${messageErreur(error)}`);
+    return null;
+  }
+}
+
+/**
+ * Renvoie les rectangles (fractions 0..1) des textes/stickers/watermarks
+ * incrustés. Tâche de détection pure, donc non soumise au refus d'édition.
+ */
+async function detecterZonesTexte(image: Part): Promise<Zone[]> {
+  const prompt = `Repère TOUS les éléments ajoutés par-dessus la photo : textes, sous-titres, stickers, watermarks, noms d'utilisateur, boutons, logos d'interface.
+Réponds UNIQUEMENT par un tableau JSON de rectangles englobants, coordonnées en fractions de 0 à 1 (origine coin haut-gauche) :
+[{"x":0.1,"y":0.05,"w":0.8,"h":0.12}]
+Tableau vide [] si aucun élément ajouté. Aucune autre sortie.`;
+
+  const parts = await callWithFallback(TEXT_MODELS, [image, { text: prompt }]);
+  const brut = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
+
+  try {
+    const zones = JSON.parse(brut) as Zone[];
+    if (!Array.isArray(zones)) return [];
+    // Un peu de marge autour de chaque zone : le modèle serre souvent trop, et
+    // il vaut mieux effacer quelques pixels de trop que de laisser un liseré.
+    return zones
+      .filter((z) => [z.x, z.y, z.w, z.h].every((n) => typeof n === "number"))
+      .map((z) => ({
+        x: Math.max(0, z.x - 0.01),
+        y: Math.max(0, z.y - 0.01),
+        w: Math.min(1, z.w + 0.02),
+        h: Math.min(1, z.h + 0.02),
+      }));
+  } catch {
+    return [];
+  }
 }
 
 /**
