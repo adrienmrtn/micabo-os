@@ -47,13 +47,21 @@ Deno.serve(async (request) => {
   }
 
   try {
+    // On reprend aussi les sujets `failed` : la plupart des échecs de préparation
+    // sont des 429 Gemini (quota) — transitoires. Sans ça, un sujet qui tombe sur
+    // un quota plein restait bloqué à jamais. Il repart au passage suivant, quand
+    // le quota s'est libéré.
     let query = supabase
       .from("sujets")
       .select("*")
-      .in("preparation_statut", ["running", "pending"]);
+      .in("preparation_statut", ["running", "pending", "failed"]);
 
     if (sujetId) query = query.eq("id", sujetId);
-    else query = query.order("preparation_statut", { ascending: false }).order("created_at");
+    // pending/running d'abord, failed ensuite ; puis les plus anciens.
+    else
+      query = query
+        .order("preparation_statut", { ascending: false })
+        .order("created_at");
 
     const { data: sujets } = await query.limit(1);
     const sujet = sujets?.[0];
