@@ -94,6 +94,7 @@ export const fr = {
       fabrication: "Fabrication des posts…",
       prets: "prêts",
       voir: "Voir →",
+      aucun: "Aucun post à fabriquer pour cette date (les comptes ont déjà leur post, ou pas de matière prête).",
       etat: {
         pending: "En attente",
         running: "En cours",

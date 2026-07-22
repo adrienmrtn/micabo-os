@@ -43,14 +43,30 @@ export function SimulerMinuitCard() {
     setErreur(null);
     setLignes([]);
     try {
-      // 1 — Assignation de la journée à tous les comptes (comme minuit).
+      // 1 — Assignation de la journée à tous les comptes (comme minuit). On
+      // retente une fois si ça hoquette, et de toute façon on continue avec les
+      // posts qui existent : l'assignation crée les coquilles même si la réponse
+      // se perd, inutile de tout bloquer pour un aléa passager.
       setEtape(t("simMinuit.assignation"));
-      await lancerAssignationJour(date);
+      try {
+        await lancerAssignationJour(date);
+      } catch {
+        try {
+          await lancerAssignationJour(date);
+        } catch {
+          // on poursuit avec ce qui a été créé
+        }
+      }
 
       // 2 — On récupère les coquilles créées, puis on fait avancer chaque post
       // pas à pas en rafraîchissant l'affichage : l'évolution est visible.
       setEtape(t("simMinuit.fabrication"));
       let posts = await postsDuJour(date);
+      if (posts.length === 0) {
+        setErreur(t("simMinuit.aucun"));
+        setEtape(null);
+        return;
+      }
       setLignes(posts);
 
       for (let i = 0; i < MAX_PASSAGES; i += 1) {
