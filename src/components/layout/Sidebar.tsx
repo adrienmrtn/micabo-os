@@ -72,7 +72,7 @@ export function Sidebar({
   footer?: React.ReactNode;
 }) {
   return (
-    <aside className="hidden w-60 shrink-0 flex-col bg-sidebar lg:flex">
+    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col self-start bg-sidebar lg:flex">
       <Brand title={title} />
       <div className="flex-1 overflow-y-auto scrollbar-slim">
         <NavList items={items} />
