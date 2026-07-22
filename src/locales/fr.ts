@@ -359,6 +359,9 @@ export const fr = {
       choisirCompte: "Choisis un compte.",
       aucunPost: "Aucun post créé : il manque probablement un sujet préparé.",
       echecPipeline: "La fabrication du post a échoué, regarde le détail du post.",
+      pasDeReference: "Ce compte n'a pas de compte de référence assigné.",
+      pasDeMatiere:
+        "Ce compte de référence n'a pas encore de sujet exploitable. Coche « Extraire d'abord », attends 2-3 min que les photos se nettoient, puis relance — ou teste un compte qui a déjà de la matière.",
       cout: "Un test complet prend 1 à 3 minutes et consomme du crédit Gemini.",
     },
     prompts: {

@@ -57,18 +57,32 @@ export function TestCompletCard() {
         await lancerExtraction(compte.compte_reference_id);
       }
 
-      // On prépare jusqu'à obtenir au moins un sujet exploitable.
+      // On prépare jusqu'à obtenir un sujet prêt POUR CE COMPTE de référence
+      // (et pas n'importe lequel : d'autres comptes peuvent en avoir, ça ne sert
+      // à rien pour celui-ci). On cible les sujets de sa référence, un par un.
+      const refId = compte.compte_reference_id;
+      if (!refId) throw new Error(t("test.pasDeReference"));
+
       setEtape(t("test.preparation"));
       for (let i = 0; i < MAX_PREPARATION; i += 1) {
         const { count } = await supabase
           .from("sujets")
           .select("*", { count: "exact", head: true })
+          .eq("compte_reference_id", refId)
           .eq("preparation_statut", "done")
-          .eq("statut", "retenu");
-        if ((count ?? 0) > 0) break;
+          .in("statut", ["retenu", "utilise"]);
+        if ((count ?? 0) > 0) break; // un sujet de ce compte est prêt : on avance
 
-        const r = await lancerPreparation();
-        if (r.idle) break;
+        // Sinon on prépare un sujet EN ATTENTE de ce compte de référence.
+        const { data: aPreparer } = await supabase
+          .from("sujets")
+          .select("id")
+          .eq("compte_reference_id", refId)
+          .in("preparation_statut", ["pending", "running"])
+          .limit(1);
+
+        if (!aPreparer?.length) throw new Error(t("test.pasDeMatiere"));
+        await lancerPreparation(aPreparer[0].id);
       }
 
       setEtape(t("test.assignation"));
