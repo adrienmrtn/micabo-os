@@ -26,6 +26,13 @@ export function serviceClient() {
  *   le rôle est vérifié côté base — le secret ne descend jamais au navigateur.
  */
 export async function assertAuthorised(request: Request): Promise<Response | null> {
+  // Requête préliminaire CORS du navigateur : on répond tout de suite, sans
+  // authentifier. assertAuthorised étant le premier appel de chaque fonction,
+  // ce seul point couvre le preflight de toutes.
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
   const expected = Deno.env.get("CRON_SECRET");
   if (!expected) {
     return json({ error: "CRON_SECRET non configuré" }, 500);
@@ -93,10 +100,19 @@ export function messageErreur(erreur: unknown): string {
   return String(erreur);
 }
 
+// Sans ces en-têtes, un appel depuis le navigateur (origine Vercel, différente
+// de supabase.co) est bloqué par CORS : la requête échoue en « Failed to fetch »
+// avant même d'atteindre la fonction. En curl ça passait, d'où le piège.
+export const corsHeaders: Record<string, string> = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+  "access-control-allow-methods": "POST, OPTIONS",
+};
+
 export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...corsHeaders },
   });
 }
 
