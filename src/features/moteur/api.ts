@@ -151,6 +151,58 @@ export async function listerPosters(): Promise<PosterProfil[]> {
   }));
 }
 
+// --- Reviews -----------------------------------------------------------------
+
+export interface Review {
+  id: string;
+  poster_id: string;
+  body: string;
+  note: number | null;
+  created_at: string;
+  seen_at: string | null;
+}
+
+/** L'admin envoie une review (retour) à un poster : elle s'affichera en pop-up
+ *  à sa prochaine connexion. */
+export async function envoyerReview(posterId: string, body: string): Promise<void> {
+  const { data: auth } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from("reviews")
+    .insert({ poster_id: posterId, body: body.trim(), admin_id: auth.user?.id ?? null });
+  if (error) throw error;
+}
+
+/** Toutes les reviews (admin), les plus récentes d'abord. */
+export async function listerReviews(): Promise<Review[]> {
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("id, poster_id, body, note, created_at, seen_at")
+    .order("created_at", { ascending: false })
+    .limit(300);
+  if (error) throw error;
+  return (data ?? []) as Review[];
+}
+
+/** Reviews non encore vues du poster connecté (RLS ne renvoie que les siennes). */
+export async function mesReviewsNonVues(): Promise<Review[]> {
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("id, poster_id, body, note, created_at, seen_at")
+    .is("seen_at", null)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Review[];
+}
+
+/** Le poster marque une review comme vue (referme le pop-up). */
+export async function marquerReviewVue(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("reviews")
+    .update({ seen_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 /** Crée directement un recruteur (hiring manager) par son nom + sa langue
  *  (admin). Son espace est prêt à sa première connexion. */
 export function creerRecruteur(input: { prenom: string; nom: string; langue?: string }) {

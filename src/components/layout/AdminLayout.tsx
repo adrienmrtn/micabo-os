@@ -68,6 +68,12 @@ export function AdminLayout() {
               description: t("navDesc.analytics"),
             },
             { to: "/admin/posters", label: t("nav.posters"), icon: Users, description: t("navDesc.posters") },
+            {
+              to: "/admin/reviews",
+              label: t("nav.reviews"),
+              icon: MessageSquareQuote,
+              description: t("navDesc.reviews"),
+            },
           ],
         },
         {
