@@ -3,6 +3,21 @@ import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
 
+/**
+ * Texte Sophia de repli, par langue, quand l'intégration intelligente échoue.
+ * Volontairement simple et honnête (une accroche + l'appli) : mieux vaut une
+ * mention par défaut, présente et modifiable, que pas de Sophia du tout. Repli
+ * anglais pour toute langue non prévue.
+ */
+function sophiaParDefaut(langue: string): string {
+  const par: Record<string, string> = {
+    fr: "Envie d'en apprendre plus chaque jour ? L'appli Sophia t'apprend une culture générale de dingue en quelques minutes. Teste-la 👀",
+    en: "Want to learn something new every day? The Sophia app teaches you wild general knowledge in minutes. Give it a try 👀",
+    es: "¿Quieres aprender algo nuevo cada día? La app Sophia te enseña cultura general increíble en minutos. Pruébala 👀",
+  };
+  return par[langue] ?? par.en;
+}
+
 interface Slide {
   position: number;
   raw_url: string;
@@ -67,6 +82,7 @@ export async function creerPost(
 // deno-lint-ignore no-explicit-any
 export async function avancerPost(supabase: Supabase, post: any): Promise<string> {
   let sophiaManquante = false;
+  let sophiaRepli = false;
   try {
     const { data: compte } = await supabase
       .from("comptes")
@@ -155,6 +171,12 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
       return "traduction";
     }
 
+    // 1.5 — GARANTIE VISUELS PROPRES : si une slide porte encore une image non
+    // nettoyée (le nettoyage a lâché), on la remplace par une photo DÉJÀ propre
+    // de la bibliothèque du compte, plutôt que de livrer au poster une image à
+    // texte. Aucune alternative propre → on garde le brut, qui reste signalé.
+    await garantirVisuelsPropres(supabase, compte, post.id);
+
     // 2 — placement de l'appli Sophia sur l'une des slides.
     if (!existantes.some((s) => s.position_sophia)) {
       await marquer(supabase, post.id, "placement_sophia");
@@ -192,11 +214,21 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
           })
           .eq("id", cible.id);
       } else {
-        // Aucune Sophia placée malgré les tentatives internes. On NE boucle pas
-        // (retenter à chaque passage brûlerait du crédit sans fin), mais on ne
-        // le cache pas : le post finit avec une erreur visible, à placer à la
-        // main depuis la fiche admin.
-        sophiaManquante = true;
+        // REPLI GARANTI : Sophia doit TOUJOURS être présente sur un post promo.
+        // Quand l'intégration intelligente échoue (Gemini surchargé, réponse
+        // illisible), on ne laisse plus le post sans mention : on pose un texte
+        // Sophia par défaut sur la dernière slide (place de CTA naturelle) et on
+        // le signale pour que l'admin le personnalise s'il le souhaite.
+        const derniere = existantes[existantes.length - 1];
+        if (derniere) {
+          await supabase
+            .from("post_slides")
+            .update({ texte_overlay: sophiaParDefaut(compte.langue), position_sophia: true })
+            .eq("id", derniere.id);
+          sophiaRepli = true;
+        } else {
+          sophiaManquante = true;
+        }
       }
     }
 
@@ -205,7 +237,11 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
       .update({
         pipeline_statut: "done",
         pipeline_etape: null,
-        pipeline_erreur: sophiaManquante ? "Placement Sophia à faire à la main" : null,
+        pipeline_erreur: sophiaManquante
+          ? "Placement Sophia à faire à la main"
+          : sophiaRepli
+            ? "Sophia placée en repli (texte par défaut, à personnaliser)"
+            : null,
         statut: "assigne",
       })
       .eq("id", post.id);
@@ -223,6 +259,54 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
       })
       .eq("id", post.id);
     return "failed";
+  }
+}
+
+/**
+ * Remplace toute slide encore illustrée d'une image NON nettoyée (chemin
+ * `brut/…`) par une photo DÉJÀ propre de la bibliothèque du compte de référence
+ * (la moins utilisée, pas déjà sur ce post). On coupe aussi `reference_url` :
+ * l'image de remplacement n'a pas de texte à placer, le guide d'origine n'a plus
+ * lieu d'être. Sans alternative propre disponible, on laisse le brut (il reste
+ * signalé « texte non retiré » côté poster et admin).
+ */
+// deno-lint-ignore no-explicit-any
+async function garantirVisuelsPropres(supabase: Supabase, compte: any, postId: string) {
+  const { data: slides } = await supabase
+    .from("post_slides")
+    .select("id, media_id")
+    .eq("post_id", postId);
+  if (!slides || slides.length === 0) return;
+
+  const ids = slides.map((s) => s.media_id).filter(Boolean);
+  const { data: medias } = await supabase
+    .from("media_library")
+    .select("id, storage_path")
+    .in("id", ids);
+  const chemin = new Map((medias ?? []).map((m) => [m.id, m.storage_path as string]));
+
+  const aRemplacer = slides.filter((s) => !chemin.get(s.media_id)?.startsWith("propre/"));
+  if (aRemplacer.length === 0) return;
+
+  const dejaSurPost = new Set(slides.map((s) => s.media_id).filter(Boolean));
+  let query = supabase
+    .from("media_library")
+    .select("id")
+    .like("storage_path", "propre/%")
+    .order("used_count", { ascending: true })
+    .limit(60);
+  if (compte.compte_reference_id) query = query.eq("compte_reference_id", compte.compte_reference_id);
+
+  const { data: propres } = await query;
+  const dispo = (propres ?? []).map((m) => m.id).filter((id) => !dejaSurPost.has(id));
+
+  for (const slide of aRemplacer) {
+    const remplacant = dispo.shift();
+    if (!remplacant) break; // plus d'alternative propre : on garde le brut signalé
+    await supabase
+      .from("post_slides")
+      .update({ media_id: remplacant, reference_url: null })
+      .eq("id", slide.id);
   }
 }
 

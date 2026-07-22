@@ -381,14 +381,18 @@ Rappel : les trois variantes sont en ${langue}.
 Réponds UNIQUEMENT en JSON, sans bloc de code ni commentaire :
 {"chosen_position": <numéro de slide>, "mode": "instructif|confession", "variants": ["A","B","C"], "best": 0}`;
 
-  // Deux tentatives : une réponse mal formée (JSON cassé, position invalide)
+  // Quatre tentatives avec attente croissante : une réponse mal formée (JSON
+  // cassé, position invalide) OU un appel Gemini en échec passager (surcharge)
   // laissait le post SANS placement Sophia, ce qui n'a aucun sens sur un post
-  // promotionnel. On réessaie avant d'abandonner.
-  for (let essai = 0; essai < 2; essai += 1) {
-    const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }]);
-    const raw = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
+  // promotionnel. On enveloppe TOUT l'essai (appel compris) dans le try, et on
+  // espace les reprises, pour absorber les pics de surcharge avant d'abandonner.
+  for (let essai = 0; essai < 4; essai += 1) {
+    if (essai > 0) await new Promise((r) => setTimeout(r, 1500 * essai + Math.random() * 1000));
 
     try {
+      const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }]);
+      const raw = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
+
       const parsed = JSON.parse(raw);
       const chosenPosition = Number(parsed.chosen_position);
       const variants = (parsed.variants ?? [])
@@ -402,7 +406,7 @@ Réponds UNIQUEMENT en JSON, sans bloc de code ni commentaire :
 
       return { chosenPosition, mode: String(parsed.mode ?? ""), variants, bestIndex };
     } catch {
-      // réponse illisible : on retente une fois
+      // appel en échec ou réponse illisible : on retente après l'attente
     }
   }
 
