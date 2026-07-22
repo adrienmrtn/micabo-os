@@ -530,6 +530,16 @@ export const lancerExtraction = (compteReferenceId?: string) =>
 export const lancerPreparation = (sujetId?: string) =>
   invoke<{ etape?: string; idle?: boolean }>("preparation", { sujetId: sujetId ?? null });
 
+/** Importe un slideshow depuis un lien TikTok collé à la main : scrape ce seul
+ *  post et en fait un sujet, rattaché à un compte de référence (pour que ses
+ *  visuels rejoignent la bonne bibliothèque). Le nettoyage et la composition
+ *  suivent le cours normal ensuite. */
+export const importerDepuisLien = (postUrl: string, compteReferenceId: string) =>
+  invoke<{ ok: boolean; sujetId: string | null; reused: boolean; error?: string }>("extraction", {
+    postUrl,
+    compteReferenceId,
+  });
+
 export const lancerAssignation = (
   compteId?: string,
   type?: string,

@@ -17,9 +17,11 @@ import {
 } from "@/components/ui/card";
 import {
   aujourdhui,
+  importerDepuisLien,
   lancerComposition,
   listerComptes,
   listerPosts,
+  listerSources,
   reassignerPost,
   sujetsDisponibles,
 } from "@/features/moteur/api";
@@ -128,17 +130,30 @@ export function AdminPostsPage() {
   const posts = useQuery({ queryKey: ["posts"], queryFn: () => listerPosts() });
   const comptes = useQuery({ queryKey: ["comptes"], queryFn: listerComptes });
   const sujets = useQuery({ queryKey: ["sujets-dispo"], queryFn: sujetsDisponibles });
+  const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
 
   const [compteId, setCompteId] = React.useState("");
   const [sujetId, setSujetId] = React.useState("");
   const [type, setType] = React.useState("nouveau");
   const [date, setDate] = React.useState(aujourdhui());
 
+  const [lien, setLien] = React.useState("");
+  const [sourceImport, setSourceImport] = React.useState("");
+
   const creer = useMutation({
     mutationFn: () => lancerComposition({ compteId, sujetId, type, date }),
     onSuccess: () => {
       setSujetId("");
       queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+  });
+
+  const importer = useMutation({
+    mutationFn: () => importerDepuisLien(lien.trim(), sourceImport),
+    onSuccess: (r) => {
+      if (r.sujetId || r.reused) setLien("");
+      // Le sujet importé doit apparaître dans le menu « Créer à la main ».
+      queryClient.invalidateQueries({ queryKey: ["sujets-dispo"] });
     },
   });
 
@@ -150,6 +165,70 @@ export function AdminPostsPage() {
 
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("posts.importLien")}</CardTitle>
+          <CardDescription>{t("posts.importLienDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (lien.trim() && sourceImport) importer.mutate();
+            }}
+            className="grid gap-4 sm:grid-cols-2"
+          >
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="iLien">{t("posts.lienTikTok")}</Label>
+              <Input
+                id="iLien"
+                required
+                placeholder="https://www.tiktok.com/@compte/photo/…"
+                value={lien}
+                onChange={(e) => setLien(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="iSource">{t("posts.rattacherA")}</Label>
+              <select
+                id="iSource"
+                required
+                className={selectClass}
+                value={sourceImport}
+                onChange={(e) => setSourceImport(e.target.value)}
+              >
+                <option value="">{t("common.none")}</option>
+                {sources.data?.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    @{s.handle_tiktok}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <Button type="submit" disabled={importer.isPending || !lien.trim() || !sourceImport}>
+                {importer.isPending ? t("posts.importEnCours") : t("posts.importer")}
+              </Button>
+            </div>
+            <div className="sm:col-span-2">
+              {importer.isSuccess && (importer.data.sujetId || importer.data.reused) && (
+                <p className="text-sm text-success">
+                  {importer.data.reused ? t("posts.importDejaLa") : t("posts.importOk")}
+                </p>
+              )}
+              {importer.isSuccess && !importer.data.sujetId && !importer.data.reused && (
+                <p className="text-sm text-destructive">
+                  {importer.data.error ?? t("posts.importVide")}
+                </p>
+              )}
+              {importer.isError && (
+                <p className="text-sm text-destructive">{(importer.error as Error).message}</p>
+              )}
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>{t("posts.creerManuel")}</CardTitle>

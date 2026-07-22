@@ -344,6 +344,16 @@ export const fr = {
       sansDate: "Sans date",
       creer: "Créer le post",
       creeAttente: "Post créé. La fabrication se termine au prochain passage du cron.",
+      importLien: "Importer un slideshow depuis un lien TikTok",
+      importLienDesc:
+        "Colle le lien d'un post photo TikTok : on le récupère et on en fait un sujet, prêt à composer. Rattache-le au compte de référence pour que ses visuels rejoignent la bonne bibliothèque.",
+      lienTikTok: "Lien du post TikTok",
+      rattacherA: "Rattacher au compte de référence",
+      importer: "Importer",
+      importEnCours: "Récupération…",
+      importOk: "Slideshow importé. Il apparaît ci-dessous dans « Créer à la main ».",
+      importDejaLa: "Ce post était déjà importé — sujet réutilisé.",
+      importVide: "Aucun post photo trouvé à ce lien.",
     },
     analytics: {
       title: "Analytics",
