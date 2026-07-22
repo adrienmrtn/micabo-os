@@ -316,35 +316,25 @@ export const renettoyerSlide = (postSlideId: string) =>
     { postSlideId },
   );
 
-/**
- * Remplace la photo d'une slide par un fichier fourni par l'admin. Le visuel
- * est versé tel quel : aucun nettoyage, c'est un choix manuel assumé.
- */
-export async function remplacerPhotoSlide(slideId: string, fichier: File): Promise<void> {
-  const chemin = `remplace/${slideId}-${crypto.randomUUID()}.${extension(fichier.name)}`;
-  const { error: upErr } = await supabase.storage
-    .from("medias")
-    .upload(chemin, fichier, { upsert: true, contentType: fichier.type || "image/jpeg" });
-  if (upErr) throw upErr;
-
-  const url = supabase.storage.from("medias").getPublicUrl(chemin).data.publicUrl;
-  const { data: media, error: insErr } = await supabase
-    .from("media_library")
-    .insert({ storage_path: chemin, url, source: "fourni_par_freelance" })
-    .select("id")
-    .single();
-  if (insErr) throw insErr;
-
+/** Fait pointer une slide vers un autre visuel déjà en bibliothèque. */
+export async function majMediaSlide(slideId: string, mediaId: string): Promise<void> {
   const { error } = await supabase
     .from("post_slides")
-    .update({ media_id: media.id })
+    .update({ media_id: mediaId })
     .eq("id", slideId);
   if (error) throw error;
 }
 
-function extension(nom: string): string {
-  const point = nom.lastIndexOf(".");
-  return point >= 0 ? nom.slice(point + 1).toLowerCase() : "jpg";
+/** Le compte de référence dont dépend un post — pour filtrer sa bibliothèque. */
+export async function compteReferenceDuPost(postId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("posts")
+    .select("comptes(compte_reference_id)")
+    .eq("id", postId)
+    .single();
+  if (error) throw error;
+  // deno-lint-ignore no-explicit-any
+  return (data as any)?.comptes?.compte_reference_id ?? null;
 }
 
 export async function sujetsDisponibles(): Promise<Array<{ id: string; titre: string }>> {

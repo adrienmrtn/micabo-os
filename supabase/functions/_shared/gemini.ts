@@ -357,37 +357,50 @@ Slides du slideshow (slide 1 = couverture) :
 ${slideList}
 ${examples ? `\nCorrections passées à respecter :\n${examples}\n` : ""}
 --- SORTIE ---
-Ne remplace jamais la slide 1 (couverture). Produis 3 variantes, toutes dans le
-même mode grammatical que le reste du deck. Puis applique l'autocontrôle et
-désigne la MEILLEURE des trois (celle qui respecte le mieux toutes les règles :
-mode, zéro tiret, zéro jargon, simplicité, format des slides voisines). Indique
-son index (0, 1 ou 2) dans "best".
+Ne remplace jamais la slide 1 (couverture). Choisis UNE slide (position ≥ 2) et
+écris 3 variantes qui remplacent son texte. Chaque variante DOIT :
+- reprendre EXACTEMENT le préfixe de la slide remplacée : si son texte commence
+  par un numéro ("5.", "3)"), une puce ou un emoji, la variante commence par le
+  MÊME. Ne change jamais le numéro, ne saute pas de numéro.
+- faire une longueur comparable à ce texte (à ±20 % du nombre de caractères) :
+  ni beaucoup plus courte, ni plus longue — elle occupe la même place à l'écran.
+- rester dans le même mode grammatical et le même ton que les slides voisines,
+  pour s'enchaîner sans rupture.
+
+Puis applique l'autocontrôle et désigne la MEILLEURE des trois (mode, longueur,
+préfixe conservé, zéro tiret, zéro jargon). Indique son index (0, 1 ou 2) dans "best".
 
 Rappel : les trois variantes sont en ${langue}.
 
 Réponds UNIQUEMENT en JSON, sans bloc de code ni commentaire :
 {"chosen_position": <numéro de slide>, "mode": "instructif|confession", "variants": ["A","B","C"], "best": 0}`;
 
-  const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }]);
-  const raw = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
+  // Deux tentatives : une réponse mal formée (JSON cassé, position invalide)
+  // laissait le post SANS placement Sophia, ce qui n'a aucun sens sur un post
+  // promotionnel. On réessaie avant d'abandonner.
+  for (let essai = 0; essai < 2; essai += 1) {
+    const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }]);
+    const raw = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
 
-  try {
-    const parsed = JSON.parse(raw);
-    const chosenPosition = Number(parsed.chosen_position);
-    const variants = (parsed.variants ?? [])
-      .map((v: unknown) => String(v ?? "").trim())
-      .filter(Boolean);
+    try {
+      const parsed = JSON.parse(raw);
+      const chosenPosition = Number(parsed.chosen_position);
+      const variants = (parsed.variants ?? [])
+        .map((v: unknown) => String(v ?? "").trim())
+        .filter(Boolean);
 
-    if (!chosenPosition || chosenPosition < 2 || variants.length === 0) return null;
+      if (!chosenPosition || chosenPosition < 2 || variants.length === 0) continue;
 
-    // Le modèle a désigné la meilleure ; on borne au cas où l'index déborde.
-    const best = Number(parsed.best);
-    const bestIndex = Number.isInteger(best) && best >= 0 && best < variants.length ? best : 0;
+      const best = Number(parsed.best);
+      const bestIndex = Number.isInteger(best) && best >= 0 && best < variants.length ? best : 0;
 
-    return { chosenPosition, mode: String(parsed.mode ?? ""), variants, bestIndex };
-  } catch {
-    return null;
+      return { chosenPosition, mode: String(parsed.mode ?? ""), variants, bestIndex };
+    } catch {
+      // réponse illisible : on retente une fois
+    }
   }
+
+  return null;
 }
 
 /**

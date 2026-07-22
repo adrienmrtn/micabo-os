@@ -324,6 +324,8 @@ export const fr = {
       nettoyageEchec: "Nettoyage impossible (le modèle a refusé)",
       nettoyageTexteResiduel: "Nettoyée, mais du texte semble subsister — revérifie.",
       remplacerPhoto: "Remplacer la photo",
+      choisirBiblio: "Choisir une photo de la bibliothèque du compte",
+      biblioVide: "Aucune photo dans la bibliothèque de ce compte.",
     },
     calendrier: {
       title: "Mon calendrier",

@@ -66,6 +66,7 @@ export async function creerPost(
  */
 // deno-lint-ignore no-explicit-any
 export async function avancerPost(supabase: Supabase, post: any): Promise<string> {
+  let sophiaManquante = false;
   try {
     const { data: compte } = await supabase
       .from("comptes")
@@ -178,17 +179,24 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
         langue: compte.langue,
       });
 
-      if (placement) {
-        const cible = existantes.find((s) => s.position === placement.chosenPosition);
-        if (cible) {
-          await supabase
-            .from("post_slides")
-            .update({
-              texte_overlay: placement.variants[placement.bestIndex],
-              position_sophia: true,
-            })
-            .eq("id", cible.id);
-        }
+      const cible = placement
+        ? existantes.find((s) => s.position === placement.chosenPosition)
+        : undefined;
+
+      if (placement && cible) {
+        await supabase
+          .from("post_slides")
+          .update({
+            texte_overlay: placement.variants[placement.bestIndex],
+            position_sophia: true,
+          })
+          .eq("id", cible.id);
+      } else {
+        // Aucune Sophia placée malgré les tentatives internes. On NE boucle pas
+        // (retenter à chaque passage brûlerait du crédit sans fin), mais on ne
+        // le cache pas : le post finit avec une erreur visible, à placer à la
+        // main depuis la fiche admin.
+        sophiaManquante = true;
       }
     }
 
@@ -197,7 +205,7 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
       .update({
         pipeline_statut: "done",
         pipeline_etape: null,
-        pipeline_erreur: null,
+        pipeline_erreur: sophiaManquante ? "Placement Sophia à faire à la main" : null,
         statut: "assigne",
       })
       .eq("id", post.id);
