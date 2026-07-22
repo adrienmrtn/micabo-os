@@ -1,6 +1,6 @@
 import { downloadImage } from "./apify.ts";
 import { messageErreur } from "./supabase.ts";
-import { inpaintTexte, type Zone } from "./inpaint.ts";
+import { effacerTexte, type Zone } from "./inpaint.ts";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -432,7 +432,7 @@ export async function cleanImage(imageUrl: string): Promise<string | null> {
   // Il évite aussi les tentatives Gemini image, les plus chères.
   let noteInpaint = "inpaint: aucune image (pas de zone, ou pas de clé)";
   try {
-    const parInpaint = await inpaintFallback(image);
+    const parInpaint = await inpaintFallback(image, imageUrl);
     if (parInpaint) return parInpaint;
   } catch (error) {
     // Le motif remonte au lieu d'être avalé : c'est ainsi qu'on a vu que les
@@ -467,7 +467,7 @@ export async function cleanImage(imageUrl: string): Promise<string | null> {
  * les zones repérées. Les erreurs remontent (elles ne sont plus gobées) pour
  * que la vraie cause d'un échec soit visible.
  */
-async function inpaintFallback(image: Part): Promise<string | null> {
+async function inpaintFallback(image: Part, imageUrl: string): Promise<string | null> {
   const base64 = image.inline_data?.data ?? image.inlineData?.data;
   const mime = image.inline_data?.mime_type ?? image.inlineData?.mimeType ?? "image/jpeg";
   if (!base64) return null;
@@ -476,7 +476,7 @@ async function inpaintFallback(image: Part): Promise<string | null> {
   if (zones.length === 0) return null;
 
   const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-  return await inpaintTexte(bytes, mime, zones);
+  return await effacerTexte(imageUrl, bytes, mime, zones);
 }
 
 /**

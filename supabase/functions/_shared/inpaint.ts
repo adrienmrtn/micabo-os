@@ -1,13 +1,14 @@
-// Effacement de texte par inpainting — filet de secours quand Gemini refuse de
-// retoucher une image (typiquement un visage réel).
+// Effacement de texte par inpainting — voie principale de nettoyage.
 //
-// Contrairement à un modèle génératif, un service d'effacement par masque ne
-// juge pas le contenu : on lui donne l'image + un masque des zones de texte, il
-// reconstruit UNIQUEMENT sous le masque. Aucun refus possible.
+// On donne l'image + un masque des zones de texte ; le modèle reconstruit
+// UNIQUEMENT sous le masque, sans toucher au reste ni juger la personne.
 //
-// Provider : Stability AI « Erase » (https://api.stability.ai). Il faut une clé
-// STABILITY_API_KEY dans les secrets. Sans clé, `inpaintTexte` renvoie null et
-// l'appelant garde l'original : le fallback est inerte tant que la clé manque.
+// Fournisseurs, dans l'ordre :
+//   1. LaMa via Replicate (REPLICATE_API_TOKEN) — modèle brut, AUCUNE
+//      modération, donc il accepte les stills de films. ~0,0004 $/image.
+//   2. Stability « Erase » (STABILITY_KEY) — repli ; a une modération qui
+//      refuse certains visuels sous copyright.
+// Sans aucun jeton, `effacerTexte` renvoie null et l'appelant garde l'original.
 
 export interface Zone {
   // Fractions de la largeur/hauteur, origine coin haut-gauche.
@@ -137,25 +138,99 @@ async function masquePNG(w: number, h: number, zones: Zone[]): Promise<Uint8Arra
 
 // --- Appel du service d'effacement ------------------------------------------
 
+function enBase64(bytes: Uint8Array): string {
+  let binaire = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binaire += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binaire);
+}
+
 /**
- * Efface les `zones` de texte de l'image et renvoie le résultat en base64.
- * Renvoie null si aucune clé, aucune zone, ou en cas d'erreur — l'appelant
- * gardera alors l'original.
+ * Efface les `zones` de texte et renvoie le résultat en base64.
+ *
+ * Voie principale : LaMa sur Replicate — un modèle d'inpainting brut, SANS
+ * modération de contenu, qui accepte donc les stills de films que Stability
+ * refuse. ~0,0004 $ l'image, ~2 s. Repli sur Stability si aucun jeton Replicate.
+ * Renvoie null si aucune zone ni aucun fournisseur configuré.
  */
-export async function inpaintTexte(
+export async function effacerTexte(
+  imageUrl: string,
   imageBytes: Uint8Array,
   mime: string,
   zones: Zone[],
 ): Promise<string | null> {
-  // On accepte les deux noms : la clé a été posée sous STABILITY_KEY.
-  const key = Deno.env.get("STABILITY_KEY") ?? Deno.env.get("STABILITY_API_KEY");
-  if (!key || zones.length === 0) return null;
+  if (zones.length === 0) return null;
 
   const dims = dimensionsImage(imageBytes);
   if (!dims) throw new Error("inpaint: dimensions illisibles");
-
   const masque = await masquePNG(dims.w, dims.h, zones);
 
+  const jetonReplicate = Deno.env.get("REPLICATE_API_TOKEN");
+  if (jetonReplicate) return await lamaReplicate(jetonReplicate, imageUrl, masque);
+
+  const cleStability = Deno.env.get("STABILITY_KEY") ?? Deno.env.get("STABILITY_API_KEY");
+  if (cleStability) return await stabilityErase(cleStability, imageBytes, mime, masque, dims);
+
+  return null;
+}
+
+/**
+ * LaMa via Replicate. `Prefer: wait` bloque jusqu'au résultat (le modèle tourne
+ * en ~2 s) ; en cas de réponse asynchrone on interroge la prédiction. Le masque
+ * part en data-URI, l'image publique par son URL. Convention LaMa : blanc =
+ * zone à effacer.
+ */
+async function lamaReplicate(
+  jeton: string,
+  imageUrl: string,
+  masque: Uint8Array,
+): Promise<string> {
+  const maskDataUri = `data:image/png;base64,${enBase64(masque)}`;
+
+  const res = await fetch("https://api.replicate.com/v1/models/allenhooo/lama/predictions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${jeton}`,
+      "Content-Type": "application/json",
+      Prefer: "wait",
+    },
+    body: JSON.stringify({ input: { image: imageUrl, mask: maskDataUri } }),
+  });
+  if (!res.ok) {
+    throw new Error(`Replicate ${res.status}: ${(await res.text()).slice(0, 250)}`);
+  }
+
+  let prediction = await res.json();
+
+  // Filet si `Prefer: wait` n'a pas suffi : on interroge jusqu'à la fin.
+  for (let i = 0; i < 30 && (prediction.status === "starting" || prediction.status === "processing"); i += 1) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const suivi = await fetch(prediction.urls.get, { headers: { Authorization: `Bearer ${jeton}` } });
+    prediction = await suivi.json();
+  }
+
+  if (prediction.status !== "succeeded") {
+    throw new Error(`Replicate ${prediction.status}: ${JSON.stringify(prediction.error ?? "").slice(0, 200)}`);
+  }
+
+  const sortie = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+  if (!sortie) throw new Error("Replicate: aucune image en sortie");
+
+  const img = await fetch(sortie);
+  if (!img.ok) throw new Error(`Replicate: récupération du résultat ${img.status}`);
+  return enBase64(new Uint8Array(await img.arrayBuffer()));
+}
+
+/** Stability « Erase » : repli. A une modération qui refuse certains visuels. */
+async function stabilityErase(
+  cle: string,
+  imageBytes: Uint8Array,
+  mime: string,
+  masque: Uint8Array,
+  dims: { w: number; h: number },
+): Promise<string> {
   const form = new FormData();
   form.append("image", new Blob([imageBytes], { type: mime }), "image");
   form.append("mask", new Blob([masque], { type: "image/png" }), "mask.png");
@@ -163,20 +238,11 @@ export async function inpaintTexte(
 
   const res = await fetch("https://api.stability.ai/v2beta/stable-image/edit/erase", {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, Accept: "image/*" },
+    headers: { Authorization: `Bearer ${cle}`, Accept: "image/*" },
     body: form,
   });
-  // On NE gobe plus l'erreur : le motif remonte pour qu'on sache pourquoi
-  // l'inpainting a échoué au lieu de basculer silencieusement sur Gemini.
   if (!res.ok) {
     throw new Error(`Stability ${res.status} (${dims.w}×${dims.h}): ${(await res.text()).slice(0, 200)}`);
   }
-
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  let binaire = "";
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binaire += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binaire);
+  return enBase64(new Uint8Array(await res.arrayBuffer()));
 }
