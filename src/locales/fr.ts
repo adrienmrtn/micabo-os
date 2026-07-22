@@ -346,6 +346,12 @@ export const fr = {
       creeAttente: "Post créé. La fabrication se termine au prochain passage du cron.",
     },
     analytics: {
+      title: "Analytics",
+      subtitle:
+        "Performances réelles, tirées du profil TikTok de chaque compte. Clique « Rafraîchir » pour aller chercher les derniers chiffres.",
+      rafraichir: "Rafraîchir les stats",
+      rafraichirEnCours: "Scraping des comptes…",
+      rafraichiOk: "{{count}} relevés mis à jour depuis TikTok.",
       vues: "Vues",
       likes: "Likes",
       publies: "Publiés",

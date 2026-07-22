@@ -1,9 +1,10 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { TrendingUp } from "lucide-react";
+import { RefreshCw, TrendingUp } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -12,7 +13,8 @@ import {
   CardTitle,
   EmptyState,
 } from "@/components/ui/card";
-import { statsComptes, statsPosts } from "@/features/moteur/api";
+import { cn } from "@/lib/utils";
+import { lancerMetriques, statsComptes, statsPosts } from "@/features/moteur/api";
 
 const selectClass =
   "h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:w-72";
@@ -36,12 +38,25 @@ function Total({ label, valeur }: { label: string; valeur: string }) {
 
 export function AdminAnalyticsPage() {
   const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
   const [compteId, setCompteId] = React.useState("");
 
   const comptes = useQuery({ queryKey: ["stats-comptes"], queryFn: statsComptes });
   const posts = useQuery({
     queryKey: ["stats-posts", compteId || "tous"],
     queryFn: () => statsPosts(compteId || undefined),
+  });
+
+  // Va chercher les vraies stats sur le profil TikTok de chaque compte (scrape
+  // Apify des 30 derniers posts, rapproché par l'ID du lien publié), puis
+  // rafraîchit le tableau. C'est une opération facturée (Apify) : bouton manuel,
+  // pas d'appel automatique au chargement de la page.
+  const rafraichir = useMutation({
+    mutationFn: () => lancerMetriques(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stats-comptes"] });
+      queryClient.invalidateQueries({ queryKey: ["stats-posts"] });
+    },
   });
 
   const cumul = (comptes.data ?? []).reduce(
@@ -58,6 +73,34 @@ export function AdminAnalyticsPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">{t("analytics.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("analytics.subtitle")}</p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={rafraichir.isPending}
+            onClick={() => rafraichir.mutate()}
+          >
+            <RefreshCw className={cn("size-4", rafraichir.isPending && "animate-spin")} />
+            {rafraichir.isPending ? t("analytics.rafraichirEnCours") : t("analytics.rafraichir")}
+          </Button>
+          {rafraichir.isSuccess && (
+            <p className="text-xs text-success">
+              {t("analytics.rafraichiOk", {
+                count: (rafraichir.data?.resultats ?? []).reduce((n, r) => n + r.releves, 0),
+              })}
+            </p>
+          )}
+          {rafraichir.isError && (
+            <p className="text-xs text-destructive">{(rafraichir.error as Error).message}</p>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Total label={t("analytics.vues")} valeur={abrege(cumul.vues)} />
         <Total label={t("analytics.likes")} valeur={abrege(cumul.likes)} />
