@@ -696,12 +696,17 @@ Réponds uniquement par OUI ou NON.`,
 export async function verifyClean(base64Image: string, mimeType: string): Promise<boolean> {
   const parts = await callWithFallback(TEXT_MODELS, [
     {
-      text: `Reste-t-il du texte incrusté, un sticker ou un watermark sur cette image ?
-Ignore les URLs et sources citées, qui sont légitimes.
+      text: `Regarde attentivement. Reste-t-il le MOINDRE texte incrusté, sous-titre,
+légende, titre, sticker, watermark, pseudo ou bouton sur cette image ?
+(Ignore uniquement une petite URL ou source citée en tout petit, c'est légitime.)
+RÈGLE : au moindre doute, ou s'il reste ne serait-ce qu'un fragment de texte,
+réponds OUI. On préfère remplacer une photo que d'en livrer une avec du texte.
 Réponds uniquement par OUI ou NON.`,
     },
     { inline_data: { mime_type: mimeType, data: base64Image } },
   ]);
 
-  return !textOf(parts).toUpperCase().includes("OUI");
+  // Par prudence : toute réponse qui n'est pas un NON net = on considère qu'il
+  // reste du texte (donc l'appelant re-tente puis remplace).
+  return textOf(parts).trim().toUpperCase().startsWith("NON");
 }
