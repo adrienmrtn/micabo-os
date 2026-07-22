@@ -11,6 +11,7 @@ import {
   Settings,
   Users,
   UserSquare,
+  Wand2,
 } from "lucide-react";
 
 import { AppShell } from "./AppShell";
@@ -29,6 +30,7 @@ export function AdminLayout() {
         { to: "/admin/comptes", label: t("nav.comptes"), icon: UserSquare },
         { to: "/admin/posters", label: t("nav.posters"), icon: Users },
         { to: "/admin/bibliotheque", label: t("nav.bibliotheque"), icon: Images },
+        { to: "/admin/test-nettoyage", label: t("nav.testNettoyage"), icon: Wand2 },
         { to: "/admin/reglages", label: t("nav.reglages"), icon: Settings },
         { to: "/admin/prompts", label: t("nav.prompts"), icon: MessageSquareQuote },
       ]}

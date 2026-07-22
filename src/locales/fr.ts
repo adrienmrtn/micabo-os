@@ -33,6 +33,7 @@ export const fr = {
       comptes: "Comptes",
       posters: "Posters",
       bibliotheque: "Bibliothèque",
+      testNettoyage: "Test nettoyage",
       reglages: "Réglages",
       prompts: "Prompts",
       calendrier: "Calendrier",
@@ -318,6 +319,18 @@ export const fr = {
       aucuneMesureAide:
         "Les chiffres arrivent une fois qu'un post est publié avec son lien TikTok renseigné.",
       voirTikTok: "Voir sur TikTok",
+    },
+    testNet: {
+      title: "Test du nettoyage",
+      subtitle:
+        "Photos non nettoyées de chaque compte. Clique « Tester » pour voir le rendu du nettoyage, sans rien modifier.",
+      vide: "Aucune photo à texte à tester — tout est déjà nettoyé.",
+      avant: "Avant",
+      apres: "Après",
+      tester: "Tester le nettoyage",
+      enCours: "Nettoyage…",
+      pasEncore: "Clique « Tester »",
+      echec: "Échec — voir le message",
     },
     adminCal: {
       legende:

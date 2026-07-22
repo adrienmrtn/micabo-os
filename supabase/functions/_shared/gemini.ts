@@ -1,6 +1,7 @@
 import { downloadImage } from "./apify.ts";
 import { messageErreur } from "./supabase.ts";
 import { effacerTexte, type Zone } from "./inpaint.ts";
+import { nettoyerViaProxy } from "./proxy.ts";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -424,12 +425,18 @@ const PROMPT_NETTOYAGE = `Tu fais une restauration photo subtile.
 5. Renvoie uniquement l'image nettoyée.`;
 
 export async function cleanImage(imageUrl: string): Promise<string | null> {
+  // 0 — PROXY LOVABLE en priorité s'il est configuré. Il fait le nettoyage
+  // Gemini côté serveur (meilleur rendu que l'inpainting, pas de flou), sans
+  // qu'on touche à la clé Lovable. On ne le rattrape pas : si le proxy est en
+  // place mais échoue, on veut voir pourquoi.
+  const parProxy = await nettoyerViaProxy(imageUrl);
+  if (parProxy) return parProxy;
+
   const image = await fetchImageAsInline(imageUrl);
 
-  // 1 — INPAINTING D'ABORD. C'est la voie principale : il n'efface que la zone
-  // du texte, ne juge jamais le contenu (aucun refus sur les visages) et ne
-  // régénère pas la personne (donc aucune dérive du cadrage ou des couleurs).
-  // Il évite aussi les tentatives Gemini image, les plus chères.
+  // 1 — INPAINTING, si le proxy n'est pas configuré. Il n'efface que la zone du
+  // texte, ne juge jamais le contenu (aucun refus) et ne régénère pas la
+  // personne. Voie de repli.
   let noteInpaint = "inpaint: aucune image (pas de zone, ou pas de clé)";
   try {
     const parInpaint = await inpaintFallback(image, imageUrl);

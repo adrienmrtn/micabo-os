@@ -339,6 +339,43 @@ export async function retirerPhotoSlide(slideId: string): Promise<void> {
 export const nettoyerMedia = (mediaId: string) =>
   invoke<{ ok: boolean; nettoyee: boolean; erreur?: string }>("nettoyer-media", { mediaId });
 
+/** Nettoyage de test NON destructif : renvoie l'image nettoyée sans rien écraser. */
+export const nettoyerTest = (url: string) =>
+  invoke<{ ok: boolean; url?: string; erreur?: string; motif?: string }>("nettoyer-test", { url });
+
+/** Visuels bruts (à texte) regroupés par compte de référence, pour l'écran de test. */
+export interface MediaTest {
+  id: string;
+  url: string;
+  compte_reference_id: string | null;
+  source: string;
+}
+export async function mediasBrutsParSource(): Promise<
+  Array<{ source: string; medias: MediaTest[] }>
+> {
+  const { data, error } = await supabase
+    .from("media_library")
+    .select("id, url, compte_reference_id, storage_path, comptes_reference(handle_tiktok)")
+    .like("storage_path", "brut/%")
+    .order("created_at", { ascending: false })
+    .limit(300);
+  if (error) throw error;
+
+  const groupes = new Map<string, { source: string; medias: MediaTest[] }>();
+  // deno-lint-ignore no-explicit-any
+  for (const m of data as any[]) {
+    const source = m.comptes_reference?.handle_tiktok ?? "sans compte";
+    if (!groupes.has(source)) groupes.set(source, { source, medias: [] });
+    groupes.get(source)!.medias.push({
+      id: m.id,
+      url: m.url,
+      compte_reference_id: m.compte_reference_id,
+      source,
+    });
+  }
+  return [...groupes.values()];
+}
+
 /** Supprime un visuel de la bibliothèque. Les slides qui l'utilisaient
  *  repassent à « photo manquante » (media_id mis à null par la FK). */
 export async function supprimerMedia(mediaId: string): Promise<void> {
