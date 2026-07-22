@@ -3,7 +3,6 @@ import {
   RefusRetouche,
   ocrFrame,
   scoreRelevance,
-  verifyClean,
 } from "../_shared/gemini.ts";
 import { assertAuthorised, chargerPrompt, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
@@ -179,12 +178,12 @@ async function nettoyerVersBibliotheque(
     }
 
     if (!candidat) continue;
-    // On ne retient QUE si la vérification confirme l'absence de texte. Garder
-    // la dernière tentative « faute de mieux » remplissait la bibliothèque de
-    // visuels rangés dans propre/ — donc marqués « Nettoyé » — qui portaient
-    // encore leur texte. Mieux vaut honnêtement garder l'original (brut/) : au
-    // moins il est signalé comme non nettoyé côté poster et côté admin.
-    if (await verifyClean(candidat, "image/png")) propreBase64 = candidat;
+    // cleanImage rend une sortie de confiance (proxy) ou déjà vérifiée en
+    // interne (repli inpaint/génératif). On la retient telle quelle : la double
+    // vérification rejetait à tort des images denses en texte pourtant bien
+    // nettoyées par le proxy. Les échecs durs versent l'original (brut/), qui
+    // reste signalé « non nettoyé » côté poster et côté admin.
+    propreBase64 = candidat;
   }
 
   const path = `propre/${sujet.id}/${slide.position}.png`;

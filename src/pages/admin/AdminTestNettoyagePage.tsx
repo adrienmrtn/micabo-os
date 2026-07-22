@@ -23,7 +23,7 @@ function CarteTest({ media }: { media: MediaTest }) {
   const { t } = useTranslation();
 
   const nettoyer = useMutation({
-    mutationFn: () => avecTimeout(nettoyerTest(media.url), 90000),
+    mutationFn: () => avecTimeout(nettoyerTest(media.url), 130000),
   });
   const resultat = nettoyer.data;
 

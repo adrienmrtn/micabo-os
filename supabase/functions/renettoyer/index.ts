@@ -1,4 +1,4 @@
-import { cleanImage, verifyClean } from "../_shared/gemini.ts";
+import { cleanImage } from "../_shared/gemini.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
@@ -47,8 +47,10 @@ Deno.serve(async (request) => {
     // 1 — Tentative de nettoyage (proxy Lovable en priorité, cf. cleanImage).
     if (slide.reference_url) {
       try {
+        // cleanImage rend une sortie de confiance (proxy) ou déjà vérifiée
+        // (repli inpaint/génératif). On ne re-vérifie plus ici.
         const propreBase64 = await cleanImage(slide.reference_url);
-        if (propreBase64 && (await verifyClean(propreBase64, "image/png"))) {
+        if (propreBase64) {
           const path = `propre/manuel/${slide.id}.png`;
           const bytes = Uint8Array.from(atob(propreBase64), (c) => c.charCodeAt(0));
           const { error: upErr } = await supabase.storage

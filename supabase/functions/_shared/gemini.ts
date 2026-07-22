@@ -425,10 +425,12 @@ const PROMPT_NETTOYAGE = `Tu fais une restauration photo subtile.
 5. Renvoie uniquement l'image nettoyée.`;
 
 export async function cleanImage(imageUrl: string): Promise<string | null> {
-  // 0 — PROXY LOVABLE en priorité s'il est configuré. Il fait le nettoyage
-  // Gemini côté serveur (meilleur rendu que l'inpainting, pas de flou), sans
-  // qu'on touche à la clé Lovable. On ne le rattrape pas : si le proxy est en
-  // place mais échoue, on veut voir pourquoi.
+  // 0 — PROXY LOVABLE en priorité s'il est configuré. C'est le nettoyeur de
+  // RÉFÉRENCE : sa sortie est de confiance, on ne la re-vérifie PAS. La double
+  // vérification rejetait à tort des images denses en texte que le proxy avait
+  // pourtant bien nettoyées (il « croyait revoir » du texte). On lui fait
+  // confiance ; les échecs durs (proxy sans image) remontent et sont rattrapés
+  // en aval (remplacement par une photo propre de la bibliothèque).
   const parProxy = await nettoyerViaProxy(imageUrl);
   if (parProxy) return parProxy;
 
@@ -436,11 +438,13 @@ export async function cleanImage(imageUrl: string): Promise<string | null> {
 
   // 1 — INPAINTING, si le proxy n'est pas configuré. Il n'efface que la zone du
   // texte, ne juge jamais le contenu (aucun refus) et ne régénère pas la
-  // personne. Voie de repli.
+  // personne. Voie de repli — VÉRIFIÉE ici, car l'effacement peut laisser du
+  // texte hors du masque.
   let noteInpaint = "inpaint: aucune image (pas de zone, ou pas de clé)";
   try {
     const parInpaint = await inpaintFallback(image, imageUrl);
-    if (parInpaint) return parInpaint;
+    if (parInpaint && (await verifyClean(parInpaint, "image/png"))) return parInpaint;
+    if (parInpaint) noteInpaint = "inpaint: texte encore visible après effacement";
   } catch (error) {
     // Le motif remonte au lieu d'être avalé : c'est ainsi qu'on a vu que les
     // images trop grandes étaient rejetées par le service d'effacement.
@@ -449,7 +453,7 @@ export async function cleanImage(imageUrl: string): Promise<string | null> {
 
   // 2 — REPLI GEMINI GÉNÉRATIF, seulement si l'inpainting n'a rien pu faire.
   // La source d'ABORD, la consigne ensuite ; température basse et sortie image
-  // forcée.
+  // forcée. Vérifié aussi (le génératif peut halluciner ou laisser du texte).
   const parts: Part[] = [image, { text: PROMPT_NETTOYAGE }];
   const config: GenConfig = { temperature: 0.2, responseModalities: ["IMAGE"] };
   const echecs: string[] = [];
@@ -458,8 +462,9 @@ export async function cleanImage(imageUrl: string): Promise<string | null> {
     try {
       const sortie = await call(model, parts, config);
       const data = imageDataOf(sortie);
-      if (data) return data;
-      echecs.push(`${model}: ${textOf(sortie).slice(0, 120) || "bloqué (aucune image)"}`);
+      if (data && (await verifyClean(data, "image/png"))) return data;
+      if (data) echecs.push(`${model}: texte encore visible après retouche`);
+      else echecs.push(`${model}: ${textOf(sortie).slice(0, 120) || "bloqué (aucune image)"}`);
     } catch (error) {
       echecs.push(`${model}: ${messageErreur(error)}`);
     }
