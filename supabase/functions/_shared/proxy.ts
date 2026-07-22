@@ -35,13 +35,19 @@ export async function nettoyerViaProxy(imageUrl: string): Promise<string | null>
   const base64 = enBase64(new Uint8Array(await resImg.arrayBuffer()));
   const corpsRequete = JSON.stringify({ image_base64: base64, strip_metadata: true });
 
-  // 5 essais avec attente croissante : les 503 « Service temporarily
-  // unavailable » de Gemini sont fréquents mais passagers (la surcharge dure
-  // quelques secondes à quelques dizaines de secondes). Cinq passes espacées
-  // absorbent quasiment toujours le pic sans que l'appelant voie l'échec.
+  // 5 essais avec attente croissante + JITTER aléatoire : les 503 « Service
+  // temporarily unavailable » de Gemini sont fréquents mais passagers (la
+  // surcharge dure quelques secondes à quelques dizaines de secondes). Le jitter
+  // est essentiel quand PLUSIEURS nettoyages tournent en parallèle : sans lui,
+  // tous ceux qui prennent un 503 réessaieraient au même instant et se
+  // percuteraient à nouveau (effet « troupeau »). En décalant chaque réessai
+  // d'un délai aléatoire, on étale la charge et le pic s'absorbe tout seul.
   let dernier = "";
   for (let essai = 0; essai < 5; essai += 1) {
-    if (essai > 0) await new Promise((r) => setTimeout(r, 2000 * essai));
+    if (essai > 0) {
+      const attente = 2000 * essai + Math.floor(Math.random() * 2000);
+      await new Promise((r) => setTimeout(r, attente));
+    }
 
     const res = await fetch(PROXY_URL, {
       method: "POST",

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { executerEnLot } from "@/lib/lot";
 import {
   compteReferenceDuPost,
   lirePost,
@@ -269,30 +270,16 @@ export function AdminPostDetailPage() {
   const aProbleme = liste.filter((s) => !estPropre(s)).length;
 
   /**
-   * Nettoie toutes les slides à texte EN PARALLÈLE (3 à la fois pour ne pas
-   * saturer les quotas). Chaque nettoyage dure ~1 min ; les lancer en série
-   * serait interminable, d'où le parallélisme.
+   * Nettoie toutes les slides à texte via un pool d'agents parallèles (cf.
+   * executerEnLot). Chaque nettoyage dure ~1 min ; les lancer en série serait
+   * interminable, d'où le parallélisme.
    */
   async function nettoyerTout() {
     const aFaire = liste.filter((s) => !estPropre(s));
     setLot({ fait: 0, total: aFaire.length });
-
-    let index = 0;
-    let fait = 0;
-    const LARGEUR = 3;
-    async function travailleur() {
-      while (index < aFaire.length) {
-        const slide = aFaire[index++];
-        try {
-          await renettoyerSlide(slide.id);
-        } catch {
-          // un échec isolé ne doit pas stopper le lot
-        }
-        fait += 1;
-        setLot({ fait, total: aFaire.length });
-      }
-    }
-    await Promise.all(Array.from({ length: LARGEUR }, travailleur));
+    await executerEnLot(aFaire, (slide) => renettoyerSlide(slide.id), {
+      onProgres: (fait, total) => setLot({ fait, total }),
+    });
     setLot(null);
     queryClient.invalidateQueries({ queryKey: ["slides", id] });
   }

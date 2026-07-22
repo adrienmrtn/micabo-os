@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Sparkles, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { executerEnLot } from "@/lib/lot";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -111,24 +112,12 @@ export function AdminBibliothequePage() {
   const aNettoyerListe = (medias.data ?? []).filter((m) => !estPropre(m));
   const aNettoyer = aNettoyerListe.length;
 
-  /** Nettoie tous les visuels à texte en parallèle (3 à la fois). */
+  /** Nettoie tous les visuels à texte via un pool d'agents parallèles. */
   async function nettoyerTout() {
     setLot({ fait: 0, total: aNettoyerListe.length });
-    let index = 0;
-    let fait = 0;
-    async function travailleur() {
-      while (index < aNettoyerListe.length) {
-        const media = aNettoyerListe[index++];
-        try {
-          await nettoyerMedia(media.id);
-        } catch {
-          // un échec isolé ne stoppe pas le lot
-        }
-        fait += 1;
-        setLot({ fait, total: aNettoyerListe.length });
-      }
-    }
-    await Promise.all(Array.from({ length: 3 }, travailleur));
+    await executerEnLot(aNettoyerListe, (media) => nettoyerMedia(media.id), {
+      onProgres: (fait, total) => setLot({ fait, total }),
+    });
     setLot(null);
     rafraichir();
   }
