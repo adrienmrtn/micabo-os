@@ -21,52 +21,71 @@ export function AdminLayout() {
   return (
     <AppShell
       navLabel={t("nav.admin")}
-      navItems={[
-        { to: "/admin", label: t("nav.pilotage"), icon: Gauge, description: t("navDesc.pilotage") },
+      groups={[
         {
-          to: "/admin/calendrier",
-          label: t("nav.calendrier"),
-          icon: CalendarDays,
-          description: t("navDesc.calendrier"),
+          items: [
+            { to: "/admin", label: t("nav.pilotage"), icon: Gauge, description: t("navDesc.pilotage") },
+          ],
         },
         {
-          to: "/admin/analytics",
-          label: t("nav.analytics"),
-          icon: BarChart3,
-          description: t("navDesc.analytics"),
-        },
-        { to: "/admin/posts", label: t("nav.posts"), icon: CalendarRange, description: t("navDesc.posts") },
-        { to: "/admin/sources", label: t("nav.sources"), icon: AtSign, description: t("navDesc.sources") },
-        {
-          to: "/admin/comptes",
-          label: t("nav.comptes"),
-          icon: UserSquare,
-          description: t("navDesc.comptes"),
-        },
-        { to: "/admin/posters", label: t("nav.posters"), icon: Users, description: t("navDesc.posters") },
-        {
-          to: "/admin/bibliotheque",
-          label: t("nav.bibliotheque"),
-          icon: Images,
-          description: t("navDesc.bibliotheque"),
-        },
-        {
-          to: "/admin/test-nettoyage",
-          label: t("nav.testNettoyage"),
-          icon: Wand2,
-          description: t("navDesc.testNettoyage"),
-        },
-        {
-          to: "/admin/reglages",
-          label: t("nav.reglages"),
-          icon: Settings,
-          description: t("navDesc.reglages"),
+          title: t("navSection.production"),
+          items: [
+            {
+              to: "/admin/calendrier",
+              label: t("nav.calendrier"),
+              icon: CalendarDays,
+              description: t("navDesc.calendrier"),
+            },
+            { to: "/admin/posts", label: t("nav.posts"), icon: CalendarRange, description: t("navDesc.posts") },
+            { to: "/admin/sources", label: t("nav.sources"), icon: AtSign, description: t("navDesc.sources") },
+            {
+              to: "/admin/comptes",
+              label: t("nav.comptes"),
+              icon: UserSquare,
+              description: t("navDesc.comptes"),
+            },
+            {
+              to: "/admin/bibliotheque",
+              label: t("nav.bibliotheque"),
+              icon: Images,
+              description: t("navDesc.bibliotheque"),
+            },
+            {
+              to: "/admin/test-nettoyage",
+              label: t("nav.testNettoyage"),
+              icon: Wand2,
+              description: t("navDesc.testNettoyage"),
+            },
+          ],
         },
         {
-          to: "/admin/prompts",
-          label: t("nav.prompts"),
-          icon: MessageSquareQuote,
-          description: t("navDesc.prompts"),
+          title: t("navSection.suivi"),
+          items: [
+            {
+              to: "/admin/analytics",
+              label: t("nav.analytics"),
+              icon: BarChart3,
+              description: t("navDesc.analytics"),
+            },
+            { to: "/admin/posters", label: t("nav.posters"), icon: Users, description: t("navDesc.posters") },
+          ],
+        },
+        {
+          title: t("navSection.config"),
+          items: [
+            {
+              to: "/admin/reglages",
+              label: t("nav.reglages"),
+              icon: Settings,
+              description: t("navDesc.reglages"),
+            },
+            {
+              to: "/admin/prompts",
+              label: t("nav.prompts"),
+              icon: MessageSquareQuote,
+              description: t("navDesc.prompts"),
+            },
+          ],
         },
       ]}
     >

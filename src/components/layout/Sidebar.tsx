@@ -8,44 +8,56 @@ export interface NavItem {
   to: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  /** Courte explication de ce que fait l'écran, montrée sous le libellé. */
+  /** Explication courte, montrée en infobulle au survol (garde la nav compacte). */
   description?: string;
 }
 
-function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
+/** Un bloc de navigation, avec un intitulé de section optionnel. */
+export interface NavGroup {
+  title?: string;
+  items: NavItem[];
+}
+
+function NavList({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () => void }) {
   return (
-    <nav className="flex flex-col gap-0.5 px-3">
-      {items.map(({ to, label, icon: Icon, description }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end
-          onClick={onNavigate}
-          className={({ isActive }) =>
-            cn(
-              "flex items-start gap-3 rounded-md px-3 py-2 transition-colors",
-              isActive
-                ? "bg-sidebar-active/20 text-white"
-                : "text-sidebar-foreground hover:bg-white/5 hover:text-white",
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <Icon className="mt-0.5 size-4 shrink-0" />
-              <span className="min-w-0 flex-1">
-                <span className={cn("block truncate text-sm", isActive && "font-medium")}>
-                  {label}
-                </span>
-                {description && (
-                  <span className="mt-0.5 block text-[11px] leading-tight text-sidebar-foreground/55">
-                    {description}
-                  </span>
-                )}
-              </span>
-            </>
+    <nav className="flex flex-col gap-5 px-3 py-2">
+      {groups.map((groupe, i) => (
+        <div key={groupe.title ?? i} className="flex flex-col gap-0.5">
+          {groupe.title && (
+            <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+              {groupe.title}
+            </p>
           )}
-        </NavLink>
+          {groupe.items.map(({ to, label, icon: Icon, description }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end
+              onClick={onNavigate}
+              title={description}
+              className={({ isActive }) =>
+                cn(
+                  "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                  isActive
+                    ? "bg-sidebar-active/20 font-medium text-white"
+                    : "text-sidebar-foreground/85 hover:bg-white/[0.06] hover:text-white",
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon
+                    className={cn(
+                      "size-[18px] shrink-0 transition-colors",
+                      isActive ? "text-white" : "text-sidebar-foreground/60 group-hover:text-white",
+                    )}
+                  />
+                  <span className="truncate">{label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </div>
       ))}
     </nav>
   );
@@ -54,28 +66,28 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
 function Brand({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-2.5 px-5 py-5">
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-active/25">
-        <Sparkles className="size-4 text-white" />
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sidebar-active to-primary shadow-sm">
+        <Sparkles className="size-[18px] text-white" />
       </div>
-      <span className="truncate text-sm font-semibold text-white">{title}</span>
+      <span className="truncate text-[15px] font-semibold tracking-tight text-white">{title}</span>
     </div>
   );
 }
 
 export function Sidebar({
   title,
-  items,
+  groups,
   footer,
 }: {
   title: string;
-  items: NavItem[];
+  groups: NavGroup[];
   footer?: React.ReactNode;
 }) {
   return (
-    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col self-start bg-sidebar lg:flex">
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col self-start border-r border-white/5 bg-sidebar lg:flex">
       <Brand title={title} />
       <div className="flex-1 overflow-y-auto scrollbar-slim">
-        <NavList items={items} />
+        <NavList groups={groups} />
       </div>
       {footer && <div className="border-t border-white/10 p-3">{footer}</div>}
     </aside>
@@ -88,13 +100,13 @@ export function MobileDrawer({
   open,
   onClose,
   title,
-  items,
+  groups,
   footer,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
-  items: NavItem[];
+  groups: NavGroup[];
   footer?: React.ReactNode;
 }) {
   React.useEffect(() => {
@@ -116,7 +128,7 @@ export function MobileDrawer({
     <div className="fixed inset-0 z-50 lg:hidden">
       <button
         aria-label="Fermer le menu"
-        className="absolute inset-0 bg-black/50"
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
       <div className="absolute inset-y-0 left-0 flex w-64 animate-slide-in flex-col bg-sidebar">
@@ -131,7 +143,7 @@ export function MobileDrawer({
           </button>
         </div>
         <div className="flex-1 overflow-y-auto scrollbar-slim">
-          <NavList items={items} onNavigate={onClose} />
+          <NavList groups={groups} onNavigate={onClose} />
         </div>
         {footer && <div className="border-t border-white/10 p-3">{footer}</div>}
       </div>

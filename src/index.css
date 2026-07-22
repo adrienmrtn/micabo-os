@@ -40,11 +40,11 @@
     --input: 252 18% 88%;
     --ring: 262 72% 52%;
 
-    --sidebar: 258 30% 15%;
+    --sidebar: 258 32% 14%;
     --sidebar-foreground: 255 20% 82%;
-    --sidebar-active: 262 60% 60%;
+    --sidebar-active: 262 65% 62%;
 
-    --radius: 0.75rem;
+    --radius: 0.85rem;
   }
 
   .dark {

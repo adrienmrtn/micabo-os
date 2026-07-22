@@ -9,7 +9,7 @@ export function PosterLayout() {
   return (
     <AppShell
       navLabel={t("nav.poster")}
-      navItems={[{ to: "/calendrier", label: t("nav.calendrier"), icon: CalendarDays }]}
+      groups={[{ items: [{ to: "/calendrier", label: t("nav.calendrier"), icon: CalendarDays }] }]}
     >
       <Outlet />
     </AppShell>

@@ -46,6 +46,11 @@ export const fr = {
       copierBio: "Copier la bio",
       aide: "Crée ton compte TikTok avec ce pseudo, cette bio et cet avatar. Tout est déjà généré pour toi.",
     },
+    navSection: {
+      production: "Production",
+      suivi: "Suivi",
+      config: "Configuration",
+    },
     navDesc: {
       pilotage: "Vue d'ensemble et lancement du pipeline",
       calendrier: "Tous les posts par jour, glisser-déposer",

@@ -10,12 +10,16 @@ export function HiringLayout() {
   return (
     <AppShell
       navLabel={t("nav.hiring")}
-      navItems={[
+      groups={[
         {
-          to: "/embauche",
-          label: t("nav.embauche"),
-          icon: UserPlus,
-          description: t("navDesc.embauche"),
+          items: [
+            {
+              to: "/embauche",
+              label: t("nav.embauche"),
+              icon: UserPlus,
+              description: t("navDesc.embauche"),
+            },
+          ],
         },
       ]}
     >

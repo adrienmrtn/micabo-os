@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/features/auth/AuthContext";
 import { signOut } from "@/features/auth/api";
 import { SUPPORTED_LANGUAGES } from "@/locales";
-import { MobileDrawer, Sidebar, type NavItem } from "./Sidebar";
+import { MobileDrawer, Sidebar, type NavGroup } from "./Sidebar";
 
 interface ProfilAffiche {
   prenom: string | null;
@@ -48,11 +48,11 @@ function UserBlock() {
 
 export function AppShell({
   navLabel,
-  navItems,
+  groups,
   children,
 }: {
   navLabel: string;
-  navItems: NavItem[];
+  groups: NavGroup[];
   children: React.ReactNode;
 }) {
   const { t, i18n } = useTranslation();
@@ -62,18 +62,18 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar title={t("app.name")} items={navItems} footer={footer} />
+      <Sidebar title={t("app.name")} groups={groups} footer={footer} />
       <MobileDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         title={t("app.name")}
-        items={navItems}
+        groups={groups}
         footer={footer}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur">
-          <div className="flex h-14 items-center justify-between gap-3 px-4 lg:px-8">
+        <header className="sticky top-0 z-30 border-b border-border/70 bg-background/80 backdrop-blur-md">
+          <div className="flex h-16 items-center justify-between gap-3 px-5 lg:px-10">
             <div className="flex min-w-0 items-center gap-2">
               <Button
                 variant="ghost"
@@ -84,7 +84,7 @@ export function AppShell({
               >
                 <Menu />
               </Button>
-              <span className="truncate text-sm font-medium text-muted-foreground">
+              <span className="truncate text-[15px] font-semibold tracking-tight">
                 {navLabel}
               </span>
             </div>
@@ -93,7 +93,7 @@ export function AppShell({
               {SUPPORTED_LANGUAGES.length > 1 && (
                 <select
                   aria-label="langue"
-                  className="h-8 rounded-md border border-input bg-card px-2 text-sm"
+                  className="h-8 rounded-lg border border-input bg-card px-2 text-sm"
                   value={i18n.resolvedLanguage}
                   onChange={(e) => i18n.changeLanguage(e.target.value)}
                 >
@@ -112,8 +112,8 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex-1 animate-fade-in px-4 py-6 lg:px-8 lg:py-8">
-          <div className="mx-auto w-full max-w-5xl">{children}</div>
+        <main className="flex-1 animate-fade-in px-5 py-7 lg:px-10 lg:py-9">
+          <div className="mx-auto w-full max-w-6xl">{children}</div>
         </main>
       </div>
     </div>
