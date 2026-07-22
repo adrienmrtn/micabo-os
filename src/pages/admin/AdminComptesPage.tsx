@@ -21,10 +21,12 @@ import {
   creerCompte,
   genererPersona,
   listerComptes,
+  listerLanguesReference,
   listerMedias,
   listerPosters,
   listerSources,
   majCompte,
+  majUpwork,
   supprimerCompte,
 } from "@/features/moteur/api";
 import type { CompteAvecDetails } from "@/features/moteur/types";
@@ -265,6 +267,89 @@ function ReglagesCompte({ compte }: { compte: CompteAvecDetails }) {
   );
 }
 
+/** Édition des infos d'un créateur : nom affiché, @ TikTok, langue, lien Upwork. */
+function InfosCompte({ compte }: { compte: CompteAvecDetails }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
+
+  const [nom, setNom] = React.useState(compte.persona_nom ?? "");
+  const [handle, setHandle] = React.useState(compte.handle_tiktok ?? "");
+  const [langue, setLangue] = React.useState(compte.langue);
+  const [upwork, setUpwork] = React.useState(compte.profiles?.upwork_url ?? "");
+
+  const upworkInitial = compte.profiles?.upwork_url ?? "";
+  const modifie =
+    nom !== (compte.persona_nom ?? "") ||
+    handle !== (compte.handle_tiktok ?? "") ||
+    langue !== compte.langue ||
+    upwork !== upworkInitial;
+
+  const enregistrer = useMutation({
+    mutationFn: async () => {
+      await majCompte(compte.id, {
+        persona_nom: nom.trim() || null,
+        handle_tiktok: handle.trim().replace(/^@/, "") || null,
+        langue,
+      });
+      if (upwork !== upworkInitial) await majUpwork(compte.poster_id, upwork);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["comptes"] }),
+  });
+
+  const opts = langues.data ?? [];
+  const languesOpts = opts.includes(langue) ? opts : [langue, ...opts];
+
+  return (
+    <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-2">
+      <div className="space-y-1.5">
+        <Label htmlFor={`nom-${compte.id}`}>{t("comptes.nomAffiche")}</Label>
+        <Input id={`nom-${compte.id}`} value={nom} onChange={(e) => setNom(e.target.value)} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`handle-${compte.id}`}>{t("comptes.pseudo")}</Label>
+        <Input
+          id={`handle-${compte.id}`}
+          value={handle}
+          placeholder="pseudo.tiktok"
+          onChange={(e) => setHandle(e.target.value)}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`langue-${compte.id}`}>{t("comptes.langue")}</Label>
+        <select
+          id={`langue-${compte.id}`}
+          className={selectClass}
+          value={langue}
+          onChange={(e) => setLangue(e.target.value)}
+        >
+          {languesOpts.map((l) => (
+            <option key={l} value={l}>
+              {l.toUpperCase()}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`upwork-${compte.id}`}>{t("comptes.upwork")}</Label>
+        <Input
+          id={`upwork-${compte.id}`}
+          value={upwork}
+          placeholder="https://www.upwork.com/…"
+          onChange={(e) => setUpwork(e.target.value)}
+        />
+      </div>
+      {modifie && (
+        <div className="sm:col-span-2">
+          <Button size="sm" disabled={enregistrer.isPending} onClick={() => enregistrer.mutate()}>
+            {enregistrer.isPending ? t("common.saving") : t("common.save")}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LigneCompte({ compte }: { compte: CompteAvecDetails }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -319,6 +404,8 @@ function LigneCompte({ compte }: { compte: CompteAvecDetails }) {
           </Button>
         </div>
       </div>
+
+      <InfosCompte compte={compte} />
 
       <ChoixAvatar compte={compte} />
 

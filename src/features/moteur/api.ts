@@ -82,7 +82,7 @@ export async function listerSujets(): Promise<Sujet[]> {
 export async function listerComptes(): Promise<CompteAvecDetails[]> {
   const { data, error } = await supabase
     .from("comptes")
-    .select("*, profiles(prenom, nom), comptes_reference(handle_tiktok)")
+    .select("*, profiles(prenom, nom, upwork_url), comptes_reference(handle_tiktok)")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data as CompteAvecDetails[];

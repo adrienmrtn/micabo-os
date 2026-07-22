@@ -37,7 +37,7 @@ export interface Compte {
 }
 
 export interface CompteAvecDetails extends Compte {
-  profiles: { prenom: string | null; nom: string | null } | null;
+  profiles: { prenom: string | null; nom: string | null; upwork_url: string | null } | null;
   comptes_reference: { handle_tiktok: string } | null;
 }
 

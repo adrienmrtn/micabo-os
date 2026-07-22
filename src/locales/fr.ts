@@ -189,6 +189,9 @@ export const fr = {
     comptes: {
       title: "Comptes de publication",
       subtitle: "Les comptes TikTok tenus par tes posters.",
+      nomAffiche: "Nom affiché",
+      pseudo: "Pseudo TikTok (@)",
+      upwork: "Lien Upwork",
       identitesTitre: "Identités TikTok à compléter",
       identitesDesc: "{{count}} compte(s) sans pseudo ou sans avatar généré. Le créateur ne voit rien à recréer.",
       completerIdentites: "Compléter les {{count}} identités",
