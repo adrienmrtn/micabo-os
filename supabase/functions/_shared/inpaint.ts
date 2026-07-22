@@ -168,7 +168,7 @@ export async function effacerTexte(
   const masque = await masquePNG(dims.w, dims.h, zones);
 
   const jetonReplicate = Deno.env.get("REPLICATE_API_TOKEN");
-  if (jetonReplicate) return await fluxFillReplicate(jetonReplicate, imageUrl, masque);
+  if (jetonReplicate) return await lamaReplicate(jetonReplicate, imageUrl, masque);
 
   const cleStability = Deno.env.get("STABILITY_KEY") ?? Deno.env.get("STABILITY_API_KEY");
   if (cleStability) return await stabilityErase(cleStability, imageBytes, mime, masque, dims);
@@ -177,18 +177,17 @@ export async function effacerTexte(
 }
 
 /**
- * Flux Fill (dev) via Replicate. `Prefer: wait` bloque jusqu'au résultat ; en
- * cas de réponse asynchrone on interroge la prédiction. Le masque part en
- * data-URI, l'image publique par son URL. Convention : blanc = zone à remplir.
- *
- * Contrairement à LaMa (qui floute), c'est un modèle de diffusion : il
- * reconstruit le décor sous le texte de façon photoréaliste. Version figée,
- * récupérée via l'API Replicate ; un modèle communautaire s'appelle par son
- * hash de version sur /v1/predictions.
+ * LaMa via Replicate. C'est un EFFACEUR, pas un modèle génératif : il prolonge
+ * le décor présent autour du masque et n'invente RIEN — jamais de texte inventé
+ * ni de personne surgie du néant (le défaut de Flux). Il est aussi bien plus
+ * rapide (~2 s contre ~40 s). Sur un fond uni il est parfait ; sur un décor
+ * très détaillé il peut légèrement adoucir, ce qui reste préférable à une
+ * hallucination. `Prefer: wait` bloque jusqu'au résultat, avec interrogation de
+ * secours si la réponse est asynchrone.
  */
-const FLUX_FILL_VERSION = "a053f84125613d83e65328a289e14eb6639e10725c243e8fb0c24128e5573f4c";
+const LAMA_VERSION = "cdac78a1bec5b23c07fd29692fb70baa513ea403a39e643c48ec5edadb15fe72";
 
-async function fluxFillReplicate(
+async function lamaReplicate(
   jeton: string,
   imageUrl: string,
   masque: Uint8Array,
@@ -203,22 +202,8 @@ async function fluxFillReplicate(
       Prefer: "wait",
     },
     body: JSON.stringify({
-      version: FLUX_FILL_VERSION,
-      input: {
-        image: imageUrl,
-        mask: maskDataUri,
-        // Un prompt VIDE poussait Flux à « continuer » le texte qu'il voyait
-        // autour et à halluciner du charabia. On lui décrit donc explicitement
-        // ce qu'on veut : le décor prolongé, sans aucune lettre.
-        prompt:
-          "clean photo background, natural continuation of the scene, no text, no letters, no words, no captions, no watermark, photorealistic, seamless",
-        // Sortie ~1 Mpx : net, largement assez pour TikTok, et assez léger pour
-        // que l'Edge Function tienne (match_input sur 8 Mpx faisait sauter le worker).
-        megapixels: "1",
-        output_format: "png",
-        num_inference_steps: 30,
-        disable_safety_checker: true,
-      },
+      version: LAMA_VERSION,
+      input: { image: imageUrl, mask: maskDataUri },
     }),
   });
   if (!res.ok) {

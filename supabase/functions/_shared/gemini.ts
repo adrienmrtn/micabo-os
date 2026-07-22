@@ -485,9 +485,10 @@ async function inpaintFallback(image: Part, imageUrl: string): Promise<string | 
  */
 async function detecterZonesTexte(image: Part): Promise<Zone[]> {
   const prompt = `Tu localises tout ce qui a été AJOUTÉ par-dessus la photo : textes, sous-titres, légendes, stickers, watermarks, pseudos, boutons, logos d'interface. Il y en a presque toujours.
-Pour chaque élément, donne son rectangle englobant en FRACTIONS de 0 à 1 (origine coin haut-gauche).
+Regroupe les lignes d'un MÊME bloc de texte en UN seul rectangle, et prends une marge GÉNÉREUSE autour (mieux vaut englober un peu trop que laisser un bord de lettre).
+Donne chaque rectangle en FRACTIONS de 0 à 1 (origine coin haut-gauche).
 Réponds UNIQUEMENT par un tableau JSON, rien avant ni après :
-[{"x":0.1,"y":0.05,"w":0.8,"h":0.12}]
+[{"x":0.1,"y":0.05,"w":0.8,"h":0.35}]
 Réponds [] seulement si l'image est réellement vierge de tout texte ou sticker.`;
 
   // Deux tentatives : la détection est le maillon fragile (une réponse vide ou
@@ -551,12 +552,16 @@ function normaliserZone(item: any): Zone | null {
   }
   if (w <= 0 || h <= 0) return null;
 
-  return {
-    x: Math.max(0, Math.min(1, x - 0.01)),
-    y: Math.max(0, Math.min(1, y - 0.01)),
-    w: Math.max(0, Math.min(1, w + 0.02)),
-    h: Math.max(0, Math.min(1, h + 0.02)),
-  };
+  // Marge large (3 % de chaque côté) : LaMa n'efface QUE le masque et n'invente
+  // rien, donc un masque trop serré laisse un liseré de texte. Mieux vaut
+  // mordre un peu autour — sur les fonds unis où le texte se pose, c'est sans
+  // conséquence.
+  const marge = 0.03;
+  const x0 = Math.max(0, x - marge);
+  const y0 = Math.max(0, y - marge);
+  const x1 = Math.min(1, x + w + marge);
+  const y1 = Math.min(1, y + h + marge);
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 
 /**
