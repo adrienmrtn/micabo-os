@@ -1,7 +1,9 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { Sparkles } from "lucide-react";
 
+import { executerEnLot } from "@/lib/lot";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -374,8 +376,42 @@ export function AdminComptesPage() {
 
   const posterEligibles = (posters.data ?? []).filter((p) => p.role === "poster");
 
+  // Identités incomplètes : sans pseudo ou sans avatar généré.
+  const [lotPersona, setLotPersona] = React.useState<{ fait: number; total: number } | null>(null);
+  const incompletes = (comptes.data ?? []).filter((c) => !c.persona_nom || !c.avatar_url);
+
+  async function completerIdentites() {
+    setLotPersona({ fait: 0, total: incompletes.length });
+    await executerEnLot(
+      incompletes,
+      (c) => genererPersona(c.id, true),
+      { largeur: 2, onProgres: (fait, total) => setLotPersona({ fait, total }) },
+    );
+    setLotPersona(null);
+    queryClient.invalidateQueries({ queryKey: ["comptes"] });
+  }
+
   return (
     <div className="space-y-6">
+      {incompletes.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-5">
+            <div>
+              <p className="text-sm font-medium">{t("comptes.identitesTitre")}</p>
+              <p className="text-xs text-muted-foreground">
+                {t("comptes.identitesDesc", { count: incompletes.length })}
+              </p>
+            </div>
+            <Button disabled={lotPersona !== null} onClick={completerIdentites}>
+              <Sparkles className="size-4" />
+              {lotPersona
+                ? t("comptes.identitesEnCours", { fait: lotPersona.fait, total: lotPersona.total })
+                : t("comptes.completerIdentites", { count: incompletes.length })}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>{t("comptes.title")}</CardTitle>

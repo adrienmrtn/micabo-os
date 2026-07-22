@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, EmptyState } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase/client";
-import { aujourdhui, monCompte } from "@/features/moteur/api";
+import { aujourdhui, majMonHandle, monCompte } from "@/features/moteur/api";
 import { useAuth } from "@/features/auth/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -104,11 +104,22 @@ function CartePost({ post, creneau }: { post: PostCalendrier; creneau?: number }
  */
 function IdentiteTikTok() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const { data: compte } = useQuery({ queryKey: ["mon-compte"], queryFn: monCompte });
 
-  if (!compte || (!compte.persona_nom && !compte.handle_tiktok && !compte.avatar_url)) {
-    return null;
-  }
+  const [editHandle, setEditHandle] = React.useState(false);
+  const [handle, setHandle] = React.useState("");
+
+  const majHandle = useMutation({
+    mutationFn: () => majMonHandle(handle),
+    onSuccess: () => {
+      setEditHandle(false);
+      queryClient.invalidateQueries({ queryKey: ["mon-compte"] });
+    },
+  });
+
+  // Le poster n'a pas encore de compte de publication : rien à afficher.
+  if (!compte) return null;
 
   const copier = (texte: string) => navigator.clipboard?.writeText(texte);
 
@@ -127,14 +138,46 @@ function IdentiteTikTok() {
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {t("identite.titre")}
             </p>
-            {compte.persona_nom && (
-              <p className="text-sm font-semibold">{compte.persona_nom}</p>
+            {compte.persona_nom && <p className="text-sm font-semibold">{compte.persona_nom}</p>}
+
+            {/* Le @ TikTok : éditable par le poster une fois son compte créé. */}
+            {editHandle ? (
+              <div className="flex items-center gap-1">
+                <span className="text-sm text-muted-foreground">@</span>
+                <input
+                  value={handle}
+                  onChange={(e) => setHandle(e.target.value)}
+                  placeholder={compte.handle_tiktok ?? "ton.pseudo"}
+                  className="h-7 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+                />
+                <Button size="sm" className="h-7" disabled={majHandle.isPending} onClick={() => majHandle.mutate()}>
+                  {t("common.save")}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditHandle(false)}>
+                  {t("common.cancel")}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm text-muted-foreground">
+                  @{compte.handle_tiktok ?? "—"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHandle(compte.handle_tiktok ?? "");
+                    setEditHandle(true);
+                  }}
+                  className="text-xs text-primary underline underline-offset-2"
+                >
+                  {compte.handle_tiktok ? t("identite.majHandle") : t("identite.setHandle")}
+                </button>
+              </div>
             )}
-            {compte.handle_tiktok && (
-              <p className="text-sm text-muted-foreground">@{compte.handle_tiktok}</p>
-            )}
+            <p className="text-[11px] text-muted-foreground">{t("identite.handleAide")}</p>
+
             {compte.persona_bio && (
-              <p className="whitespace-pre-wrap text-sm">{compte.persona_bio}</p>
+              <p className="whitespace-pre-wrap pt-1 text-sm">{compte.persona_bio}</p>
             )}
             <div className="flex flex-wrap gap-2 pt-1">
               {compte.avatar_url && (

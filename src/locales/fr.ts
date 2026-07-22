@@ -55,6 +55,10 @@ export const fr = {
       avatar: "Télécharger l'avatar",
       copierBio: "Copier la bio",
       aide: "Crée ton compte TikTok avec ce pseudo, cette bio et cet avatar. Tout est déjà généré pour toi.",
+      majHandle: "Mettre à jour mon @",
+      setHandle: "Renseigner mon @",
+      handleAide:
+        "Si le pseudo n'est pas disponible sur TikTok, ajoute des chiffres au hasard. Puis mets ton vrai @ à jour ici pour qu'on ait ton lien.",
     },
     navSection: {
       production: "Production",
@@ -184,6 +188,10 @@ export const fr = {
     comptes: {
       title: "Comptes de publication",
       subtitle: "Les comptes TikTok tenus par tes posters.",
+      identitesTitre: "Identités TikTok à compléter",
+      identitesDesc: "{{count}} compte(s) sans pseudo ou sans avatar généré. Le créateur ne voit rien à recréer.",
+      completerIdentites: "Compléter les {{count}} identités",
+      identitesEnCours: "Génération… {{fait}}/{{total}}",
       poster: "Poster",
       source: "Compte de référence",
       persona: "Nom affiché",
@@ -239,6 +247,8 @@ export const fr = {
       recruteurs: "Recruteurs",
       sansRecruteur: "Sans recruteur",
       aucunCreateur: "Aucun créateur.",
+      reference: "Réf.",
+      compteReference: "Compte de référence (source) — visible admin uniquement",
       sansCompte: "Sans compte de publication (à configurer plus tard)",
       langueAide:
         "Choisis une langue : le compte de référence et la persona (pseudo, bio, avatar) sont générés automatiquement.",

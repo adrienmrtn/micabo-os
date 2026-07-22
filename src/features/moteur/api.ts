@@ -129,12 +129,19 @@ export async function listerPosters(): Promise<PosterProfil[]> {
   const { data: roles } = await supabase.from("user_roles").select("user_id, role");
   const parUtilisateur = new Map((roles ?? []).map((r) => [r.user_id, r.role]));
 
-  // Le pseudo TikTok du poster vit sur son compte de publication : on le rapatrie
-  // pour construire le lien direct vers son compte.
-  const { data: comptes } = await supabase.from("comptes").select("poster_id, handle_tiktok");
+  // Le pseudo TikTok du poster vit sur son compte de publication ; on rapatrie
+  // aussi son compte de RÉFÉRENCE (la source), visible côté admin seulement.
+  const { data: comptes } = await supabase
+    .from("comptes")
+    .select("poster_id, handle_tiktok, comptes_reference(handle_tiktok)");
   const handleParPoster = new Map(
     (comptes ?? []).filter((c) => c.handle_tiktok).map((c) => [c.poster_id, c.handle_tiktok]),
   );
+  const referenceParPoster = new Map<string, string>();
+  for (const c of comptes ?? []) {
+    const ref = (c as { comptes_reference?: { handle_tiktok?: string } }).comptes_reference;
+    if (ref?.handle_tiktok) referenceParPoster.set(c.poster_id, ref.handle_tiktok);
+  }
 
   const nomParId = new Map(
     (profils ?? []).map((p) => [
@@ -147,6 +154,7 @@ export async function listerPosters(): Promise<PosterProfil[]> {
     ...p,
     role: (parUtilisateur.get(p.id) ?? null) as PosterProfil["role"],
     handle_tiktok: handleParPoster.get(p.id) ?? null,
+    reference_handle: referenceParPoster.get(p.id) ?? null,
     manager_nom: p.manager_id ? (nomParId.get(p.manager_id) ?? null) : null,
   }));
 }
@@ -245,6 +253,12 @@ export async function monCompte(): Promise<MonCompte | null> {
     .maybeSingle();
   if (error) throw error;
   return (data as MonCompte) ?? null;
+}
+
+/** Le poster met à jour son pseudo TikTok (après avoir créé son compte). */
+export async function majMonHandle(handle: string): Promise<void> {
+  const { error } = await supabase.rpc("maj_mon_handle", { nouveau: handle });
+  if (error) throw error;
 }
 
 export function creerPoster(input: {

@@ -46,12 +46,26 @@ function CreateurLiens({
   const tiktok = poster.handle_tiktok
     ? `https://www.tiktok.com/@${poster.handle_tiktok.replace(/^@/, "")}`
     : null;
+  const reference = poster.reference_handle
+    ? `https://www.tiktok.com/@${poster.reference_handle.replace(/^@/, "")}`
+    : null;
 
   return (
     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       {tiktok && (
         <a href={tiktok} target="_blank" rel="noreferrer" className="underline underline-offset-2">
           TikTok ↗
+        </a>
+      )}
+      {reference && (
+        <a
+          href={reference}
+          target="_blank"
+          rel="noreferrer"
+          className="text-muted-foreground underline underline-offset-2"
+          title={t("posters.compteReference")}
+        >
+          {t("posters.reference")} @{poster.reference_handle} ↗
         </a>
       )}
       {!edit && poster.upwork_url && (
