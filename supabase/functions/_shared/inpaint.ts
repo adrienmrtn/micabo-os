@@ -152,34 +152,31 @@ export async function inpaintTexte(
   if (!key || zones.length === 0) return null;
 
   const dims = dimensionsImage(imageBytes);
-  if (!dims) return null;
+  if (!dims) throw new Error("inpaint: dimensions illisibles");
 
-  try {
-    const masque = await masquePNG(dims.w, dims.h, zones);
+  const masque = await masquePNG(dims.w, dims.h, zones);
 
-    const form = new FormData();
-    form.append("image", new Blob([imageBytes], { type: mime }), "image");
-    form.append("mask", new Blob([masque], { type: "image/png" }), "mask.png");
-    form.append("output_format", "png");
+  const form = new FormData();
+  form.append("image", new Blob([imageBytes], { type: mime }), "image");
+  form.append("mask", new Blob([masque], { type: "image/png" }), "mask.png");
+  form.append("output_format", "png");
 
-    const res = await fetch("https://api.stability.ai/v2beta/stable-image/edit/erase", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, Accept: "image/*" },
-      body: form,
-    });
-    if (!res.ok) {
-      throw new Error(`Stability ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    }
-
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    let binaire = "";
-    const CHUNK = 0x8000;
-    for (let i = 0; i < bytes.length; i += CHUNK) {
-      binaire += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-    }
-    return btoa(binaire);
-  } catch (error) {
-    console.warn(`[inpaint] échec, on garde l'original : ${error}`);
-    return null;
+  const res = await fetch("https://api.stability.ai/v2beta/stable-image/edit/erase", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, Accept: "image/*" },
+    body: form,
+  });
+  // On NE gobe plus l'erreur : le motif remonte pour qu'on sache pourquoi
+  // l'inpainting a échoué au lieu de basculer silencieusement sur Gemini.
+  if (!res.ok) {
+    throw new Error(`Stability ${res.status} (${dims.w}×${dims.h}): ${(await res.text()).slice(0, 200)}`);
   }
+
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  let binaire = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binaire += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binaire);
 }

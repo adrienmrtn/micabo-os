@@ -429,10 +429,16 @@ export async function cleanImage(imageUrl: string): Promise<string | null> {
   // 1 — INPAINTING D'ABORD. C'est la voie principale : il n'efface que la zone
   // du texte, ne juge jamais le contenu (aucun refus sur les visages) et ne
   // régénère pas la personne (donc aucune dérive du cadrage ou des couleurs).
-  // Il évite aussi les tentatives Gemini image, les plus chères. Renvoie null
-  // si aucune zone de texte détectée, pas de clé Stability, ou erreur.
-  const parInpaint = await inpaintFallback(image);
-  if (parInpaint) return parInpaint;
+  // Il évite aussi les tentatives Gemini image, les plus chères.
+  let noteInpaint = "inpaint: aucune image (pas de zone, ou pas de clé)";
+  try {
+    const parInpaint = await inpaintFallback(image);
+    if (parInpaint) return parInpaint;
+  } catch (error) {
+    // Le motif remonte au lieu d'être avalé : c'est ainsi qu'on a vu que les
+    // images trop grandes étaient rejetées par le service d'effacement.
+    noteInpaint = `inpaint: ${messageErreur(error)}`;
+  }
 
   // 2 — REPLI GEMINI GÉNÉRATIF, seulement si l'inpainting n'a rien pu faire.
   // La source d'ABORD, la consigne ensuite ; température basse et sortie image
@@ -452,29 +458,25 @@ export async function cleanImage(imageUrl: string): Promise<string | null> {
     }
   }
 
-  throw new RefusRetouche(echecs.join(" | "));
+  throw new RefusRetouche([noteInpaint, ...echecs].join(" | "));
 }
 
 /**
  * Détecte les zones de texte incrusté, puis les efface par inpainting. La
  * détection est une simple lecture (jamais bloquée), l'effacement ne touche que
- * les zones repérées.
+ * les zones repérées. Les erreurs remontent (elles ne sont plus gobées) pour
+ * que la vraie cause d'un échec soit visible.
  */
 async function inpaintFallback(image: Part): Promise<string | null> {
-  try {
-    const base64 = image.inline_data?.data ?? image.inlineData?.data;
-    const mime = image.inline_data?.mime_type ?? image.inlineData?.mimeType ?? "image/jpeg";
-    if (!base64) return null;
+  const base64 = image.inline_data?.data ?? image.inlineData?.data;
+  const mime = image.inline_data?.mime_type ?? image.inlineData?.mimeType ?? "image/jpeg";
+  if (!base64) return null;
 
-    const zones = await detecterZonesTexte(image);
-    if (zones.length === 0) return null;
+  const zones = await detecterZonesTexte(image);
+  if (zones.length === 0) return null;
 
-    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-    return await inpaintTexte(bytes, mime, zones);
-  } catch (error) {
-    console.warn(`[inpaint fallback] ${messageErreur(error)}`);
-    return null;
-  }
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  return await inpaintTexte(bytes, mime, zones);
 }
 
 /**

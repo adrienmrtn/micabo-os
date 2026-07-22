@@ -174,7 +174,7 @@ export const fr = {
       texteRestant: "Texte présent",
       nettoyer: "Nettoyer",
       nettoyageEnCours: "Nettoyage…",
-      nettoyageEchec: "Échec (Gemini a refusé — visage). Clé Stability requise.",
+      nettoyageEchec: "Image refusée par les deux services (souvent un still de film). Remplace-la.",
       confirmSuppr: "Supprimer cette photo de la bibliothèque ?",
       compteur_one: "{{count}} visuel porte encore du texte à nettoyer.",
       compteur_other: "{{count}} visuels portent encore du texte à nettoyer.",
@@ -330,7 +330,8 @@ export const fr = {
       texteRestant: "Texte non retiré",
       renettoyer: "Re-nettoyer la photo",
       nettoyageEnCours: "Nettoyage…",
-      nettoyageEchec: "Nettoyage impossible (le modèle a refusé)",
+      nettoyageEchec:
+        "Image refusée par les deux services (souvent un still de film sous copyright). Remplace-la par une autre photo.",
       nettoyageTexteResiduel: "Nettoyée, mais du texte semble subsister — revérifie.",
       remplacerPhoto: "Remplacer la photo",
       choisirBiblio: "Choisir une photo de la bibliothèque du compte",
