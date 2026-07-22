@@ -1,4 +1,4 @@
-import { cleanImage } from "../_shared/gemini.ts";
+import { cleanImage, verifyClean } from "../_shared/gemini.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 const BUCKET = "medias";
@@ -39,9 +39,13 @@ Deno.serve(async (request) => {
       return json({ ok: true, nettoyee: true, note: "déjà nettoyée" });
     }
 
-    // cleanImage rend une sortie de confiance (proxy) ou déjà vérifiée (repli).
     const propreBase64 = await cleanImage(media.url);
     if (!propreBase64) return json({ ok: false, nettoyee: false, motif: "aucune image renvoyée" });
+    // Le proxy renvoie parfois l'image non nettoyée en disant « réussi » : on
+    // vérifie qu'il n'y a plus de texte avant de la marquer propre.
+    if (!(await verifyClean(propreBase64, "image/png"))) {
+      return json({ ok: false, nettoyee: false, motif: "texte encore présent après nettoyage" });
+    }
 
     const path = `propre/manuel/${media.id}.png`;
     const bytes = Uint8Array.from(atob(propreBase64), (c) => c.charCodeAt(0));

@@ -1,4 +1,4 @@
-import { cleanImage, ocrFrame, scoreRelevance } from "../_shared/gemini.ts";
+import { cleanImage, ocrFrame, scoreRelevance, verifyClean } from "../_shared/gemini.ts";
 import { assertAuthorised, chargerPrompt, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
@@ -190,6 +190,16 @@ async function nettoyerVersBibliotheque(
     return null;
   }
   if (!propreBase64) return null;
+
+  // CONTRÔLE : le proxy renvoie PARFOIS l'image sans l'avoir nettoyée (il dit
+  // « réussi » quand même). On ne la stocke donc pas comme propre à l'aveugle :
+  // s'il reste du texte incrusté, on renvoie null → re-tentée au passage suivant
+  // (le proxy réussit souvent au 2e coup), puis remplacée par une photo propre
+  // de la bibliothèque en dernier recours. Le poster n'a jamais de texte résiduel.
+  if (!(await verifyClean(propreBase64, "image/png"))) {
+    console.warn(`[nettoyage non abouti] sujet=${sujet.id} slide=${slide.position} — texte encore présent`);
+    return null;
+  }
 
   const path = `propre/${sujet.id}/${slide.position}.png`;
   const bytes = Uint8Array.from(atob(propreBase64), (c) => c.charCodeAt(0));
