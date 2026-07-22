@@ -168,7 +168,7 @@ export async function effacerTexte(
   const masque = await masquePNG(dims.w, dims.h, zones);
 
   const jetonReplicate = Deno.env.get("REPLICATE_API_TOKEN");
-  if (jetonReplicate) return await lamaReplicate(jetonReplicate, imageUrl, masque);
+  if (jetonReplicate) return await fluxFillReplicate(jetonReplicate, imageUrl, masque);
 
   const cleStability = Deno.env.get("STABILITY_KEY") ?? Deno.env.get("STABILITY_API_KEY");
   if (cleStability) return await stabilityErase(cleStability, imageBytes, mime, masque, dims);
@@ -177,17 +177,18 @@ export async function effacerTexte(
 }
 
 /**
- * LaMa via Replicate. `Prefer: wait` bloque jusqu'au résultat (le modèle tourne
- * en ~2 s) ; en cas de réponse asynchrone on interroge la prédiction. Le masque
- * part en data-URI, l'image publique par son URL. Convention LaMa : blanc =
- * zone à effacer.
+ * Flux Fill (dev) via Replicate. `Prefer: wait` bloque jusqu'au résultat ; en
+ * cas de réponse asynchrone on interroge la prédiction. Le masque part en
+ * data-URI, l'image publique par son URL. Convention : blanc = zone à remplir.
+ *
+ * Contrairement à LaMa (qui floute), c'est un modèle de diffusion : il
+ * reconstruit le décor sous le texte de façon photoréaliste. Version figée,
+ * récupérée via l'API Replicate ; un modèle communautaire s'appelle par son
+ * hash de version sur /v1/predictions.
  */
-// Version figée du modèle allenhooo/lama (récupérée via l'API Replicate).
-// Un modèle communautaire s'appelle par son hash de version sur /v1/predictions,
-// et non par /models/{slug}/predictions (réservé aux modèles officiels).
-const LAMA_VERSION = "cdac78a1bec5b23c07fd29692fb70baa513ea403a39e643c48ec5edadb15fe72";
+const FLUX_FILL_VERSION = "a053f84125613d83e65328a289e14eb6639e10725c243e8fb0c24128e5573f4c";
 
-async function lamaReplicate(
+async function fluxFillReplicate(
   jeton: string,
   imageUrl: string,
   masque: Uint8Array,
@@ -202,8 +203,23 @@ async function lamaReplicate(
       Prefer: "wait",
     },
     body: JSON.stringify({
-      version: LAMA_VERSION,
-      input: { image: imageUrl, mask: maskDataUri },
+      version: FLUX_FILL_VERSION,
+      input: {
+        image: imageUrl,
+        mask: maskDataUri,
+        // Prompt vide : on ne veut rien inventer, seulement prolonger le décor
+        // existant là où le texte a été effacé.
+        prompt: "",
+        // Sortie ~1 Mpx : net et photoréaliste, largement assez pour TikTok,
+        // et surtout assez léger pour que l'Edge Function tienne (match_input
+        // sur une source 8 Mpx faisait exploser la mémoire du worker).
+        megapixels: "1",
+        output_format: "png",
+        num_inference_steps: 28,
+        // Contenu maison (photos lifestyle) : on coupe le checker de sortie
+        // pour éviter un faux positif qui bloquerait un nettoyage légitime.
+        disable_safety_checker: true,
+      },
     }),
   });
   if (!res.ok) {
