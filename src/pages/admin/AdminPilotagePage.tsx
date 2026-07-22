@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { BarChart3, Download, Sparkles, Wand2 } from "lucide-react";
+import { BarChart3, Download, Music, Sparkles, Wand2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
   lancerMetriques,
   lancerPreparation,
   listerSujets,
+  reparerMusique,
 } from "@/features/moteur/api";
 import type { Sujet } from "@/features/moteur/types";
 import { TestCompletCard } from "@/features/moteur/TestCompletCard";
@@ -88,11 +89,18 @@ export function AdminPilotagePage() {
       setMessage(`${r.resultats.reduce((s, x) => s + x.releves, 0)} relevé(s)`),
   });
 
+  const musique = useMutation({
+    onSettled: rafraichir,
+    mutationFn: () => reparerMusique(),
+    onSuccess: (r) => setMessage(t("pilotage.musiqueReparee", { count: r.corriges })),
+  });
+
   const enCours =
     extraction.isPending ||
     preparation.isPending ||
     assignation.isPending ||
-    metriques.isPending;
+    metriques.isPending ||
+    musique.isPending;
   const echec =
     extraction.error ?? preparation.error ?? assignation.error ?? metriques.error;
 
@@ -129,6 +137,10 @@ export function AdminPilotagePage() {
             <Button variant="outline" disabled={enCours} onClick={() => metriques.mutate()}>
               <BarChart3 />
               {metriques.isPending ? t("pilotage.running") : t("pilotage.metriques")}
+            </Button>
+            <Button variant="outline" disabled={enCours} onClick={() => musique.mutate()}>
+              <Music />
+              {musique.isPending ? t("pilotage.running") : t("pilotage.reparerMusique")}
             </Button>
           </div>
 

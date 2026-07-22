@@ -6,8 +6,16 @@ export interface ScrapedPost {
   text: string;
   imageUrls: string[];
   musicUrl: string | null;
+  musicTitle: string | null;
   createTime: number | null;
   stats: { vues: number; likes: number; commentaires: number; partages: number };
+}
+
+interface MusicMeta {
+  playUrl?: string;
+  musicId?: string;
+  musicName?: string;
+  musicAuthor?: string;
 }
 
 interface ApifyItem {
@@ -18,11 +26,36 @@ interface ApifyItem {
   createTime?: number;
   imageUrlList?: string[];
   slideshowImageLinks?: Array<string | { downloadLink?: string; url?: string }>;
-  musicMeta?: { playUrl?: string };
+  musicMeta?: MusicMeta;
   playCount?: number;
   diggCount?: number;
   commentCount?: number;
   shareCount?: number;
+}
+
+/**
+ * Lien vers la PAGE « son » de TikTok — stable et partageable, contrairement au
+ * `playUrl` (fichier audio CDN signé qui expire au bout de quelques jours, d'où
+ * les boutons musique morts). C'est cette page qui laisse le poster ajouter le
+ * son en favori et « utiliser ce son ». Le slug avant l'ID n'est que cosmétique :
+ * TikTok redirige d'après l'identifiant numérique final. Ne révèle pas le compte
+ * source (elle liste toutes les vidéos qui utilisent ce son).
+ */
+function lienMusique(meta: MusicMeta | undefined): { url: string | null; titre: string | null } {
+  const titre = meta?.musicName?.trim() || null;
+  if (meta?.musicId) {
+    const slug =
+      (titre ?? "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 40) || "son";
+    return { url: `https://www.tiktok.com/music/${slug}-${meta.musicId}`, titre };
+  }
+  // Pas d'ID exploitable : on retombe sur le playUrl, faute de mieux.
+  return { url: meta?.playUrl ?? null, titre };
 }
 
 function normaliseImageLink(link: string | { downloadLink?: string; url?: string }) {
@@ -98,7 +131,8 @@ async function runActor(
       webVideoUrl: item.webVideoUrl ?? "",
       text: item.text ?? "",
       imageUrls: mergeImageUrls(item),
-      musicUrl: item.musicMeta?.playUrl ?? null,
+      musicUrl: lienMusique(item.musicMeta).url,
+      musicTitle: lienMusique(item.musicMeta).titre,
       createTime: item.createTime ?? null,
       stats: {
         vues: item.playCount ?? 0,

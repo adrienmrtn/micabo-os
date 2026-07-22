@@ -133,6 +133,7 @@ interface PostScrape {
   text: string;
   imageUrls: string[];
   musicUrl: string | null;
+  musicTitle: string | null;
 }
 
 /**
@@ -231,6 +232,7 @@ async function creerSujet(
       compte_reference_id: compteReferenceId,
       source_url: post.webVideoUrl,
       musique_url: post.musicUrl,
+      musique_titre: post.musicTitle,
     })
     .select()
     .single();

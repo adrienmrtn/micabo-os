@@ -100,6 +100,8 @@ export const fr = {
       preparation: "Préparer un sujet",
       assignation: "Assigner la journée",
       metriques: "Relever les performances",
+      reparerMusique: "Réparer les liens musique",
+      musiqueReparee: "{{count}} lien(s) musique réparé(s).",
       running: "En cours…",
       sujets: "Sujets",
       posts: "Posts",

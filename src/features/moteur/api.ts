@@ -562,6 +562,13 @@ export const lancerMetriques = (compteId?: string) =>
     compteId: compteId ?? null,
   });
 
+/** Répare les liens musique périmés (re-scrape des sons pour un lien stable). */
+export const reparerMusique = () =>
+  invoke<{ ok: boolean; examines: number; corriges: number; echecs: number }>(
+    "backfill-musique",
+    {},
+  );
+
 export const lancerComposition = (input: {
   compteId: string;
   sujetId: string;
