@@ -344,21 +344,27 @@ async function choisirSujet(supabase: Supabase, compte: any) {
   // donc aussi les sujets déjà « utilise » — l'exclusion `dejaPris` empêche qu'un
   // même compte reçoive deux fois le même. Sans ça, un slideshow servait une seule
   // fois puis restait bloqué, alors qu'on veut le décliner dans chaque langue.
-  let query = supabase
-    .from("sujets")
-    .select("id")
-    .eq("preparation_statut", "done")
-    .in("statut", ["retenu", "utilise"])
-    .order("pertinence_score", { ascending: false })
-    .limit(1);
+  const base = () => {
+    let q = supabase
+      .from("sujets")
+      .select("id")
+      .eq("preparation_statut", "done")
+      .in("statut", ["retenu", "utilise"])
+      .order("pertinence_score", { ascending: false })
+      .limit(1);
+    if (exclus.length > 0) q = q.not("id", "in", `(${exclus.join(",")})`);
+    return q;
+  };
 
+  // 1) D'abord la source liée au compte (sa niche).
   if (compte.compte_reference_id) {
-    query = query.eq("compte_reference_id", compte.compte_reference_id);
-  }
-  if (exclus.length > 0) {
-    query = query.not("id", "in", `(${exclus.join(",")})`);
+    const { data } = await base().eq("compte_reference_id", compte.compte_reference_id);
+    if (data?.[0]) return data[0];
   }
 
-  const { data } = await query;
+  // 2) Repli sur le POOL COMMUN : n'importe quelle source. Sans ça, un poster dont
+  //    la source n'a plus de sujet frais se retrouvait à 0 post alors que du stock
+  //    déjà nettoyé existe ailleurs — il n'y a qu'à le re-traduire dans sa langue.
+  const { data } = await base();
   return data?.[0] ?? null;
 }

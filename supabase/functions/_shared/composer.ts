@@ -380,14 +380,41 @@ async function garantirVisuelsPropres(supabase: Supabase, compte: any, postId: s
 async function renumeroterSlides(supabase: Supabase, postId: string) {
   const { data: slides } = await supabase
     .from("post_slides")
-    .select("id, texte_overlay")
+    .select("id, texte_overlay, position_sophia")
     .eq("post_id", postId)
     .order("position");
+  if (!slides || slides.length === 0) return;
 
+  const detecteNumero = /^\s*\d+\s*[.)]/;
+  const remplaceNumero = /^(\s*)\d+(\s*[.)])\s?/;
+  const aNumero = (t: string) => detecteNumero.test(t);
+
+  // Convention du diaporama, lue sur les slides de CONTENU (on écarte la 1re =
+  // accroche, et la slide Sophia). Si la plupart portent un numéro, le diaporama
+  // est numéroté ; sinon il ne l'est pas.
+  const contenu = slides.filter((s, i) => i !== 0 && !s.position_sophia);
+  const numerotes = contenu.filter((s) => aNumero(s.texte_overlay ?? "")).length;
+  const conventionNumerotee = numerotes > 0 && numerotes >= contenu.length - numerotes;
+
+  if (!conventionNumerotee) {
+    // Diaporama non numéroté : on RETIRE tout numéro en tête (y compris celui que
+    // l'IA aurait collé sur la slide Sophia) — sinon une seule slide numérotée
+    // dépareille au milieu de slides qui n'en ont pas.
+    for (const s of slides) {
+      const texte = s.texte_overlay ?? "";
+      const nouveau = texte.replace(remplaceNumero, "$1");
+      if (nouveau !== texte) {
+        await supabase.from("post_slides").update({ texte_overlay: nouveau }).eq("id", s.id);
+      }
+    }
+    return;
+  }
+
+  // Diaporama numéroté : 1, 2, 3… dans l'ordre, sur chaque slide numérotée.
   let n = 0;
-  for (const s of slides ?? []) {
+  for (const s of slides) {
     const texte = s.texte_overlay ?? "";
-    if (!/^\s*\d+\s*[.)]/.test(texte)) continue; // pas de numéro = accroche
+    if (!aNumero(texte)) continue; // pas de numéro (accroche) = intacte
     n += 1;
     const nouveau = texte.replace(/^(\s*)\d+(\s*[.)])/, `$1${n}$2`);
     if (nouveau !== texte) {
