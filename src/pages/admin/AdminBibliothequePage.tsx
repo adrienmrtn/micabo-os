@@ -99,6 +99,7 @@ export function AdminBibliothequePage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [sourceId, setSourceId] = React.useState("");
+  const [lot, setLot] = React.useState<{ fait: number; total: number } | null>(null);
 
   const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
   const medias = useQuery({
@@ -107,15 +108,53 @@ export function AdminBibliothequePage() {
   });
 
   const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["medias"] });
-  const aNettoyer = (medias.data ?? []).filter((m) => !estPropre(m)).length;
+  const aNettoyerListe = (medias.data ?? []).filter((m) => !estPropre(m));
+  const aNettoyer = aNettoyerListe.length;
+
+  /** Nettoie tous les visuels à texte en parallèle (3 à la fois). */
+  async function nettoyerTout() {
+    setLot({ fait: 0, total: aNettoyerListe.length });
+    let index = 0;
+    let fait = 0;
+    async function travailleur() {
+      while (index < aNettoyerListe.length) {
+        const media = aNettoyerListe[index++];
+        try {
+          await nettoyerMedia(media.id);
+        } catch {
+          // un échec isolé ne stoppe pas le lot
+        }
+        fait += 1;
+        setLot({ fait, total: aNettoyerListe.length });
+      }
+    }
+    await Promise.all(Array.from({ length: 3 }, travailleur));
+    setLot(null);
+    rafraichir();
+  }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t("bibliotheque.title")}</CardTitle>
-        <CardDescription>
-          {aNettoyer > 0 ? t("bibliotheque.compteur", { count: aNettoyer }) : t("bibliotheque.subtitle")}
-        </CardDescription>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <CardTitle>{t("bibliotheque.title")}</CardTitle>
+            <CardDescription>
+              {aNettoyer > 0
+                ? t("bibliotheque.compteur", { count: aNettoyer })
+                : t("bibliotheque.subtitle")}
+            </CardDescription>
+          </div>
+          {aNettoyer > 0 && (
+            <Button size="sm" disabled={lot !== null} onClick={nettoyerTout}>
+              <Sparkles />
+              {lot
+                ? t("adminPost.lotEnCours", { fait: lot.fait, total: lot.total })
+                : t("bibliotheque.nettoyerTout", { count: aNettoyer })}
+            </Button>
+          )}
+        </div>
+        {lot && <p className="pt-1 text-xs text-muted-foreground">{t("adminPost.lotAide")}</p>}
       </CardHeader>
       <CardContent className="space-y-4">
         <select

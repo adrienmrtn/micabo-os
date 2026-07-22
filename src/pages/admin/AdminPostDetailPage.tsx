@@ -249,6 +249,8 @@ function SlideAdmin({
 export function AdminPostDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
+  const [lot, setLot] = React.useState<{ fait: number; total: number } | null>(null);
 
   const post = useQuery({ queryKey: ["post", id], queryFn: () => lirePost(id!), enabled: Boolean(id) });
   const slides = useQuery({
@@ -263,13 +265,42 @@ export function AdminPostDetailPage() {
     enabled: Boolean(id),
   });
 
+  const liste = slides.data ?? [];
+  const aProbleme = liste.filter((s) => !estPropre(s)).length;
+
+  /**
+   * Nettoie toutes les slides à texte EN PARALLÈLE (3 à la fois pour ne pas
+   * saturer les quotas). Chaque nettoyage dure ~1 min ; les lancer en série
+   * serait interminable, d'où le parallélisme.
+   */
+  async function nettoyerTout() {
+    const aFaire = liste.filter((s) => !estPropre(s));
+    setLot({ fait: 0, total: aFaire.length });
+
+    let index = 0;
+    let fait = 0;
+    const LARGEUR = 3;
+    async function travailleur() {
+      while (index < aFaire.length) {
+        const slide = aFaire[index++];
+        try {
+          await renettoyerSlide(slide.id);
+        } catch {
+          // un échec isolé ne doit pas stopper le lot
+        }
+        fait += 1;
+        setLot({ fait, total: aFaire.length });
+      }
+    }
+    await Promise.all(Array.from({ length: LARGEUR }, travailleur));
+    setLot(null);
+    queryClient.invalidateQueries({ queryKey: ["slides", id] });
+  }
+
   if (post.isPending || slides.isPending) {
     return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   }
   if (!post.data) return <p className="text-sm text-destructive">{t("common.notFoundTitle")}</p>;
-
-  const liste = slides.data ?? [];
-  const aProbleme = liste.filter((s) => !estPropre(s)).length;
 
   return (
     <div className="space-y-4">
@@ -287,12 +318,27 @@ export function AdminPostDetailPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">{t("adminPost.title")}</CardTitle>
-          <CardDescription>
-            {aProbleme > 0
-              ? t("adminPost.aVerifier", { count: aProbleme })
-              : t("adminPost.toutPropre")}
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">{t("adminPost.title")}</CardTitle>
+              <CardDescription>
+                {aProbleme > 0
+                  ? t("adminPost.aVerifier", { count: aProbleme })
+                  : t("adminPost.toutPropre")}
+              </CardDescription>
+            </div>
+            {aProbleme > 0 && (
+              <Button size="sm" disabled={lot !== null} onClick={nettoyerTout}>
+                <Sparkles />
+                {lot
+                  ? t("adminPost.lotEnCours", { fait: lot.fait, total: lot.total })
+                  : t("adminPost.nettoyerTout", { count: aProbleme })}
+              </Button>
+            )}
+          </div>
+          {lot && (
+            <p className="pt-1 text-xs text-muted-foreground">{t("adminPost.lotAide")}</p>
+          )}
         </CardHeader>
       </Card>
 
