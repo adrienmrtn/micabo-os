@@ -308,6 +308,22 @@ export const fr = {
         "Les chiffres arrivent une fois qu'un post est publié avec son lien TikTok renseigné.",
       voirTikTok: "Voir sur TikTok",
     },
+    adminCal: {
+      legende:
+        "Vert = publié, orange = en cours de fabrication, violet = prêt. Clique un post pour l'éditer.",
+    },
+    adminPost: {
+      title: "Détail du post",
+      aVerifier_one: "{{count}} photo à vérifier — texte non retiré ou photo manquante.",
+      aVerifier_other: "{{count}} photos à vérifier — texte non retiré ou photo manquante.",
+      toutPropre: "Toutes les photos sont nettoyées.",
+      texteRestant: "Texte non retiré",
+      renettoyer: "Re-nettoyer la photo",
+      nettoyageEnCours: "Nettoyage…",
+      nettoyageEchec: "Nettoyage impossible (le modèle a refusé)",
+      nettoyageTexteResiduel: "Nettoyée, mais du texte semble subsister — revérifie.",
+      remplacerPhoto: "Remplacer la photo",
+    },
     calendrier: {
       title: "Mon calendrier",
       aujourdhui: "Aujourd'hui",

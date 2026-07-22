@@ -248,6 +248,97 @@ export async function reassignerPost(
   if (error) throw error;
 }
 
+export interface PostCalendrierAdmin {
+  id: string;
+  date_publication_prevue: string | null;
+  type: string;
+  statut: string;
+  pipeline_statut: string;
+  publie_at: string | null;
+  persona_nom: string | null;
+  handle_tiktok: string | null;
+  poster_prenom: string | null;
+  sujet_titre: string | null;
+}
+
+/** Tous les posts, pour le calendrier admin. RLS admin = accès complet. */
+export async function postsCalendrierAdmin(): Promise<PostCalendrierAdmin[]> {
+  // Pas d'embed `profiles` sous `comptes` : comptes.poster_id pointe vers
+  // auth.users, pas vers public.profiles, donc PostgREST ne sait pas résoudre
+  // la relation (la requête partait en 400). persona_nom suffit à identifier
+  // le compte sur le calendrier.
+  const { data, error } = await supabase
+    .from("posts")
+    .select(
+      "id, date_publication_prevue, type, statut, pipeline_statut, publie_at, " +
+        "sujets(titre), comptes(persona_nom, handle_tiktok)",
+    )
+    .order("date_publication_prevue", { ascending: false, nullsFirst: false })
+    .limit(400);
+  if (error) throw error;
+
+  // deno-lint-ignore no-explicit-any
+  return (data as any[]).map((p) => ({
+    id: p.id,
+    date_publication_prevue: p.date_publication_prevue,
+    type: p.type,
+    statut: p.statut,
+    pipeline_statut: p.pipeline_statut,
+    publie_at: p.publie_at,
+    persona_nom: p.comptes?.persona_nom ?? null,
+    handle_tiktok: p.comptes?.handle_tiktok ?? null,
+    poster_prenom: null,
+    sujet_titre: p.sujets?.titre ?? null,
+  }));
+}
+
+/** Modifie le texte d'une slide. Édition manuelle admin, aucun appel IA. */
+export async function majTexteSlide(slideId: string, texte: string): Promise<void> {
+  const { error } = await supabase
+    .from("post_slides")
+    .update({ texte_overlay: texte })
+    .eq("id", slideId);
+  if (error) throw error;
+}
+
+/** Relance le nettoyage d'une seule photo (déclenché à la main par l'admin). */
+export const renettoyerSlide = (postSlideId: string) =>
+  invoke<{ ok: boolean; nettoyee: boolean; verifie_sans_texte?: boolean; erreur?: string }>(
+    "renettoyer",
+    { postSlideId },
+  );
+
+/**
+ * Remplace la photo d'une slide par un fichier fourni par l'admin. Le visuel
+ * est versé tel quel : aucun nettoyage, c'est un choix manuel assumé.
+ */
+export async function remplacerPhotoSlide(slideId: string, fichier: File): Promise<void> {
+  const chemin = `remplace/${slideId}-${crypto.randomUUID()}.${extension(fichier.name)}`;
+  const { error: upErr } = await supabase.storage
+    .from("medias")
+    .upload(chemin, fichier, { upsert: true, contentType: fichier.type || "image/jpeg" });
+  if (upErr) throw upErr;
+
+  const url = supabase.storage.from("medias").getPublicUrl(chemin).data.publicUrl;
+  const { data: media, error: insErr } = await supabase
+    .from("media_library")
+    .insert({ storage_path: chemin, url, source: "fourni_par_freelance" })
+    .select("id")
+    .single();
+  if (insErr) throw insErr;
+
+  const { error } = await supabase
+    .from("post_slides")
+    .update({ media_id: media.id })
+    .eq("id", slideId);
+  if (error) throw error;
+}
+
+function extension(nom: string): string {
+  const point = nom.lastIndexOf(".");
+  return point >= 0 ? nom.slice(point + 1).toLowerCase() : "jpg";
+}
+
 export async function sujetsDisponibles(): Promise<Array<{ id: string; titre: string }>> {
   const { data, error } = await supabase
     .from("sujets")

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   AtSign,
   BarChart3,
+  CalendarDays,
   CalendarRange,
   Gauge,
   Images,
@@ -21,6 +22,7 @@ export function AdminLayout() {
       navLabel={t("nav.admin")}
       navItems={[
         { to: "/admin", label: t("nav.pilotage"), icon: Gauge },
+        { to: "/admin/calendrier", label: t("nav.calendrier"), icon: CalendarDays },
         { to: "/admin/analytics", label: t("nav.analytics"), icon: BarChart3 },
         { to: "/admin/posts", label: t("nav.posts"), icon: CalendarRange },
         { to: "/admin/sources", label: t("nav.sources"), icon: AtSign },
