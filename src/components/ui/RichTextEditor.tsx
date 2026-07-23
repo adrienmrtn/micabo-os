@@ -4,6 +4,7 @@ import {
   Heading1,
   Heading2,
   Italic,
+  Link2,
   List,
   ListOrdered,
   Strikethrough,
@@ -67,6 +68,23 @@ export function RichTextEditor({
     onChange(ref.current?.innerHTML ?? "");
   };
 
+  // Insère un lien sur la sélection (ou demande l'URL à coller).
+  const insererLien = () => {
+    const url = window.prompt("URL du lien (https://…)");
+    if (url?.trim()) exec("createLink", url.trim());
+  };
+
+  // Dans une zone d'édition, un clic sert normalement à placer le curseur : les
+  // liens semblaient « morts ». Ici, cliquer un lien l'OUVRE dans un nouvel
+  // onglet (l'édition du texte du lien reste possible via le clavier).
+  const ouvrirLien = (e: React.MouseEvent) => {
+    const a = (e.target as HTMLElement).closest("a");
+    if (a instanceof HTMLAnchorElement && a.href) {
+      e.preventDefault();
+      window.open(a.href, "_blank", "noopener");
+    }
+  };
+
   return (
     <div className="overflow-hidden rounded-md border">
       <div className="flex flex-wrap items-center gap-0.5 border-b bg-muted/30 p-1">
@@ -99,6 +117,9 @@ export function RichTextEditor({
         <BoutonBarre onClick={() => exec("insertOrderedList")}>
           <ListOrdered className="size-4" />
         </BoutonBarre>
+        <BoutonBarre onClick={insererLien}>
+          <Link2 className="size-4" />
+        </BoutonBarre>
         <span className="mx-1 h-5 w-px bg-border" />
         <select
           aria-label="police"
@@ -119,7 +140,11 @@ export function RichTextEditor({
         contentEditable
         suppressContentEditableWarning
         onInput={() => onChange(ref.current?.innerHTML ?? "")}
-        className={cn("min-h-52 px-3 py-2 focus:outline-none", richTextClass)}
+        onClick={ouvrirLien}
+        className={cn(
+          "min-h-52 px-3 py-2 focus:outline-none [&_a]:cursor-pointer",
+          richTextClass,
+        )}
       />
     </div>
   );
