@@ -1,8 +1,8 @@
 import * as React from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Check, ImageUp, Sparkles, Trash2, X } from "lucide-react";
+import { Check, ImageUp, RefreshCcw, Sparkles, Trash2, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { cn } from "@/lib/utils";
 import { executerEnLot } from "@/lib/lot";
 import {
+  avancerUnPost,
   compteReferenceDuPost,
   lirePost,
   listerMedias,
@@ -18,6 +19,7 @@ import {
   majTexteSlide,
   renettoyerSlide,
   retirerPhotoSlide,
+  revoquerPost,
   supprimerSlide,
 } from "@/features/moteur/api";
 import type { Media, PostSlide } from "@/features/moteur/types";
@@ -268,8 +270,40 @@ function SlideAdmin({
 export function AdminPostDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [lot, setLot] = React.useState<{ fait: number; total: number } | null>(null);
+  const [revoq, setRevoq] = React.useState<string | null>(null);
+
+  /**
+   * Post inutilisable (thème incohérent pour Sophia) : on rejette CE slideshow
+   * (pas le hook — un autre post peut commencer pareil et rester bon), on en
+   * refabrique un autre pour le même créateur + date, puis on l'ouvre.
+   */
+  async function revoquerEtRefaire() {
+    if (!id) return;
+    if (!window.confirm(t("adminPost.confirmRevoquer"))) return;
+    setRevoq(t("adminPost.revoquerEnCours"));
+    try {
+      const { newPostId } = await revoquerPost(id);
+      if (!newPostId) {
+        setRevoq(null);
+        window.alert(t("adminPost.revoquerAucun"));
+        navigate("/admin/calendrier");
+        return;
+      }
+      // On fabrique le nouveau post pas à pas jusqu'à ce qu'il soit prêt.
+      for (let i = 0; i < 40; i += 1) {
+        const r = await avancerUnPost(newPostId).catch(() => null);
+        if (r?.etape === "done" || r?.etape === "failed") break;
+      }
+      setRevoq(null);
+      navigate(`/admin/posts/${newPostId}`);
+    } catch (e) {
+      setRevoq(null);
+      window.alert((e as Error).message);
+    }
+  }
 
   const post = useQuery({ queryKey: ["post", id], queryFn: () => lirePost(id!), enabled: Boolean(id) });
   const slides = useQuery({
@@ -313,13 +347,24 @@ export function AdminPostDetailPage() {
         <Button variant="outline" size="sm" asChild>
           <Link to="/admin/calendrier">{t("common.back")}</Link>
         </Button>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            disabled={revoq !== null}
+            onClick={revoquerEtRefaire}
+          >
+            <RefreshCcw className="size-4" />
+            {revoq ?? t("adminPost.revoquer")}
+          </Button>
           <Badge variant="secondary">{t(`type.${post.data.type}`)}</Badge>
           <Badge variant={post.data.publie_at ? "success" : "outline"}>
             {t(`statut.${post.data.statut}`)}
           </Badge>
         </div>
       </div>
+      <p className="text-xs text-muted-foreground">{t("adminPost.revoquerAide")}</p>
 
       <Card>
         <CardHeader className="pb-3">

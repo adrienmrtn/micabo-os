@@ -597,6 +597,13 @@ export const en = {
       confirmRetirerPhoto: "Remove the photo from this slide?",
       supprimerSlide: "Delete the slide",
       confirmSupprimerSlide: "Delete this entire slide from the post? The following ones will be renumbered.",
+      revoquer: "Revoke and find a new one",
+      revoquerAide:
+        "If this slideshow makes no sense for Sophia (theme can't be integrated), revoke it: we reject THIS slideshow (not the hook — another post can start the same way and still be good) and build a new one for this creator on this date.",
+      revoquerEnCours: "Revoking and building…",
+      confirmRevoquer:
+        "Revoke this post and build another for this creator on this date? This slideshow won't be picked again.",
+      revoquerAucun: "No other topic available right now — try later (the pipeline prepares new slideshows every night).",
     },
     documents: {
       nav: "Documents",

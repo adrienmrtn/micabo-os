@@ -597,6 +597,13 @@ export const fr = {
       confirmRetirerPhoto: "Retirer la photo de cette slide ?",
       supprimerSlide: "Supprimer la slide",
       confirmSupprimerSlide: "Supprimer cette slide entière du post ? Les suivantes seront renumérotées.",
+      revoquer: "Révoquer et trouver un nouveau",
+      revoquerAide:
+        "Si ce slideshow n'a pas de sens pour Sophia (thème non intégrable), révoque-le : on rejette CE slideshow (pas le hook — un autre post peut commencer pareil et rester bon) et on en refait un autre pour ce créateur à cette date.",
+      revoquerEnCours: "Révocation et fabrication…",
+      confirmRevoquer:
+        "Révoquer ce post et en fabriquer un autre pour ce créateur à cette date ? Ce slideshow ne sera plus repioché.",
+      revoquerAucun: "Aucun autre sujet disponible pour l'instant — réessaie plus tard (le pipeline prépare de nouveaux slideshows chaque nuit).",
     },
     documents: {
       nav: "Documents",
