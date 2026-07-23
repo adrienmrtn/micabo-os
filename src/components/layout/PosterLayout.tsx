@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { BookOpen, CalendarDays, HelpCircle } from "lucide-react";
 
 import { ReviewPopup } from "@/features/reviews/ReviewPopup";
+import { OnboardingPopup } from "@/features/onboarding/OnboardingPopup";
 import { AppShell } from "./AppShell";
 
 export function PosterLayout() {
@@ -21,6 +22,7 @@ export function PosterLayout() {
         },
       ]}
     >
+      <OnboardingPopup />
       <ReviewPopup />
       <Outlet />
     </AppShell>

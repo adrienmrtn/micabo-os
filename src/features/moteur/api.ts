@@ -292,6 +292,26 @@ export async function majMonUpwork(url: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Le poster a-t-il déjà vu la vidéo d'onboarding ? (null = jamais vue). */
+export async function onboardingVu(): Promise<boolean> {
+  const { data: sess } = await supabase.auth.getUser();
+  const uid = sess.user?.id;
+  if (!uid) return true;
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("onboarding_vu_at")
+    .eq("id", uid)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data?.onboarding_vu_at);
+}
+
+/** Marque la vidéo d'onboarding comme vue (le pop-up ne réapparaîtra plus). */
+export async function marquerOnboardingVu(): Promise<void> {
+  const { error } = await supabase.rpc("marquer_onboarding_vu");
+  if (error) throw error;
+}
+
 /** Le lien Upwork du poster connecté (sur sa propre ligne profiles). */
 export async function monUpwork(): Promise<string | null> {
   const { data: sess } = await supabase.auth.getUser();

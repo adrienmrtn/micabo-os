@@ -63,6 +63,11 @@ export const fr = {
       majUpwork: "Mettre à jour mon lien Upwork",
       setUpwork: "Renseigner mon lien Upwork",
     },
+    onboarding: {
+      titre: "Bienvenue ! Regarde cette vidéo",
+      sous: "2 min pour savoir comment poster facilement",
+      compris: "J'ai compris",
+    },
     navSection: {
       production: "Production",
       tests: "Tests",
