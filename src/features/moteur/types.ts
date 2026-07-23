@@ -93,6 +93,7 @@ export interface Post {
   musique_url: string | null;
   musique_titre: string | null;
   musique_plateforme: string | null;
+  hashtags: string | null;
   publie_at: string | null;
   publie_url: string | null;
   pipeline_statut: PipelineStatut;

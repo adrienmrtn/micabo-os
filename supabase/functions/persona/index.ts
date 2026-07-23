@@ -177,39 +177,54 @@ async function filtrerPseudos(
 const CANDIDATS_AVATAR = 6;
 
 async function choisirAvatar(supabase: Supabase, compteReferenceId: string | null) {
-  // Déjà jugés sans visage : utilisables tels quels, aucun appel à passer.
-  let connus = supabase
-    .from("media_library")
-    .select("id, url, used_count")
-    .eq("visage_identifiable", false)
-    .order("used_count")
-    .limit(1);
-  if (compteReferenceId) connus = connus.eq("compte_reference_id", compteReferenceId);
-
-  const { data: dejaSur } = await connus;
-  if (dejaSur?.[0]) return dejaSur[0];
-
-  // Sinon on juge quelques visuels encore non examinés.
-  let aJuger = supabase
-    .from("media_library")
-    .select("id, url, used_count")
-    .is("visage_identifiable", null)
-    .order("used_count")
-    .limit(CANDIDATS_AVATAR);
-  if (compteReferenceId) aJuger = aJuger.eq("compte_reference_id", compteReferenceId);
-
-  const { data: candidats } = await aJuger;
-
-  for (const media of candidats ?? []) {
-    const visage = await contientVisageIdentifiable(media.url);
-    // Le doute vaut refus : un indécis est marqué comme portant un visage.
-    await supabase
+  // Une image DÉJÀ jugée sans visage (aucun appel à passer). On tente d'abord la
+  // source du compte, puis TOUTE la bibliothèque — un avatar est juste une photo
+  // esthétique, la niche exacte importe peu, et ça garantit un avatar même quand
+  // la source neuve n'a encore aucune image à elle.
+  const connuSansVisage = async (limiterALaSource: boolean) => {
+    let q = supabase
       .from("media_library")
-      .update({ visage_identifiable: visage === null ? true : visage })
-      .eq("id", media.id);
+      .select("id, url, used_count")
+      .eq("visage_identifiable", false)
+      .eq("texte_restant", false)
+      .like("storage_path", "propre/%")
+      .order("used_count")
+      .limit(1);
+    if (limiterALaSource && compteReferenceId) q = q.eq("compte_reference_id", compteReferenceId);
+    const { data } = await q;
+    return data?.[0] ?? null;
+  };
 
-    if (visage === false) return media;
-  }
+  const dejaSur =
+    (compteReferenceId ? await connuSansVisage(true) : null) ?? (await connuSansVisage(false));
+  if (dejaSur) return dejaSur;
 
-  return null;
+  // Sinon on juge quelques visuels encore non examinés (source d'abord, puis
+  // global) jusqu'à en trouver un sans visage.
+  const jugerNouveaux = async (limiterALaSource: boolean) => {
+    let q = supabase
+      .from("media_library")
+      .select("id, url, used_count")
+      .is("visage_identifiable", null)
+      .eq("texte_restant", false)
+      .like("storage_path", "propre/%")
+      .order("used_count")
+      .limit(CANDIDATS_AVATAR);
+    if (limiterALaSource && compteReferenceId) q = q.eq("compte_reference_id", compteReferenceId);
+    const { data: candidats } = await q;
+
+    for (const media of candidats ?? []) {
+      const visage = await contientVisageIdentifiable(media.url);
+      await supabase
+        .from("media_library")
+        .update({ visage_identifiable: visage === null ? true : visage })
+        .eq("id", media.id);
+      if (visage === false) return media;
+    }
+    return null;
+  };
+
+  return (
+    (compteReferenceId ? await jugerNouveaux(true) : null) ?? (await jugerNouveaux(false))
+  );
 }

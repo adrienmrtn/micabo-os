@@ -327,6 +327,8 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
             ? "Sophia placée en repli (texte par défaut, à personnaliser)"
             : null,
         statut: "assigne",
+        // Description = hashtags dans la langue du compte (à copier dans TikTok).
+        hashtags: post.hashtags ?? hashtagsPour(compte.langue, post.id),
       })
       .eq("id", post.id);
 
@@ -409,6 +411,29 @@ async function garantirVisuelsPropres(supabase: Supabase, compte: any, postId: s
  * intacts. Les slides sans numéro (accroche) sont ignorées. Déterministe : ça
  * corrige tout décalage laissé par la traduction ou le placement Sophia.
  */
+// Réserve de hashtags par langue (culture générale / self-improvement / booktok /
+// pour toi). Chaque post en tire ~7, variés d'un post à l'autre — aucun appel IA.
+const HASHTAGS: Record<string, string[]> = {
+  fr: ["#apprendre", "#culturegenerale", "#developpementpersonnel", "#booktok", "#pourtoi", "#savoir", "#apprendresurtiktok", "#culture", "#motivation", "#connaissances", "#fyp", "#anecdotes"],
+  en: ["#learning", "#selfimprovement", "#booktok", "#foryou", "#knowledge", "#learnontiktok", "#growthmindset", "#facts", "#motivation", "#studytok", "#fyp", "#smart"],
+  de: ["#lernen", "#selbstverbesserung", "#booktok", "#fürdich", "#wissen", "#bildung", "#persönlichkeitsentwicklung", "#motivation", "#fakten", "#allgemeinwissen", "#fyp", "#lernenmittiktok"],
+  it: ["#imparare", "#crescitapersonale", "#booktok", "#perte", "#cultura", "#conoscenza", "#sapere", "#motivazione", "#curiosità", "#studytok", "#fyp", "#impararesutiktok"],
+  es: ["#aprender", "#desarrollopersonal", "#booktok", "#parati", "#cultura", "#conocimiento", "#superacionpersonal", "#motivacion", "#datoscuriosos", "#aprendeentiktok", "#fyp", "#sabiduria"],
+  pt: ["#aprender", "#desenvolvimentopessoal", "#booktok", "#paravoce", "#cultura", "#conhecimento", "#crescimento", "#motivacao", "#curiosidades", "#aprendanotiktok", "#fyp", "#sabedoria"],
+};
+
+/** ~7 hashtags de la langue du compte, variés par post (offset déterministe tiré
+ *  de l'id du post) — pas deux posts avec exactement la même description. */
+function hashtagsPour(langue: string, postId: string): string {
+  const pool = HASHTAGS[langue] ?? HASHTAGS.fr;
+  let h = 0;
+  for (const c of postId) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const debut = h % pool.length;
+  const choix: string[] = [];
+  for (let i = 0; i < 7 && i < pool.length; i += 1) choix.push(pool[(debut + i) % pool.length]);
+  return choix.join(" ");
+}
+
 async function renumeroterSlides(supabase: Supabase, postId: string) {
   const { data: slides } = await supabase
     .from("post_slides")

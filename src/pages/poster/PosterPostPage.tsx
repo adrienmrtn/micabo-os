@@ -376,6 +376,28 @@ export function PosterPostPage() {
         </Card>
       )}
 
+      {/* 3.5 — Description / hashtags à coller dans la légende TikTok. */}
+      {donnees.hashtags && (
+        <Card>
+          <CardContent className="pt-5">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-sm font-medium">{t("posts.hashtagsTitre")}</p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => navigator.clipboard?.writeText(donnees.hashtags ?? "")}
+              >
+                <Copy className="size-3.5" />
+                {t("posts.copier")}
+              </Button>
+            </div>
+            <p className="rounded-lg bg-muted/50 p-3 text-sm leading-relaxed text-primary">
+              {donnees.hashtags}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* 4 — Les slides : photo à poster, photo d'origine, texte. */}
       <div className="space-y-4">
         {liste.map((slide, index) => (
@@ -534,6 +556,7 @@ function texteComplet(post: Post, slides: PostSlide[]): string {
   const lignes = slides
     .filter((s) => s.texte_overlay)
     .map((s) => `Slide ${s.position}\n${s.texte_overlay}`);
+  if (post.hashtags) lignes.push(`Description :\n${post.hashtags}`);
   if (post.musique_url) lignes.push(`Musique : ${post.musique_url}`);
   return lignes.join("\n\n");
 }

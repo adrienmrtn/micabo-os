@@ -471,6 +471,7 @@ export const fr = {
       voirNettoyees: "Voir les images nettoyées",
       slide: "Slide {{position}}",
       sophia: "Sophia",
+      hashtagsTitre: "Description à mettre (hashtags)",
       musique: "Musique",
       copier: "Copier",
       copie: "Copié",
