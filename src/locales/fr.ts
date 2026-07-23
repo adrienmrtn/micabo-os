@@ -591,6 +591,21 @@ export const fr = {
       supprimerSlide: "Supprimer la slide",
       confirmSupprimerSlide: "Supprimer cette slide entière du post ? Les suivantes seront renumérotées.",
     },
+    documents: {
+      nav: "Documents",
+      navDesc: "Guides et FAQ (managers et créateurs) — éditables",
+      title: "Documents — guides et FAQ",
+      subtitle:
+        "Le contenu que voient les managers et les créateurs dans leur espace. Modifie-le ici ; c'est appliqué tout de suite.",
+      rubrique: "Ressources",
+      guideManager: "Guide du manager",
+      guideCreateur: "Guide du créateur",
+      onboarding: "Onboarder des créateurs",
+      faq: "FAQ",
+      pourManagers: "Managers",
+      pourCreateurs: "Créateurs",
+      pourTous: "Tous",
+    },
     calendrier: {
       title: "Mon calendrier",
       aujourdhui: "Aujourd'hui",

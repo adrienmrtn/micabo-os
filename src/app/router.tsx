@@ -9,6 +9,8 @@ import { AdminLayout } from "@/components/layout/AdminLayout";
 import { PosterLayout } from "@/components/layout/PosterLayout";
 import { HiringLayout } from "@/components/layout/HiringLayout";
 import { HiringPosterPage } from "@/pages/hiring/HiringPosterPage";
+import { AdminDocumentsPage } from "@/pages/admin/AdminDocumentsPage";
+import { DocumentView } from "@/features/documents/DocumentView";
 import { AdminPilotagePage } from "@/pages/admin/AdminPilotagePage";
 import { AdminSourcesPage } from "@/pages/admin/AdminSourcesPage";
 import { AdminPostersPage } from "@/pages/admin/AdminPostersPage";
@@ -59,18 +61,24 @@ export function AppRouter() {
             <Route path="/admin/test-nettoyage" element={<AdminTestNettoyagePage />} />
             <Route path="/admin/reglages" element={<AdminReglagesPage />} />
             <Route path="/admin/prompts" element={<AdminPromptsPage />} />
+            <Route path="/admin/documents" element={<AdminDocumentsPage />} />
           </Route>
         </Route>
 
         <Route element={<RoleGate allow={["poster"]} />}>
           <Route element={<PosterLayout />}>
             <Route path="/calendrier" element={<PosterCalendrierPage />} />
+            <Route path="/createur/guide" element={<DocumentView cle="guide_poster" />} />
+            <Route path="/createur/faq" element={<DocumentView cle="faq_poster" />} />
           </Route>
         </Route>
 
         <Route element={<RoleGate allow={["hiring_manager"]} />}>
           <Route element={<HiringLayout />}>
             <Route path="/embauche" element={<HiringPosterPage />} />
+            <Route path="/manager/guide" element={<DocumentView cle="guide_manager" />} />
+            <Route path="/manager/onboarding" element={<DocumentView cle="onboarding" />} />
+            <Route path="/manager/faq" element={<DocumentView cle="faq_manager" />} />
           </Route>
         </Route>
 

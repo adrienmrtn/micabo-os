@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   AtSign,
   BarChart3,
+  BookOpen,
   CalendarDays,
   CalendarRange,
   FlaskConical,
@@ -90,6 +91,12 @@ export function AdminLayout() {
               label: t("nav.prompts"),
               icon: MessageSquareQuote,
               description: t("navDesc.prompts"),
+            },
+            {
+              to: "/admin/documents",
+              label: t("documents.nav"),
+              icon: BookOpen,
+              description: t("documents.navDesc"),
             },
           ],
         },

@@ -397,6 +397,51 @@ export async function apercuSujet(sujetId: string): Promise<SlideApercu[]> {
     }));
 }
 
+// --- Documents (guides, FAQ) -------------------------------------------------
+
+export interface DocumentEditable {
+  id: string;
+  cle: string;
+  titre: string;
+  contenu: string;
+  audience: "manager" | "poster" | "all";
+  ordre: number;
+  updated_at: string;
+}
+
+/** Documents visibles par l'appelant (RLS : admin tout, manager/poster les leurs). */
+export async function listerDocuments(): Promise<DocumentEditable[]> {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*")
+    .order("audience")
+    .order("ordre");
+  if (error) throw error;
+  return (data ?? []) as DocumentEditable[];
+}
+
+export async function lireDocument(cle: string): Promise<DocumentEditable | null> {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*")
+    .eq("cle", cle)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as DocumentEditable) ?? null;
+}
+
+/** Édition d'un document (admin uniquement via RLS). */
+export async function majDocument(
+  id: string,
+  patch: { titre?: string; contenu?: string },
+): Promise<void> {
+  const { error } = await supabase
+    .from("documents")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export function supprimerPoster(userId: string) {
   return invoke("manage-users", { action: "delete", userId });
 }
