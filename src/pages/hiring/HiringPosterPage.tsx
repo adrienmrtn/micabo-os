@@ -127,7 +127,11 @@ export function HiringPosterPage() {
                 {creer.isPending ? t("hiring.enCours") : t("hiring.create")}
               </Button>
               {creer.isError && (
-                <p className="mt-2 text-sm text-destructive">{(creer.error as Error).message}</p>
+                <p className="mt-2 text-sm text-destructive">
+                  {(creer.error as Error).message === "NO_FREE_REFERENCE"
+                    ? t("posters.plusDeReference")
+                    : (creer.error as Error).message}
+                </p>
               )}
             </div>
           </form>

@@ -45,6 +45,16 @@ Deno.serve(async (request) => {
       return json({ error: "Prénom requis et mot de passe d'au moins 8 caractères" }, 400);
     }
 
+    // Un poster occupe UN compte de référence LIBRE de sa langue (1 poster =
+    // 1 source). S'il n'y en a plus, on n'ouvre aucun accès et on le dit tout de
+    // suite — AVANT de créer quoi que ce soit. Le front affiche « plus de
+    // créateurs possibles dans cette langue ».
+    let referenceId: string | null = null;
+    if (roleVoulu === "poster" && langue) {
+      referenceId = await referenceLibre(supabase, langue);
+      if (!referenceId) return json({ error: "NO_FREE_REFERENCE" }, 409);
+    }
+
     const email = await emailDisponible(supabase, prenom, nom);
 
     const { data, error } = await supabase.auth.admin.createUser({
@@ -93,7 +103,7 @@ Deno.serve(async (request) => {
     // Automatisation IA du compte de publication (posters seulement, avec langue).
     let compte: { id: string; reference: string | null; persona: boolean } | null = null;
     if (data.user && roleVoulu === "poster" && langue) {
-      compte = await preparerCompte(supabase, request, data.user.id, langue);
+      compte = await preparerCompte(supabase, request, data.user.id, langue, referenceId);
     }
 
     return json({ ok: true, userId: data.user?.id, email, compte, role: roleVoulu });
@@ -162,9 +172,8 @@ async function preparerCompte(
   request: Request,
   posterId: string,
   langue: string,
+  referenceId: string | null,
 ): Promise<{ id: string; reference: string | null; persona: boolean }> {
-  const referenceId = await referenceLaMoinsChargee(supabase, langue);
-
   const { data: compte, error } = await supabase
     .from("comptes")
     .insert({ poster_id: posterId, compte_reference_id: referenceId, langue })
@@ -174,16 +183,22 @@ async function preparerCompte(
     return { id: "", reference: referenceId, persona: false };
   }
 
-  const persona = await genererPersonaAuto(request, compte.id);
+  // Identité (nom, @ disponible, bio, avatar) générée ET appliquée tout de suite.
+  // On retente quelques fois : au moment d'une création, Gemini peut être saturé
+  // (429). Ce qui échoue quand même est rattrapé par le cron `maintenance-auto`.
+  let persona = false;
+  for (let essai = 0; essai < 3 && !persona; essai += 1) {
+    persona = await genererPersonaAuto(request, compte.id);
+  }
   return { id: compte.id, reference: referenceId, persona };
 }
 
 /**
- * Le compte de référence actif de la langue demandée qui porte le moins de
- * comptes de publication — pour répartir les posters au lieu d'empiler tout le
- * monde sur le premier. Renvoie null si la langue n'a aucun compte de référence.
+ * Un compte de référence actif de la langue demandée qui n'est ENCORE assigné à
+ * AUCUN compte de publication (1 poster = 1 source). Renvoie null si la langue
+ * n'a plus de source libre — auquel cas on ne crée pas de nouveau poster.
  */
-async function referenceLaMoinsChargee(
+async function referenceLibre(
   supabase: Supabase,
   langue: string,
 ): Promise<string | null> {
@@ -196,17 +211,11 @@ async function referenceLaMoinsChargee(
 
   const { data: comptes } = await supabase
     .from("comptes")
-    .select("compte_reference_id");
-  const charge = new Map<string, number>();
-  for (const c of comptes ?? []) {
-    if (c.compte_reference_id) {
-      charge.set(c.compte_reference_id, (charge.get(c.compte_reference_id) ?? 0) + 1);
-    }
-  }
+    .select("compte_reference_id")
+    .not("compte_reference_id", "is", null);
+  const pris = new Set((comptes ?? []).map((c) => c.compte_reference_id));
 
-  return refs
-    .map((r) => r.id)
-    .sort((a, b) => (charge.get(a) ?? 0) - (charge.get(b) ?? 0))[0];
+  return refs.find((r) => !pris.has(r.id))?.id ?? null;
 }
 
 /**

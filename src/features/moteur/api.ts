@@ -26,7 +26,22 @@ export function aujourdhui(): string {
 
 async function invoke<T>(name: string, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke(name, { body });
-  if (error) throw error;
+  if (error) {
+    // Sur une réponse non-2xx, supabase renvoie un message générique
+    // (« Edge Function returned a non-2xx status code ») : on va lire le vrai
+    // message dans le corps de la réponse pour l'afficher tel quel.
+    let message = error.message;
+    try {
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.json === "function") {
+        const corps = await ctx.json();
+        if (corps?.error) message = corps.error as string;
+      }
+    } catch {
+      // corps illisible : on garde le message générique
+    }
+    throw new Error(message);
+  }
   const result = data as { error?: string };
   if (result?.error) throw new Error(result.error);
   return data as T;

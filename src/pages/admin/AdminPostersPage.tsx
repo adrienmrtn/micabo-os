@@ -345,7 +345,9 @@ export function AdminPostersPage() {
               </Button>
               {creer.isError && (
                 <p className="mt-2 text-sm text-destructive">
-                  {(creer.error as Error).message}
+                  {(creer.error as Error).message === "NO_FREE_REFERENCE"
+                    ? t("posters.plusDeReference")
+                    : (creer.error as Error).message}
                 </p>
               )}
             </div>
