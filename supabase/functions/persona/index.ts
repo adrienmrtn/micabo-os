@@ -91,9 +91,11 @@ Deno.serve(async (request) => {
       await supabase
         .from("comptes")
         .update({
-          handle_tiktok: handleApplique,
+          // On ne REMPLIT que ce qui manque : un @ ou un nom déjà posés (souvent
+          // édités à la main) ne sont jamais écrasés par une re-génération.
+          handle_tiktok: compte.handle_tiktok ?? handleApplique,
           persona_nom: compte.persona_nom ?? handleApplique,
-          persona_bio: proposition.bio,
+          persona_bio: compte.persona_bio ?? proposition.bio,
           avatar_url: avatar?.url ?? compte.avatar_url,
           avatar_source: avatar ? "bibliotheque" : compte.avatar_source,
         })
