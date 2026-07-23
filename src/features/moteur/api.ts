@@ -402,8 +402,12 @@ export async function apercuSujet(sujetId: string): Promise<SlideApercu[]> {
 export interface DocumentEditable {
   id: string;
   cle: string;
+  /** Version française (défaut). */
   titre: string;
   contenu: string;
+  /** Version anglaise (le viewer retombe sur le français si vide). */
+  titre_en: string | null;
+  contenu_en: string | null;
   audience: "manager" | "poster" | "all";
   ordre: number;
   updated_at: string;
@@ -433,7 +437,7 @@ export async function lireDocument(cle: string): Promise<DocumentEditable | null
 /** Édition d'un document (admin uniquement via RLS). */
 export async function majDocument(
   id: string,
-  patch: { titre?: string; contenu?: string },
+  patch: { titre?: string; contenu?: string; titre_en?: string | null; contenu_en?: string | null },
 ): Promise<void> {
   const { error } = await supabase
     .from("documents")

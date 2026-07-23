@@ -620,6 +620,8 @@ export const en = {
       guideCreateur: "Creator guide",
       onboarding: "Onboard creators",
       faq: "FAQ",
+      versionAide: "The English version shows when the interface is in English; empty = falls back to French.",
+      titreEnPlaceholder: "English title",
       pourManagers: "Managers",
       pourCreateurs: "Creators",
       pourTous: "Everyone",

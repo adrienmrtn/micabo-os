@@ -17,7 +17,7 @@ function estHtml(contenu: string): boolean {
  * depuis la page Documents.
  */
 export function DocumentView({ cle }: { cle: string }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const doc = useQuery({ queryKey: ["document", cle], queryFn: () => lireDocument(cle) });
 
   if (doc.isPending) {
@@ -27,20 +27,26 @@ export function DocumentView({ cle }: { cle: string }) {
     return <p className="text-sm text-muted-foreground">{t("common.empty")}</p>;
   }
 
+  // Le document suit la langue de l'interface : anglais si l'UI est en anglais
+  // ET que la version anglaise existe, sinon français (version par défaut).
+  const enAnglais = i18n.resolvedLanguage === "en";
+  const titre = enAnglais && doc.data.titre_en ? doc.data.titre_en : doc.data.titre;
+  const contenu = enAnglais && doc.data.contenu_en ? doc.data.contenu_en : doc.data.contenu;
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-xl">{doc.data.titre}</CardTitle>
+        <CardTitle className="text-xl">{titre}</CardTitle>
       </CardHeader>
       <CardContent>
-        {estHtml(doc.data.contenu) ? (
+        {estHtml(contenu) ? (
           <div
             className={richTextClass}
             // Contenu rédigé par l'admin via l'éditeur interne (pas d'entrée tierce).
-            dangerouslySetInnerHTML={{ __html: doc.data.contenu }}
+            dangerouslySetInnerHTML={{ __html: contenu }}
           />
         ) : (
-          <div className="whitespace-pre-wrap text-sm leading-relaxed">{doc.data.contenu}</div>
+          <div className="whitespace-pre-wrap text-sm leading-relaxed">{contenu}</div>
         )}
       </CardContent>
     </Card>
