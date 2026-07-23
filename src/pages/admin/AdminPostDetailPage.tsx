@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Check, ImageUp, RefreshCcw, Sparkles, Trash2, X } from "lucide-react";
+import { Check, ImageUp, QrCode, RefreshCcw, Sparkles, Trash2, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -348,6 +348,15 @@ export function AdminPostDetailPage() {
           <Link to="/admin/calendrier">{t("common.back")}</Link>
         </Button>
         <div className="flex flex-wrap items-center gap-2">
+          {post.data.pipeline_statut === "done" && (
+            <Button variant="outline" size="sm" asChild>
+              {/* Vue « poster » : QR pour le mobile + ZIP + téléchargement photos. */}
+              <Link to={`/posts/${id}`}>
+                <QrCode className="size-4" />
+                {t("adminPost.qrTelechargement")}
+              </Link>
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

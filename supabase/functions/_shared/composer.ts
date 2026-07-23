@@ -422,15 +422,15 @@ const HASHTAGS: Record<string, string[]> = {
   pt: ["#aprender", "#desenvolvimentopessoal", "#booktok", "#paravoce", "#cultura", "#conhecimento", "#crescimento", "#motivacao", "#curiosidades", "#aprendanotiktok", "#fyp", "#sabedoria"],
 };
 
-/** ~7 hashtags de la langue du compte, variés par post (offset déterministe tiré
- *  de l'id du post) — pas deux posts avec exactement la même description. */
+/** MAX 3 hashtags de la langue du compte, variés par post (offset déterministe
+ *  tiré de l'id du post) — pas deux posts avec exactement la même description. */
 function hashtagsPour(langue: string, postId: string): string {
   const pool = HASHTAGS[langue] ?? HASHTAGS.fr;
   let h = 0;
   for (const c of postId) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const debut = h % pool.length;
   const choix: string[] = [];
-  for (let i = 0; i < 7 && i < pool.length; i += 1) choix.push(pool[(debut + i) % pool.length]);
+  for (let i = 0; i < 3 && i < pool.length; i += 1) choix.push(pool[(debut + i) % pool.length]);
   return choix.join(" ");
 }
 

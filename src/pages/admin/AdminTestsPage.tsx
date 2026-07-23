@@ -248,7 +248,8 @@ function TestsRecents() {
               </p>
             </div>
             <Button size="sm" variant="outline" asChild>
-              <Link to={`/admin/posts/${p.id}`}>{t("posts.ouvrir")}</Link>
+              {/* Vue poster : QR mobile + ZIP + téléchargement des photos. */}
+              <Link to={`/posts/${p.id}`}>{t("posts.ouvrir")}</Link>
             </Button>
           </div>
         ))}

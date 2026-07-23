@@ -609,6 +609,7 @@ export const en = {
       confirmRetirerPhoto: "Remove the photo from this slide?",
       supprimerSlide: "Delete the slide",
       confirmSupprimerSlide: "Delete this entire slide from the post? The following ones will be renumbered.",
+      qrTelechargement: "QR & download",
       revoquer: "Revoke and find a new one",
       revoquerAide:
         "If this slideshow makes no sense for Sophia (theme can't be integrated), revoke it: we reject THIS slideshow (not the hook — another post can start the same way and still be good) and build a new one for this creator on this date.",
