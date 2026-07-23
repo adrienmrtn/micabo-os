@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ecrirePrompt, lirePrompt } from "@/features/moteur/api";
+import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
 
-/** Les trois prompts qui pilotent le moteur, modifiables sans redéploiement. */
+/** Les prompts qui pilotent le moteur, modifiables sans redéploiement. */
 const PROMPTS = [
   { cle: "pertinence", titre: "prompts.pertinenceTitle", desc: "prompts.pertinenceDesc" },
   { cle: "placement_sophia", titre: "prompts.placementTitle", desc: "prompts.placementDesc" },
@@ -16,6 +17,11 @@ const PROMPTS = [
   { cle: "composition_nouveau", titre: "prompts.nouveauTitle", desc: "prompts.nouveauDesc" },
   { cle: "composition_remanie", titre: "prompts.remanieTitle", desc: "prompts.remanieDesc" },
 ] as const;
+
+// « fr » utilise le prompt « traduction » de base ci-dessus. Les autres langues
+// ont leur prompt dédié `traduction_xx` : sans lui, le moteur traduit avec des
+// règles neutres. C'est ici qu'on soigne le ton par langue.
+const LANGUES_TRADUCTION = LANGUES_CIBLES.filter((l) => l !== "fr");
 
 function EditeurPrompt({ cle, titre, desc }: { cle: string; titre: string; desc: string }) {
   const { t } = useTranslation();
@@ -78,6 +84,19 @@ export function AdminPromptsPage() {
     <div className="space-y-6">
       {PROMPTS.map((p) => (
         <EditeurPrompt key={p.cle} cle={p.cle} titre={t(p.titre)} desc={t(p.desc)} />
+      ))}
+
+      <div className="pt-2">
+        <h2 className="text-sm font-semibold">{t("prompts.traductionsLanguesTitre")}</h2>
+        <p className="text-xs text-muted-foreground">{t("prompts.traductionsLanguesDesc")}</p>
+      </div>
+      {LANGUES_TRADUCTION.map((l) => (
+        <EditeurPrompt
+          key={`traduction_${l}`}
+          cle={`traduction_${l}`}
+          titre={t("prompts.traductionLangue", { langue: nomLangue(l) })}
+          desc={t("prompts.traductionLangueDesc", { langue: nomLangue(l) })}
+        />
       ))}
     </div>
   );
