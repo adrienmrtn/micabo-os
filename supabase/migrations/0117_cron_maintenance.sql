@@ -1,5 +1,6 @@
 -- Cron « maintenance-auto » : répare en continu, sans intervention de l'admin.
--- Toutes les 3 min, la fonction `maintenance` traite un petit lot (borné pour ne
+-- La nuit (18h-6h UTC), toutes les 10 min, la fonction `maintenance` traite un
+-- petit lot (borné pour ne
 -- pas dépasser le mur 150 s) :
 --   1. liens musique « fichier » (CDN périmé) → lien stable vers la page son ;
 --   2. identités de compte incomplètes → génération (pseudo/bio/avatar).
@@ -8,7 +9,7 @@
 -- Créé via cron.schedule (le rôle du Management API ne peut pas INSERT dans
 -- cron.job directement) :
 --
--- select cron.schedule('maintenance-auto', '*/3 * * * *', $job$
+-- select cron.schedule('maintenance-auto', '*/10 18-23,0-6 * * *', $job$
 --   select net.http_post(
 --     url := 'https://<ref>.supabase.co/functions/v1/maintenance',
 --     headers := jsonb_build_object('content-type','application/json','x-cron-secret','<CRON_SECRET>'),
