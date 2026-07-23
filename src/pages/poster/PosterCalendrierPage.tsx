@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, EmptyState } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase/client";
-import { aujourdhui, majMonHandle, majMonUpwork, monCompte, monUpwork } from "@/features/moteur/api";
+import { aujourdhui, majMonHandle, monCompte } from "@/features/moteur/api";
 import { useAuth } from "@/features/auth/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -118,18 +118,6 @@ function IdentiteTikTok() {
     },
   });
 
-  // Lien de conversation Upwork : le poster le renseigne pour que l'admin ait
-  // toujours le bon lien vers leur échange.
-  const { data: upworkUrl } = useQuery({ queryKey: ["mon-upwork"], queryFn: monUpwork });
-  const [editUpwork, setEditUpwork] = React.useState(false);
-  const [upwork, setUpwork] = React.useState("");
-  const majUpwork = useMutation({
-    mutationFn: () => majMonUpwork(upwork),
-    onSuccess: () => {
-      setEditUpwork(false);
-      queryClient.invalidateQueries({ queryKey: ["mon-upwork"] });
-    },
-  });
 
   // Le poster n'a pas encore de compte de publication : rien à afficher.
   if (!compte) return null;
@@ -188,40 +176,6 @@ function IdentiteTikTok() {
               </div>
             )}
             <p className="text-[11px] text-muted-foreground">{t("identite.handleAide")}</p>
-
-            {/* Lien Upwork, éditable par le poster. */}
-            {editUpwork ? (
-              <div className="flex items-center gap-1">
-                <input
-                  value={upwork}
-                  onChange={(e) => setUpwork(e.target.value)}
-                  placeholder="https://www.upwork.com/…"
-                  className="h-7 flex-1 rounded-md border border-input bg-background px-2 text-sm"
-                />
-                <Button size="sm" className="h-7" disabled={majUpwork.isPending} onClick={() => majUpwork.mutate()}>
-                  {t("common.save")}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditUpwork(false)}>
-                  {t("common.cancel")}
-                </Button>
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm text-muted-foreground">
-                  Upwork : {upworkUrl ? <span className="break-all">{upworkUrl}</span> : "—"}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUpwork(upworkUrl ?? "");
-                    setEditUpwork(true);
-                  }}
-                  className="text-xs text-primary underline underline-offset-2"
-                >
-                  {upworkUrl ? t("identite.majUpwork") : t("identite.setUpwork")}
-                </button>
-              </div>
-            )}
 
             {compte.persona_bio && (
               <p className="whitespace-pre-wrap pt-1 text-sm">{compte.persona_bio}</p>
