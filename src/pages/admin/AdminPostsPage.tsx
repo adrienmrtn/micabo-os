@@ -14,8 +14,57 @@ import {
   CardTitle,
   EmptyState,
 } from "@/components/ui/card";
-import { listerComptes, listerPosts, reassignerPost } from "@/features/moteur/api";
+import { listerComptes, listerPosts, listerSlides, reassignerPost } from "@/features/moteur/api";
 import type { Post } from "@/features/moteur/types";
+
+/** Aperçu du diaporama d'un post, en ligne : miniatures nettoyées (photo à poster)
+ *  ou d'origine (avec texte), + le texte de chaque slide. Évite d'ouvrir chaque
+ *  post pour vérifier. */
+function ApercuPost({ postId }: { postId: string }) {
+  const { t } = useTranslation();
+  const [origine, setOrigine] = React.useState(false);
+  const slides = useQuery({ queryKey: ["slides", postId], queryFn: () => listerSlides(postId) });
+
+  if (slides.isPending) return <p className="text-xs text-muted-foreground">{t("common.loading")}</p>;
+
+  return (
+    <div className="space-y-2 border-t pt-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium">{t("posts.apercuDiaporama")}</p>
+        <button
+          type="button"
+          onClick={() => setOrigine((v) => !v)}
+          className="text-xs text-primary underline underline-offset-2"
+        >
+          {origine ? t("posts.voirNettoyees") : t("posts.voirOrigine")}
+        </button>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {slides.data?.map((s) => {
+          const url = origine
+            ? (s.reference_url ?? s.media_library?.url ?? null)
+            : (s.media_library?.url ?? s.reference_url ?? null);
+          return (
+            <div key={s.id} className="w-32 shrink-0 space-y-1">
+              <div className="relative aspect-[3/4] overflow-hidden rounded-md border bg-muted">
+                {url ? <img src={url} alt="" className="size-full object-cover" /> : null}
+                <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 text-xs font-medium text-white">
+                  {s.position}
+                </span>
+                {s.position_sophia && (
+                  <span className="absolute right-1 top-1 rounded bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">
+                    Sophia
+                  </span>
+                )}
+              </div>
+              <p className="line-clamp-3 text-[11px] text-muted-foreground">{s.texte_overlay}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
@@ -39,6 +88,7 @@ function LignePost({
   const queryClient = useQueryClient();
   const [compteId, setCompteId] = React.useState(post.compte_id);
   const [date, setDate] = React.useState(post.date_publication_prevue ?? "");
+  const [apercu, setApercu] = React.useState(false);
 
   const modifie =
     compteId !== post.compte_id || date !== (post.date_publication_prevue ?? "");
@@ -103,12 +153,19 @@ function LignePost({
             </Button>
           )}
           {post.pipeline_statut === "done" && (
-            <Button size="sm" variant="outline" asChild>
-              <Link to={`/posts/${post.id}`}>{t("posts.apercu")}</Link>
-            </Button>
+            <>
+              <Button size="sm" variant={apercu ? "default" : "outline"} onClick={() => setApercu((v) => !v)}>
+                {t("posts.apercu")}
+              </Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link to={`/admin/posts/${post.id}`}>{t("posts.ouvrir")}</Link>
+              </Button>
+            </>
           )}
         </div>
       </div>
+
+      {apercu && post.pipeline_statut === "done" && <ApercuPost postId={post.id} />}
     </div>
   );
 }

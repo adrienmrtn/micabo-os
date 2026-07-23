@@ -174,7 +174,11 @@ export function AdminPilotagePage() {
                 </p>
               )}
 
-              {(sujet.structure_slides?.length ?? 0) > 0 && (
+              {/* Seuls les sujets RETENUS/UTILISÉS sont nettoyés (images propres) :
+                  les rejetés ne le sont pas (on ne dépense pas de crédit dessus).
+                  On ne propose donc l'aperçu « diaporama stocké » que pour ceux-là. */}
+              {(sujet.structure_slides?.length ?? 0) > 0 &&
+                (sujet.statut === "retenu" || sujet.statut === "utilise") && (
                 <div className="pt-1">
                   <Button
                     size="sm"

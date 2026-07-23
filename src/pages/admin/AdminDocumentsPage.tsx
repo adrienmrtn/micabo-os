@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import {
   Card,
   CardContent,
@@ -49,12 +49,7 @@ function EditeurDocument({ doc }: { doc: DocumentEditable }) {
       </CardHeader>
       <CardContent className="space-y-3">
         <Input value={titre} onChange={(e) => setTitre(e.target.value)} />
-        <Textarea
-          rows={12}
-          value={contenu}
-          onChange={(e) => setContenu(e.target.value)}
-          className="text-sm leading-relaxed"
-        />
+        <RichTextEditor value={contenu} onChange={setContenu} />
         <div className="flex items-center gap-3">
           <Button disabled={!modifie || enregistrer.isPending} onClick={() => enregistrer.mutate()}>
             {enregistrer.isPending ? t("common.saving") : t("common.save")}

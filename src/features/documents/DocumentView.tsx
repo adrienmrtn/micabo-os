@@ -2,7 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { richTextClass } from "@/components/ui/RichTextEditor";
 import { lireDocument } from "@/features/moteur/api";
+
+/** Le contenu vient d'un éditeur riche interne (admin), il peut donc contenir du
+ *  HTML de mise en forme ; sinon (ancien texte simple) on préserve les sauts. */
+function estHtml(contenu: string): boolean {
+  return /<\/?[a-z][\s\S]*>/i.test(contenu);
+}
 
 /**
  * Affiche un document (guide, FAQ) en lecture seule pour un manager ou un poster.
@@ -26,9 +33,15 @@ export function DocumentView({ cle }: { cle: string }) {
         <CardTitle className="text-xl">{doc.data.titre}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="prose-sm max-w-none whitespace-pre-wrap text-sm leading-relaxed">
-          {doc.data.contenu}
-        </div>
+        {estHtml(doc.data.contenu) ? (
+          <div
+            className={richTextClass}
+            // Contenu rédigé par l'admin via l'éditeur interne (pas d'entrée tierce).
+            dangerouslySetInnerHTML={{ __html: doc.data.contenu }}
+          />
+        ) : (
+          <div className="whitespace-pre-wrap text-sm leading-relaxed">{doc.data.contenu}</div>
+        )}
       </CardContent>
     </Card>
   );
