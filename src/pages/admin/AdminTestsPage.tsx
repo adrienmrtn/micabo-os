@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { assignerTikTok, listerComptes } from "@/features/moteur/api";
+import { nomLangue } from "@/features/moteur/langues";
 import { SimulerMinuitCard } from "@/features/moteur/SimulerMinuitCard";
 import { TestCompletCard } from "@/features/moteur/TestCompletCard";
 import { TestScrapeCard } from "@/features/moteur/TestScrapeCard";
@@ -26,7 +27,18 @@ function TesterUnTikTok() {
   const comptes = useQuery({ queryKey: ["comptes"], queryFn: listerComptes });
 
   const [lien, setLien] = React.useState("");
+  const [langue, setLangue] = React.useState("");
   const [compteId, setCompteId] = React.useState("");
+
+  // On choisit d'abord la LANGUE (celle dans laquelle le test est traduit), puis
+  // le STYLE — chaque compte porte une voix/persona propre. Le compte reste ce
+  // qu'on envoie au moteur, mais on le présente comme « langue » puis « style »
+  // au lieu d'un opaque « via un compte ».
+  const langues = React.useMemo(
+    () => [...new Set((comptes.data ?? []).map((c) => c.langue))].sort(),
+    [comptes.data],
+  );
+  const stylesDispo = (comptes.data ?? []).filter((c) => c.langue === langue);
 
   const tester = useMutation({
     mutationFn: () => assignerTikTok({ url: lien, compteId, estTest: true }),
@@ -52,22 +64,45 @@ function TesterUnTikTok() {
             onChange={(e) => setLien(e.target.value)}
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="tCompte">{t("tests.langueVia")}</Label>
-          <select
-            id="tCompte"
-            className={selectClass}
-            value={compteId}
-            onChange={(e) => setCompteId(e.target.value)}
-          >
-            <option value="">{t("common.none")}</option>
-            {comptes.data?.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.persona_nom ?? c.handle_tiktok ?? c.id.slice(0, 8)} · {c.langue.toUpperCase()}
-              </option>
-            ))}
-          </select>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="tLangue">{t("tests.langue")}</Label>
+            <select
+              id="tLangue"
+              className={selectClass}
+              value={langue}
+              onChange={(e) => {
+                setLangue(e.target.value);
+                setCompteId("");
+              }}
+            >
+              <option value="">{t("common.none")}</option>
+              {langues.map((l) => (
+                <option key={l} value={l}>
+                  {nomLangue(l)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tStyle">{t("tests.style")}</Label>
+            <select
+              id="tStyle"
+              className={selectClass}
+              value={compteId}
+              disabled={!langue}
+              onChange={(e) => setCompteId(e.target.value)}
+            >
+              <option value="">{langue ? t("tests.styleChoisir") : t("tests.styleLangueDabord")}</option>
+              {stylesDispo.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.persona_nom ?? c.handle_tiktok ?? c.id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+        <p className="text-xs text-muted-foreground">{t("tests.styleAide")}</p>
 
         <Button
           disabled={tester.isPending || !lien.trim() || !compteId}

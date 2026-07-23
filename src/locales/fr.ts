@@ -120,6 +120,12 @@ export const fr = {
       tiktokDesc:
         "Colle un lien TikTok : on le nettoie, on y intègre Sophia, et on te sort un post à télécharger (QR). Il n'apparaît sur aucun calendrier.",
       langueVia: "Langue / style (via un compte)",
+      langue: "Langue",
+      style: "Style",
+      styleChoisir: "Choisir un style",
+      styleLangueDabord: "Choisis d'abord une langue",
+      styleAide:
+        "La langue = celle dans laquelle le test est traduit. Le style = la voix/persona d'un de tes comptes (chaque compte a son ton).",
       tiktokLancer: "Tester ce TikTok",
       tiktokOk: "Test lancé — il se fabrique en arrière-plan.",
       enCours: "En cours…",
