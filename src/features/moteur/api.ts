@@ -906,6 +906,34 @@ export async function postsDuJour(date: string): Promise<
   }));
 }
 
+export interface PostTest {
+  id: string;
+  titre: string | null;
+  persona: string | null;
+  pipeline_statut: string;
+  created_at: string;
+}
+
+/** Les posts de TEST récents (invisibles sur les calendriers) — pour les
+ *  retrouver après coup au lieu de perdre leur lien. */
+export async function listerPostsTest(): Promise<PostTest[]> {
+  const { data, error } = await supabase
+    .from("posts")
+    .select("id, pipeline_statut, created_at, comptes(persona_nom), sujets(titre)")
+    .eq("est_test", true)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  // deno-lint-ignore no-explicit-any
+  return (data ?? []).map((p: any) => ({
+    id: p.id,
+    titre: p.sujets?.titre ?? null,
+    persona: p.comptes?.persona_nom ?? null,
+    pipeline_statut: p.pipeline_statut,
+    created_at: p.created_at,
+  }));
+}
+
 export const genererPersona = (compteId: string, appliquer = false) =>
   invoke<{ pseudos: string[]; bio: string; avatarUrl: string | null; applique: boolean }>(
     "persona",

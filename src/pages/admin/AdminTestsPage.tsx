@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { assignerTikTok, listerComptes, testerTraduction } from "@/features/moteur/api";
+import { assignerTikTok, listerComptes, listerPostsTest, testerTraduction } from "@/features/moteur/api";
 import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
 import { SimulerMinuitCard } from "@/features/moteur/SimulerMinuitCard";
 import { TestCompletCard } from "@/features/moteur/TestCompletCard";
@@ -222,6 +222,41 @@ function TestNettoyageCard() {
   );
 }
 
+/** Les posts de test récents, pour les retrouver (ils n'apparaissent sur aucun
+ *  calendrier). Statut « done » = prêt à ouvrir (QR, téléchargement). */
+function TestsRecents() {
+  const { t } = useTranslation();
+  const tests = useQuery({ queryKey: ["posts-test"], queryFn: listerPostsTest });
+  if (!tests.data || tests.data.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">{t("tests.recentsTitre")}</CardTitle>
+        <CardDescription>{t("tests.recentsDesc")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-1.5">
+        {tests.data.map((p) => (
+          <div
+            key={p.id}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2.5 text-sm"
+          >
+            <div className="min-w-0">
+              <p className="truncate font-medium">{p.titre?.slice(0, 60) || p.id.slice(0, 8)}</p>
+              <p className="text-xs text-muted-foreground">
+                {p.persona ?? "—"} · {t(`statut.${p.pipeline_statut}`, p.pipeline_statut)}
+              </p>
+            </div>
+            <Button size="sm" variant="outline" asChild>
+              <Link to={`/admin/posts/${p.id}`}>{t("posts.ouvrir")}</Link>
+            </Button>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 // Catalogue des tests : on choisit d'abord ici (chacun est expliqué), puis le
 // test choisi s'affiche seul en dessous — plus de mur de cartes empilées.
 const TESTS = [
@@ -267,6 +302,8 @@ export function AdminTestsPage() {
       </Card>
 
       {actif ? actif.render() : null}
+
+      <TestsRecents />
     </div>
   );
 }

@@ -142,6 +142,8 @@ export const en = {
       tradTexte: "Text to translate",
       tradPlaceholder: "Paste a slide text here (in its original language)…",
       tradLancer: "Translate",
+      recentsTitre: "Your recent tests",
+      recentsDesc: "Test posts are on no calendar — find them here (open for the QR and download).",
       tradResultat: "Translation",
       enCours: "In progress…",
       nettoyageTitre: "Test cleaning a photo",
