@@ -3,16 +3,16 @@ import { initReactI18next } from "react-i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
 
 import { fr } from "./fr";
+import { en } from "./en";
 
 /**
- * Une seule langue pour l'instant. Pour en ajouter une : créer `en.ts` sur le
- * modèle de `fr.ts`, l'importer, et l'ajouter aux deux constantes ci-dessous —
- * le sélecteur de langue de l'AppShell apparaît automatiquement dès qu'il y a
- * plus d'une entrée.
+ * Langues disponibles. Le sélecteur de langue de l'AppShell apparaît
+ * automatiquement dès qu'il y a plus d'une entrée. Pour en ajouter une : créer
+ * `xx.ts` sur le modèle de `fr.ts`, l'importer, et l'ajouter aux deux constantes.
  */
-export const SUPPORTED_LANGUAGES = ["fr"] as const;
+export const SUPPORTED_LANGUAGES = ["fr", "en"] as const;
 
-const resources = { fr };
+const resources = { fr, en };
 
 void i18next
   .use(LanguageDetector)
