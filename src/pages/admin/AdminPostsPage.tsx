@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -15,15 +14,7 @@ import {
   CardTitle,
   EmptyState,
 } from "@/components/ui/card";
-import {
-  assignerTikTok,
-  aujourdhui,
-  lancerComposition,
-  listerComptes,
-  listerPosts,
-  reassignerPost,
-  sujetsDisponibles,
-} from "@/features/moteur/api";
+import { listerComptes, listerPosts, reassignerPost } from "@/features/moteur/api";
 import type { Post } from "@/features/moteur/types";
 
 const selectClass =
@@ -124,38 +115,9 @@ function LignePost({
 
 export function AdminPostsPage() {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
 
   const posts = useQuery({ queryKey: ["posts"], queryFn: () => listerPosts() });
   const comptes = useQuery({ queryKey: ["comptes"], queryFn: listerComptes });
-  const sujets = useQuery({ queryKey: ["sujets-dispo"], queryFn: sujetsDisponibles });
-
-  const [compteId, setCompteId] = React.useState("");
-  const [sujetId, setSujetId] = React.useState("");
-  const [type, setType] = React.useState("nouveau");
-  const [date, setDate] = React.useState(aujourdhui());
-
-  // Assigner un TikTok précis à un créateur pour une date (import + compo).
-  const [aLien, setALien] = React.useState("");
-  const [aCompte, setACompte] = React.useState("");
-  const [aType, setAType] = React.useState("nouveau");
-  const [aDate, setADate] = React.useState(aujourdhui());
-
-  const creer = useMutation({
-    mutationFn: () => lancerComposition({ compteId, sujetId, type, date }),
-    onSuccess: () => {
-      setSujetId("");
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
-    },
-  });
-
-  const assigner = useMutation({
-    mutationFn: () => assignerTikTok({ url: aLien, compteId: aCompte, type: aType, date: aDate }),
-    onSuccess: () => {
-      setALien("");
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
-    },
-  });
 
   const listeComptes = (comptes.data ?? []).map((c) => ({
     id: c.id,
@@ -165,190 +127,6 @@ export function AdminPostsPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("posts.assignerTikTok")}</CardTitle>
-          <CardDescription>{t("posts.assignerTikTokDesc")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (aLien.trim() && aCompte) assigner.mutate();
-            }}
-            className="grid gap-4 sm:grid-cols-2"
-          >
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="aLien">{t("posts.lienTikTok")}</Label>
-              <Input
-                id="aLien"
-                required
-                placeholder="https://www.tiktok.com/@compte/photo/…"
-                value={aLien}
-                onChange={(e) => setALien(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="aCompte">{t("posts.assignerA")}</Label>
-              <select
-                id="aCompte"
-                required
-                className={selectClass}
-                value={aCompte}
-                onChange={(e) => setACompte(e.target.value)}
-              >
-                <option value="">{t("common.none")}</option>
-                {listeComptes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.persona_nom ?? c.handle_tiktok ?? c.id.slice(0, 8)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="aDate">{t("posts.datePrevue")}</Label>
-              <Input id="aDate" type="date" value={aDate} onChange={(e) => setADate(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="aType">{t("test.type")}</Label>
-              <select
-                id="aType"
-                className={selectClass}
-                value={aType}
-                onChange={(e) => setAType(e.target.value)}
-              >
-                <option value="nouveau">{t("type.nouveau")}</option>
-                <option value="remanie">{t("type.remanie")}</option>
-                <option value="recycle">{t("type.recycle")}</option>
-              </select>
-            </div>
-            <div className="flex items-end">
-              <Button type="submit" disabled={assigner.isPending || !aLien.trim() || !aCompte}>
-                {assigner.isPending ? t("posts.assignerEnCours") : t("posts.assigner")}
-              </Button>
-            </div>
-            <div className="sm:col-span-2">
-              {assigner.isSuccess && (
-                <p className="text-sm text-success">
-                  {t("posts.assignerOk")}{" "}
-                  {assigner.data?.postId && (
-                    <Link
-                      to={`/posts/${assigner.data.postId}`}
-                      className="underline underline-offset-2"
-                    >
-                      {t("posts.voirLePost")}
-                    </Link>
-                  )}
-                </p>
-              )}
-              {assigner.isError && (
-                <p className="text-sm text-destructive">{(assigner.error as Error).message}</p>
-              )}
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("posts.creerManuel")}</CardTitle>
-          <CardDescription>{t("posts.creerManuelDesc")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (compteId && sujetId) creer.mutate();
-            }}
-            className="grid gap-4 sm:grid-cols-2"
-          >
-            <div className="space-y-2">
-              <Label htmlFor="mCompte">{t("posts.assignerA")}</Label>
-              <select
-                id="mCompte"
-                required
-                className={selectClass}
-                value={compteId}
-                onChange={(e) => setCompteId(e.target.value)}
-              >
-                <option value="">{t("common.none")}</option>
-                {listeComptes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.persona_nom ?? c.handle_tiktok ?? c.id.slice(0, 8)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="mSujet">{t("posts.sujet")}</Label>
-              <select
-                id="mSujet"
-                required
-                className={selectClass}
-                value={sujetId}
-                onChange={(e) => setSujetId(e.target.value)}
-              >
-                <option value="">{t("common.none")}</option>
-                {sujets.data?.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.titre.slice(0, 60)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="mType">{t("test.type")}</Label>
-              <select
-                id="mType"
-                className={selectClass}
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-              >
-                <option value="nouveau">{t("type.nouveau")}</option>
-                <option value="remanie">{t("type.remanie")}</option>
-                <option value="recycle">{t("type.recycle")}</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="mDate">{t("posts.datePrevue")}</Label>
-              <Input
-                id="mDate"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <Button type="submit" disabled={creer.isPending || !compteId || !sujetId}>
-                {creer.isPending ? t("common.saving") : t("posts.creer")}
-              </Button>
-              {(!compteId || !sujetId) && (
-                <p className="mt-2 text-xs text-muted-foreground">{t("posts.creerHint")}</p>
-              )}
-              {creer.isError && (
-                <p className="mt-2 text-sm text-destructive">
-                  {(creer.error as Error).message}
-                </p>
-              )}
-              {creer.isSuccess && (
-                <p className="mt-2 text-sm text-success">
-                  {t("posts.creeAttente")}{" "}
-                  {creer.data?.postId && (
-                    <Link to={`/posts/${creer.data.postId}`} className="underline underline-offset-2">
-                      {t("posts.voirLePost")}
-                    </Link>
-                  )}
-                </p>
-              )}
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader>
           <CardTitle>{t("posts.tous")}</CardTitle>

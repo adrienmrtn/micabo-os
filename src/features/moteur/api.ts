@@ -916,6 +916,11 @@ export interface PostScrapeTest {
   sophia: boolean;
 }
 
+/** Teste la traduction d'un texte vers une langue (même prompt que le moteur),
+ *  sans fabriquer de post. Sert à régler les prompts de traduction. */
+export const testerTraduction = (texte: string, langue: string) =>
+  invoke<{ ok: boolean; traduction: string }>("traduire-test", { texte, langue });
+
 /** Teste le scrape d'un compte de référence : renvoie ses posts avec leurs vues
  *  (triés par vues), SANS rien créer — pour vérifier que le moteur repère bien
  *  les TikToks qui performent. */

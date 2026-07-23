@@ -131,6 +131,13 @@ export const en = {
         "Language = the translation. Style = the voice (optional). Leave the style empty for a post \"for you\": you get a test post to download and post on YOUR account (it appears on no creator's calendar).",
       tiktokLancer: "Test this TikTok",
       tiktokOk: "Test started — it's being built in the background.",
+      tradTitre: "Test a translation",
+      tradDesc:
+        "Paste a text, pick a language: we translate it with the SAME prompt as the engine. Use it to tune the translation prompts (Prompts page) without building a post.",
+      tradTexte: "Text to translate",
+      tradPlaceholder: "Paste a slide text here (in its original language)…",
+      tradLancer: "Translate",
+      tradResultat: "Translation",
       enCours: "In progress…",
       nettoyageTitre: "Test cleaning a photo",
       nettoyageDesc: "See how cleaning looks on your photos, without changing anything.",

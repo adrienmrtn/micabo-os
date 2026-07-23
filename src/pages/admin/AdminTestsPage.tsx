@@ -2,14 +2,15 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { FlaskConical, Link2, Sparkles, Wand2 } from "lucide-react";
+import { FlaskConical, Languages, Link2, Sparkles, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { assignerTikTok, listerComptes } from "@/features/moteur/api";
-import { nomLangue } from "@/features/moteur/langues";
+import { Textarea } from "@/components/ui/textarea";
+import { assignerTikTok, listerComptes, testerTraduction } from "@/features/moteur/api";
+import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
 import { SimulerMinuitCard } from "@/features/moteur/SimulerMinuitCard";
 import { TestCompletCard } from "@/features/moteur/TestCompletCard";
 import { TestScrapeCard } from "@/features/moteur/TestScrapeCard";
@@ -136,6 +137,70 @@ function TesterUnTikTok() {
   );
 }
 
+/** Teste la traduction d'un texte vers une langue, avec le même prompt que le
+ *  moteur — pour régler les prompts de traduction sans fabriquer un post. */
+function TestTraduction() {
+  const { t } = useTranslation();
+  const [texte, setTexte] = React.useState("");
+  const [langue, setLangue] = React.useState("en");
+
+  const traduire = useMutation({ mutationFn: () => testerTraduction(texte, langue) });
+
+  return (
+    <Card className="border-primary/30">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Languages className="size-4 text-primary" />
+          {t("tests.tradTitre")}
+        </CardTitle>
+        <CardDescription>{t("tests.tradDesc")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="tradTexte">{t("tests.tradTexte")}</Label>
+          <Textarea
+            id="tradTexte"
+            rows={3}
+            value={texte}
+            onChange={(e) => setTexte(e.target.value)}
+            placeholder={t("tests.tradPlaceholder")}
+          />
+        </div>
+        <div className="space-y-2 sm:max-w-xs">
+          <Label htmlFor="tradLangue">{t("tests.langue")}</Label>
+          <select
+            id="tradLangue"
+            className={selectClass}
+            value={langue}
+            onChange={(e) => setLangue(e.target.value)}
+          >
+            {LANGUES_CIBLES.map((l) => (
+              <option key={l} value={l}>
+                {nomLangue(l)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <Button disabled={traduire.isPending || !texte.trim()} onClick={() => traduire.mutate()}>
+          <Languages className="size-4" />
+          {traduire.isPending ? t("tests.enCours") : t("tests.tradLancer")}
+        </Button>
+        {traduire.isError && (
+          <p className="text-sm text-destructive">{(traduire.error as Error).message}</p>
+        )}
+        {traduire.data?.traduction && (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">{t("tests.tradResultat")}</p>
+            <p className="whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-sm">
+              {traduire.data.traduction}
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Le test nettoyage vit sur sa propre page : ici juste un raccourci. */
 function TestNettoyageCard() {
   const { t } = useTranslation();
@@ -162,6 +227,7 @@ function TestNettoyageCard() {
 const TESTS = [
   { value: "minuit", titreKey: "simMinuit.title", descKey: "simMinuit.subtitle", render: () => <SimulerMinuitCard /> },
   { value: "tiktok", titreKey: "tests.tiktokTitre", descKey: "tests.tiktokDesc", render: () => <TesterUnTikTok /> },
+  { value: "traduction", titreKey: "tests.tradTitre", descKey: "tests.tradDesc", render: () => <TestTraduction /> },
   { value: "complet", titreKey: "tests.completTitre", descKey: "tests.completDesc", render: () => <TestCompletCard /> },
   { value: "scrape", titreKey: "tests.scrapeTitre", descKey: "tests.scrapeDesc", render: () => <TestScrapeCard /> },
   { value: "nettoyage", titreKey: "tests.nettoyageTitre", descKey: "tests.nettoyageDesc", render: () => <TestNettoyageCard /> },
