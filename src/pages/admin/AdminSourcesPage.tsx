@@ -79,7 +79,13 @@ function BoutonExtraire({ sourceId }: { sourceId: string }) {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <Button size="sm" variant="outline" disabled={extraire.isPending} onClick={() => extraire.mutate()}>
+      <Button
+        size="sm"
+        variant="outline"
+        title={t("sources.extraireAide")}
+        disabled={extraire.isPending}
+        onClick={() => extraire.mutate()}
+      >
         {extraire.isPending ? t("sources.extraction") : t("sources.extraire")}
       </Button>
       {resultat && <span className="text-xs text-muted-foreground">{resultat}</span>}
@@ -161,8 +167,26 @@ export function AdminSourcesPage() {
             <div key={source.id} className="space-y-3 rounded-lg border p-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">@{source.handle_tiktok}</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <a
+                    href={`https://www.tiktok.com/@${source.handle_tiktok.replace(/^@/, "")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium underline underline-offset-2"
+                  >
+                    @{source.handle_tiktok} ↗
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigator.clipboard?.writeText(
+                        `https://www.tiktok.com/@${source.handle_tiktok.replace(/^@/, "")}`,
+                      )
+                    }
+                    className="text-xs text-muted-foreground underline underline-offset-2"
+                  >
+                    {t("sources.copierLien")}
+                  </button>
                   {!source.is_active && (
                     <Badge variant="secondary">{t("sources.inactive")}</Badge>
                   )}

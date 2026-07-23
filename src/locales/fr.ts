@@ -220,6 +220,9 @@ export const fr = {
       activate: "Activer",
       deactivate: "Désactiver",
       extraire: "Extraire",
+      extraireAide:
+        "Va chercher les derniers posts photo de ce compte de référence (triés par vues), en crée des sujets prêts à traduire. C'est ce que fait le cron chaque soir ; ce bouton le lance à la main.",
+      copierLien: "Copier le lien",
       extraction: "Extraction…",
       extraitLe: "Extrait le {{date}}",
       jamais: "Jamais extrait",
@@ -307,6 +310,8 @@ export const fr = {
       upworkModifier: "Modifier Upwork",
       ajouterPoster: "Ajouter un poster",
       ajouterRecruteur: "Ajouter un recruteur",
+      coutMensuel: "Coût / mois",
+      coutAjouter: "+ Ajouter un coût",
       gererCompte: "Gérer le compte",
       creerCompte: "Créer le compte de publication",
       sansCompteCree: "Ce poster n'a pas encore de compte de publication.",

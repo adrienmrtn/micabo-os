@@ -200,13 +200,19 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
         ? await visuelsAlternatifs(supabase, compte, slides)
         : new Map(slides.map((s) => [s.position, s.media_id]));
 
-      const { data: creees } = await supabase
+      // RÉPARE les images périmées : un media_id du sujet peut pointer vers une
+      // image supprimée de la bibliothèque (violation de clé étrangère → l'insert
+      // échouait et le post bloquait la file). On valide chaque image, et on
+      // remplace les périmées par une image propre encore présente (sinon null).
+      await reparerVisuelsPerimes(supabase, compte, slides, visuels);
+
+      const { data: creees, error: errInsert } = await supabase
         .from("post_slides")
         .insert(
           slides.map((s) => ({
             post_id: post.id,
             position: s.position,
-            media_id: visuels.get(s.position) ?? s.media_id,
+            media_id: visuels.get(s.position) ?? null,
             texte_overlay: parPosition.get(s.position) ?? "",
             position_sophia: false,
             // Le visuel d'origine, texte encore incrusté : c'est le modèle de
@@ -215,6 +221,11 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
           })),
         )
         .select("media_id");
+      // On VÉRIFIE l'insertion : sans ça, un échec (ex. media_id périmé) était
+      // avalé, le post repartait « traduction » sans jamais créer de slide, et
+      // bloquait toute la file (il passe avant les posts en attente). On lève
+      // l'erreur → le post est marqué `failed` avec la cause, la file avance.
+      if (errInsert) throw new Error(`Insertion des slides échouée : ${errInsert.message}`);
 
       await marquerVisuelsUtilises(supabase, compte.id, post.id, creees ?? []);
 
@@ -441,6 +452,50 @@ async function renumeroterSlides(supabase: Supabase, postId: string) {
  * Sans remplaçant disponible on garde l'original : mieux vaut un doublon visuel
  * qu'un post sans image.
  */
+// deno-lint-ignore no-explicit-any
+/**
+ * Remplace, DANS la map de visuels, tout media_id qui n'existe plus dans la
+ * bibliothèque (image supprimée → clé étrangère invalide). Sans ça, l'insert des
+ * slides échouait et le post bloquait toute la file. On substitue une image propre
+ * encore présente (la moins utilisée de la source du compte), sinon `null`.
+ */
+// deno-lint-ignore no-explicit-any
+async function reparerVisuelsPerimes(
+  supabase: Supabase,
+  compte: any,
+  slides: Slide[],
+  visuels: Map<number, string | null>,
+): Promise<void> {
+  const voulus = [
+    ...new Set(slides.map((s) => visuels.get(s.position)).filter((v): v is string => Boolean(v))),
+  ];
+  if (voulus.length === 0) return;
+
+  const { data: presents } = await supabase
+    .from("media_library")
+    .select("id")
+    .in("id", voulus);
+  const ok = new Set((presents ?? []).map((m) => m.id as string));
+
+  const perimes = slides.filter((s) => {
+    const v = visuels.get(s.position);
+    return v && !ok.has(v);
+  });
+  if (perimes.length === 0) return;
+
+  let poolQ = supabase.from("media_library").select("id").order("used_count").limit(200);
+  if (compte.compte_reference_id) {
+    poolQ = poolQ.eq("compte_reference_id", compte.compte_reference_id);
+  }
+  const { data: pool } = await poolQ;
+  const dejaChoisies = new Set([...visuels.values()].filter(Boolean) as string[]);
+  const libres = (pool ?? []).map((m) => m.id as string).filter((id) => !dejaChoisies.has(id));
+
+  for (const s of perimes) {
+    visuels.set(s.position, libres.shift() ?? null);
+  }
+}
+
 // deno-lint-ignore no-explicit-any
 async function visuelsAlternatifs(
   supabase: Supabase,

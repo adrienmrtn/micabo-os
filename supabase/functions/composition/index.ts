@@ -45,7 +45,11 @@ Deno.serve(async (request) => {
       .in("pipeline_statut", ["running", "pending"]);
 
     if (postId) query = query.eq("id", postId);
-    else query = query.order("pipeline_statut", { ascending: false }).order("created_at");
+    // PENDING d'abord, running ensuite : un post laissé « running » par une
+    // tentative qui a calé (timeout worker) ne doit JAMAIS passer devant les posts
+    // en attente, sinon il bloque toute la file (c'est ce qui laissait des posters
+    // sans post). Il sera repris quand il n'y a plus rien de neuf à fabriquer.
+    else query = query.order("pipeline_statut", { ascending: true }).order("created_at");
 
     const { data: posts } = await query.limit(1);
     const post = posts?.[0];

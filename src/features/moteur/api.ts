@@ -122,7 +122,7 @@ export async function listerPosters(): Promise<PosterProfil[]> {
   const { data: profils, error } = await supabase
     .from("profiles")
     .select(
-      "id, prenom, nom, email, langues, nationalite, upwork_url, manager_id, is_active, must_change_password",
+      "id, prenom, nom, email, langues, nationalite, upwork_url, manager_id, is_active, must_change_password, cout_mensuel",
     )
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -230,6 +230,15 @@ export async function majUpwork(userId: string, url: string): Promise<void> {
   const { error } = await supabase
     .from("profiles")
     .update({ upwork_url: url.trim() || null })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
+/** Coût mensuel (€) d'un créateur/recruteur, saisi par l'admin (null = vide). */
+export async function majCoutMensuel(userId: string, montant: number | null): Promise<void> {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ cout_mensuel: montant })
     .eq("id", userId);
   if (error) throw error;
 }

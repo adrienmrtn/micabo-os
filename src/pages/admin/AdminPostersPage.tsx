@@ -25,6 +25,7 @@ import {
   listerComptes,
   listerLanguesReference,
   listerPosters,
+  majCoutMensuel,
   majPoster,
   majUpwork,
   supprimerPoster,
@@ -116,6 +117,58 @@ function CreateurLiens({
             {t("common.cancel")}
           </Button>
         </span>
+      )}
+    </div>
+  );
+}
+
+/** Coût mensuel (€) d'un créateur/recruteur, éditable en ligne. Informatif. */
+function CoutMensuel({ poster }: { poster: PosterProfil }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [edit, setEdit] = React.useState(false);
+  const [val, setVal] = React.useState(poster.cout_mensuel != null ? String(poster.cout_mensuel) : "");
+
+  const save = useMutation({
+    mutationFn: () => majCoutMensuel(poster.id, val.trim() === "" ? null : Number(val)),
+    onSuccess: () => {
+      setEdit(false);
+      queryClient.invalidateQueries({ queryKey: ["posters"] });
+    },
+  });
+
+  return (
+    <div className="mt-1 flex items-center gap-2 text-xs">
+      <span className="text-muted-foreground">{t("posters.coutMensuel")} :</span>
+      {edit ? (
+        <span className="flex items-center gap-1">
+          <Input
+            type="number"
+            min={0}
+            value={val}
+            onChange={(e) => setVal(e.target.value)}
+            placeholder="0"
+            className="h-7 w-24 text-xs"
+          />
+          <span>€</span>
+          <Button size="sm" className="h-7" disabled={save.isPending} onClick={() => save.mutate()}>
+            {t("common.save")}
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7" onClick={() => setEdit(false)}>
+            {t("common.cancel")}
+          </Button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setVal(poster.cout_mensuel != null ? String(poster.cout_mensuel) : "");
+            setEdit(true);
+          }}
+          className="font-medium underline underline-offset-2"
+        >
+          {poster.cout_mensuel != null ? `${poster.cout_mensuel} €/mois` : t("posters.coutAjouter")}
+        </button>
       )}
     </div>
   );
@@ -417,6 +470,7 @@ export function AdminPostersPage() {
                     poster={poster}
                     onSave={(url) => enregistrerUpwork.mutate({ id: poster.id, url })}
                   />
+                  {poster.role !== "admin" && <CoutMensuel poster={poster} />}
                 </div>
 
                 {!soiMeme && (

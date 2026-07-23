@@ -349,6 +349,11 @@ export async function integrateSophia(input: {
   /** Langue du compte : la slide Sophia doit parler comme ses voisines. */
   langue?: string;
 }): Promise<SophiaPlacement | null> {
+  // Sophia DOIT tomber dans les 2-3 dernières slides (jamais au début) : on borne
+  // les positions permises aux 3 dernières (hors couverture = slide 1).
+  const positions = input.slides.map((s) => s.position).sort((a, b) => a - b);
+  const autorisees = positions.filter((p) => p >= 2).slice(-3);
+  const autoriseesTxt = autorisees.join(", ");
   const examples = input.corrections
     .slice(0, 40)
     .map((c) =>
@@ -382,8 +387,16 @@ Slides du slideshow (slide 1 = couverture) :
 ${slideList}
 ${examples ? `\nCorrections passées à respecter :\n${examples}\n` : ""}
 --- SORTIE ---
-Ne remplace jamais la slide 1 (couverture). Choisis UNE slide (position ≥ 2) et
-écris 3 variantes qui remplacent son texte. Chaque variante DOIT :
+Ne remplace jamais la slide 1 (couverture). Sophia doit toujours tomber dans les
+2-3 DERNIÈRES slides, jamais avant : choisis UNE slide parmi ces positions
+UNIQUEMENT : ${autoriseesTxt}. Écris 3 variantes qui remplacent son texte.
+Chaque variante DOIT :
+- MENTION DE SOPHIA selon le TON des slides : si elles TUTOIENT (2e personne du
+  singulier, « tu / ton / tes / tes... »), la mention doit être INDIRECTE — n'écris
+  JAMAIS « utilise l'appli Sophia » ni « télécharge Sophia » ; écris plutôt une
+  formule du type « utilise une appli de micro-apprentissage comme Sophia ». Si les
+  slides sont à la 1re personne (« je / j'ai / mon »), une mention directe de Sophia
+  est parfaitement acceptable (« j'utilise l'appli Sophia… »).
 - reprendre EXACTEMENT le préfixe de la slide remplacée : si son texte commence
   par un numéro ("5.", "3)"), une puce ou un emoji, la variante commence par le
   MÊME. Ne change jamais le numéro, ne saute pas de numéro.
@@ -423,12 +436,18 @@ Réponds UNIQUEMENT en JSON, sans bloc de code ni commentaire :
         .map((v: unknown) => String(v ?? "").trim())
         .filter(Boolean);
 
-      if (!chosenPosition || chosenPosition < 2 || variants.length === 0) continue;
+      // La position choisie DOIT être dans les 2-3 dernières slides. Si le modèle
+      // sort une position hors zone, on la ramène sur la dernière slide autorisée
+      // plutôt que d'échouer (les variantes restent valables pour une slide de fin).
+      const positionFinale = autorisees.includes(chosenPosition)
+        ? chosenPosition
+        : autorisees[autorisees.length - 1];
+      if (!positionFinale || variants.length === 0) continue;
 
       const best = Number(parsed.best);
       const bestIndex = Number.isInteger(best) && best >= 0 && best < variants.length ? best : 0;
 
-      return { chosenPosition, mode: String(parsed.mode ?? ""), variants, bestIndex };
+      return { chosenPosition: positionFinale, mode: String(parsed.mode ?? ""), variants, bestIndex };
     } catch {
       // appel en échec ou réponse illisible : on retente après l'attente
     }
