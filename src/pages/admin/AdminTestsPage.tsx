@@ -39,9 +39,14 @@ function TesterUnTikTok() {
     [comptes.data],
   );
   const stylesDispo = (comptes.data ?? []).filter((c) => c.langue === langue);
+  // Le style est OPTIONNEL : pour un test « pour moi » (le poster, c'est toi), il
+  // suffit de choisir la langue ; on prend alors le premier compte de la langue
+  // comme véhicule. Le post produit est un post de test, à télécharger et poster
+  // où tu veux (il n'apparaît sur aucun calendrier de créateur).
+  const compteEffectif = compteId || stylesDispo[0]?.id || "";
 
   const tester = useMutation({
-    mutationFn: () => assignerTikTok({ url: lien, compteId, estTest: true }),
+    mutationFn: () => assignerTikTok({ url: lien, compteId: compteEffectif, estTest: true }),
     onSuccess: () => setLien(""),
   });
 
@@ -85,7 +90,7 @@ function TesterUnTikTok() {
             </select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tStyle">{t("tests.style")}</Label>
+            <Label htmlFor="tStyle">{t("tests.styleOptionnel")}</Label>
             <select
               id="tStyle"
               className={selectClass}
@@ -102,10 +107,10 @@ function TesterUnTikTok() {
             </select>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">{t("tests.styleAide")}</p>
+        <p className="text-xs text-muted-foreground">{t("tests.styleAidePourMoi")}</p>
 
         <Button
-          disabled={tester.isPending || !lien.trim() || !compteId}
+          disabled={tester.isPending || !lien.trim() || !compteEffectif}
           onClick={() => tester.mutate()}
         >
           <Sparkles className="size-4" />

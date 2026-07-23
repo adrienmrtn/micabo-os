@@ -122,10 +122,13 @@ export const fr = {
       langueVia: "Langue / style (via un compte)",
       langue: "Langue",
       style: "Style",
-      styleChoisir: "Choisir un style",
+      styleOptionnel: "Style (optionnel)",
+      styleChoisir: "Choisir un style (ou laisser vide)",
       styleLangueDabord: "Choisis d'abord une langue",
       styleAide:
         "La langue = celle dans laquelle le test est traduit. Le style = la voix/persona d'un de tes comptes (chaque compte a son ton).",
+      styleAidePourMoi:
+        "Langue = la traduction. Style = la voix (optionnel). Laisse le style vide pour un post « pour toi » : tu obtiens un post de test à télécharger et poster sur TON compte (il n'apparaît sur aucun calendrier de créateur).",
       tiktokLancer: "Tester ce TikTok",
       tiktokOk: "Test lancé — il se fabrique en arrière-plan.",
       enCours: "En cours…",
