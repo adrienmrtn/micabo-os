@@ -401,6 +401,7 @@ export const en = {
       typeAuto: "Automatic (per the ratios)",
       typeHint:
         "Recycled and reworked need a prior post on this account. Without history, they become a new one.",
+      editerConsignes: "Edit the guidance for this post type →",
       repli: "No history: the {{type}} was produced as a new one.",
       extraction: "Extracting sources…",
       preparation: "Preparing a topic…",

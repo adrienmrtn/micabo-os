@@ -401,6 +401,7 @@ export const fr = {
       typeAuto: "Automatique (selon les ratios)",
       typeHint:
         "Recopiage et remanié ont besoin d'un post antérieur sur ce compte. Sans historique, ils deviennent un nouveau.",
+      editerConsignes: "Modifier les consignes de ce type de post →",
       repli: "Pas d'historique : le {{type}} a été produit comme un nouveau.",
       extraction: "Extraction des sources…",
       preparation: "Préparation d'un sujet…",

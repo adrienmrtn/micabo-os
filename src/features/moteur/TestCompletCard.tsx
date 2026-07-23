@@ -168,6 +168,15 @@ export function TestCompletCard() {
             <option value="nouveau">{t("type.nouveau")}</option>
           </select>
           <p className="text-xs text-muted-foreground">{t("test.typeHint")}</p>
+          {(type === "nouveau" || type === "remanie" || type === "recycle") && (
+            <button
+              type="button"
+              onClick={() => navigate("/admin/prompts")}
+              className="text-xs font-medium text-primary underline underline-offset-2"
+            >
+              {t("test.editerConsignes")}
+            </button>
+          )}
         </div>
 
         <label className="flex items-center gap-2 text-sm">
