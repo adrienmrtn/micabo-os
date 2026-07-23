@@ -1,5 +1,5 @@
 import { creerPost as creerCoquille } from "../_shared/composer.ts";
-import { assertAuthorised, json, messageErreur, serviceClient, todayIso } from "../_shared/supabase.ts";
+import { assertAuthorised, aujourdhuiParis, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
 type TypePost = "recycle" | "remanie" | "nouveau";
@@ -36,7 +36,10 @@ Deno.serve(async (request) => {
     // Corps vide : tous les comptes, aujourd'hui.
   }
 
-  const jour = date ?? todayIso();
+  // Sans date explicite, le jour visé est le jour PARIS : à minuit Paris (22h
+  // UTC l'été), la date UTC est encore la veille — c'est ce qui faisait rater
+  // l'assignation de minuit.
+  const jour = date ?? aujourdhuiParis();
 
   try {
     const reglages = await chargerReglages(supabase);

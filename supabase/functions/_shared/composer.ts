@@ -365,11 +365,18 @@ async function garantirVisuelsPropres(supabase: Supabase, compte: any, postId: s
   const ids = slides.map((s) => s.media_id).filter(Boolean);
   const { data: medias } = await supabase
     .from("media_library")
-    .select("id, storage_path")
+    .select("id, storage_path, texte_restant")
     .in("id", ids);
   const chemin = new Map((medias ?? []).map((m) => [m.id, m.storage_path as string]));
+  const sales = new Set(
+    (medias ?? []).filter((m) => m.texte_restant).map((m) => m.id as string),
+  );
 
-  const aRemplacer = slides.filter((s) => !chemin.get(s.media_id)?.startsWith("propre/"));
+  // À remplacer : image hors `propre/` OU signalée par l'audit (texte encore
+  // présent malgré son rangement en propre).
+  const aRemplacer = slides.filter(
+    (s) => !chemin.get(s.media_id)?.startsWith("propre/") || sales.has(s.media_id),
+  );
   if (aRemplacer.length === 0) return;
 
   const dejaSurPost = new Set(slides.map((s) => s.media_id).filter(Boolean));
@@ -377,6 +384,7 @@ async function garantirVisuelsPropres(supabase: Supabase, compte: any, postId: s
     .from("media_library")
     .select("id")
     .like("storage_path", "propre/%")
+    .eq("texte_restant", false)
     .order("used_count", { ascending: true })
     .limit(60);
   if (compte.compte_reference_id) query = query.eq("compte_reference_id", compte.compte_reference_id);
@@ -483,7 +491,12 @@ async function reparerVisuelsPerimes(
   });
   if (perimes.length === 0) return;
 
-  let poolQ = supabase.from("media_library").select("id").order("used_count").limit(200);
+  let poolQ = supabase
+    .from("media_library")
+    .select("id")
+    .eq("texte_restant", false)
+    .order("used_count")
+    .limit(200);
   if (compte.compte_reference_id) {
     poolQ = poolQ.eq("compte_reference_id", compte.compte_reference_id);
   }
@@ -511,6 +524,7 @@ async function visuelsAlternatifs(
   let query = supabase
     .from("media_library")
     .select("id")
+    .eq("texte_restant", false)
     .order("used_count")
     .limit(100);
   if (compte.compte_reference_id) {

@@ -77,6 +77,8 @@ export interface Media {
   tags: string[];
   langue: string | null;
   visage_identifiable: boolean | null;
+  /** L'audit a vu du texte sur une image pourtant rangée en propre. */
+  texte_restant: boolean;
   used_count: number;
   created_at: string;
 }

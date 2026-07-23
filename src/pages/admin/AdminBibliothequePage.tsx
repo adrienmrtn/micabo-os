@@ -27,7 +27,8 @@ const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:w-64";
 
 function estPropre(media: Media): boolean {
-  return media.storage_path.startsWith("propre/");
+  // Rangée en propre ET pas signalée par l'audit (texte encore présent).
+  return media.storage_path.startsWith("propre/") && !media.texte_restant;
 }
 
 function VignetteMedia({ media, onChange }: { media: Media; onChange: () => void }) {

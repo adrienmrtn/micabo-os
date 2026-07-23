@@ -63,7 +63,16 @@ Deno.serve(async (request) => {
           const { data: media, error: insErr } = await supabase
             .from("media_library")
             .upsert(
-              { compte_id: post?.compte_id ?? null, storage_path: path, url, source: "nettoye_reference", visage_identifiable: null },
+              {
+                compte_id: post?.compte_id ?? null,
+                storage_path: path,
+                url,
+                source: "nettoye_reference",
+                visage_identifiable: null,
+                // Vérifiée juste au-dessus : inutile que l'audit y repasse.
+                verifie_le: new Date().toISOString(),
+                texte_restant: false,
+              },
               { onConflict: "storage_path" },
             )
             .select("id")
@@ -116,6 +125,7 @@ async function visuelPropreDeSecours(
     .from("media_library")
     .select("id")
     .like("storage_path", "propre/%")
+    .eq("texte_restant", false)
     .order("used_count", { ascending: true })
     .limit(30);
   if (refId) query = query.eq("compte_reference_id", refId);

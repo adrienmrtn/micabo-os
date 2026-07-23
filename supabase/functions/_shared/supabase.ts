@@ -158,3 +158,14 @@ export function json(body: unknown, status = 200): Response {
 export function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
+/**
+ * Date du jour à PARIS (YYYY-MM-DD) — le « jour » métier de la plateforme.
+ * À minuit Paris (22h UTC l'été), la date UTC est encore la VEILLE : utiliser
+ * l'UTC faisait viser le mauvais jour au cron de minuit, et les posts du jour
+ * n'étaient réellement créés qu'au rattrapage de 6h, avec 2h de fenêtre de
+ * fabrication au lieu de 8 — d'où des posters sans post au réveil.
+ */
+export function aujourdhuiParis(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(new Date());
+}

@@ -1,4 +1,5 @@
-import { scrapePost } from "../_shared/apify.ts";
+import { downloadImage, scrapePost } from "../_shared/apify.ts";
+import { verifyClean } from "../_shared/gemini.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 /**
@@ -12,6 +13,7 @@ import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared
  */
 const MUSIQUE_PAR_PASSAGE = 3;
 const PERSONAS_PAR_PASSAGE = 1;
+const AUDITS_PAR_PASSAGE = 2;
 
 Deno.serve(async (request) => {
   const denied = await assertAuthorised(request);
@@ -20,7 +22,7 @@ Deno.serve(async (request) => {
   const supabase = serviceClient();
   const secret = Deno.env.get("CRON_SECRET") ?? "";
   const base = new URL(request.url);
-  const rapport = { musique: 0, personas: 0 };
+  const rapport = { musique: 0, personas: 0, audits: 0, sales: 0 };
 
   try {
     // 1 — MUSIQUE : quelques sujets dont le lien est un fichier CDN → on re-scrape
@@ -71,6 +73,37 @@ Deno.serve(async (request) => {
         if (d?.applique) rapport.personas += 1;
       } catch {
         // idem
+      }
+    }
+
+    // 3 — AUDIT BIBLIOTHÈQUE : quelques images « propres » jamais contrôlées.
+    // Celles nettoyées AVANT l'ajout de la vérification peuvent encore porter du
+    // texte. Texte trouvé → `texte_restant` : l'image sort du pipeline et
+    // s'affiche « texte présent » dans la bibliothèque (re-nettoyable).
+    const { data: aAuditer } = await supabase
+      .from("media_library")
+      .select("id, url")
+      .like("storage_path", "propre/%")
+      .is("verifie_le", null)
+      .limit(AUDITS_PAR_PASSAGE);
+
+    for (const m of aAuditer ?? []) {
+      try {
+        const bytes = await downloadImage(m.url);
+        let bin = "";
+        const CHUNK = 0x8000;
+        for (let i = 0; i < bytes.length; i += CHUNK) {
+          bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+        }
+        const propre = await verifyClean(btoa(bin), "image/png");
+        await supabase
+          .from("media_library")
+          .update({ verifie_le: new Date().toISOString(), texte_restant: !propre })
+          .eq("id", m.id);
+        rapport.audits += 1;
+        if (!propre) rapport.sales += 1;
+      } catch {
+        // un échec isolé (429, image inaccessible) : on réessaiera au prochain tour
       }
     }
 

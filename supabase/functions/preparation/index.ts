@@ -229,6 +229,10 @@ async function nettoyerVersBibliotheque(
         source: "nettoye_reference",
         langue: sujet.langue,
         visage_identifiable: null,
+        // Vérifiée au stockage (verifyClean ci-dessus) : l'audit de la
+        // maintenance n'a pas besoin d'y repasser.
+        verifie_le: new Date().toISOString(),
+        texte_restant: false,
       },
       { onConflict: "storage_path" },
     )

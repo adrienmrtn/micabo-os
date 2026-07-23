@@ -30,12 +30,14 @@ Deno.serve(async (request) => {
   try {
     const { data: media } = await supabase
       .from("media_library")
-      .select("id, url, storage_path")
+      .select("id, url, storage_path, texte_restant")
       .eq("id", mediaId)
       .single();
     if (!media) return json({ error: "média introuvable" }, 404);
 
-    if (media.storage_path.startsWith("propre/")) {
+    // « Déjà nettoyée » SAUF si l'audit a signalé du texte restant : dans ce
+    // cas on la re-nettoie vraiment.
+    if (media.storage_path.startsWith("propre/") && !media.texte_restant) {
       return json({ ok: true, nettoyee: true, note: "déjà nettoyée" });
     }
 
@@ -58,7 +60,12 @@ Deno.serve(async (request) => {
 
     const { error: majErr } = await supabase
       .from("media_library")
-      .update({ storage_path: path, url })
+      .update({
+        storage_path: path,
+        url,
+        verifie_le: new Date().toISOString(),
+        texte_restant: false,
+      })
       .eq("id", media.id);
     if (majErr) throw majErr;
 

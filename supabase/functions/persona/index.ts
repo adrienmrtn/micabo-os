@@ -151,12 +151,15 @@ async function filtrerPseudos(
 
   if (sansEcho.length === 0) return [];
 
+  // On écarte tout pseudo déjà porté par un de NOS comptes — que ce soit comme
+  // @ OU comme nom affiché (deux posters avec le même nom, ça s'est produit).
   const { data: pris } = await supabase
     .from("comptes")
-    .select("handle_tiktok")
-    .in("handle_tiktok", sansEcho);
+    .select("handle_tiktok, persona_nom");
 
-  const dejaPris = new Set((pris ?? []).map((c) => c.handle_tiktok));
+  const dejaPris = new Set(
+    (pris ?? []).flatMap((c) => [c.handle_tiktok, c.persona_nom]).filter(Boolean),
+  );
   return sansEcho.filter((pseudo) => !dejaPris.has(pseudo));
 }
 
