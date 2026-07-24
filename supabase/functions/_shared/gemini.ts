@@ -1,8 +1,6 @@
-import { Image } from "https://deno.land/x/imagescript@1.2.15/mod.ts";
-
 import { downloadImage } from "./apify.ts";
 import { messageErreur } from "./supabase.ts";
-import { effacerTexte, type Zone } from "./inpaint.ts";
+import { dimensionsImage, effacerTexte, type Zone } from "./inpaint.ts";
 import { nettoyerViaProxy } from "./proxy.ts";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -473,15 +471,35 @@ const PROMPT_NETTOYAGE = `Tu fais une restauration photo subtile.
 4. Ne génère aucun texte, logo, badge ou watermark supplémentaire.
 5. Renvoie uniquement l'image nettoyée.`;
 
+/**
+ * Une image DÉGÉNÉRÉE (quasi entièrement noire/unie) : elle se compresse en un
+ * PNG minuscule pour ses dimensions. `verifyClean` ne l'attrape PAS (une image
+ * noire n'a « pas de texte » → jugée propre), d'où le désastre du 24/07 où des
+ * centaines de slides ont été stockées toutes noires. Ce garde-fou, lui, refuse
+ * tout ce qui pèse moins de ~50 Ko/mégapixel — un vrai visuel photo n'est jamais
+ * aussi compressible. En cas de doute (dimensions illisibles) on n'écarte pas.
+ */
+function sembleDegeneree(base64: string): boolean {
+  try {
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const dims = dimensionsImage(bytes);
+    if (!dims || dims.w === 0 || dims.h === 0) return false;
+    const megapixels = (dims.w * dims.h) / 1_000_000;
+    const koParMp = bytes.length / 1024 / Math.max(megapixels, 0.01);
+    return koParMp < 50;
+  } catch {
+    return false;
+  }
+}
+
 export async function cleanImage(imageUrl: string): Promise<string | null> {
-  // 0 — PROXY LOVABLE en priorité s'il est configuré. C'est le nettoyeur de
-  // RÉFÉRENCE : sa sortie est de confiance, on ne la re-vérifie PAS. La double
-  // vérification rejetait à tort des images denses en texte que le proxy avait
-  // pourtant bien nettoyées (il « croyait revoir » du texte). On lui fait
-  // confiance ; les échecs durs (proxy sans image) remontent et sont rattrapés
-  // en aval (remplacement par une photo propre de la bibliothèque).
+  // 0 — PROXY LOVABLE en priorité s'il est configuré. Sa sortie « texte » n'est
+  // pas re-vérifiée (verifyClean rejetait à tort des images denses en texte bien
+  // nettoyées), MAIS on refuse désormais une sortie DÉGÉNÉRÉE (noire/unie) : c'est
+  // le seul contrôle qui aurait évité que tout parte en noir. Une sortie noire →
+  // on tombe sur l'inpainting/génératif au lieu de la stocker.
   const parProxy = await nettoyerViaProxy(imageUrl);
-  if (parProxy) return parProxy;
+  if (parProxy && !sembleDegeneree(parProxy)) return parProxy;
 
   const image = await fetchImageAsInline(imageUrl);
 
@@ -492,8 +510,13 @@ export async function cleanImage(imageUrl: string): Promise<string | null> {
   let noteInpaint = "inpaint: aucune image (pas de zone, ou pas de clé)";
   try {
     const parInpaint = await inpaintFallback(image, imageUrl);
-    if (parInpaint && (await verifyClean(parInpaint, "image/png"))) return parInpaint;
-    if (parInpaint) noteInpaint = "inpaint: texte encore visible après effacement";
+    if (parInpaint && sembleDegeneree(parInpaint)) {
+      noteInpaint = "inpaint: sortie dégénérée (noire) rejetée";
+    } else if (parInpaint && (await verifyClean(parInpaint, "image/png"))) {
+      return parInpaint;
+    } else if (parInpaint) {
+      noteInpaint = "inpaint: texte encore visible après effacement";
+    }
   } catch (error) {
     // Le motif remonte au lieu d'être avalé : c'est ainsi qu'on a vu que les
     // images trop grandes étaient rejetées par le service d'effacement.
@@ -511,99 +534,16 @@ export async function cleanImage(imageUrl: string): Promise<string | null> {
     try {
       const sortie = await call(model, parts, config);
       const data = imageDataOf(sortie);
-      if (data && (await verifyClean(data, "image/png"))) return data;
-      if (data) echecs.push(`${model}: texte encore visible après retouche`);
+      if (data && sembleDegeneree(data)) echecs.push(`${model}: sortie dégénérée (noire) rejetée`);
+      else if (data && (await verifyClean(data, "image/png"))) return data;
+      else if (data) echecs.push(`${model}: texte encore visible après retouche`);
       else echecs.push(`${model}: ${textOf(sortie).slice(0, 120) || "bloqué (aucune image)"}`);
     } catch (error) {
       echecs.push(`${model}: ${messageErreur(error)}`);
     }
   }
 
-  // 3 — DERNIER RECOURS : nettoyage PAR ZONE. On recadre sur le seul bloc de
-  // texte, on nettoie ce ZOOM (le modèle y voit le texte en grand, et une petite
-  // vignette anodine ne déclenche pas les refus de copyright), puis on RECOLLE
-  // la zone nettoyée sur l'original. Le reste de la photo reste l'ORIGINAL — d'où
-  // un bien meilleur taux de réussite ET beaucoup moins de « média généré par
-  // IA » (seule la zone est retouchée).
-  try {
-    const parZone = await nettoyerParZones(image);
-    if (parZone) return parZone;
-    echecs.push("zone: échec (texte encore visible ou recadrage impossible)");
-  } catch (error) {
-    echecs.push(`zone: ${messageErreur(error)}`);
-  }
-
   throw new RefusRetouche([noteInpaint, ...echecs].join(" | "));
-}
-
-/** Octets → base64 (par blocs, pour ne pas exploser la pile sur les gros buffers). */
-function octetsEnBase64(bytes: Uint8Array): string {
-  let binaire = "";
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binaire += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binaire);
-}
-
-/**
- * Nettoyage PAR ZONE : on repère le texte, on recadre dessus (avec marge), on
- * nettoie CE recadrage en génératif — envoyé seul, le modèle le traite en pleine
- * résolution (l'effet « zoom ») et ne voit pas de contexte sous copyright, donc
- * il refuse rarement — puis on recolle la zone nettoyée à sa place sur l'original.
- * Renvoie l'image complète en base64, ou null si rien de propre n'a pu être obtenu.
- */
-async function nettoyerParZones(image: Part): Promise<string | null> {
-  const base64 = image.inline_data?.data ?? image.inlineData?.data;
-  if (!base64) return null;
-
-  const zones = await detecterZonesTexte(image);
-  if (zones.length === 0) return null;
-
-  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-  const img = await Image.decode(bytes);
-  const W = img.width;
-  const H = img.height;
-
-  // Boîte englobant TOUTES les zones de texte, avec une marge.
-  let fx0 = 1, fy0 = 1, fx1 = 0, fy1 = 0;
-  for (const z of zones) {
-    fx0 = Math.min(fx0, z.x);
-    fy0 = Math.min(fy0, z.y);
-    fx1 = Math.max(fx1, z.x + z.w);
-    fy1 = Math.max(fy1, z.y + z.h);
-  }
-  const marge = 0.04;
-  const px = Math.max(0, Math.floor((fx0 - marge) * W));
-  const py = Math.max(0, Math.floor((fy0 - marge) * H));
-  const pw = Math.min(W - px, Math.ceil((fx1 - fx0 + 2 * marge) * W));
-  const ph = Math.min(H - py, Math.ceil((fy1 - fy0 + 2 * marge) * H));
-  if (pw < 8 || ph < 8) return null;
-
-  // Recadrage → PNG → génératif sur le seul zoom.
-  const crop = img.clone().crop(px, py, pw, ph);
-  const cropPart: Part = {
-    inline_data: { mime_type: "image/png", data: octetsEnBase64(await crop.encode()) },
-  };
-  const parts: Part[] = [cropPart, { text: PROMPT_NETTOYAGE }];
-  const config: GenConfig = { temperature: 0.2, responseModalities: ["IMAGE"] };
-
-  for (const model of IMAGE_MODELS) {
-    try {
-      const sortie = await call(model, parts, config);
-      const data = imageDataOf(sortie);
-      if (!data || !(await verifyClean(data, "image/png"))) continue;
-
-      // Recollage : la zone nettoyée reprend EXACTEMENT sa place et sa taille.
-      const propre = await Image.decode(Uint8Array.from(atob(data), (c) => c.charCodeAt(0)));
-      if (propre.width !== pw || propre.height !== ph) propre.resize(pw, ph);
-      img.composite(propre, px, py);
-      return octetsEnBase64(await img.encode());
-    } catch {
-      // modèle suivant
-    }
-  }
-  return null;
 }
 
 /**
