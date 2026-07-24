@@ -1,4 +1,5 @@
-import { contientVisageIdentifiable, genererPersona } from "../_shared/gemini.ts";
+import { avatarPourSource } from "../_shared/avatar.ts";
+import { genererPersona } from "../_shared/gemini.ts";
 import { scrapeProfile, scrapeProfileBio } from "../_shared/apify.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
@@ -106,7 +107,7 @@ Deno.serve(async (request) => {
       reference?.handle_tiktok ?? "",
     );
 
-    const avatar = await choisirAvatar(supabase, compte.compte_reference_id);
+    const avatar = await avatarPourSource(supabase, compte.compte_reference_id);
 
     // Le @ RÉELLEMENT posé : le pseudo choisi, mais garanti LIBRE sur TikTok
     // (sinon on ajoute des chiffres). Calculé seulement si on applique.
@@ -129,7 +130,7 @@ Deno.serve(async (request) => {
         })
         .eq("id", compteId);
 
-      if (avatar) {
+      if (avatar?.id) {
         await supabase
           .from("media_library")
           .update({ used_count: avatar.used_count + 1 })
@@ -191,68 +192,4 @@ async function filtrerPseudos(
     (pris ?? []).flatMap((c) => [c.handle_tiktok, c.persona_nom]).filter(Boolean),
   );
   return sansEcho.filter((pseudo) => !dejaPris.has(pseudo));
-}
-
-/**
- * Le moins utilisé parmi les visuels sans visage identifiable.
- *
- * Le test de visage se fait ICI, et non à la préparation : il ne sert qu'au
- * choix d'une photo de profil, une fois par compte, alors qu'à la préparation
- * il tournait sur chaque slide — des centaines d'appels facturés pour des
- * visuels qui ne deviendront jamais un avatar. On examine donc quelques
- * candidats à la demande, et on garde le verdict pour ne pas le repayer.
- */
-const CANDIDATS_AVATAR = 6;
-
-async function choisirAvatar(supabase: Supabase, compteReferenceId: string | null) {
-  // Une image DÉJÀ jugée sans visage (aucun appel à passer). On tente d'abord la
-  // source du compte, puis TOUTE la bibliothèque — un avatar est juste une photo
-  // esthétique, la niche exacte importe peu, et ça garantit un avatar même quand
-  // la source neuve n'a encore aucune image à elle.
-  const connuSansVisage = async (limiterALaSource: boolean) => {
-    let q = supabase
-      .from("media_library")
-      .select("id, url, used_count")
-      .eq("visage_identifiable", false)
-      .eq("texte_restant", false)
-      .like("storage_path", "propre/%")
-      .order("used_count")
-      .limit(1);
-    if (limiterALaSource && compteReferenceId) q = q.eq("compte_reference_id", compteReferenceId);
-    const { data } = await q;
-    return data?.[0] ?? null;
-  };
-
-  const dejaSur =
-    (compteReferenceId ? await connuSansVisage(true) : null) ?? (await connuSansVisage(false));
-  if (dejaSur) return dejaSur;
-
-  // Sinon on juge quelques visuels encore non examinés (source d'abord, puis
-  // global) jusqu'à en trouver un sans visage.
-  const jugerNouveaux = async (limiterALaSource: boolean) => {
-    let q = supabase
-      .from("media_library")
-      .select("id, url, used_count")
-      .is("visage_identifiable", null)
-      .eq("texte_restant", false)
-      .like("storage_path", "propre/%")
-      .order("used_count")
-      .limit(CANDIDATS_AVATAR);
-    if (limiterALaSource && compteReferenceId) q = q.eq("compte_reference_id", compteReferenceId);
-    const { data: candidats } = await q;
-
-    for (const media of candidats ?? []) {
-      const visage = await contientVisageIdentifiable(media.url);
-      await supabase
-        .from("media_library")
-        .update({ visage_identifiable: visage === null ? true : visage })
-        .eq("id", media.id);
-      if (visage === false) return media;
-    }
-    return null;
-  };
-
-  return (
-    (compteReferenceId ? await jugerNouveaux(true) : null) ?? (await jugerNouveaux(false))
-  );
 }

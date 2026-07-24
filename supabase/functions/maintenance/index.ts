@@ -1,4 +1,5 @@
 import { downloadImage, scrapePost } from "../_shared/apify.ts";
+import { preparerAvatarReference } from "../_shared/avatar.ts";
 import { verifyClean } from "../_shared/gemini.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
@@ -14,6 +15,7 @@ import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared
 const MUSIQUE_PAR_PASSAGE = 3;
 const PERSONAS_PAR_PASSAGE = 1;
 const AUDITS_PAR_PASSAGE = 2;
+const AVATARS_REF_PAR_PASSAGE = 2;
 
 Deno.serve(async (request) => {
   const denied = await assertAuthorised(request);
@@ -22,7 +24,7 @@ Deno.serve(async (request) => {
   const supabase = serviceClient();
   const secret = Deno.env.get("CRON_SECRET") ?? "";
   const base = new URL(request.url);
-  const rapport = { musique: 0, personas: 0, audits: 0, sales: 0 };
+  const rapport = { musique: 0, personas: 0, audits: 0, sales: 0, avatarsRef: 0 };
 
   try {
     // 1 — MUSIQUE : quelques sujets dont le lien est un fichier CDN → on re-scrape
@@ -104,6 +106,25 @@ Deno.serve(async (request) => {
         if (!propre) rapport.sales += 1;
       } catch {
         // un échec isolé (429, image inaccessible) : on réessaiera au prochain tour
+      }
+    }
+
+    // 4 — AVATARS DE RÉFÉRENCE : on prépare À L'AVANCE une photo de profil sans
+    // visage pour chaque source active qui n'en a pas encore. Ainsi la création
+    // d'un poster n'a plus qu'à la copier — aucun appel Gemini au moment critique.
+    const { data: refsSansAvatar } = await supabase
+      .from("comptes_reference")
+      .select("id")
+      .eq("is_active", true)
+      .is("avatar_url", null)
+      .limit(AVATARS_REF_PAR_PASSAGE);
+
+    for (const r of refsSansAvatar ?? []) {
+      try {
+        const url = await preparerAvatarReference(supabase, r.id);
+        if (url) rapport.avatarsRef += 1;
+      } catch {
+        // source sans image exploitable pour l'instant : on réessaiera
       }
     }
 
