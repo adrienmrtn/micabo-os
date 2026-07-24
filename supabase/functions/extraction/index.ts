@@ -30,10 +30,19 @@ const idDe = (url: string) => url.match(/\/(?:photo|video)\/(\d+)/)?.[1] ?? url;
 /**
  * Nombre de sujets créés par passage. Le scrape lui-même est léger, mais
  * rapatrier les visuels ne l'est pas : sept images par post, et le worker
- * s'épuise avant la fin. On en crée deux, et le passage suivant prend la suite
- * — la déduplication sur source_url garantit qu'on ne repasse pas dessus.
+ * s'épuise avant la fin. Cinq tient dans une invocation (≈40 téléchargements)
+ * et suffit à alimenter une source par nuit ; la dédup sur source_url évite
+ * de repasser sur ce qui est déjà pris.
  */
-const SUJETS_PAR_PASSAGE = 2;
+const SUJETS_PAR_PASSAGE = 5;
+
+/**
+ * On ne re-scrape pas une source déjà vue dans les dernières 20 h : chaque
+ * source est ainsi rafraîchie AU PLUS une fois par nuit (le cron tourne toutes
+ * les 15 min et sert les sources restantes). Sans ce garde-fou, la même source
+ * serait re-scrapée en boucle — des appels Apify pour rien une fois épuisée.
+ */
+const RESCRAPE_APRES_H = 20;
 
 /**
  * Extraction : récupère les posts passés d'un compte de référence (propriété de
@@ -137,7 +146,15 @@ Deno.serve(async (request) => {
       .eq("is_active", true)
       .order("dernier_scrape_at", { ascending: true, nullsFirst: true })
       .limit(1);
-    if (compteReferenceId) query = query.eq("id", compteReferenceId);
+    // Une source déjà scrapée dans les 20 dernières heures est ignorée : on
+    // n'en fait qu'UNE par nuit, et le cron sert les autres aux passages
+    // suivants. Un appel ciblé (compteReferenceId) force le scrape, lui.
+    if (compteReferenceId) {
+      query = query.eq("id", compteReferenceId);
+    } else {
+      const seuil = new Date(Date.now() - RESCRAPE_APRES_H * 3600 * 1000).toISOString();
+      query = query.or(`dernier_scrape_at.is.null,dernier_scrape_at.lt.${seuil}`);
+    }
 
     const { data: comptes, error } = await query;
     if (error) throw error;
@@ -180,14 +197,16 @@ Deno.serve(async (request) => {
           })
           .eq("id", run?.id);
 
-        // On ne date le scrape qu'une fois la source épuisée : tant qu'il reste
-        // des posts à rapatrier, elle doit rester en tête de file.
-        if (!restants) {
-          await supabase
-            .from("comptes_reference")
-            .update({ dernier_scrape_at: new Date().toISOString() })
-            .eq("id", compte.id);
-        }
+        // On date le scrape À CHAQUE passage : la source passe en fin de file et
+        // le garde-fou des 20 h l'exclut jusqu'à la nuit suivante. Ainsi on
+        // alimente TOUTES les sources tour à tour (5 sujets chacune/nuit) plutôt
+        // que d'en vider une seule pendant que les autres crèvent de faim.
+        // `restants` (posts non encore rapatriés) est repris la nuit d'après.
+        void restants;
+        await supabase
+          .from("comptes_reference")
+          .update({ dernier_scrape_at: new Date().toISOString() })
+          .eq("id", compte.id);
       } catch (error) {
         await supabase
           .from("extractions")
