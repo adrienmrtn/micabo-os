@@ -35,16 +35,52 @@ async function handleLibre(handle: string): Promise<boolean> {
 }
 
 /**
- * Un pseudo LIBRE sur TikTok : on part du pseudo choisi ; si TikTok l'a déjà, on
- * ajoute quelques chiffres au hasard jusqu'à en trouver un de libre.
+ * Un pseudo probablement LIBRE sur TikTok. On fait UN SEUL contrôle (un scrape
+ * Apify coûte ~10-30 s ; en enchaîner cinq faisait timeout toute la création) :
+ * si le pseudo de base est libre on le garde, sinon — ou si le contrôle échoue
+ * — on lui colle 3 chiffres au hasard, ce qui suffit à éviter les collisions
+ * courantes. La disponibilité fine est affinable à la main ensuite.
  */
 async function trouverHandleLibre(base: string): Promise<string> {
-  if (await handleLibre(base)) return base;
-  for (let i = 0; i < 4; i += 1) {
-    const candidat = `${base}${Math.floor(Math.random() * 900) + 100}`; // 3 chiffres
-    if (await handleLibre(candidat)) return candidat;
+  try {
+    if (await handleLibre(base)) return base;
+  } catch {
+    // Apify indispo : on ne bloque pas, on suffixe directement.
   }
-  return `${base}${Math.floor(Math.random() * 9000) + 1000}`; // dernier recours
+  return `${base}${Math.floor(Math.random() * 900) + 100}`; // 3 chiffres
+}
+
+/** Racines par langue pour un pseudo de SECOURS (culture générale / savoir),
+ *  quand l'IA est indisponible : mieux vaut une identité correcte tout de suite
+ *  qu'un compte vide. L'admin peut toujours « Générer une identité » ensuite. */
+const RACINES_SECOURS: Record<string, string[]> = {
+  fr: ["savoir", "culture", "esprit", "curieux", "eclaire", "matiere.grise", "apprends", "le.savais.tu"],
+  en: ["knowledge", "curious", "learn", "bright.mind", "brain.fuel", "did.you.know", "smart.daily", "quick.facts"],
+  de: ["wissen", "neugierig", "lernen", "kluger.kopf", "bildung", "wusstest.du", "schlau.taeglich", "gehirn.futter"],
+  it: ["sapere", "curioso", "impara", "mente.viva", "cultura", "lo.sapevi", "cervello", "intelletto"],
+  es: ["saber", "curioso", "aprende", "mente.viva", "cultura", "sabias.que", "cerebro", "brillante"],
+  pt: ["saber", "curioso", "aprende", "mente.viva", "cultura", "sabia.que", "cerebro", "brilhante"],
+};
+
+/** Bio de SECOURS par langue (culture générale), quand l'IA est indisponible. */
+const BIO_SECOURS: Record<string, string> = {
+  fr: "un peu de culture chaque jour 🧠\nabonne-toi pour apprendre quelque chose de nouveau ✨",
+  en: "a little knowledge every day 🧠\nfollow to learn something new ✨",
+  de: "jeden tag ein bisschen wissen 🧠\nfolge mir und lerne etwas neues ✨",
+  it: "un po' di cultura ogni giorno 🧠\nseguimi per imparare qualcosa di nuovo ✨",
+  es: "un poco de cultura cada día 🧠\nsígueme para aprender algo nuevo ✨",
+  pt: "um pouco de cultura todo dia 🧠\nsegue para aprender algo novo ✨",
+};
+
+function pseudosDeSecours(langue: string): string[] {
+  const racines = RACINES_SECOURS[langue] ?? RACINES_SECOURS.fr;
+  // Chaque racine + une variante suffixée : de quoi laisser filtrerPseudos
+  // écarter les collisions et trouverHandleLibre suffixer sans être à court.
+  return racines.flatMap((r) => [r, `${r}${Math.floor(Math.random() * 90) + 10}`]);
+}
+
+function bioDeSecours(langue: string): string {
+  return BIO_SECOURS[langue] ?? BIO_SECOURS.fr;
 }
 
 /**
@@ -93,24 +129,34 @@ Deno.serve(async (request) => {
       }
     }
 
+    // L'IA d'abord ; mais si elle est indisponible (429 Gemini fréquent en
+    // journée), on NE bloque PAS : on bascule sur une identité de secours
+    // déterministe. Une identité correcte tout de suite vaut mieux qu'un compte
+    // vide qu'il faut re-générer à la main.
     const proposition = await genererPersona({
       niche: reference?.niche ?? "",
       langue: compte.langue,
       referenceHandle: reference?.handle_tiktok ?? undefined,
       referenceBio: referenceBio || undefined,
-    });
-    if (!proposition) return json({ error: "Génération impossible" }, 502);
+    }).catch(() => null);
 
-    const pseudos = await filtrerPseudos(
-      supabase,
-      proposition.pseudos,
-      reference?.handle_tiktok ?? "",
-    );
+    const pseudosIA = proposition?.pseudos?.length
+      ? proposition.pseudos
+      : pseudosDeSecours(compte.langue);
+    const bio = proposition?.bio?.trim() || bioDeSecours(compte.langue);
+
+    // Écarte les pseudos trahissant la source ou déjà pris ; si tout est écarté,
+    // on repart du pool de secours (jamais vide).
+    let pseudos = await filtrerPseudos(supabase, pseudosIA, reference?.handle_tiktok ?? "");
+    if (pseudos.length === 0) {
+      pseudos = await filtrerPseudos(supabase, pseudosDeSecours(compte.langue), reference?.handle_tiktok ?? "");
+    }
+    // Ultime garde-fou : jamais aucun candidat.
+    if (pseudos.length === 0) pseudos = pseudosDeSecours(compte.langue);
 
     const avatar = await avatarPourSource(supabase, compte.compte_reference_id);
 
-    // Le @ RÉELLEMENT posé : le pseudo choisi, mais garanti LIBRE sur TikTok
-    // (sinon on ajoute des chiffres). Calculé seulement si on applique.
+    // Le @ RÉELLEMENT posé : le pseudo choisi, garanti probablement libre.
     let handleApplique: string | null = null;
 
     if (appliquer && pseudos.length > 0) {
@@ -124,7 +170,7 @@ Deno.serve(async (request) => {
           handle_tiktok: compte.handle_tiktok ?? handleApplique,
           // Nom affiché = le @ simplifié (pas le @ brut).
           persona_nom: compte.persona_nom ?? nomDepuisHandle(handleApplique),
-          persona_bio: compte.persona_bio ?? proposition.bio,
+          persona_bio: compte.persona_bio ?? bio,
           avatar_url: avatar?.url ?? compte.avatar_url,
           avatar_source: avatar ? "bibliotheque" : compte.avatar_source,
         })
@@ -141,10 +187,11 @@ Deno.serve(async (request) => {
     return json({
       ok: true,
       pseudos,
-      bio: proposition.bio,
+      bio,
       avatarUrl: avatar?.url ?? null,
       handle: handleApplique,
       applique: appliquer && pseudos.length > 0,
+      secours: !proposition, // vrai si l'IA était indispo (identité de secours)
     });
   } catch (error) {
     return json({ ok: false, error: messageErreur(error) }, 500);
