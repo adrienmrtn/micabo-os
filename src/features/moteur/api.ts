@@ -154,18 +154,16 @@ export async function listerPosters(): Promise<PosterProfil[]> {
   // TikTok du header (bug où la liste montrait un @ ≠ de celui de l'éditeur).
   const { data: comptes } = await supabase
     .from("comptes")
-    .select("poster_id, handle_tiktok, comptes_reference(handle_tiktok)")
+    .select("poster_id, handle_tiktok, persona_nom, persona_bio, avatar_url, comptes_reference(handle_tiktok)")
     .eq("is_active", true)
     .order("created_at", { ascending: false });
   // Un poster ne doit avoir qu'UN compte actif ; si par accident il y en a
   // plusieurs, on garde le premier (le plus récent) — le MÊME que celui affiché
   // par l'éditeur, pour que le @ du lien et celui du champ coïncident toujours.
-  const handleParPoster = new Map<string, string>();
+  const compteParPoster = new Map<string, NonNullable<typeof comptes>[number]>();
   const referenceParPoster = new Map<string, string>();
   for (const c of comptes ?? []) {
-    if (c.handle_tiktok && !handleParPoster.has(c.poster_id)) {
-      handleParPoster.set(c.poster_id, c.handle_tiktok);
-    }
+    if (!compteParPoster.has(c.poster_id)) compteParPoster.set(c.poster_id, c);
     const ref = (c as { comptes_reference?: { handle_tiktok?: string } }).comptes_reference;
     if (ref?.handle_tiktok && !referenceParPoster.has(c.poster_id)) {
       referenceParPoster.set(c.poster_id, ref.handle_tiktok);
@@ -179,13 +177,19 @@ export async function listerPosters(): Promise<PosterProfil[]> {
     ]),
   );
 
-  return (profils ?? []).map((p) => ({
-    ...p,
-    role: (parUtilisateur.get(p.id) ?? null) as PosterProfil["role"],
-    handle_tiktok: handleParPoster.get(p.id) ?? null,
-    reference_handle: referenceParPoster.get(p.id) ?? null,
-    manager_nom: p.manager_id ? (nomParId.get(p.manager_id) ?? null) : null,
-  }));
+  return (profils ?? []).map((p) => {
+    const compte = compteParPoster.get(p.id);
+    return {
+      ...p,
+      role: (parUtilisateur.get(p.id) ?? null) as PosterProfil["role"],
+      handle_tiktok: compte?.handle_tiktok ?? null,
+      reference_handle: referenceParPoster.get(p.id) ?? null,
+      persona_nom: compte?.persona_nom ?? null,
+      persona_bio: compte?.persona_bio ?? null,
+      avatar_url: compte?.avatar_url ?? null,
+      manager_nom: p.manager_id ? (nomParId.get(p.manager_id) ?? null) : null,
+    };
+  });
 }
 
 // --- Reviews -----------------------------------------------------------------

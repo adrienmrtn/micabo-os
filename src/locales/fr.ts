@@ -363,6 +363,8 @@ export const fr = {
       enCours: "Création…",
       personaOk: "Compte et identité TikTok générés. Le poster les verra sur son espace.",
       personaPlusTard: "Compte créé ; l'identité TikTok sera générée sous peu.",
+      source: "source",
+      identiteEnCours: "Identité TikTok en cours de génération…",
       badge: "Recruteur",
       promote: "Faire recruteur",
       revoke: "Repasser poster",
@@ -593,6 +595,7 @@ export const fr = {
       toutPropre: "Toutes les photos sont nettoyées.",
       texteRestant: "Texte non retiré",
       renettoyer: "Re-nettoyer la photo",
+      outilsAdmin: "Outils admin",
       nettoyageEnCours: "Nettoyage…",
       nettoyageEchec:
         "Le nettoyage n'a pas abouti sur cette photo (Gemini surchargé, ou texte trop dense). Réessaie, ou remplace-la.",

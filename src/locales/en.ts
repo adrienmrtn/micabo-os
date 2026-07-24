@@ -363,6 +363,8 @@ export const en = {
       enCours: "Creating…",
       personaOk: "TikTok account and identity generated. The poster will see them in their workspace.",
       personaPlusTard: "Account created; the TikTok identity will be generated shortly.",
+      source: "source",
+      identiteEnCours: "TikTok identity being generated…",
       badge: "Recruiter",
       promote: "Make recruiter",
       revoke: "Back to poster",
@@ -593,6 +595,7 @@ export const en = {
       toutPropre: "All photos are cleaned.",
       texteRestant: "Text not removed",
       renettoyer: "Re-clean the photo",
+      outilsAdmin: "Admin tools",
       nettoyageEnCours: "Cleaning…",
       nettoyageEchec:
         "Cleaning didn't succeed on this photo (Gemini overloaded, or text too dense). Retry, or replace it.",

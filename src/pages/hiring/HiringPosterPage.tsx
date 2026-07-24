@@ -164,14 +164,48 @@ export function HiringPosterPage() {
           {posters.data
             ?.filter((p) => p.role === "poster")
             .map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
-                <div className="min-w-0">
-                  <span className="text-sm font-medium">
-                    {[p.prenom, p.nom].filter(Boolean).join(" ") || p.email}
-                  </span>
+              <div key={p.id} className="flex items-start gap-3 rounded-lg border p-3">
+                {p.avatar_url ? (
+                  <img src={p.avatar_url} alt="" className="size-11 shrink-0 rounded-full border object-cover" />
+                ) : (
+                  <div className="size-11 shrink-0 rounded-full border bg-muted" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium">
+                      {[p.prenom, p.nom].filter(Boolean).join(" ") || p.email}
+                    </span>
+                    {!p.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
+                  </div>
                   <p className="truncate text-xs text-muted-foreground">{p.email}</p>
+
+                  {/* Identité TikTok du compte (générée par l'IA) : le HM la vérifie. */}
+                  <div className="mt-1.5 space-y-1 border-t pt-1.5">
+                    {p.handle_tiktok ? (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+                        <a
+                          href={`https://www.tiktok.com/@${p.handle_tiktok.replace(/^@/, "")}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium text-primary underline underline-offset-2"
+                        >
+                          @{p.handle_tiktok.replace(/^@/, "")}
+                        </a>
+                        {p.persona_nom && <span className="text-muted-foreground">{p.persona_nom}</span>}
+                        {p.reference_handle && (
+                          <span className="text-muted-foreground">
+                            {t("hiring.source")} @{p.reference_handle.replace(/^@/, "")}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">{t("hiring.identiteEnCours")}</p>
+                    )}
+                    {p.persona_bio && (
+                      <p className="whitespace-pre-wrap text-xs text-muted-foreground">{p.persona_bio}</p>
+                    )}
+                  </div>
                 </div>
-                {!p.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
               </div>
             ))}
         </CardContent>

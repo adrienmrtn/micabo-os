@@ -125,6 +125,9 @@ export interface PosterProfil {
   cout_mensuel: number | null;
   handle_tiktok: string | null;
   reference_handle: string | null;
+  persona_nom: string | null;
+  persona_bio: string | null;
+  avatar_url: string | null;
   manager_id: string | null;
   manager_nom: string | null;
   is_active: boolean;

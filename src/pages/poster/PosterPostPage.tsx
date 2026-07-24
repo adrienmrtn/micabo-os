@@ -8,27 +8,39 @@ import {
   Check,
   Copy,
   Download,
+  ImageUp,
   Music,
   QrCode,
   Share,
+  Sparkles,
   X,
 } from "lucide-react";
 import JSZip from "jszip";
 import QRCode from "qrcode";
 
+import { useAuth } from "@/features/auth/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { lirePost, listerSlides, majPost, reordonnerSlides } from "@/features/moteur/api";
+import {
+  compteReferenceDuPost,
+  lirePost,
+  listerMedias,
+  listerSlides,
+  majMediaSlide,
+  majPost,
+  renettoyerSlide,
+  reordonnerSlides,
+} from "@/features/moteur/api";
 import {
   partagerFichiers,
   peutPartager,
   recupererFichier,
   telechargerFichier,
 } from "@/features/moteur/telechargement";
-import type { Post, PostSlide } from "@/features/moteur/types";
+import type { Media, Post, PostSlide } from "@/features/moteur/types";
 
 function nomFichier(postId: string, position: number) {
   return `${postId.slice(0, 8)}-${String(position).padStart(2, "0")}.jpg`;
@@ -170,8 +182,114 @@ function Visuel({
   );
 }
 
+/**
+ * Contrôles RÉSERVÉS À L'ADMIN sur une slide, ici même (utile pour les posts de
+ * test qu'on ouvre dans cette vue) : renettoyer une image au texte encore
+ * incrusté, ou la remplacer par une autre de la bibliothèque de la source. Un
+ * poster normal ne les voit jamais — et de toute façon la fonction `renettoyer`
+ * refuse un appel non-admin.
+ */
+function ControlesAdminSlide({
+  slide,
+  postId,
+  compteReferenceId,
+}: {
+  slide: PostSlide;
+  postId: string;
+  compteReferenceId: string | null;
+}) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [picker, setPicker] = React.useState(false);
+  const rafraichir = () => {
+    queryClient.invalidateQueries({ queryKey: ["slides", postId] });
+    queryClient.invalidateQueries({ queryKey: ["fichiers", postId] });
+  };
+
+  const medias = useQuery({
+    queryKey: ["medias", compteReferenceId],
+    queryFn: () => listerMedias(compteReferenceId ?? undefined),
+    enabled: picker && Boolean(compteReferenceId),
+  });
+  const renettoyer = useMutation({ mutationFn: () => renettoyerSlide(slide.id), onSuccess: rafraichir });
+  const remplacer = useMutation({
+    mutationFn: (mediaId: string) => majMediaSlide(slide.id, mediaId),
+    onSuccess: () => {
+      setPicker(false);
+      rafraichir();
+    },
+  });
+  const propres = (medias.data ?? []).filter((m) => m.storage_path?.startsWith("propre/"));
+
+  return (
+    <div className="rounded-lg border border-dashed border-primary/40 bg-primary/[0.03] p-3">
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {t("adminPost.outilsAdmin")}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" disabled={renettoyer.isPending} onClick={() => renettoyer.mutate()}>
+          <Sparkles className="size-4" />
+          {renettoyer.isPending ? t("adminPost.nettoyageEnCours") : t("adminPost.renettoyer")}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={remplacer.isPending || !compteReferenceId}
+          onClick={() => setPicker(true)}
+        >
+          <ImageUp className="size-4" />
+          {remplacer.isPending ? t("common.saving") : t("adminPost.remplacerPhoto")}
+        </Button>
+      </div>
+
+      {renettoyer.data && !renettoyer.data.nettoyee && !renettoyer.data.remplacee && (
+        <p className="mt-2 text-xs text-destructive">
+          {t("adminPost.nettoyageEchec")}
+          {renettoyer.data.motif ? ` — ${renettoyer.data.motif}` : ""}
+        </p>
+      )}
+
+      {picker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setPicker(false)}>
+          <div
+            className="max-h-[80vh] w-full max-w-3xl overflow-y-auto rounded-lg border bg-card p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-medium">{t("adminPost.choisirBiblio")}</p>
+              <Button size="icon" variant="ghost" aria-label={t("common.cancel")} onClick={() => setPicker(false)}>
+                <X />
+              </Button>
+            </div>
+            {medias.isPending ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">{t("common.loading")}</p>
+            ) : propres.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">{t("adminPost.biblioVide")}</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {propres.map((m: Media) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => remplacer.mutate(m.id)}
+                    className="overflow-hidden rounded-md border transition hover:ring-2 hover:ring-primary"
+                  >
+                    <img src={m.url} alt="" className="aspect-square w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PosterPostPage() {
   const { t, i18n } = useTranslation();
+  const { role } = useAuth();
+  const estAdmin = role === "admin";
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [lienPublie, setLienPublie] = React.useState("");
@@ -188,6 +306,12 @@ export function PosterPostPage() {
     queryKey: ["slides", id],
     queryFn: () => listerSlides(id!),
     enabled: Boolean(id),
+  });
+  // Bibliothèque source pour le remplacement d'image (contrôles admin seulement).
+  const refId = useQuery({
+    queryKey: ["post-ref", id],
+    queryFn: () => compteReferenceDuPost(id!),
+    enabled: estAdmin && Boolean(id),
   });
 
   const liste = React.useMemo(() => slides.data ?? [], [slides.data]);
@@ -497,6 +621,14 @@ export function PosterPostPage() {
 
               {slide.texte_overlay && (
                 <TexteCopiable texte={slide.texte_overlay} label={t("posts.texteSlide")} />
+              )}
+
+              {estAdmin && (
+                <ControlesAdminSlide
+                  slide={slide}
+                  postId={id!}
+                  compteReferenceId={refId.data ?? null}
+                />
               )}
             </CardContent>
           </Card>
