@@ -22,6 +22,7 @@ interface ApifyItem {
   id?: string;
   webVideoUrl?: string;
   text?: string;
+  authorMeta?: { signature?: string; nickName?: string; name?: string };
   createTimeISO?: string;
   createTime?: number;
   imageUrlList?: string[];
@@ -146,6 +147,32 @@ async function runActor(
 
 export function scrapeProfile(handle: string, resultsPerPage: number) {
   return runActor({ profiles: [handle], resultsPerPage });
+}
+
+/** La bio (signature) et le nom affiché d'un profil TikTok, via Apify. Sert
+ *  d'inspiration pour générer l'identité d'un poster. Renvoie null en cas d'échec. */
+export async function scrapeProfileBio(
+  handle: string,
+): Promise<{ bio: string; nickname: string } | null> {
+  const token = Deno.env.get("APIFY_TOKEN");
+  if (!token) return null;
+  try {
+    const response = await fetch(
+      `https://api.apify.com/v2/acts/${ACTOR}/run-sync-get-dataset-items?token=${token}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ profiles: [handle], resultsPerPage: 1, shouldDownloadVideos: false }),
+      },
+    );
+    if (!response.ok) return null;
+    const items = (await response.json()) as ApifyItem[];
+    const meta = items.find((i) => i.authorMeta)?.authorMeta;
+    if (!meta) return null;
+    return { bio: (meta.signature ?? "").trim(), nickname: (meta.nickName ?? meta.name ?? "").trim() };
+  } catch {
+    return null;
+  }
 }
 
 /**

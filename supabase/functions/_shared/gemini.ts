@@ -650,19 +650,32 @@ export interface PersonaProposee {
 export async function genererPersona(input: {
   niche: string;
   langue: string;
+  /** @ du compte de référence : inspire les pseudos « dans la même veine ». */
+  referenceHandle?: string;
+  /** Bio du compte de référence : inspire la nouvelle bio, sans la copier. */
+  referenceBio?: string;
 }): Promise<PersonaProposee | null> {
+  const langue = LANGUES[input.langue] ?? input.langue;
+
   const prompt = `Tu crées l'identité d'un nouveau compte TikTok qui publiera du
 contenu de culture générale dans la niche : ${input.niche || "culture générale"}.
 
-Propose 4 pseudos et une bio, en ${input.langue === "fr" ? "français" : input.langue}.
+TOUT ce que tu écris (pseudos ET bio) doit être en ${langue.toUpperCase()}.
+${input.referenceHandle ? `\nCompte de référence dont il faut s'inspirer (SANS copier) : @${input.referenceHandle}.` : ""}${
+    input.referenceBio ? `\nBio de ce compte de référence, à reprendre EN ESPRIT (pas mot à mot) :\n"${input.referenceBio}"` : ""
+  }
+
+Propose 4 pseudos et une bio.
 
 Règles pour les pseudos :
-- Courts, faciles à retenir et à taper, en minuscules.
+- DANS LA MÊME VEINE que le @ de référence, mais NOUVEAUX (jamais le même mot-clé).
+- Courts, faciles à retenir et à taper, en minuscules, en ${langue}.
 - Uniquement lettres, chiffres, points et underscores.
 - Crédibles pour un vrai compte tenu par une personne, pas une marque.
 - Quatre directions différentes, pas quatre variantes du même mot.
 
 Règles pour la bio :
+- Dans la même veine que la bio de référence, mais RÉÉCRITE, en ${langue}.
 - Deux lignes maximum, ton naturel, tutoiement.
 - Pas de jargon marketing, pas de tiret cadratin, pas d'emoji en rafale.
 

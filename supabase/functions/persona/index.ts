@@ -1,8 +1,22 @@
 import { contientVisageIdentifiable, genererPersona } from "../_shared/gemini.ts";
-import { scrapeProfile } from "../_shared/apify.ts";
+import { scrapeProfile, scrapeProfileBio } from "../_shared/apify.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
+
+/** Nom affiché = le @ simplifié : on retire les chiffres de fin, on remplace les
+ *  points/underscores par des espaces, et on met une majuscule à chaque mot.
+ *  Ex. « le_savant_urbain42 » → « Le Savant Urbain ». */
+function nomDepuisHandle(handle: string): string {
+  const mots = handle
+    .replace(/\d+$/, "")
+    .replace(/[._]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((m) => m.charAt(0).toUpperCase() + m.slice(1));
+  return mots.join(" ") || handle;
+}
 
 /**
  * Le pseudo est-il libre sur TikTok ? On scrape le profil : s'il renvoie des
@@ -59,7 +73,7 @@ Deno.serve(async (request) => {
   try {
     const { data: compte, error } = await supabase
       .from("comptes")
-      .select("*, comptes_reference(handle_tiktok, niche)")
+      .select("*, comptes_reference(id, handle_tiktok, niche, bio)")
       .eq("id", compteId)
       .single();
     if (error || !compte) return json({ error: "Compte introuvable" }, 404);
@@ -67,9 +81,22 @@ Deno.serve(async (request) => {
     // deno-lint-ignore no-explicit-any
     const reference = (compte as any).comptes_reference;
 
+    // Bio du compte de référence : on la capture UNE fois via Apify puis on la
+    // garde, pour inspirer la bio du poster sans re-scraper à chaque génération.
+    let referenceBio: string = reference?.bio ?? "";
+    if (!referenceBio && reference?.handle_tiktok) {
+      const meta = await scrapeProfileBio(reference.handle_tiktok);
+      if (meta?.bio) {
+        referenceBio = meta.bio;
+        await supabase.from("comptes_reference").update({ bio: meta.bio }).eq("id", reference.id);
+      }
+    }
+
     const proposition = await genererPersona({
       niche: reference?.niche ?? "",
       langue: compte.langue,
+      referenceHandle: reference?.handle_tiktok ?? undefined,
+      referenceBio: referenceBio || undefined,
     });
     if (!proposition) return json({ error: "Génération impossible" }, 502);
 
@@ -94,7 +121,8 @@ Deno.serve(async (request) => {
           // On ne REMPLIT que ce qui manque : un @ ou un nom déjà posés (souvent
           // édités à la main) ne sont jamais écrasés par une re-génération.
           handle_tiktok: compte.handle_tiktok ?? handleApplique,
-          persona_nom: compte.persona_nom ?? handleApplique,
+          // Nom affiché = le @ simplifié (pas le @ brut).
+          persona_nom: compte.persona_nom ?? nomDepuisHandle(handleApplique),
           persona_bio: compte.persona_bio ?? proposition.bio,
           avatar_url: avatar?.url ?? compte.avatar_url,
           avatar_source: avatar ? "bibliotheque" : compte.avatar_source,
