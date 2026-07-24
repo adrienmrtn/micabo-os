@@ -333,7 +333,7 @@ export const en = {
       upworkModifier: "Edit Upwork",
       ajouterPoster: "Add a poster",
       ajouterRecruteur: "Add a recruiter",
-      plusDeReference: "No more creators possible in this language: no free reference account. Add a source in this language (Sources page).",
+      plusDeReference: "Every source is already taken in this language (one source = one poster per language). Add a new source (Sources page) to create one more poster.",
       coutMensuel: "Cost / month",
       coutAjouter: "+ Add a cost",
       gererCompte: "Manage account",

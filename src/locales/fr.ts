@@ -333,7 +333,7 @@ export const fr = {
       upworkModifier: "Modifier Upwork",
       ajouterPoster: "Ajouter un poster",
       ajouterRecruteur: "Ajouter un recruteur",
-      plusDeReference: "Plus de créateurs possibles dans cette langue : aucun compte de référence libre. Ajoute une source dans cette langue (page Sources).",
+      plusDeReference: "Toutes les sources sont déjà prises dans cette langue (une source = un poster par langue). Ajoute une nouvelle source (page Sources) pour créer un poster de plus.",
       coutMensuel: "Coût / mois",
       coutAjouter: "+ Ajouter un coût",
       gererCompte: "Gérer le compte",

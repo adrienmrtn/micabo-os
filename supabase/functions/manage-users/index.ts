@@ -194,9 +194,15 @@ async function preparerCompte(
 }
 
 /**
- * Un compte de référence actif de la langue demandée qui n'est ENCORE assigné à
- * AUCUN compte de publication (1 poster = 1 source). Renvoie null si la langue
- * n'a plus de source libre — auquel cas on ne crée pas de nouveau poster.
+ * Choisit une source de référence pour un poster de la langue demandée.
+ *
+ * Une même source est REPIOCHABLE une fois PAR LANGUE : son contenu est traduit
+ * vers la langue du poster, donc une source anglaise peut nourrir à la fois un
+ * poster EN, un poster DE, un poster FR… mais UN SEUL par langue. On exclut donc
+ * uniquement les sources déjà prises par un compte de CETTE langue ; la langue
+ * propre de la source n'entre pas en compte (sauf comme préférence : à qualité
+ * égale on prend une source native pour éviter une traduction). Renvoie null
+ * seulement si TOUTES les sources sont déjà prises dans cette langue.
  */
 async function referenceLibre(
   supabase: Supabase,
@@ -204,18 +210,24 @@ async function referenceLibre(
 ): Promise<string | null> {
   const { data: refs } = await supabase
     .from("comptes_reference")
-    .select("id")
-    .eq("langue", langue)
+    .select("id, langue")
     .eq("is_active", true);
   if (!refs || refs.length === 0) return null;
 
+  // Sources déjà attribuées à un poster DE LA MÊME LANGUE (les seules à exclure).
   const { data: comptes } = await supabase
     .from("comptes")
     .select("compte_reference_id")
+    .eq("langue", langue)
     .not("compte_reference_id", "is", null);
-  const pris = new Set((comptes ?? []).map((c) => c.compte_reference_id));
+  const prisDansCetteLangue = new Set((comptes ?? []).map((c) => c.compte_reference_id));
 
-  return refs.find((r) => !pris.has(r.id))?.id ?? null;
+  const libres = refs.filter((r) => !prisDansCetteLangue.has(r.id));
+  if (libres.length === 0) return null;
+
+  // À qualité égale, préférer une source déjà dans la langue du poster (contenu
+  // natif, pas de traduction) ; sinon n'importe quelle source libre convient.
+  return (libres.find((r) => r.langue === langue) ?? libres[0]).id;
 }
 
 /**
