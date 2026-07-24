@@ -381,20 +381,35 @@ async function choisirSujet(supabase: Supabase, compte: any, jour: string) {
   const source = compte.compte_reference_id ? await candidats(true) : [];
   const tous = await candidats(false);
 
-  // 1) Source du compte, hors fenêtre 14 j.
+  // Le vu le moins récemment d'une liste (jamais vu d'abord).
+  const moinsRecent = (liste: string[]) => {
+    const jamais = liste.find((id) => !derniereVue.has(id));
+    if (jamais) return jamais;
+    return liste
+      .slice()
+      .sort((a, b) => (derniereVue.get(a) ?? "").localeCompare(derniereVue.get(b) ?? ""))[0] ?? null;
+  };
+
+  // 1) SA source, hors fenêtre 14 j (contenu frais, jamais vu récemment).
   const fraisSource = source.find((id) => !vuRecemment(id));
   if (fraisSource) return { id: fraisSource };
 
-  // 2) Pool commun, hors fenêtre 14 j.
+  // 2) SA source encore : on relâche les 14 j et on RECYCLE son propre contenu
+  //    (le texte est gardé, les images changent à la composition). Un poster
+  //    reste ainsi TOUJOURS sur sa source — jamais le contenu d'une autre, ce qui
+  //    trahirait le réseau (deux posters relayant le même compte). Tant que sa
+  //    source a des sujets prêts, on ne sort pas d'ici.
+  if (source.length > 0) {
+    const recycle = moinsRecent(source);
+    if (recycle) return { id: recycle };
+  }
+
+  // 3) DERNIER RECOURS : le compte n'a AUCUN sujet prêt sur sa propre source
+  //    (source non liée, ou pas encore extraite/nettoyée). Pour ne pas le laisser
+  //    sans rien, on pioche dans le pool commun — hors 14 j si possible, sinon le
+  //    moins récent. Dès que sa source produit, l'étape 1/2 reprend la main.
   const fraisPool = tous.find((id) => !vuRecemment(id));
   if (fraisPool) return { id: fraisPool };
-
-  // 3) JAMAIS 0 : on relâche les 14 j. Jamais vu par ce compte d'abord, sinon le
-  //    vu le moins récemment.
-  const jamaisVu = tous.find((id) => !derniereVue.has(id));
-  if (jamaisVu) return { id: jamaisVu };
-  const parAnciennete = tous
-    .slice()
-    .sort((a, b) => (derniereVue.get(a) ?? "").localeCompare(derniereVue.get(b) ?? ""));
-  return parAnciennete[0] ? { id: parAnciennete[0] } : null;
+  const secours = moinsRecent(tous);
+  return secours ? { id: secours } : null;
 }

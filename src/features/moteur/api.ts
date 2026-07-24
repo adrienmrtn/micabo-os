@@ -99,6 +99,9 @@ export async function listerComptes(): Promise<CompteAvecDetails[]> {
   const { data, error } = await supabase
     .from("comptes")
     .select("*, profiles(prenom, nom, upwork_url), comptes_reference(handle_tiktok)")
+    // Comptes ACTIFS uniquement : un compte désactivé (doublon retiré, ancienne
+    // identité…) ne doit plus apparaître ni dans l'éditeur ni dans les tests.
+    .eq("is_active", true)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data as CompteAvecDetails[];
@@ -147,16 +150,26 @@ export async function listerPosters(): Promise<PosterProfil[]> {
 
   // Le pseudo TikTok du poster vit sur son compte de publication ; on rapatrie
   // aussi son compte de RÉFÉRENCE (la source), visible côté admin seulement.
+  // Comptes ACTIFS seulement : un doublon désactivé ne doit pas détourner le lien
+  // TikTok du header (bug où la liste montrait un @ ≠ de celui de l'éditeur).
   const { data: comptes } = await supabase
     .from("comptes")
-    .select("poster_id, handle_tiktok, comptes_reference(handle_tiktok)");
-  const handleParPoster = new Map(
-    (comptes ?? []).filter((c) => c.handle_tiktok).map((c) => [c.poster_id, c.handle_tiktok]),
-  );
+    .select("poster_id, handle_tiktok, comptes_reference(handle_tiktok)")
+    .eq("is_active", true)
+    .order("created_at", { ascending: false });
+  // Un poster ne doit avoir qu'UN compte actif ; si par accident il y en a
+  // plusieurs, on garde le premier (le plus récent) — le MÊME que celui affiché
+  // par l'éditeur, pour que le @ du lien et celui du champ coïncident toujours.
+  const handleParPoster = new Map<string, string>();
   const referenceParPoster = new Map<string, string>();
   for (const c of comptes ?? []) {
+    if (c.handle_tiktok && !handleParPoster.has(c.poster_id)) {
+      handleParPoster.set(c.poster_id, c.handle_tiktok);
+    }
     const ref = (c as { comptes_reference?: { handle_tiktok?: string } }).comptes_reference;
-    if (ref?.handle_tiktok) referenceParPoster.set(c.poster_id, ref.handle_tiktok);
+    if (ref?.handle_tiktok && !referenceParPoster.has(c.poster_id)) {
+      referenceParPoster.set(c.poster_id, ref.handle_tiktok);
+    }
   }
 
   const nomParId = new Map(
