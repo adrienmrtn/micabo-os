@@ -852,9 +852,12 @@ export async function assignerTikTok(input: {
   // « done », met le post en « attente_preparation » et le laisse SANS images —
   // la préparation ne tournant qu'au cron de nuit, un test lancé en journée
   // restait bloqué. On prépare donc CE sujet, étape par étape, jusqu'à ce qu'il
-  // soit prêt (chaque appel avance d'un cran : OCR → pertinence → nettoyage). Un
-  // sujet DÉJÀ prêt (lien réutilisé) sort de la boucle au premier tour, sans coût.
-  const MAX_PREPARATION = 30;
+  // soit prêt. Chaque appel avance d'un cran (OCR → pertinence → nettoyage de 2
+  // images) ET peut réessayer un nettoyage raté : sur un deck de ~10 images avec
+  // quelques reprises, ça fait facilement plus de 30 tours. La borne est donc
+  // large, et un échec réseau isolé n'interrompt pas la boucle (on retente au
+  // tour suivant). Un sujet DÉJÀ prêt (lien réutilisé) sort au premier tour.
+  const MAX_PREPARATION = 80;
   for (let i = 0; i < MAX_PREPARATION; i += 1) {
     const { data: s } = await supabase
       .from("sujets")
@@ -865,7 +868,12 @@ export async function assignerTikTok(input: {
     if (s?.preparation_statut === "failed") {
       throw new Error("Le nettoyage des photos a échoué. Réessaie ou change de lien.");
     }
-    await lancerPreparation(imp.sujetId);
+    try {
+      await lancerPreparation(imp.sujetId);
+    } catch {
+      // Échec passager (proxy/Gemini saturé) : on retente au tour suivant plutôt
+      // que d'abandonner tout le test.
+    }
   }
 
   const post = await lancerComposition({
@@ -875,6 +883,29 @@ export async function assignerTikTok(input: {
     date: input.date,
     estTest: input.estTest,
   });
+
+  // COMPOSITION jusqu'au bout. lancerComposition ne fait QUE créer/avancer d'un
+  // cran ; la fabrication (traduction du deck, puis intégration Sophia slide par
+  // slide) prend plusieurs passages. On boucle donc jusqu'à ce que le post soit
+  // « done », sinon il ressort sans images (c'était le cas ici : un seul appel).
+  const MAX_COMPOSITION = 15;
+  for (let i = 0; i < MAX_COMPOSITION; i += 1) {
+    const { data: p } = await supabase
+      .from("posts")
+      .select("pipeline_statut")
+      .eq("id", post.postId)
+      .single();
+    if (p?.pipeline_statut === "done") break;
+    if (p?.pipeline_statut === "failed") {
+      throw new Error("La composition du post a échoué. Réessaie ou change de lien.");
+    }
+    try {
+      await avancerUnPost(post.postId);
+    } catch {
+      // idem : un hoquet réseau ne doit pas condamner le test.
+    }
+  }
+
   return { postId: post.postId, reused: imp.reused };
 }
 
