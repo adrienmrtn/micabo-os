@@ -848,6 +848,26 @@ export async function assignerTikTok(input: {
   const imp = await importerDepuisLien(input.url.trim(), compte?.compte_reference_id ?? null);
   if (!imp.sujetId) throw new Error(imp.error ?? "Aucun post photo trouvé à ce lien.");
 
+  // NETTOYAGE avant composition. Sans ça, la composition voit un sujet non
+  // « done », met le post en « attente_preparation » et le laisse SANS images —
+  // la préparation ne tournant qu'au cron de nuit, un test lancé en journée
+  // restait bloqué. On prépare donc CE sujet, étape par étape, jusqu'à ce qu'il
+  // soit prêt (chaque appel avance d'un cran : OCR → pertinence → nettoyage). Un
+  // sujet DÉJÀ prêt (lien réutilisé) sort de la boucle au premier tour, sans coût.
+  const MAX_PREPARATION = 30;
+  for (let i = 0; i < MAX_PREPARATION; i += 1) {
+    const { data: s } = await supabase
+      .from("sujets")
+      .select("preparation_statut")
+      .eq("id", imp.sujetId)
+      .single();
+    if (s?.preparation_statut === "done") break;
+    if (s?.preparation_statut === "failed") {
+      throw new Error("Le nettoyage des photos a échoué. Réessaie ou change de lien.");
+    }
+    await lancerPreparation(imp.sujetId);
+  }
+
   const post = await lancerComposition({
     compteId: input.compteId,
     sujetId: imp.sujetId,
