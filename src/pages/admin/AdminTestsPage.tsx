@@ -125,7 +125,7 @@ function TesterUnTikTok() {
           <p className="text-sm text-success">
             {t("tests.tiktokOk")}{" "}
             <Link
-              to={`/posts/${tester.data.postId}`}
+              to={`/admin/posts/${tester.data.postId}`}
               className="font-medium underline underline-offset-2"
             >
               {t("posts.voirLePost")}
@@ -248,8 +248,9 @@ function TestsRecents() {
               </p>
             </div>
             <Button size="sm" variant="outline" asChild>
-              {/* Vue poster : QR mobile + ZIP + téléchargement des photos. */}
-              <Link to={`/posts/${p.id}`}>{t("posts.ouvrir")}</Link>
+              {/* Vue admin complète : détails du slideshow, renettoyer par slide,
+                  et un bouton QR/ZIP vers la vue poster. */}
+              <Link to={`/admin/posts/${p.id}`}>{t("posts.ouvrir")}</Link>
             </Button>
           </div>
         ))}

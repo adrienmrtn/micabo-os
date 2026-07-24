@@ -210,7 +210,7 @@ export function TestCompletCard() {
               {t("test.termine")}
               {typeProduit ? ` (${typeProduit})` : ""}
             </p>
-            <Button size="sm" variant="outline" onClick={() => navigate(`/posts/${postId}`)}>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/admin/posts/${postId}`)}>
               {t("test.voir")}
             </Button>
           </div>

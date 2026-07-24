@@ -261,6 +261,11 @@ async function stockerBrut(supabase: Supabase, sujet: any, slide: Slide): Promis
         source: "nettoye_reference",
         langue: sujet.langue,
         visage_identifiable: null,
+        // Le brut porte ENCORE son texte incrusté : on le signale, sinon il
+        // pourrait être repioché comme s'il était propre (avatar, visuel de
+        // remplacement…). texte_restant l'exclut de tous les pools « propres ».
+        verifie_le: new Date().toISOString(),
+        texte_restant: true,
       },
       { onConflict: "storage_path" },
     )
