@@ -1,6 +1,6 @@
 import * as React from "react";
 import { NavLink } from "react-router-dom";
-import { Sparkles, X } from "lucide-react";
+import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -66,9 +66,7 @@ function NavList({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () =
 function Brand({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-2.5 px-5 py-5">
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sidebar-active to-primary shadow-sm">
-        <Sparkles className="size-[18px] text-white" />
-      </div>
+      <img src="/favicon.svg" alt="Sophia" className="size-9 shrink-0 rounded-xl shadow-sm" />
       <span className="truncate text-[15px] font-semibold tracking-tight text-white">{title}</span>
     </div>
   );

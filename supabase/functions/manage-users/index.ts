@@ -110,9 +110,19 @@ Deno.serve(async (request) => {
   }
 
   if (body.action === "delete") {
-    // Suppression réservée à l'admin : un hiring manager ne défait pas.
-    if (acces.role !== "admin") return json({ error: "forbidden" }, 403);
     if (!body.userId) return json({ error: "userId requis" }, 400);
+    // L'admin supprime n'importe qui ; le hiring manager, SEULEMENT ses propres
+    // créateurs (profiles.manager_id = lui). La suppression de l'utilisateur
+    // casacade sur profil → compte → et LIBÈRE ainsi son compte de référence
+    // (referenceLibre ne le voit plus pris) : il redevient dispo pour un futur poster.
+    if (acces.role !== "admin") {
+      const { data: cible } = await supabase
+        .from("profiles")
+        .select("manager_id")
+        .eq("id", body.userId)
+        .single();
+      if (!cible || cible.manager_id !== acces.userId) return json({ error: "forbidden" }, 403);
+    }
     const { error } = await supabase.auth.admin.deleteUser(body.userId);
     if (error) return json({ error: error.message }, 400);
     return json({ ok: true });

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Check, Pencil, UserPlus, X } from "lucide-react";
+import { Check, Pencil, Trash2, UserPlus, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import {
   listerLanguesReference,
   listerPosters,
   majCompte,
+  supprimerPoster,
 } from "@/features/moteur/api";
 import type { PosterProfil } from "@/features/moteur/types";
 
@@ -56,6 +57,10 @@ function LignePoster({ poster: p }: { poster: PosterProfil }) {
       queryClient.invalidateQueries({ queryKey: ["posters"] });
     },
   });
+  const supprimer = useMutation({
+    mutationFn: () => supprimerPoster(p.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["posters"] }),
+  });
 
   return (
     <div className="flex items-start gap-3 rounded-lg border p-3">
@@ -70,15 +75,31 @@ function LignePoster({ poster: p }: { poster: PosterProfil }) {
             {[p.prenom, p.nom].filter(Boolean).join(" ") || p.email}
           </span>
           {!p.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
-          {p.compte_id && !edite && (
-            <button
-              type="button"
-              onClick={() => setEdite(true)}
-              className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-primary"
-            >
-              <Pencil className="size-3" />
-              {t("common.edit")}
-            </button>
+          {!edite && (
+            <span className="ml-auto flex items-center gap-3">
+              {p.compte_id && (
+                <button
+                  type="button"
+                  onClick={() => setEdite(true)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-primary"
+                >
+                  <Pencil className="size-3" />
+                  {t("common.edit")}
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={supprimer.isPending}
+                onClick={() => {
+                  if (window.confirm(t("hiring.confirmSuppr", { nom: [p.prenom, p.nom].filter(Boolean).join(" ") || p.email })))
+                    supprimer.mutate();
+                }}
+                className="inline-flex items-center gap-1 text-xs font-medium text-destructive"
+              >
+                <Trash2 className="size-3" />
+                {t("common.delete")}
+              </button>
+            </span>
           )}
         </div>
         <p className="truncate text-xs text-muted-foreground">{p.email}</p>

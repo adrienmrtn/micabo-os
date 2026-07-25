@@ -390,6 +390,7 @@ export const en = {
       calendrierLegende: "One color per creator. ✓ = published. Dimmed = being built. Click a post to preview.",
       apercuTitre: "Post preview",
       apercuVide: "This post has no content yet (still being built).",
+      confirmSuppr: "Permanently delete {{nom}}? Their reference account will become available again for a future creator.",
       badge: "Recruiter",
       promote: "Make recruiter",
       revoke: "Back to poster",

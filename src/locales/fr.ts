@@ -390,6 +390,7 @@ export const fr = {
       calendrierLegende: "Une couleur par créateur. ✓ = publié. Estompé = en cours de fabrication. Clique un post pour l'aperçu.",
       apercuTitre: "Aperçu du post",
       apercuVide: "Ce post n'a pas encore de contenu (en cours de fabrication).",
+      confirmSuppr: "Supprimer définitivement {{nom}} ? Son compte de référence redeviendra disponible pour un futur créateur.",
       badge: "Recruteur",
       promote: "Faire recruteur",
       revoke: "Repasser poster",
