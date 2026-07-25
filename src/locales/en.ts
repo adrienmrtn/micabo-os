@@ -316,6 +316,16 @@ export const en = {
       vues: "views",
       pertinence: "Relevance",
       voirTikTok: "View TikTok",
+      chercherPlus: "Fetch more posts",
+      recherche: "Scraping…",
+      scrapeLance: "Profile scrape started (TikTok API) — new slideshows will show here once cleaned.",
+      ajouterLien: "Add a link",
+      ajouter: "Add to stock",
+      ajoutEnCours: "Adding…",
+      ajouterAide: "Paste a TikTok link (from this source or another) — it lands in this source's stock once cleaned.",
+      ajoutOk: "Added — will appear in the stock once cleaned.",
+      dejaConnu: "This link is already in the stock.",
+      sourceVide: "No reproducible post for this source yet. Fetch more, or paste a link.",
     },
     comptes: {
       title: "Publishing accounts",
@@ -720,6 +730,8 @@ export const en = {
     },
     calendrier: {
       title: "My calendar",
+      warmupRappel:
+        "⚠️ Don't forget to warm up the account before you start posting (and every week, scroll for 5-6 minutes so TikTok doesn't take you for a robot)!",
       aujourdhui: "Today",
       aVenir: "Upcoming",
       passe: "Past",

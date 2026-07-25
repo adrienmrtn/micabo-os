@@ -316,6 +316,16 @@ export const fr = {
       vues: "vues",
       pertinence: "Pertinence",
       voirTikTok: "Voir le TikTok",
+      chercherPlus: "Aller chercher + de posts",
+      recherche: "Scrape en cours…",
+      scrapeLance: "Scrape du profil lancé (API TikTok) — les nouveaux slideshows apparaîtront ici une fois nettoyés.",
+      ajouterLien: "Rentrer un lien",
+      ajouter: "Ajouter au stock",
+      ajoutEnCours: "Ajout…",
+      ajouterAide: "Colle un lien TikTok (de cette source ou d'une autre) — il se range dans le stock de cette source après nettoyage.",
+      ajoutOk: "Ajouté — apparaîtra dans le stock une fois nettoyé.",
+      dejaConnu: "Ce lien est déjà dans le stock.",
+      sourceVide: "Aucun post reproduisible pour cette source. Va en chercher, ou colle un lien.",
     },
     comptes: {
       title: "Comptes de publication",
@@ -720,6 +730,8 @@ export const fr = {
     },
     calendrier: {
       title: "Mon calendrier",
+      warmupRappel:
+        "⚠️ N'oublie pas de warm up le compte avant de commencer à poster (et chaque semaine, scrolle 5-6 minutes pour que TikTok ne te prenne pas pour un robot) !",
       aujourdhui: "Aujourd'hui",
       aVenir: "À venir",
       passe: "Passé",

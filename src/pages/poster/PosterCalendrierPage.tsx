@@ -256,6 +256,12 @@ export function PosterCalendrierPage() {
 
   return (
     <div className="space-y-8">
+      {/* Rappel de warm-up : un compte neuf qui poste d'emblée, ou inactif, se
+          fait repérer par TikTok comme un bot. */}
+      <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm font-medium text-destructive">
+        {t("calendrier.warmupRappel")}
+      </div>
+
       <IdentiteTikTok />
 
       <section className="space-y-4">

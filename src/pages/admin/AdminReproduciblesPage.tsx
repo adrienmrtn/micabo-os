@@ -1,9 +1,11 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ExternalLink, Eye, Recycle } from "lucide-react";
+import { Download, ExternalLink, Eye, Link2, Recycle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -12,7 +14,14 @@ import {
   CardTitle,
   EmptyState,
 } from "@/components/ui/card";
-import { listerReproduisibles, type PostReproduisible } from "@/features/moteur/api";
+import {
+  ajouterLienAuStock,
+  lancerExtraction,
+  listerReproduisibles,
+  listerSources,
+  type PostReproduisible,
+} from "@/features/moteur/api";
+import type { CompteReference } from "@/features/moteur/types";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:max-w-xs";
@@ -82,36 +91,122 @@ function CartePost({ post }: { post: PostReproduisible }) {
   );
 }
 
+/** Une source + son stock, avec les deux actions : aller chercher + de posts
+ *  (scrape API du profil) et rentrer un lien directement dans le stock. */
+function SectionSource({ source, posts }: { source: CompteReference; posts: PostReproduisible[] }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [ouvert, setOuvert] = React.useState(false);
+  const [lien, setLien] = React.useState("");
+  const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["reproduisibles"] });
+
+  const scraper = useMutation({
+    mutationFn: () => lancerExtraction(source.id),
+    onSuccess: rafraichir,
+  });
+  const ajouter = useMutation({
+    mutationFn: () => ajouterLienAuStock(lien.trim(), source.id),
+    onSuccess: () => {
+      setLien("");
+      setOuvert(false);
+      rafraichir();
+    },
+  });
+
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-sm font-semibold">@{source.handle_tiktok}</h2>
+        <Badge variant="outline">{t("reproduisibles.enStock", { count: posts.length })}</Badge>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" disabled={scraper.isPending} onClick={() => scraper.mutate()}>
+            <Download className={`size-4 ${scraper.isPending ? "animate-pulse" : ""}`} />
+            {scraper.isPending ? t("reproduisibles.recherche") : t("reproduisibles.chercherPlus")}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setOuvert((v) => !v)}>
+            <Link2 className="size-4" />
+            {t("reproduisibles.ajouterLien")}
+          </Button>
+        </div>
+      </div>
+
+      {scraper.isSuccess && (
+        <p className="text-xs text-success">{t("reproduisibles.scrapeLance")}</p>
+      )}
+      {scraper.isError && (
+        <p className="text-xs text-destructive">{(scraper.error as Error).message}</p>
+      )}
+
+      {ouvert && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (lien.trim()) ajouter.mutate();
+          }}
+          className="space-y-1.5 rounded-md border border-dashed p-3"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              placeholder="https://www.tiktok.com/@compte/photo/…"
+              value={lien}
+              onChange={(e) => setLien(e.target.value)}
+              className="min-w-64 flex-1"
+            />
+            <Button type="submit" size="sm" disabled={ajouter.isPending || !lien.trim()}>
+              {ajouter.isPending ? t("reproduisibles.ajoutEnCours") : t("reproduisibles.ajouter")}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">{t("reproduisibles.ajouterAide")}</p>
+          {ajouter.isSuccess && (
+            <p className="text-xs text-success">
+              {ajouter.data.reused ? t("reproduisibles.dejaConnu") : t("reproduisibles.ajoutOk")}
+            </p>
+          )}
+          {ajouter.isError && (
+            <p className="text-xs text-destructive">{(ajouter.error as Error).message}</p>
+          )}
+        </form>
+      )}
+
+      {posts.length === 0 ? (
+        <p className="text-xs text-muted-foreground">{t("reproduisibles.sourceVide")}</p>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2">
+          {posts.map((p) => (
+            <CartePost key={p.id} post={p} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /**
  * Page « Posts reproduisibles » : le STOCK de sujets prêts à reproduire, par
  * source de référence. Un post reproduisible = pertinent (culture générale,
- * self-improvement, anti-doomscroll) ET assez performant. Chaque compte de
- * référence doit toujours en avoir en réserve pour l'assignation de minuit.
+ * self-improvement, anti-doomscroll) ET assez performant. Chaque source affiche
+ * deux actions : aller chercher plus de posts (scrape API) ou rentrer un lien.
  */
 export function AdminReproduciblesPage() {
   const { t } = useTranslation();
   const posts = useQuery({ queryKey: ["reproduisibles"], queryFn: listerReproduisibles });
-  const [source, setSource] = React.useState("");
-
-  const sources = React.useMemo(
-    () =>
-      [...new Set((posts.data ?? []).map((p) => p.reference_handle).filter(Boolean))].sort() as string[],
-    [posts.data],
-  );
+  const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
+  const [filtre, setFiltre] = React.useState("");
 
   const parSource = React.useMemo(() => {
     const m = new Map<string, PostReproduisible[]>();
     for (const p of posts.data ?? []) {
-      if (source && p.reference_handle !== source) continue;
-      const k = p.reference_handle ?? "—";
-      const arr = m.get(k) ?? [];
+      if (!p.reference_id) continue;
+      const arr = m.get(p.reference_id) ?? [];
       arr.push(p);
-      m.set(k, arr);
+      m.set(p.reference_id, arr);
     }
     return m;
-  }, [posts.data, source]);
+  }, [posts.data]);
 
-  const total = [...parSource.values()].reduce((n, l) => n + l.length, 0);
+  // On liste TOUTES les sources (même à 0 en stock) pour toujours proposer les
+  // boutons ; filtrées par le sélecteur.
+  const sourcesAffichees = (sources.data ?? []).filter((s) => !filtre || s.id === filtre);
 
   return (
     <div className="space-y-6">
@@ -127,37 +222,29 @@ export function AdminReproduciblesPage() {
           <select
             aria-label={t("reproduisibles.filtreSource")}
             className={selectClass}
-            value={source}
-            onChange={(e) => setSource(e.target.value)}
+            value={filtre}
+            onChange={(e) => setFiltre(e.target.value)}
           >
             <option value="">{t("reproduisibles.toutesSources")}</option>
-            {sources.map((s) => (
-              <option key={s} value={s}>
-                @{s}
+            {(sources.data ?? []).map((s) => (
+              <option key={s.id} value={s.id}>
+                @{s.handle_tiktok}
               </option>
             ))}
           </select>
         </CardContent>
       </Card>
 
-      {posts.isPending && <p className="text-sm text-muted-foreground">{t("common.loading")}</p>}
+      {(posts.isPending || sources.isPending) && (
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+      )}
       {posts.isError && (
         <p className="text-sm text-destructive">{(posts.error as Error).message}</p>
       )}
-      {posts.data && total === 0 && <EmptyState title={t("reproduisibles.vide")} />}
+      {sources.data && sourcesAffichees.length === 0 && <EmptyState title={t("reproduisibles.vide")} />}
 
-      {[...parSource.entries()].map(([src, liste]) => (
-        <section key={src} className="space-y-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold">@{src}</h2>
-            <Badge variant="outline">{t("reproduisibles.enStock", { count: liste.length })}</Badge>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            {liste.map((p) => (
-              <CartePost key={p.id} post={p} />
-            ))}
-          </div>
-        </section>
+      {sourcesAffichees.map((s) => (
+        <SectionSource key={s.id} source={s} posts={parSource.get(s.id) ?? []} />
       ))}
     </div>
   );

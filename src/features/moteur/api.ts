@@ -466,6 +466,7 @@ export interface PostReproduisible {
   hook: string | null;
   vues: number | null;
   pertinence_score: number | null;
+  reference_id: string | null;
   reference_handle: string | null;
   langue: string;
   /** URLs des visuels dans l'ordre (nettoyée si dispo, sinon brute) pour l'aperçu. */
@@ -481,7 +482,7 @@ export async function listerReproduisibles(): Promise<PostReproduisible[]> {
   const { data: sujets, error } = await supabase
     .from("sujets")
     .select(
-      "id, source_url, vues, pertinence_score, langue, created_at, structure_slides, comptes_reference(handle_tiktok)",
+      "id, source_url, vues, pertinence_score, langue, created_at, structure_slides, compte_reference_id, comptes_reference(handle_tiktok)",
     )
     .eq("preparation_statut", "done")
     .in("statut", ["retenu", "utilise"])
@@ -501,6 +502,7 @@ export async function listerReproduisibles(): Promise<PostReproduisible[]> {
       hook: slides[0]?.texte_original ?? null,
       vues: s.vues,
       pertinence_score: s.pertinence_score,
+      reference_id: (s as { compte_reference_id?: string | null }).compte_reference_id ?? null,
       reference_handle: ref?.handle_tiktok ?? null,
       langue: s.langue,
       apercus,
@@ -923,6 +925,22 @@ export const importerDepuisLien = (postUrl: string, compteReferenceId: string | 
     postUrl,
     compteReferenceId,
   });
+
+/** Rentre un lien TikTok DIRECTEMENT dans le stock reproductible d'une source
+ *  (le lien peut venir d'une autre source — il se range ici). On l'importe en le
+ *  marquant « à garder » puis on déclenche sa préparation (nettoyage) ; il
+ *  apparaît dans le stock une fois nettoyé. */
+export async function ajouterLienAuStock(
+  postUrl: string,
+  compteReferenceId: string,
+): Promise<{ sujetId: string | null; reused: boolean }> {
+  const r = await invoke<{ ok: boolean; sujetId: string | null; reused: boolean; error?: string }>(
+    "extraction",
+    { postUrl, compteReferenceId, reproductible: true },
+  );
+  if (r.sujetId) await lancerPreparation(r.sujetId).catch(() => {});
+  return { sujetId: r.sujetId, reused: r.reused };
+}
 
 /**
  * Assigne un TikTok précis à un créateur pour une date : on importe le lien (→

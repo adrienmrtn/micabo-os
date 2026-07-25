@@ -67,11 +67,14 @@ Deno.serve(async (request) => {
   let compteReferenceId: string | null = null;
   let postUrl: string | null = null;
   let testScrape: string | null = null;
+  let reproductible = false;
   try {
     const body = await request.json();
     compteReferenceId = body?.compteReferenceId ?? null;
     postUrl = body?.postUrl ?? null;
     testScrape = body?.testScrape ?? null;
+    // Import manuel dans le STOCK : l'admin colle un lien à garder en réserve.
+    reproductible = Boolean(body?.reproductible);
   } catch {
     // Corps vide : extraction complète.
   }
@@ -132,6 +135,22 @@ Deno.serve(async (request) => {
       if (!post) return json({ ok: false, error: "Aucun post photo à cette URL" }, 400);
 
       const r = await creerSujet(supabase, post, compteReferenceId);
+
+      // Import manuel « à garder en stock » : l'humain vouche pour ce lien, donc
+      // on le marque RETENU tout de suite et on renseigne un score (la préparation
+      // saute alors la porte de pertinence et passe direct au nettoyage). Une fois
+      // nettoyé, il apparaît dans les posts reproduisibles de cette source.
+      if (reproductible) {
+        await supabase
+          .from("sujets")
+          .update({
+            statut: "retenu",
+            pertinence_score: SEUIL_PERTINENCE,
+            pertinence_raison: "Ajouté manuellement au stock",
+          })
+          .eq("id", r.id);
+      }
+
       return json({ ok: true, sujetId: r.id, reused: r.reused });
     }
 
