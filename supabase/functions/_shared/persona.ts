@@ -27,21 +27,52 @@ export function nomDepuisHandle(handle: string): string {
 /**
  * Un pseudo quasi certainement LIBRE — SANS appel réseau. On NE VÉRIFIE PLUS la
  * dispo (impossible de façon fiable ET rapide) : on garantit l'unicité par
- * construction, pseudo + 3 chiffres au hasard (« spezisuchti482 »).
+ * construction. Racine NICHE (composée) + 4 chiffres au hasard (10 000
+ * combinaisons) : un mot courant type « knowledge » + 3 chiffres se retrouvait
+ * pris, une racine composée + 4 chiffres ne l'est quasiment jamais.
  */
 export function trouverHandleLibre(base: string): string {
-  return `${base}${Math.floor(Math.random() * 900) + 100}`;
+  return `${base}${Math.floor(Math.random() * 9000) + 1000}`; // 4 chiffres
 }
 
 /** Racines par langue pour un pseudo (culture générale / savoir), dans le même
- *  esprit que les comptes de référence, sans jamais copier leur @. */
+ *  esprit que les comptes de référence, sans jamais copier leur @.
+ *  DÉLIBÉRÉMENT NICHE et composées (2-3 mots) : un mot courant seul (« savoir »,
+ *  « knowledge ») est déjà pris partout sur TikTok, une tournure composée non. */
 export const RACINES_SECOURS: Record<string, string[]> = {
-  fr: ["savoir", "culture", "esprit", "curieux", "eclaire", "matiere.grise", "apprends", "le.savais.tu"],
-  en: ["knowledge", "curious", "learn", "bright.mind", "brain.fuel", "did.you.know", "smart.daily", "quick.facts"],
-  de: ["wissen", "neugierig", "lernen", "kluger.kopf", "bildung", "wusstest.du", "schlau.taeglich", "gehirn.futter"],
-  it: ["sapere", "curioso", "impara", "mente.viva", "cultura", "lo.sapevi", "cervello", "intelletto"],
-  es: ["saber", "curioso", "aprende", "mente.viva", "cultura", "sabias.que", "cerebro", "brillante"],
-  pt: ["saber", "curioso", "aprende", "mente.viva", "cultura", "sabia.que", "cerebro", "brilhante"],
+  fr: [
+    "notes.de.minuit", "petites.lumieres", "le.grenier.du.savoir", "curiosite.tardive",
+    "esprit.vagabond", "le.carnet.oublie", "chouette.lucide", "la.parenthese.utile",
+    "le.terrier.aux.idees", "savoir.de.poche", "lueurs.nocturnes", "le.doute.utile",
+    "cerveau.lent", "la.note.de.bas.de.page",
+  ],
+  en: [
+    "brain.snacks", "curio.cabinet", "the.knowing.hours", "quiet.curious",
+    "facts.after.dark", "owl.reads", "tiny.wisdoms", "the.pondering",
+    "midnight.marginalia", "the.rabbit.hole.diary", "slow.facts.club", "dust.and.wonder",
+    "the.footnote.club", "pocket.of.facts",
+  ],
+  de: [
+    "mitternacht.notizen", "kleine.wunder", "der.kaninchenbau", "leises.wissen",
+    "eulen.stunden", "die.randnotiz", "spaete.neugier", "dachboden.gedanken",
+    "funken.im.dunkeln", "wissen.zum.mitnehmen", "stille.neugier", "gehirn.snack",
+    "die.fussnote", "kleiner.funke",
+  ],
+  it: [
+    "note.di.mezzanotte", "piccole.luci", "la.tana.delle.idee", "curiosita.tarda",
+    "gufo.lucido", "sapere.tascabile", "spirito.errante", "la.parentesi.utile",
+    "polvere.e.meraviglia", "cervello.lento", "scintille.notturne", "il.taccuino.perso",
+  ],
+  es: [
+    "notas.de.medianoche", "pequenas.luces", "la.madriguera.de.ideas", "curiosidad.tardia",
+    "buho.lucido", "saber.de.bolsillo", "espiritu.errante", "chispas.nocturnas",
+    "polvo.y.asombro", "cerebro.lento", "la.nota.al.pie", "luz.tenue",
+  ],
+  pt: [
+    "notas.de.meia.noite", "pequenas.luzes", "a.toca.das.ideias", "curiosidade.tardia",
+    "coruja.lucida", "saber.de.bolso", "espirito.errante", "faiscas.noturnas",
+    "poeira.e.espanto", "cerebro.lento", "a.nota.de.rodape", "luz.tenue",
+  ],
 };
 
 /** Bio par langue (culture générale). */
@@ -56,7 +87,10 @@ export const BIO_SECOURS: Record<string, string> = {
 
 export function pseudosDeSecours(langue: string): string[] {
   const racines = RACINES_SECOURS[langue] ?? RACINES_SECOURS.fr;
-  return racines.flatMap((r) => [r, `${r}${Math.floor(Math.random() * 90) + 10}`]);
+  // Toutes les racines NUES d'abord (handles propres : « notes.de.minuit » + 4
+  // chiffres), puis des variantes suffixées en dernier recours si les ~14 racines
+  // étaient toutes déjà prises par nos comptes (14+ posters d'une même langue).
+  return [...racines, ...racines.map((r) => `${r}${Math.floor(Math.random() * 90) + 10}`)];
 }
 
 export function bioDeSecours(langue: string): string {
@@ -91,10 +125,20 @@ export async function filtrerPseudos(
   if (sansEcho.length === 0) return [];
 
   const { data: pris } = await supabase.from("comptes").select("handle_tiktok, persona_nom");
-  const dejaPris = new Set(
-    (pris ?? []).flatMap((c) => [c.handle_tiktok, c.persona_nom]).filter(Boolean),
+  // Le @ stocké porte 4 chiffres finaux (« brain.snacks9745 »), le candidat est
+  // la racine nue (« brain.snacks ») : on compare donc SANS les chiffres de fin,
+  // sinon deux posters récupéreraient la même racine ET le même nom affiché.
+  const sansChiffres = (s: string) => s.replace(/\d+$/, "").toLowerCase();
+  const dejaPris = new Set<string>();
+  for (const c of pris ?? []) {
+    if (c.handle_tiktok) dejaPris.add(sansChiffres(c.handle_tiktok));
+    if (c.persona_nom) dejaPris.add(c.persona_nom.toLowerCase());
+  }
+  return sansEcho.filter(
+    (pseudo) =>
+      !dejaPris.has(sansChiffres(pseudo)) &&
+      !dejaPris.has(nomDepuisHandle(pseudo).toLowerCase()),
   );
-  return sansEcho.filter((pseudo) => !dejaPris.has(pseudo));
 }
 
 /**
