@@ -464,22 +464,12 @@ export async function listerReproduisibles(): Promise<PostReproduisible[]> {
     .order("vues", { ascending: false, nullsFirst: false });
   if (error) throw error;
 
-  // Résolution media_id → url en un seul appel (au lieu d'un par sujet).
-  const ids = new Set<string>();
-  for (const s of sujets ?? []) {
-    for (const sl of (s.structure_slides ?? []) as SujetSlide[]) if (sl.media_id) ids.add(sl.media_id);
-  }
-  const urlParMedia = new Map<string, string>();
-  if (ids.size > 0) {
-    const { data: medias } = await supabase.from("media_library").select("id, url").in("id", [...ids]);
-    for (const m of medias ?? []) urlParMedia.set(m.id as string, m.url as string);
-  }
-
   return (sujets ?? []).map((s) => {
     const slides = ((s.structure_slides ?? []) as SujetSlide[]).slice().sort((a, b) => a.position - b.position);
-    const apercus = slides
-      .map((sl) => (sl.media_id ? urlParMedia.get(sl.media_id) : null) ?? sl.raw_url)
-      .filter(Boolean) as string[];
+    // Aperçu = les images D'ORIGINE du TikTok (raw_url), pas les versions
+    // nettoyées : un « post reproduisible », c'est le TikTok source qu'on décide
+    // de reproduire — on veut le voir tel qu'il est, avec son texte.
+    const apercus = slides.map((sl) => sl.raw_url).filter(Boolean) as string[];
     const ref = (s as { comptes_reference?: { handle_tiktok?: string } }).comptes_reference;
     return {
       id: s.id,

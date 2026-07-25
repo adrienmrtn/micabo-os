@@ -40,6 +40,14 @@ export async function assertAuthorised(request: Request): Promise<Response | nul
 
   if (request.headers.get("x-cron-secret") === expected) return null;
 
+  // Secret de TEST séparé (facultatif) : même pouvoir que CRON_SECRET, mais
+  // distinct, pour déclencher les fonctions à la main pendant les tests sans
+  // exposer/toucher le secret des crons. Les crons continuent d'utiliser
+  // CRON_SECRET. Pour le désactiver : supprimer le secret TEST_SECRET côté
+  // Supabase (aucun redéploiement nécessaire).
+  const testSecret = Deno.env.get("TEST_SECRET");
+  if (testSecret && request.headers.get("x-cron-secret") === testSecret) return null;
+
   const authorization = request.headers.get("Authorization") ?? "";
   const token = authorization.replace(/^Bearer\s+/i, "");
   if (!token) return json({ error: "unauthorized" }, 401);

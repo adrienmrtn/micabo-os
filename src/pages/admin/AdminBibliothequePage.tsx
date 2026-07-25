@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Sparkles, Trash2 } from "lucide-react";
+import { Check, Sparkles, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { executerEnLot } from "@/lib/lot";
@@ -31,7 +31,17 @@ function estPropre(media: Media): boolean {
   return media.storage_path.startsWith("propre/") && !media.texte_restant;
 }
 
-function VignetteMedia({ media, onChange }: { media: Media; onChange: () => void }) {
+function VignetteMedia({
+  media,
+  onChange,
+  selectionne,
+  onToggle,
+}: {
+  media: Media;
+  onChange: () => void;
+  selectionne: boolean;
+  onToggle: () => void;
+}) {
   const { t } = useTranslation();
   const propre = estPropre(media);
 
@@ -41,16 +51,35 @@ function VignetteMedia({ media, onChange }: { media: Media; onChange: () => void
   return (
     <div className="space-y-1.5">
       <div className="relative">
-        <img
-          src={media.url}
-          alt=""
+        {/* Toute la vignette est cliquable pour (dé)sélectionner : rapide pour
+            faire le ménage en masse. */}
+        <button
+          type="button"
+          onClick={onToggle}
+          className="block w-full"
+          aria-pressed={selectionne}
+        >
+          <img
+            src={media.url}
+            alt=""
+            className={cn(
+              "aspect-[3/4] w-full rounded-md border object-cover transition",
+              !propre && "border-2 border-warning/60",
+              selectionne && "ring-2 ring-primary ring-offset-2",
+            )}
+          />
+        </button>
+        {/* Case à cocher visuelle, coin haut-gauche. */}
+        <span
           className={cn(
-            "aspect-[3/4] w-full rounded-md border object-cover",
-            !propre && "border-2 border-warning/60",
+            "pointer-events-none absolute left-1.5 top-1.5 flex size-5 items-center justify-center rounded border bg-background/90 shadow-sm",
+            selectionne && "border-primary bg-primary text-primary-foreground",
           )}
-        />
+        >
+          {selectionne && <Check className="size-3.5" />}
+        </span>
         {!propre && (
-          <span className="absolute inset-x-0 bottom-0 rounded-b-md bg-warning/85 py-0.5 text-center text-[10px] font-medium text-warning-foreground">
+          <span className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-md bg-warning/85 py-0.5 text-center text-[10px] font-medium text-warning-foreground">
             {t("bibliotheque.texteRestant")}
           </span>
         )}
@@ -102,6 +131,8 @@ export function AdminBibliothequePage() {
   const queryClient = useQueryClient();
   const [sourceId, setSourceId] = React.useState("");
   const [lot, setLot] = React.useState<{ fait: number; total: number } | null>(null);
+  const [selection, setSelection] = React.useState<Set<string>>(new Set());
+  const [suppr, setSuppr] = React.useState<{ fait: number; total: number } | null>(null);
 
   const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
   const medias = useQuery({
@@ -112,6 +143,16 @@ export function AdminBibliothequePage() {
   const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["medias"] });
   const aNettoyerListe = (medias.data ?? []).filter((m) => !estPropre(m));
   const aNettoyer = aNettoyerListe.length;
+  const affichees = medias.data ?? [];
+
+  const basculer = (id: string) =>
+    setSelection((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  const toutSelectionner = () => setSelection(new Set(affichees.map((m) => m.id)));
+  const viderSelection = () => setSelection(new Set());
 
   /** Nettoie tous les visuels à texte via un pool d'agents parallèles. */
   async function nettoyerTout() {
@@ -120,6 +161,20 @@ export function AdminBibliothequePage() {
       onProgres: (fait, total) => setLot({ fait, total }),
     });
     setLot(null);
+    rafraichir();
+  }
+
+  /** Supprime toutes les vignettes sélectionnées, en parallèle. */
+  async function supprimerSelection() {
+    const ids = [...selection];
+    if (ids.length === 0) return;
+    if (!window.confirm(t("bibliotheque.confirmSupprLot", { count: ids.length }))) return;
+    setSuppr({ fait: 0, total: ids.length });
+    await executerEnLot(ids, (id) => supprimerMedia(id), {
+      onProgres: (fait, total) => setSuppr({ fait, total }),
+    });
+    setSuppr(null);
+    viderSelection();
     rafraichir();
   }
 
@@ -147,26 +202,65 @@ export function AdminBibliothequePage() {
         {lot && <p className="pt-1 text-xs text-muted-foreground">{t("adminPost.lotAide")}</p>}
       </CardHeader>
       <CardContent className="space-y-4">
-        <select
-          aria-label={t("comptes.source")}
-          className={selectClass}
-          value={sourceId}
-          onChange={(e) => setSourceId(e.target.value)}
-        >
-          <option value="">{t("bibliotheque.toutes")}</option>
-          {sources.data?.map((s) => (
-            <option key={s.id} value={s.id}>
-              @{s.handle_tiktok}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label={t("comptes.source")}
+            className={selectClass}
+            value={sourceId}
+            onChange={(e) => setSourceId(e.target.value)}
+          >
+            <option value="">{t("bibliotheque.toutes")}</option>
+            {sources.data?.map((s) => (
+              <option key={s.id} value={s.id}>
+                @{s.handle_tiktok}
+              </option>
+            ))}
+          </select>
+
+          {affichees.length > 0 && (
+            <Button size="sm" variant="outline" onClick={toutSelectionner}>
+              {t("bibliotheque.toutSelectionner", { count: affichees.length })}
+            </Button>
+          )}
+        </div>
+
+        {/* Barre d'actions de sélection : n'apparaît que si des visuels sont cochés. */}
+        {selection.size > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 p-2.5">
+            <span className="text-sm font-medium">
+              {t("bibliotheque.selection", { count: selection.size })}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="ghost" onClick={viderSelection} disabled={suppr !== null}>
+                {t("bibliotheque.toutDeselectionner")}
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={supprimerSelection}
+                disabled={suppr !== null}
+              >
+                <Trash2 className="size-4" />
+                {suppr
+                  ? t("bibliotheque.suppressionLot", { fait: suppr.fait, total: suppr.total })
+                  : t("bibliotheque.supprimerSelection", { count: selection.size })}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {medias.isPending && <p className="text-sm text-muted-foreground">{t("common.loading")}</p>}
         {medias.data?.length === 0 && <EmptyState title={t("bibliotheque.empty")} />}
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
-          {medias.data?.map((media) => (
-            <VignetteMedia key={media.id} media={media} onChange={rafraichir} />
+          {affichees.map((media) => (
+            <VignetteMedia
+              key={media.id}
+              media={media}
+              onChange={rafraichir}
+              selectionne={selection.has(media.id)}
+              onToggle={() => basculer(media.id)}
+            />
           ))}
         </div>
       </CardContent>
