@@ -1,7 +1,7 @@
 export const fr = {
   translation: {
     app: {
-      name: "Sophia — Moteur de contenu",
+      name: "Sophia System - Slideshows",
     },
     auth: {
       loginTitle: "Connexion",

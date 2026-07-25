@@ -1,7 +1,7 @@
 export const en = {
   translation: {
     app: {
-      name: "Sophia — Content Engine",
+      name: "Sophia System - Slideshows",
     },
     auth: {
       loginTitle: "Sign in",

@@ -1,4 +1,3 @@
-import { contientVisageIdentifiable } from "./gemini.ts";
 import { serviceClient } from "./supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
@@ -10,27 +9,19 @@ export interface VisuelAvatar {
   used_count: number;
 }
 
-// Combien de visuels encore non examinés on juge par appel, quand aucun n'a
-// déjà été validé « sans visage ».
-const CANDIDATS_AVATAR = 6;
-
 /**
- * Trouve un visuel SANS VISAGE identifiable pour servir de photo de profil.
- *
- * Le test de visage se paie à l'appel Gemini : on privilégie donc les visuels
- * DÉJÀ jugés sans visage (aucun appel), et on ne juge de nouveaux candidats
- * qu'en dernier recours — en gardant le verdict pour ne pas le repayer. On tente
- * d'abord la source du compte, puis TOUTE la bibliothèque : un avatar est juste
- * une photo esthétique sans visage, la niche exacte importe peu, et ça garantit
- * un avatar même quand une source neuve n'a encore aucune image à elle.
+ * Choisit une photo de profil : n'importe quelle image NETTOYÉE de la source (ou
+ * globale), INSTANTANÉMENT — plus de détection de visage par Gemini à la création
+ * (c'était le vrai goulot : jusqu'à 6 appels ~2 s = identité qui traîne). On
+ * privilégie une image déjà jugée sans visage si dispo, sinon n'importe quelle
+ * photo nettoyée fait l'affaire. On évite les avatars déjà attribués à un autre
+ * compte (sinon deux posters partagent la même photo). La maintenance peut
+ * affiner « sans visage » plus tard, hors du chemin critique.
  */
 export async function choisirVisuelSansVisage(
   supabase: Supabase,
   compteReferenceId: string | null,
 ): Promise<VisuelAvatar | null> {
-  // Avatars DÉJÀ attribués à d'autres comptes : on les évite, sinon deux posters
-  // qui tombent sur le pool global partagent la même photo de profil (bug vu :
-  // même avatar pour deux comptes alors que la bibliothèque est énorme).
   const { data: dejaAvatars } = await supabase
     .from("comptes")
     .select("avatar_url")
@@ -39,51 +30,24 @@ export async function choisirVisuelSansVisage(
   const premierLibre = (medias: VisuelAvatar[] | null) =>
     (medias ?? []).find((m) => !pris.has(m.url)) ?? null;
 
-  const connuSansVisage = async (limiterALaSource: boolean) => {
+  // Une seule requête (pas d'appel Gemini). `sansVisageDabord` place les images
+  // déjà jugées sans visage en tête, mais n'exclut PAS les autres.
+  const chercher = async (limiterALaSource: boolean) => {
     let q = supabase
       .from("media_library")
       .select("id, url, used_count")
-      .eq("visage_identifiable", false)
       .eq("texte_restant", false)
       .like("storage_path", "propre/%")
+      // false (sans visage) avant null (non jugé) avant true — nulls en dernier.
+      .order("visage_identifiable", { ascending: true, nullsFirst: false })
       .order("used_count")
-      .limit(60);
+      .limit(80);
     if (limiterALaSource && compteReferenceId) q = q.eq("compte_reference_id", compteReferenceId);
     const { data } = await q;
     return premierLibre(data);
   };
 
-  const dejaSur =
-    (compteReferenceId ? await connuSansVisage(true) : null) ?? (await connuSansVisage(false));
-  if (dejaSur) return dejaSur;
-
-  const jugerNouveaux = async (limiterALaSource: boolean) => {
-    let q = supabase
-      .from("media_library")
-      .select("id, url, used_count")
-      .is("visage_identifiable", null)
-      .eq("texte_restant", false)
-      .like("storage_path", "propre/%")
-      .order("used_count")
-      .limit(CANDIDATS_AVATAR);
-    if (limiterALaSource && compteReferenceId) q = q.eq("compte_reference_id", compteReferenceId);
-    const { data: candidats } = await q;
-
-    for (const media of candidats ?? []) {
-      if (pris.has(media.url)) continue; // déjà l'avatar d'un autre compte
-      const visage = await contientVisageIdentifiable(media.url);
-      await supabase
-        .from("media_library")
-        .update({ visage_identifiable: visage === null ? true : visage })
-        .eq("id", media.id);
-      if (visage === false) return media;
-    }
-    return null;
-  };
-
-  return (
-    (compteReferenceId ? await jugerNouveaux(true) : null) ?? (await jugerNouveaux(false))
-  );
+  return (compteReferenceId ? await chercher(true) : null) ?? (await chercher(false));
 }
 
 /**
