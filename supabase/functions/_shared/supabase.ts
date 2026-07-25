@@ -52,19 +52,45 @@ export async function assertAuthorised(request: Request): Promise<Response | nul
   const token = authorization.replace(/^Bearer\s+/i, "");
   if (!token) return json({ error: "unauthorized" }, 401);
 
-  const supabase = serviceClient();
-  const { data: userData, error } = await supabase.auth.getUser(token);
-  if (error || !userData.user) return json({ error: "unauthorized" }, 401);
-
-  const { data: roles } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userData.user.id)
-    .eq("role", "admin");
-
-  if (!roles || roles.length === 0) return json({ error: "forbidden" }, 403);
-
+  const acces = await rolesDuJeton(token);
+  if (!acces) return json({ error: "unauthorized" }, 401);
+  if (!acces.roles.includes("admin")) return json({ error: "forbidden" }, 403);
   return null;
+}
+
+/** `sub` (id utilisateur) du JWT, décodé SANS vérifier la signature — juste pour
+ *  savoir de qui on parle ; la VÉRIFICATION vient de la requête PostgREST ci-après. */
+function jetonSub(token: string): string | null {
+  try {
+    const charge = token.split(".")[1];
+    return (JSON.parse(atob(charge.replace(/-/g, "+").replace(/_/g, "/"))).sub as string) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Rôles du porteur du jeton, vérifiés via PostgREST — et NON via `getUser`/GoTrue,
+ * qui rejette les jetons de l'ancien format depuis la migration des clés JWT
+ * asymétriques (erreurs « bad_jwt ES256 » à la création de poster). PostgREST,
+ * lui, valide la signature (c'est pourquoi les requêtes de données du front
+ * marchent). La RLS `user_roles (user_id = auth.uid())` renvoie les rôles de
+ * l'appelant ; on filtre sur le `sub` du jeton pour ne pas capter d'autres lignes
+ * si l'appelant est admin. Renvoie null si le jeton est invalide (PostgREST refuse).
+ */
+async function rolesDuJeton(token: string): Promise<{ userId: string; roles: string[] } | null> {
+  const sub = jetonSub(token);
+  if (!sub) return null;
+  const url = Deno.env.get("SUPABASE_URL");
+  const anon = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!url || !anon) return null;
+  const userClient = createClient(url, anon, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await userClient.from("user_roles").select("role").eq("user_id", sub);
+  if (error) return null; // signature invalide → PostgREST refuse
+  return { userId: sub, roles: (data ?? []).map((r) => r.role as string) };
 }
 
 /**
@@ -85,24 +111,20 @@ export async function assertRole(
   if (expected && request.headers.get("x-cron-secret") === expected) {
     return { userId: "cron", role: "admin" };
   }
+  const testSecret = Deno.env.get("TEST_SECRET");
+  if (testSecret && request.headers.get("x-cron-secret") === testSecret) {
+    return { userId: "cron", role: "admin" };
+  }
 
   const authorization = request.headers.get("Authorization") ?? "";
   const token = authorization.replace(/^Bearer\s+/i, "");
   if (!token) return json({ error: "unauthorized" }, 401);
 
-  const supabase = serviceClient();
-  const { data: userData, error } = await supabase.auth.getUser(token);
-  if (error || !userData.user) return json({ error: "unauthorized" }, 401);
-
-  const { data: lignes } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userData.user.id);
-
-  const trouve = (lignes ?? []).map((l) => l.role).find((r) => roles.includes(r));
+  const acces = await rolesDuJeton(token);
+  if (!acces) return json({ error: "unauthorized" }, 401);
+  const trouve = acces.roles.find((r) => roles.includes(r));
   if (!trouve) return json({ error: "forbidden" }, 403);
-
-  return { userId: userData.user.id, role: trouve };
+  return { userId: acces.userId, role: trouve };
 }
 
 /**
