@@ -471,6 +471,8 @@ export interface PostReproduisible {
   langue: string;
   /** URLs des visuels dans l'ordre (nettoyée si dispo, sinon brute) pour l'aperçu. */
   apercus: string[];
+  /** Pas encore nettoyé (lien ajouté à la main, nettoyage en cours). */
+  en_preparation: boolean;
   created_at: string;
 }
 
@@ -478,18 +480,30 @@ export interface PostReproduisible {
  * Les « posts reproduisibles » : sujets préparés et retenus (pertinents + assez
  * performants), prêts à être reproduits. Un appel unique résout les visuels.
  */
+/** Marqueur posé par l'import manuel d'un lien (extraction, flag reproductible). */
+const AJOUT_MANUEL = "Ajouté manuellement au stock";
+
 export async function listerReproduisibles(): Promise<PostReproduisible[]> {
   const { data: sujets, error } = await supabase
     .from("sujets")
     .select(
-      "id, source_url, vues, pertinence_score, langue, created_at, structure_slides, compte_reference_id, comptes_reference(handle_tiktok)",
+      "id, source_url, vues, pertinence_score, pertinence_raison, preparation_statut, langue, created_at, structure_slides, compte_reference_id, comptes_reference(handle_tiktok)",
     )
-    .eq("preparation_statut", "done")
     .in("statut", ["retenu", "utilise"])
     .order("vues", { ascending: false, nullsFirst: false });
   if (error) throw error;
 
-  return (sujets ?? []).map((s) => {
+  // On affiche les sujets déjà NETTOYÉS (preparation done)… et aussi les liens
+  // AJOUTÉS À LA MAIN encore en préparation : « il se stocke là » = on le voit
+  // tout de suite (aperçu brut), avec un badge « en préparation ». Les sujets
+  // auto-scrapés pas encore prêts restent cachés jusqu'à leur nettoyage.
+  const visibles = (sujets ?? []).filter(
+    (s) =>
+      (s as { preparation_statut?: string }).preparation_statut === "done" ||
+      (s as { pertinence_raison?: string }).pertinence_raison === AJOUT_MANUEL,
+  );
+
+  return visibles.map((s) => {
     const slides = ((s.structure_slides ?? []) as SujetSlide[]).slice().sort((a, b) => a.position - b.position);
     // Aperçu = les images D'ORIGINE du TikTok (raw_url), pas les versions
     // nettoyées : un « post reproduisible », c'est le TikTok source qu'on décide
@@ -506,6 +520,7 @@ export async function listerReproduisibles(): Promise<PostReproduisible[]> {
       reference_handle: ref?.handle_tiktok ?? null,
       langue: s.langue,
       apercus,
+      en_preparation: (s as { preparation_statut?: string }).preparation_statut !== "done",
       created_at: s.created_at,
     };
   });

@@ -323,8 +323,9 @@ export const fr = {
       ajouter: "Ajouter au stock",
       ajoutEnCours: "Ajout…",
       ajouterAide: "Colle un lien TikTok (de cette source ou d'une autre) — il se range dans le stock de cette source après nettoyage.",
-      ajoutOk: "Ajouté — apparaîtra dans le stock une fois nettoyé.",
+      ajoutOk: "Ajouté au stock ✓ (nettoyage en cours en arrière-plan).",
       dejaConnu: "Ce lien est déjà dans le stock.",
+      enPreparation: "En préparation",
       sourceVide: "Aucun post reproduisible pour cette source. Va en chercher, ou colle un lien.",
     },
     comptes: {

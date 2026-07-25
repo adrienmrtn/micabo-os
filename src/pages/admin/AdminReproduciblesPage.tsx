@@ -65,6 +65,9 @@ function CartePost({ post }: { post: PostReproduisible }) {
         </p>
 
         <div className="flex flex-wrap items-center gap-2">
+          {post.en_preparation && (
+            <Badge variant="warning">{t("reproduisibles.enPreparation")}</Badge>
+          )}
           <Badge variant="secondary">
             <Eye className="mr-1 size-3" />
             {formatVues(post.vues)} {t("reproduisibles.vues")}

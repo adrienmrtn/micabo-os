@@ -323,8 +323,9 @@ export const en = {
       ajouter: "Add to stock",
       ajoutEnCours: "Adding…",
       ajouterAide: "Paste a TikTok link (from this source or another) — it lands in this source's stock once cleaned.",
-      ajoutOk: "Added — will appear in the stock once cleaned.",
+      ajoutOk: "Added to stock ✓ (cleaning runs in the background).",
       dejaConnu: "This link is already in the stock.",
+      enPreparation: "Preparing",
       sourceVide: "No reproducible post for this source yet. Fetch more, or paste a link.",
     },
     comptes: {
