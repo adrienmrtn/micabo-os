@@ -333,6 +333,9 @@ async function creerSujet(
       source_url: post.webVideoUrl,
       musique_url: post.musicUrl,
       musique_titre: post.musicTitle,
+      // Vues du TikTok d'origine : signal de « ça a bien marché » pour la page
+      // Posts reproduisibles (tri + affichage).
+      vues: post.stats?.vues ?? null,
     })
     .select()
     .single();

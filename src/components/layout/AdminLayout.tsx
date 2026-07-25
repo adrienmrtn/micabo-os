@@ -10,6 +10,7 @@ import {
   Gauge,
   Images,
   MessageSquareQuote,
+  Recycle,
   Settings,
   Users,
   Wand2,
@@ -39,6 +40,12 @@ export function AdminLayout() {
             },
             { to: "/admin/posts", label: t("nav.posts"), icon: CalendarRange, description: t("navDesc.posts") },
             { to: "/admin/sources", label: t("nav.sources"), icon: AtSign, description: t("navDesc.sources") },
+            {
+              to: "/admin/reproduisibles",
+              label: t("nav.reproduisibles"),
+              icon: Recycle,
+              description: t("navDesc.reproduisibles"),
+            },
             {
               to: "/admin/bibliotheque",
               label: t("nav.bibliotheque"),

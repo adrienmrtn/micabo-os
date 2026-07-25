@@ -13,6 +13,7 @@ import type {
   PosterProfil,
   Reglages,
   Sujet,
+  SujetSlide,
 } from "./types";
 
 /** Date du jour en YYYY-MM-DD, en heure locale — le poster raisonne sur sa
@@ -432,6 +433,66 @@ export async function apercuSujet(sujetId: string): Promise<SlideApercu[]> {
       url_propre: s.media_id ? urlParMedia.get(s.media_id) ?? null : null,
       url_brute: s.raw_url ?? null,
     }));
+}
+
+export interface PostReproduisible {
+  id: string;
+  source_url: string | null;
+  /** Le hook = texte de la 1ʳᵉ photo (OCR). Sert de titre sur la page. */
+  hook: string | null;
+  vues: number | null;
+  pertinence_score: number | null;
+  reference_handle: string | null;
+  langue: string;
+  /** URLs des visuels dans l'ordre (nettoyée si dispo, sinon brute) pour l'aperçu. */
+  apercus: string[];
+  created_at: string;
+}
+
+/**
+ * Les « posts reproduisibles » : sujets préparés et retenus (pertinents + assez
+ * performants), prêts à être reproduits. Un appel unique résout les visuels.
+ */
+export async function listerReproduisibles(): Promise<PostReproduisible[]> {
+  const { data: sujets, error } = await supabase
+    .from("sujets")
+    .select(
+      "id, source_url, vues, pertinence_score, langue, created_at, structure_slides, comptes_reference(handle_tiktok)",
+    )
+    .eq("preparation_statut", "done")
+    .in("statut", ["retenu", "utilise"])
+    .order("vues", { ascending: false, nullsFirst: false });
+  if (error) throw error;
+
+  // Résolution media_id → url en un seul appel (au lieu d'un par sujet).
+  const ids = new Set<string>();
+  for (const s of sujets ?? []) {
+    for (const sl of (s.structure_slides ?? []) as SujetSlide[]) if (sl.media_id) ids.add(sl.media_id);
+  }
+  const urlParMedia = new Map<string, string>();
+  if (ids.size > 0) {
+    const { data: medias } = await supabase.from("media_library").select("id, url").in("id", [...ids]);
+    for (const m of medias ?? []) urlParMedia.set(m.id as string, m.url as string);
+  }
+
+  return (sujets ?? []).map((s) => {
+    const slides = ((s.structure_slides ?? []) as SujetSlide[]).slice().sort((a, b) => a.position - b.position);
+    const apercus = slides
+      .map((sl) => (sl.media_id ? urlParMedia.get(sl.media_id) : null) ?? sl.raw_url)
+      .filter(Boolean) as string[];
+    const ref = (s as { comptes_reference?: { handle_tiktok?: string } }).comptes_reference;
+    return {
+      id: s.id,
+      source_url: s.source_url,
+      hook: slides[0]?.texte_original ?? null,
+      vues: s.vues,
+      pertinence_score: s.pertinence_score,
+      reference_handle: ref?.handle_tiktok ?? null,
+      langue: s.langue,
+      apercus,
+      created_at: s.created_at,
+    };
+  });
 }
 
 // --- Documents (guides, FAQ) -------------------------------------------------

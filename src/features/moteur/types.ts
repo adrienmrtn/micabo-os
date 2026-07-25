@@ -64,6 +64,7 @@ export interface Sujet {
   preparation_statut: PipelineStatut;
   preparation_erreur: string | null;
   musique_url: string | null;
+  vues: number | null;
   created_at: string;
 }
 
