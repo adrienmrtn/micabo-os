@@ -1,70 +1,13 @@
 import { avatarPourSource } from "../_shared/avatar.ts";
 import { genererPersona } from "../_shared/gemini.ts";
+import {
+  bioDeSecours,
+  filtrerPseudos,
+  nomDepuisHandle,
+  pseudosDeSecours,
+  trouverHandleLibre,
+} from "../_shared/persona.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
-
-type Supabase = ReturnType<typeof serviceClient>;
-
-/** Nom affiché = le @ simplifié : on retire les chiffres de fin, on remplace les
- *  points/underscores par des espaces, et on met une majuscule à chaque mot.
- *  Ex. « le_savant_urbain42 » → « Le Savant Urbain ». */
-function nomDepuisHandle(handle: string): string {
-  const mots = handle
-    .replace(/\d+$/, "")
-    .replace(/[._]+/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((m) => m.charAt(0).toUpperCase() + m.slice(1));
-  return mots.join(" ") || handle;
-}
-
-/**
- * Un pseudo quasi certainement LIBRE sur TikTok — SANS appel réseau (instantané).
- *
- * On NE VÉRIFIE PLUS la dispo : c'est impossible de façon fiable ET rapide. Apify
- * teste s'il y a des POSTS (rate un compte existant sans post — c'est ce qui a
- * laissé passer @spezisuchti, pourtant pris), et la page de profil TikTok renvoie
- * la même chose pour un @ pris ou libre. À la place, on garantit l'unicité par
- * construction : le pseudo IA + 3-4 chiffres au hasard (« spezisuchti4827 ») a
- * une probabilité infime d'être déjà pris. Instantané, et bien plus sûr qu'une
- * vérif qui donne de faux « libre ».
- */
-function trouverHandleLibre(base: string): string {
-  return `${base}${Math.floor(Math.random() * 900) + 100}`; // 3 chiffres au hasard
-}
-
-/** Racines par langue pour un pseudo de SECOURS (culture générale / savoir),
- *  quand l'IA est indisponible : mieux vaut une identité correcte tout de suite
- *  qu'un compte vide. L'admin peut toujours « Générer une identité » ensuite. */
-const RACINES_SECOURS: Record<string, string[]> = {
-  fr: ["savoir", "culture", "esprit", "curieux", "eclaire", "matiere.grise", "apprends", "le.savais.tu"],
-  en: ["knowledge", "curious", "learn", "bright.mind", "brain.fuel", "did.you.know", "smart.daily", "quick.facts"],
-  de: ["wissen", "neugierig", "lernen", "kluger.kopf", "bildung", "wusstest.du", "schlau.taeglich", "gehirn.futter"],
-  it: ["sapere", "curioso", "impara", "mente.viva", "cultura", "lo.sapevi", "cervello", "intelletto"],
-  es: ["saber", "curioso", "aprende", "mente.viva", "cultura", "sabias.que", "cerebro", "brillante"],
-  pt: ["saber", "curioso", "aprende", "mente.viva", "cultura", "sabia.que", "cerebro", "brilhante"],
-};
-
-/** Bio de SECOURS par langue (culture générale), quand l'IA est indisponible. */
-const BIO_SECOURS: Record<string, string> = {
-  fr: "un peu de culture chaque jour 🧠\nabonne-toi pour apprendre quelque chose de nouveau ✨",
-  en: "a little knowledge every day 🧠\nfollow to learn something new ✨",
-  de: "jeden tag ein bisschen wissen 🧠\nfolge mir und lerne etwas neues ✨",
-  it: "un po' di cultura ogni giorno 🧠\nseguimi per imparare qualcosa di nuovo ✨",
-  es: "un poco de cultura cada día 🧠\nsígueme para aprender algo nuevo ✨",
-  pt: "um pouco de cultura todo dia 🧠\nsegue para aprender algo novo ✨",
-};
-
-function pseudosDeSecours(langue: string): string[] {
-  const racines = RACINES_SECOURS[langue] ?? RACINES_SECOURS.fr;
-  // Chaque racine + une variante suffixée : de quoi laisser filtrerPseudos
-  // écarter les collisions et trouverHandleLibre suffixer sans être à court.
-  return racines.flatMap((r) => [r, `${r}${Math.floor(Math.random() * 90) + 10}`]);
-}
-
-function bioDeSecours(langue: string): string {
-  return BIO_SECOURS[langue] ?? BIO_SECOURS.fr;
-}
 
 /**
  * Propose une identité pour un compte de publication : pseudos, bio, avatar.
@@ -175,46 +118,3 @@ Deno.serve(async (request) => {
     return json({ ok: false, error: messageErreur(error) }, 500);
   }
 });
-
-/** Découpe un handle en mots significatifs, pour comparer des racines. */
-function racines(handle: string): string[] {
-  return handle
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((mot) => mot.length >= 4);
-}
-
-/**
- * Écarte les pseudos qui trahiraient la source ou qui existent déjà.
- *
- * Un pseudo partageant une racine avec le compte de référence rendrait le lien
- * devinable pour qui compare les deux comptes : c'est exactement ce que la
- * séparation stricte cherche à éviter.
- */
-async function filtrerPseudos(
-  supabase: Supabase,
-  candidats: string[],
-  handleReference: string,
-): Promise<string[]> {
-  const interdites = racines(handleReference);
-
-  const sansEcho = candidats.filter((pseudo) => {
-    const mots = racines(pseudo);
-    return !mots.some((mot) =>
-      interdites.some((racine) => mot.includes(racine) || racine.includes(mot)),
-    );
-  });
-
-  if (sansEcho.length === 0) return [];
-
-  // On écarte tout pseudo déjà porté par un de NOS comptes — que ce soit comme
-  // @ OU comme nom affiché (deux posters avec le même nom, ça s'est produit).
-  const { data: pris } = await supabase
-    .from("comptes")
-    .select("handle_tiktok, persona_nom");
-
-  const dejaPris = new Set(
-    (pris ?? []).flatMap((c) => [c.handle_tiktok, c.persona_nom]).filter(Boolean),
-  );
-  return sansEcho.filter((pseudo) => !dejaPris.has(pseudo));
-}

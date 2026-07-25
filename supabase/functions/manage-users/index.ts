@@ -1,3 +1,4 @@
+import { appliquerIdentiteInstantanee } from "../_shared/persona.ts";
 import { assertRole, json, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
@@ -100,10 +101,13 @@ Deno.serve(async (request) => {
       }
     }
 
-    // Automatisation IA du compte de publication (posters seulement, avec langue).
+    // Compte de publication (posters seulement, avec langue) : identité posée
+    // INSTANTANÉMENT et de façon déterministe (pseudo + nom + bio + avatar), sans
+    // aucun appel Gemini. La création reste sous la seconde et l'identité est
+    // TOUJOURS remplie — fini le « identité en cours » qui traîne.
     let compte: { id: string; reference: string | null; persona: boolean } | null = null;
     if (data.user && roleVoulu === "poster" && langue) {
-      compte = await preparerCompte(supabase, request, data.user.id, langue, referenceId);
+      compte = await preparerCompte(supabase, data.user.id, langue, referenceId);
     }
 
     return json({ ok: true, userId: data.user?.id, email, compte, role: roleVoulu });
@@ -123,7 +127,12 @@ Deno.serve(async (request) => {
         .single();
       if (!cible || cible.manager_id !== acces.userId) return json({ error: "forbidden" }, 403);
     }
-    const { error } = await supabase.auth.admin.deleteUser(body.userId);
+    // On NE passe PAS par auth.admin.deleteUser : depuis la migration du projet
+    // vers des clés JWT ES256, GoTrue rejette la suppression d'un utilisateur
+    // réel (« unrecognized JWT kid <nil> »). On supprime la ligne auth.users en
+    // SQL (RPC SECURITY DEFINER), ce qui cascade sur profiles → comptes et libère
+    // le compte de référence.
+    const { error } = await supabase.rpc("supprimer_auth_user", { uid: body.userId });
     if (error) return json({ error: error.message }, 400);
     return json({ ok: true });
   }
@@ -179,7 +188,6 @@ async function emailDisponible(
  */
 async function preparerCompte(
   supabase: Supabase,
-  request: Request,
   posterId: string,
   langue: string,
   referenceId: string | null,
@@ -193,14 +201,11 @@ async function preparerCompte(
     return { id: "", reference: referenceId, persona: false };
   }
 
-  // Identité (nom, @ disponible, bio, avatar) générée ET appliquée tout de suite.
-  // On retente quelques fois : au moment d'une création, Gemini peut être saturé
-  // (429). Ce qui échoue quand même est rattrapé par le cron `maintenance-auto`.
-  let persona = false;
-  for (let essai = 0; essai < 3 && !persona; essai += 1) {
-    persona = await genererPersonaAuto(request, compte.id);
-  }
-  return { id: compte.id, reference: referenceId, persona };
+  // Identité posée immédiatement, sans Gemini : sous la seconde, et toujours
+  // remplie. Un enrichissement IA (bio/pseudo plus travaillés) reste possible à
+  // la demande via la fonction `persona`, mais il ne bloque pas la création.
+  const { applique } = await appliquerIdentiteInstantanee(supabase, compte.id);
+  return { id: compte.id, reference: referenceId, persona: applique };
 }
 
 /**
@@ -240,29 +245,3 @@ async function referenceLibre(
   return (libres.find((r) => r.langue === langue) ?? libres[0]).id;
 }
 
-/**
- * Déclenche la génération de persona (pseudo, bio, avatar) en appelant la
- * fonction `persona`, qui porte déjà toute la logique (filtrage des pseudos,
- * choix d'avatar sans visage). On l'appelle en interne avec le secret cron pour
- * ne pas ré-implémenter tout ça ici. Renvoie true si la persona a été appliquée.
- */
-async function genererPersonaAuto(request: Request, compteId: string): Promise<boolean> {
-  const secret = Deno.env.get("CRON_SECRET");
-  if (!secret) return false;
-
-  // URL de la fonction voisine, déduite de l'URL de la requête courante.
-  const base = new URL(request.url);
-  const url = `${base.origin}${base.pathname.replace(/manage-users\/?$/, "")}persona`;
-
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-cron-secret": secret },
-      body: JSON.stringify({ compteId, appliquer: true }),
-    });
-    const data = await res.json().catch(() => null);
-    return Boolean(data?.applique);
-  } catch {
-    return false;
-  }
-}
