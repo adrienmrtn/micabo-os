@@ -15,6 +15,8 @@ export interface CompteReference {
   langue: string;
   /** Prompt adapté (voix / ton de traduction) propre à cette source. */
   style_profile: string | null;
+  /** Genre des identités des posters qui reprennent cette source (prénom H/F). */
+  genre: "homme" | "femme";
   is_active: boolean;
   dernier_scrape_at: string | null;
   created_at: string;

@@ -273,6 +273,9 @@ export const fr = {
       extraction: "Extraction…",
       extraitLe: "Extrait le {{date}}",
       jamais: "Jamais extrait",
+      genre: "Genre des posters :",
+      genreFemme: "Femme",
+      genreHomme: "Homme",
       confirmDelete: "Supprimer ce compte de référence ?",
     },
     sujets: {

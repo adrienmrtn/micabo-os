@@ -21,9 +21,10 @@ type Supabase = ReturnType<typeof serviceClient>;
 const SEUIL_PERTINENCE = 50;
 
 const BUCKET = "medias";
-// On récupère assez de posts récents pour pouvoir garder les MEILLEURS (par
-// vues), pas juste les derniers publiés.
-const POSTS_PAR_COMPTE = 15;
+// On récupère largement de posts récents pour pouvoir garder les MEILLEURS (par
+// vues) ET remplir le stock (objectif ≥ 10 slideshows reproductibles par source).
+// Beaucoup sont écartés (vidéos, pertinence < seuil), d'où la marge.
+const POSTS_PAR_COMPTE = 30;
 
 /** Identifiant numérique stable d'un post, quelle que soit la forme de l'URL. */
 const idDe = (url: string) => url.match(/\/(?:photo|video)\/(\d+)/)?.[1] ?? url;

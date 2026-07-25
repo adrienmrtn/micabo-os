@@ -115,6 +115,11 @@ export function AdminSourcesPage() {
       majSource(input.id, { is_active: input.actif }),
     onSuccess: rafraichir,
   });
+  const changerGenre = useMutation({
+    mutationFn: (input: { id: string; genre: "homme" | "femme" }) =>
+      majSource(input.id, { genre: input.genre }),
+    onSuccess: rafraichir,
+  });
   const retirer = useMutation({ mutationFn: supprimerSource, onSuccess: rafraichir });
 
   return (
@@ -205,6 +210,28 @@ export function AdminSourcesPage() {
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
+
+                {/* Genre des prénoms des posters qui reprennent cette source. */}
+                <div className="flex items-center gap-2 pt-2">
+                  <span className="text-xs text-muted-foreground">{t("sources.genre")}</span>
+                  <div className="inline-flex overflow-hidden rounded-md border">
+                    {(["femme", "homme"] as const).map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        disabled={changerGenre.isPending}
+                        onClick={() => changerGenre.mutate({ id: source.id, genre: g })}
+                        className={
+                          source.genre === g
+                            ? "bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground"
+                            : "bg-background px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
+                        }
+                      >
+                        {g === "femme" ? t("sources.genreFemme") : t("sources.genreHomme")}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-start gap-2">

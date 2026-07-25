@@ -1,19 +1,18 @@
 import { avatarPourSource } from "../_shared/avatar.ts";
-import { genererPersona } from "../_shared/gemini.ts";
 import {
-  bioDeSecours,
-  filtrerPseudos,
-  nomDepuisHandle,
-  pseudosDeSecours,
-  trouverHandleLibre,
+  appliquerIdentiteInstantanee,
+  genererIdentite,
+  type Genre,
 } from "../_shared/persona.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 /**
- * Propose une identité pour un compte de publication : pseudos, bio, avatar.
+ * Identité d'un compte de publication : @ « prenom.mot-culture+chiffres » selon
+ * le GENRE du compte de référence (toggle homme/femme sur la page source) + nom
+ * « Prénom Nom » + bio + avatar. 100 % déterministe et instantané (aucun Gemini).
  *
- *   { compteId }              → propositions seulement
- *   { compteId, appliquer }   → applique la première proposition retenue
+ *   { compteId }              → proposition (aperçu, sans appliquer)
+ *   { compteId, appliquer }   → applique l'identité sur le compte
  */
 Deno.serve(async (request) => {
   const denied = await assertAuthorised(request);
@@ -34,85 +33,47 @@ Deno.serve(async (request) => {
   if (!compteId) return json({ error: "compteId requis" }, 400);
 
   try {
+    // Appliquer : on passe par le chemin instantané partagé (lit le genre de la
+    // référence, ne remplit que ce qui manque), puis on relit l'état pour le front.
+    if (appliquer) {
+      const { handle } = await appliquerIdentiteInstantanee(supabase, compteId);
+      const { data: c } = await supabase
+        .from("comptes")
+        .select("handle_tiktok, persona_nom, persona_bio, avatar_url")
+        .eq("id", compteId)
+        .single();
+      return json({
+        ok: true,
+        pseudos: c?.handle_tiktok ? [c.handle_tiktok] : [],
+        nom: c?.persona_nom ?? null,
+        bio: c?.persona_bio ?? "",
+        avatarUrl: c?.avatar_url ?? null,
+        handle: handle ?? c?.handle_tiktok ?? null,
+        applique: true,
+      });
+    }
+
+    // Proposition : on génère une identité candidate SANS l'appliquer.
     const { data: compte, error } = await supabase
       .from("comptes")
-      .select("*, comptes_reference(id, handle_tiktok, niche, bio)")
+      .select("langue, compte_reference_id, comptes_reference(genre)")
       .eq("id", compteId)
       .single();
     if (error || !compte) return json({ error: "Compte introuvable" }, 404);
 
     // deno-lint-ignore no-explicit-any
-    const reference = (compte as any).comptes_reference;
-
-    // Bio du compte de référence, SEULEMENT si déjà en cache : on ne scrape PLUS
-    // via Apify ici (c'était ~15-30 s de blocage à la création, une des causes du
-    // « identité en cours » qui traîne). Sans cache, la bio est générée à partir
-    // de la niche — largement suffisant. Le cron peut cacher la bio de réf plus tard.
-    const referenceBio: string = reference?.bio ?? "";
-
-    // L'IA d'abord ; mais si elle est indisponible (429 Gemini fréquent en
-    // journée), on NE bloque PAS : on bascule sur une identité de secours
-    // déterministe. Une identité correcte tout de suite vaut mieux qu'un compte
-    // vide qu'il faut re-générer à la main.
-    const proposition = await genererPersona({
-      niche: reference?.niche ?? "",
-      langue: compte.langue,
-      referenceHandle: reference?.handle_tiktok ?? undefined,
-      referenceBio: referenceBio || undefined,
-    }).catch(() => null);
-
-    const pseudosIA = proposition?.pseudos?.length
-      ? proposition.pseudos
-      : pseudosDeSecours(compte.langue);
-    const bio = proposition?.bio?.trim() || bioDeSecours(compte.langue);
-
-    // Écarte les pseudos trahissant la source ou déjà pris ; si tout est écarté,
-    // on repart du pool de secours (jamais vide).
-    let pseudos = await filtrerPseudos(supabase, pseudosIA, reference?.handle_tiktok ?? "");
-    if (pseudos.length === 0) {
-      pseudos = await filtrerPseudos(supabase, pseudosDeSecours(compte.langue), reference?.handle_tiktok ?? "");
-    }
-    // Ultime garde-fou : jamais aucun candidat.
-    if (pseudos.length === 0) pseudos = pseudosDeSecours(compte.langue);
-
+    const genre: Genre = (compte as any).comptes_reference?.genre === "homme" ? "homme" : "femme";
+    const identite = await genererIdentite(supabase, compte.langue, genre);
     const avatar = await avatarPourSource(supabase, compte.compte_reference_id);
-
-    // Le @ RÉELLEMENT posé : le pseudo choisi, garanti probablement libre.
-    let handleApplique: string | null = null;
-
-    if (appliquer && pseudos.length > 0) {
-      handleApplique = trouverHandleLibre(pseudos[0]);
-
-      await supabase
-        .from("comptes")
-        .update({
-          // On ne REMPLIT que ce qui manque : un @ ou un nom déjà posés (souvent
-          // édités à la main) ne sont jamais écrasés par une re-génération.
-          handle_tiktok: compte.handle_tiktok ?? handleApplique,
-          // Nom affiché = le @ simplifié (pas le @ brut).
-          persona_nom: compte.persona_nom ?? nomDepuisHandle(handleApplique),
-          persona_bio: compte.persona_bio ?? bio,
-          avatar_url: avatar?.url ?? compte.avatar_url,
-          avatar_source: avatar ? "bibliotheque" : compte.avatar_source,
-        })
-        .eq("id", compteId);
-
-      if (avatar?.id) {
-        await supabase
-          .from("media_library")
-          .update({ used_count: avatar.used_count + 1 })
-          .eq("id", avatar.id);
-      }
-    }
 
     return json({
       ok: true,
-      pseudos,
-      bio,
+      pseudos: [identite.handle],
+      nom: identite.nom,
+      bio: identite.bio,
       avatarUrl: avatar?.url ?? null,
-      handle: handleApplique,
-      applique: appliquer && pseudos.length > 0,
-      secours: !proposition, // vrai si l'IA était indispo (identité de secours)
+      handle: null,
+      applique: false,
     });
   } catch (error) {
     return json({ ok: false, error: messageErreur(error) }, 500);
