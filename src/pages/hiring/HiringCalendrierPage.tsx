@@ -1,12 +1,73 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, EmptyState } from "@/components/ui/card";
-import { postsCalendrierAdmin, type PostCalendrierAdmin } from "@/features/moteur/api";
+import { lirePost, listerSlides, postsCalendrierAdmin, type PostCalendrierAdmin } from "@/features/moteur/api";
 import { cn } from "@/lib/utils";
+
+/** Aperçu (lecture seule) d'un post : ses slides — image nettoyée + texte. */
+function ApercuPost({ postId, onClose }: { postId: string; onClose: () => void }) {
+  const { t } = useTranslation();
+  const post = useQuery({ queryKey: ["post", postId], queryFn: () => lirePost(postId) });
+  const slides = useQuery({ queryKey: ["slides", postId], queryFn: () => listerSlides(postId) });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div
+        className="max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-lg border bg-card p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium">{t("hiring.apercuTitre")}</p>
+            {post.data && <Badge variant="secondary">{t(`type.${post.data.type}`)}</Badge>}
+            {post.data && (
+              <Badge variant={post.data.publie_at ? "success" : "outline"}>
+                {t(`statut.${post.data.statut}`)}
+              </Badge>
+            )}
+          </div>
+          <Button size="icon" variant="ghost" aria-label={t("common.close")} onClick={onClose}>
+            <X />
+          </Button>
+        </div>
+
+        {slides.isPending && <p className="text-sm text-muted-foreground">{t("common.loading")}</p>}
+        {slides.data && slides.data.length === 0 && (
+          <p className="text-sm text-muted-foreground">{t("hiring.apercuVide")}</p>
+        )}
+
+        <div className="space-y-3">
+          {slides.data?.map((s) => (
+            <div key={s.id} className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[auto_1fr]">
+              {s.media_library?.url ? (
+                <img
+                  src={s.media_library.url}
+                  alt=""
+                  className="h-40 w-auto rounded-md border object-cover"
+                />
+              ) : (
+                <div className="flex h-40 w-28 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
+                  —
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("posts.slide", { position: s.position })}
+                </p>
+                <p className="whitespace-pre-wrap text-sm">{s.texte_overlay}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function isoDuJour(annee: number, mois: number, jour: number): string {
   return `${annee}-${String(mois + 1).padStart(2, "0")}-${String(jour).padStart(2, "0")}`;
@@ -58,6 +119,7 @@ export function HiringCalendrierPage() {
     annee: maintenant.getFullYear(),
     mois: maintenant.getMonth(),
   }));
+  const [apercu, setApercu] = React.useState<string | null>(null);
 
   const parJour = React.useMemo(() => {
     const carte = new Map<string, PostCalendrierAdmin[]>();
@@ -96,6 +158,8 @@ export function HiringCalendrierPage() {
 
   return (
     <div className="space-y-4">
+      {apercu && <ApercuPost postId={apercu} onClose={() => setApercu(null)} />}
+
       <div>
         <h1 className="text-lg font-semibold tracking-tight">{t("hiring.calendrierTitre")}</h1>
         <p className="text-sm text-muted-foreground">{t("hiring.calendrierSous")}</p>
@@ -170,12 +234,14 @@ export function HiringCalendrierPage() {
                   </span>
 
                   {duJour.map((post) => (
-                    <div
+                    <button
                       key={post.id}
+                      type="button"
+                      onClick={() => setApercu(post.id)}
                       title={`${nomCreateur(post)} — ${post.sujet_titre ?? ""}`}
                       style={couleurs(post.compte_id)}
                       className={cn(
-                        "flex w-full max-w-full items-center gap-1 rounded border px-1.5 py-1 text-[11px] leading-tight",
+                        "flex w-full max-w-full cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-left text-[11px] leading-tight transition hover:brightness-95",
                         post.pipeline_statut !== "done" && "opacity-60",
                       )}
                     >
@@ -183,7 +249,7 @@ export function HiringCalendrierPage() {
                         {post.publie_at ? "✓ " : ""}
                         {nomCreateur(post)}
                       </span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               );
