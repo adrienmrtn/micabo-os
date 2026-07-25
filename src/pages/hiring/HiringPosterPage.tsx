@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { UserPlus } from "lucide-react";
+import { Check, Pencil, UserPlus, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,13 +20,142 @@ import {
   creerPoster,
   listerLanguesReference,
   listerPosters,
+  majCompte,
 } from "@/features/moteur/api";
+import type { PosterProfil } from "@/features/moteur/types";
 
 /** Mot de passe commun à tous les posters (dicté de vive voix). */
 const MOT_DE_PASSE = "12345678";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
+/**
+ * Une ligne créateur côté HM : identité TikTok (avatar, @, nom, source, bio),
+ * ÉDITABLE (nom, @, bio). Le HM a recruté ce créateur, il peut ajuster son
+ * identité (RLS `comptes_update_hiring`). La source et les ratios restent côté
+ * admin. L'affichage se met à jour dès qu'on enregistre (invalidation ["posters"]).
+ */
+function LignePoster({ poster: p }: { poster: PosterProfil }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [edite, setEdite] = React.useState(false);
+  const [nom, setNom] = React.useState(p.persona_nom ?? "");
+  const [handle, setHandle] = React.useState(p.handle_tiktok ?? "");
+  const [bio, setBio] = React.useState(p.persona_bio ?? "");
+
+  const enregistrer = useMutation({
+    mutationFn: () =>
+      majCompte(p.compte_id!, {
+        persona_nom: nom.trim() || null,
+        handle_tiktok: handle.trim().replace(/^@/, "") || null,
+        persona_bio: bio.trim() || null,
+      }),
+    onSuccess: () => {
+      setEdite(false);
+      queryClient.invalidateQueries({ queryKey: ["posters"] });
+    },
+  });
+
+  return (
+    <div className="flex items-start gap-3 rounded-lg border p-3">
+      {p.avatar_url ? (
+        <img src={p.avatar_url} alt="" className="size-11 shrink-0 rounded-full border object-cover" />
+      ) : (
+        <div className="size-11 shrink-0 rounded-full border bg-muted" />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium">
+            {[p.prenom, p.nom].filter(Boolean).join(" ") || p.email}
+          </span>
+          {!p.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
+          {p.compte_id && !edite && (
+            <button
+              type="button"
+              onClick={() => setEdite(true)}
+              className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-primary"
+            >
+              <Pencil className="size-3" />
+              {t("common.edit")}
+            </button>
+          )}
+        </div>
+        <p className="truncate text-xs text-muted-foreground">{p.email}</p>
+
+        <div className="mt-1.5 space-y-1 border-t pt-1.5">
+          {edite ? (
+            <div className="space-y-2">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor={`nom-${p.id}`} className="text-xs">
+                    {t("comptes.nomAffiche")}
+                  </Label>
+                  <Input id={`nom-${p.id}`} value={nom} onChange={(e) => setNom(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`h-${p.id}`} className="text-xs">
+                    {t("comptes.pseudo")}
+                  </Label>
+                  <Input id={`h-${p.id}`} value={handle} onChange={(e) => setHandle(e.target.value)} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor={`bio-${p.id}`} className="text-xs">
+                  {t("comptes.bioProposee")}
+                </Label>
+                <textarea
+                  id={`bio-${p.id}`}
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  rows={2}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" disabled={enregistrer.isPending} onClick={() => enregistrer.mutate()}>
+                  <Check className="size-4" />
+                  {enregistrer.isPending ? t("common.saving") : t("common.save")}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setEdite(false)}>
+                  <X className="size-4" />
+                  {t("common.cancel")}
+                </Button>
+              </div>
+              {enregistrer.isError && (
+                <p className="text-xs text-destructive">{(enregistrer.error as Error).message}</p>
+              )}
+            </div>
+          ) : p.handle_tiktok ? (
+            <>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+                <a
+                  href={`https://www.tiktok.com/@${p.handle_tiktok.replace(/^@/, "")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-primary underline underline-offset-2"
+                >
+                  @{p.handle_tiktok.replace(/^@/, "")}
+                </a>
+                {p.persona_nom && <span className="text-muted-foreground">{p.persona_nom}</span>}
+                {p.reference_handle && (
+                  <span className="text-muted-foreground">
+                    {t("hiring.source")} @{p.reference_handle.replace(/^@/, "")}
+                  </span>
+                )}
+              </div>
+              {p.persona_bio && (
+                <p className="whitespace-pre-wrap text-xs text-muted-foreground">{p.persona_bio}</p>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">{t("hiring.identiteEnCours")}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Écran unique du hiring manager : créer un poster. Il saisit prénom, nom et
@@ -163,51 +292,7 @@ export function HiringPosterPage() {
           )}
           {posters.data
             ?.filter((p) => p.role === "poster")
-            .map((p) => (
-              <div key={p.id} className="flex items-start gap-3 rounded-lg border p-3">
-                {p.avatar_url ? (
-                  <img src={p.avatar_url} alt="" className="size-11 shrink-0 rounded-full border object-cover" />
-                ) : (
-                  <div className="size-11 shrink-0 rounded-full border bg-muted" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium">
-                      {[p.prenom, p.nom].filter(Boolean).join(" ") || p.email}
-                    </span>
-                    {!p.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
-                  </div>
-                  <p className="truncate text-xs text-muted-foreground">{p.email}</p>
-
-                  {/* Identité TikTok du compte (générée par l'IA) : le HM la vérifie. */}
-                  <div className="mt-1.5 space-y-1 border-t pt-1.5">
-                    {p.handle_tiktok ? (
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-                        <a
-                          href={`https://www.tiktok.com/@${p.handle_tiktok.replace(/^@/, "")}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="font-medium text-primary underline underline-offset-2"
-                        >
-                          @{p.handle_tiktok.replace(/^@/, "")}
-                        </a>
-                        {p.persona_nom && <span className="text-muted-foreground">{p.persona_nom}</span>}
-                        {p.reference_handle && (
-                          <span className="text-muted-foreground">
-                            {t("hiring.source")} @{p.reference_handle.replace(/^@/, "")}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">{t("hiring.identiteEnCours")}</p>
-                    )}
-                    {p.persona_bio && (
-                      <p className="whitespace-pre-wrap text-xs text-muted-foreground">{p.persona_bio}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
+            .map((p) => <LignePoster key={p.id} poster={p} />)}
         </CardContent>
       </Card>
     </div>

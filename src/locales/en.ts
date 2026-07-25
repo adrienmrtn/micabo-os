@@ -189,6 +189,7 @@ export const en = {
       delete: "Delete",
       back: "Back",
       cancel: "Cancel",
+      edit: "Edit",
       close: "Close",
       none: "None",
       empty: "Nothing to show.",

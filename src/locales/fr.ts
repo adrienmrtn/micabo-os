@@ -189,6 +189,7 @@ export const fr = {
       delete: "Supprimer",
       back: "Retour",
       cancel: "Annuler",
+      edit: "Modifier",
       close: "Fermer",
       none: "Aucun",
       empty: "Rien à afficher.",

@@ -124,6 +124,7 @@ export interface PosterProfil {
   nationalite: string | null;
   upwork_url: string | null;
   cout_mensuel: number | null;
+  compte_id: string | null;
   handle_tiktok: string | null;
   reference_handle: string | null;
   persona_nom: string | null;

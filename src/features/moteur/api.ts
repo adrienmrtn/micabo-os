@@ -155,7 +155,7 @@ export async function listerPosters(): Promise<PosterProfil[]> {
   // TikTok du header (bug où la liste montrait un @ ≠ de celui de l'éditeur).
   const { data: comptes } = await supabase
     .from("comptes")
-    .select("poster_id, handle_tiktok, persona_nom, persona_bio, avatar_url, comptes_reference(handle_tiktok)")
+    .select("id, poster_id, handle_tiktok, persona_nom, persona_bio, avatar_url, comptes_reference(handle_tiktok)")
     .eq("is_active", true)
     .order("created_at", { ascending: false });
   // Un poster ne doit avoir qu'UN compte actif ; si par accident il y en a
@@ -183,6 +183,7 @@ export async function listerPosters(): Promise<PosterProfil[]> {
     return {
       ...p,
       role: (parUtilisateur.get(p.id) ?? null) as PosterProfil["role"],
+      compte_id: compte?.id ?? null,
       handle_tiktok: compte?.handle_tiktok ?? null,
       reference_handle: referenceParPoster.get(p.id) ?? null,
       persona_nom: compte?.persona_nom ?? null,
