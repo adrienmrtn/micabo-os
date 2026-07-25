@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, TrendingUp } from "lucide-react";
+import { Flame, RefreshCw, TrendingUp } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,17 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { lancerMetriques, statsComptes, statsPosts } from "@/features/moteur/api";
+import type { StatsPost } from "@/features/moteur/types";
+
+/** Un post « viral » : ≥ 7 jours après publication (N+7) ET plus de 30 000 vues.
+ *  Le signal que ce contenu a vraiment percé — à repérer pour le rejouer. */
+const SEUIL_VIRAL = 30_000;
+const JOURS_VIRAL = 7;
+function estViral(p: StatsPost): boolean {
+  if (!p.publie_at || p.vues == null) return false;
+  const jours = (Date.now() - new Date(p.publie_at).getTime()) / 86_400_000;
+  return jours >= JOURS_VIRAL && p.vues > SEUIL_VIRAL;
+}
 
 const selectClass =
   "h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:w-72";
@@ -46,6 +57,9 @@ export function AdminAnalyticsPage() {
     queryKey: ["stats-posts", compteId || "tous"],
     queryFn: () => statsPosts(compteId || undefined),
   });
+  // Tous les posts (sans filtre de compte) pour repérer les viraux J+7 · +30k.
+  const tousPosts = useQuery({ queryKey: ["stats-posts-viraux"], queryFn: () => statsPosts() });
+  const viraux = (tousPosts.data ?? []).filter(estViral);
 
   // Va chercher les vraies stats sur le profil TikTok de chaque compte (scrape
   // Apify des 30 derniers posts, rapproché par l'ID du lien publié), puis
@@ -56,6 +70,7 @@ export function AdminAnalyticsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["stats-comptes"] });
       queryClient.invalidateQueries({ queryKey: ["stats-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["stats-posts-viraux"] });
     },
   });
 
@@ -101,12 +116,64 @@ export function AdminAnalyticsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Total label={t("analytics.vues")} valeur={abrege(cumul.vues)} />
         <Total label={t("analytics.likes")} valeur={abrege(cumul.likes)} />
         <Total label={t("analytics.publies")} valeur={String(cumul.publies)} />
         <Total label={t("analytics.enAttente")} valeur={String(cumul.attente)} />
+        <div className="rounded-lg border border-orange-500/40 bg-orange-500/5 p-4">
+          <p className="flex items-center gap-1 text-2xl font-semibold tabular-nums text-orange-600">
+            <Flame className="size-5" />
+            {viraux.length}
+          </p>
+          <p className="text-sm text-muted-foreground">{t("analytics.viraux")}</p>
+        </div>
       </div>
+
+      <Card className="border-orange-500/30">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Flame className="size-4 text-orange-500" />
+            {t("analytics.virauxTitre")}
+          </CardTitle>
+          <CardDescription>{t("analytics.virauxDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {tousPosts.isPending && <p className="text-sm text-muted-foreground">{t("common.loading")}</p>}
+          {tousPosts.data && viraux.length === 0 && (
+            <p className="text-sm text-muted-foreground">{t("analytics.virauxVide")}</p>
+          )}
+          {viraux.map((p) => (
+            <div
+              key={p.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{p.sujet_titre ?? t("posts.title")}</p>
+                <p className="text-xs text-muted-foreground">
+                  {[
+                    p.persona_nom ?? p.handle_tiktok,
+                    p.publie_at ? new Date(p.publie_at).toLocaleDateString(i18n.language) : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </div>
+              <span className="text-sm font-semibold tabular-nums">👁 {abrege(p.vues)}</span>
+              {p.publie_url && (
+                <a
+                  href={p.publie_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs underline underline-offset-4"
+                >
+                  {t("analytics.voirTikTok")}
+                </a>
+              )}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -189,7 +256,8 @@ export function AdminAnalyticsPage() {
           {mesures.map((p) => (
             <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">
+                <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+                  {estViral(p) && <Flame className="size-3.5 shrink-0 text-orange-500" />}
                   {p.sujet_titre ?? t("posts.title")}
                 </p>
                 <p className="text-xs text-muted-foreground">

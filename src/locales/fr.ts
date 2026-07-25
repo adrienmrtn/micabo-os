@@ -579,6 +579,11 @@ export const fr = {
       parCompte: "Par compte",
       parCompteDesc: "Cumul des derniers relevés de chaque post.",
       aucunCompte: "Aucun compte.",
+      viraux: "Viraux",
+      virauxTitre: "Posts viraux (J+7 · +30k vues)",
+      virauxDesc:
+        "Les posts qui ont vraiment percé : au moins 7 jours après publication et plus de 30 000 vues. À rejouer en priorité.",
+      virauxVide: "Aucun post viral pour l'instant (aucun n'a passé 30k vues 7 jours après sa publication).",
       meilleursPosts: "Posts qui performent",
       meilleursPostsDesc: "Classés par vues du dernier relevé.",
       tousComptes: "Tous les comptes",

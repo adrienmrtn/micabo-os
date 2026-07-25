@@ -579,6 +579,11 @@ export const en = {
       parCompte: "By account",
       parCompteDesc: "Sum of each post's latest readings.",
       aucunCompte: "No account.",
+      viraux: "Viral",
+      virauxTitre: "Viral posts (D+7 · 30k+ views)",
+      virauxDesc:
+        "The posts that truly broke out: at least 7 days after publishing and more than 30,000 views. Replay these first.",
+      virauxVide: "No viral post yet (none crossed 30k views 7 days after publishing).",
       meilleursPosts: "Top-performing posts",
       meilleursPostsDesc: "Ranked by views from the latest reading.",
       tousComptes: "All accounts",
