@@ -35,19 +35,25 @@ async function handleLibre(handle: string): Promise<boolean> {
 }
 
 /**
- * Un pseudo probablement LIBRE sur TikTok. On fait UN SEUL contrôle (un scrape
- * Apify coûte ~10-30 s ; en enchaîner cinq faisait timeout toute la création) :
- * si le pseudo de base est libre on le garde, sinon — ou si le contrôle échoue
- * — on lui colle 3 chiffres au hasard, ce qui suffit à éviter les collisions
- * courantes. La disponibilité fine est affinable à la main ensuite.
+ * Un pseudo LIBRE sur TikTok. On vérifie la dispo via Apify ; si le pseudo est
+ * PRIS, on lui colle 3 chiffres au hasard et on RE-VÉRIFIE, jusqu'à en trouver
+ * un de libre. Borné à quelques essais : un scrape Apify coûte ~10-30 s, et il
+ * ne faut pas faire timeout la création. Si Apify est indisponible (on ne peut
+ * pas trancher), on renvoie le candidat courant sans bloquer — le cron
+ * `maintenance-auto` pourra réaffiner plus tard.
  */
 async function trouverHandleLibre(base: string): Promise<string> {
-  try {
-    if (await handleLibre(base)) return base;
-  } catch {
-    // Apify indispo : on ne bloque pas, on suffixe directement.
+  let candidat = base;
+  for (let essai = 0; essai < 4; essai += 1) {
+    try {
+      if (await handleLibre(candidat)) return candidat; // libre → on le garde
+    } catch {
+      return candidat; // Apify indispo : best-effort, on ne bloque pas
+    }
+    // Pris : on suffixe 3 chiffres et on retentera au tour suivant.
+    candidat = `${base}${Math.floor(Math.random() * 900) + 100}`;
   }
-  return `${base}${Math.floor(Math.random() * 900) + 100}`; // 3 chiffres
+  return candidat; // tous pris après N essais : dernier candidat (best-effort)
 }
 
 /** Racines par langue pour un pseudo de SECOURS (culture générale / savoir),
