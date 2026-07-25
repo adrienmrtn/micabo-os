@@ -86,7 +86,11 @@ async function releverCompte(
 
   let releves = 0;
   for (const post of posts) {
-    const stats = parId.get(idDuLien(post.publie_url!));
+    // Le poster colle souvent un lien COURT (bouton « Partager » : vm./vt.tiktok.com)
+    // qui ne contient pas l'ID numérique. On le résout d'abord en URL complète,
+    // sinon rien ne matche (cause du « analytics à 0 » partout sauf 1 compte).
+    const complet = await resoudreLien(post.publie_url!);
+    const stats = parId.get(idDuLien(complet));
     if (!stats) continue;
 
     await supabase.from("post_metrics").insert({
@@ -100,4 +104,26 @@ async function releverCompte(
   }
 
   return releves;
+}
+
+/**
+ * Résout un lien COURT TikTok (vm./vt.tiktok.com/XXX — ce que donne le bouton
+ * « Partager ») en URL complète `/@compte/photo/ID`, en suivant la redirection.
+ * Les liens déjà complets sont renvoyés tels quels. En cas d'échec, on renvoie
+ * l'URL d'origine (le relevé de ce post est simplement sauté ce tour-ci).
+ */
+async function resoudreLien(url: string): Promise<string> {
+  if (!/\/\/(?:vm|vt)\.tiktok\.com/i.test(url)) return url;
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+      },
+    });
+    return res.url || url;
+  } catch {
+    return url;
+  }
 }
