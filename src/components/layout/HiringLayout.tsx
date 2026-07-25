@@ -1,6 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { BookOpen, HelpCircle, Rocket, UserPlus } from "lucide-react";
+import { BookOpen, CalendarDays, HelpCircle, Rocket, UserPlus } from "lucide-react";
 
 import { AppShell } from "./AppShell";
 
@@ -18,6 +18,12 @@ export function HiringLayout() {
               label: t("nav.embauche"),
               icon: UserPlus,
               description: t("navDesc.embauche"),
+            },
+            {
+              to: "/manager/calendrier",
+              label: t("hiring.calendrierNav"),
+              icon: CalendarDays,
+              description: t("hiring.calendrierSous"),
             },
           ],
         },
