@@ -189,10 +189,10 @@ Deno.serve(async (request) => {
         .single();
 
       try {
-        // Posts triés par vues : on reprend les plus vus d'abord. Le filtre
-        // THÉMATIQUE (peut-on y intégrer Sophia ?) se fait ensuite à la
-        // PRÉPARATION — là on a le texte du hook (OCR), un signal bien plus fiable
-        // que la seule légende, et un échec IA n'y casse pas l'extraction.
+        // Scrape léger : on rapatrie quelques diaporamas (bruts). La NOTATION
+        // (pertinence Sophia) et le nettoyage se font ensuite à la préparation —
+        // la notation d'abord (rapide, depuis la légende), pour que le stock se
+        // remplisse vite, le nettoyage seulement après.
         const posts = await recupererPosts(supabase, compte.handle_tiktok);
         let crees = 0;
         let restants = false;
@@ -206,6 +206,39 @@ Deno.serve(async (request) => {
           if (!(await creerSujet(supabase, post, compte.id)).reused) crees += 1;
         }
         sujetsCrees += crees;
+
+        // NOTATION immédiate des sujets non notés de cette source (les nouveaux +
+        // un peu de retard), depuis la LÉGENDE (rapide, sans OCR). Sinon rien ne
+        // se note en journée (le cron de préparation ne tourne que la nuit) et le
+        // stock semble ne pas bouger. Retenus = visibles au stock tout de suite
+        // (brut) ; le nettoyage suit (cron / reproduction). Borné pour tenir dans
+        // une invocation.
+        const instructions = await chargerPrompt(supabase, "pertinence");
+        const { data: aNoter } = await supabase
+          .from("sujets")
+          .select("id, titre")
+          .eq("compte_reference_id", compte.id)
+          .is("pertinence_score", null)
+          .limit(10);
+        for (const s of aNoter ?? []) {
+          try {
+            const r = await scoreRelevance({
+              caption: s.titre ?? "",
+              hookText: "",
+              instructions,
+            });
+            const retenu = r.score >= SEUIL_PERTINENCE;
+            await supabase
+              .from("sujets")
+              .update({
+                pertinence_score: r.score,
+                pertinence_raison: r.reason,
+                statut: retenu ? "retenu" : "rejete",
+                preparation_statut: retenu ? "running" : "done",
+              })
+              .eq("id", s.id);
+          } catch { /* le cron de préparation le notera plus tard */ }
+        }
 
         await supabase
           .from("extractions")

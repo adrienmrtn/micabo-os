@@ -192,7 +192,13 @@ function SectionSource({ source, posts }: { source: CompteReference; posts: Post
  */
 export function AdminReproduciblesPage() {
   const { t } = useTranslation();
-  const posts = useQuery({ queryKey: ["reproduisibles"], queryFn: listerReproduisibles });
+  // Rafraîchissement auto : le stock se met à jour tout seul au fil de la
+  // notation/du nettoyage, même si on a lancé un scrape puis changé de page.
+  const posts = useQuery({
+    queryKey: ["reproduisibles"],
+    queryFn: listerReproduisibles,
+    refetchInterval: 15_000,
+  });
   const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
   const [filtre, setFiltre] = React.useState("");
 

@@ -57,10 +57,12 @@ Deno.serve(async (request) => {
       .in("preparation_statut", ["running", "pending", "failed"]);
 
     if (sujetId) query = query.eq("id", sujetId);
-    // pending/running d'abord, failed ensuite ; puis les plus anciens.
+    // Les NON NOTÉS d'abord : la notation est rapide (légende) et remplit le
+    // stock tout de suite ; l'OCR + le nettoyage (lents) des retenus viennent
+    // ensuite. Puis les plus anciens.
     else
       query = query
-        .order("preparation_statut", { ascending: false })
+        .order("pertinence_score", { ascending: true, nullsFirst: true })
         .order("created_at");
 
     const { data: sujets } = await query.limit(1);
@@ -86,26 +88,15 @@ async function avancer(supabase: Supabase, sujet: any): Promise<string> {
       .update({ preparation_statut: "running" })
       .eq("id", sujet.id);
 
-    // 1 — OCR sur le visuel BRUT : c'est la seule version qui porte encore le
-    // texte, le nettoyage vient justement l'effacer.
-    const aOcr = slides.filter((s) => s.texte_original === null);
-    if (aOcr.length > 0) {
-      for (const slide of aOcr.slice(0, SLIDES_PAR_PASSAGE)) {
-        slide.texte_original = await ocrFrame(slide.raw_url);
-      }
-      await supabase
-        .from("sujets")
-        .update({ structure_slides: slides })
-        .eq("id", sujet.id);
-      return "ocr";
-    }
-
-    // 2 — pertinence, une fois les textes connus, avant toute dépense d'image.
+    // 1 — PERTINENCE D'ABORD, depuis la seule LÉGENDE (rapide, sans OCR) : c'est
+    // ce qui décide si le sujet marcherait pour Sophia, donc s'il rejoint le
+    // stock. Un rejeté s'arrête là (aucun OCR ni nettoyage gaspillé). Un retenu
+    // enchaîne sur l'OCR (pour la traduction) puis le nettoyage — mais il est
+    // DÉJÀ visible au stock (en brut) dès maintenant.
     if (sujet.pertinence_score === null) {
-      const accroche = slides[0]?.texte_original ?? "";
       const { score, reason } = await scoreRelevance({
         caption: sujet.titre ?? "",
-        hookText: accroche,
+        hookText: "",
         instructions: await chargerPrompt(supabase, "pertinence"),
       });
 
@@ -121,6 +112,20 @@ async function avancer(supabase: Supabase, sujet: any): Promise<string> {
         .eq("id", sujet.id);
 
       return retenu ? "pertinence" : "rejete";
+    }
+
+    // 2 — OCR sur le visuel BRUT (pour la traduction) : c'est la seule version
+    // qui porte encore le texte, le nettoyage vient justement l'effacer.
+    const aOcr = slides.filter((s) => s.texte_original === null);
+    if (aOcr.length > 0) {
+      for (const slide of aOcr.slice(0, SLIDES_PAR_PASSAGE)) {
+        slide.texte_original = await ocrFrame(slide.raw_url);
+      }
+      await supabase
+        .from("sujets")
+        .update({ structure_slides: slides })
+        .eq("id", sujet.id);
+      return "ocr";
     }
 
     // 3 — nettoyage des visuels retenus, versés dans la bibliothèque.
