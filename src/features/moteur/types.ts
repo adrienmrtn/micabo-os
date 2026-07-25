@@ -100,6 +100,7 @@ export interface Post {
   pipeline_statut: PipelineStatut;
   pipeline_etape: string | null;
   pipeline_erreur: string | null;
+  est_test: boolean;
   created_at: string;
 }
 

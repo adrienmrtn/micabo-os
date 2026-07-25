@@ -649,6 +649,12 @@ export const fr = {
       confirmRevoquer:
         "Révoquer ce post et en fabriquer un autre pour ce créateur à cette date ? Ce slideshow ne sera plus repioché.",
       revoquerAucun: "Aucun autre sujet disponible pour l'instant — réessaie plus tard (le pipeline prépare de nouveaux slideshows chaque nuit).",
+      buildNettoyage: "Nettoyage des photos…",
+      buildSophia: "Intégration de Sophia…",
+      buildEchec: "La fabrication a échoué. Change de lien ou réessaie depuis la page Tests.",
+      buildAide: "Ça se fait ici, en direct. Tu peux quitter et revenir : ça reprend tout seul. Le QR et le téléchargement apparaissent une fois prêt.",
+      buildNettoyee: "nettoyée",
+      buildEnCours: "en cours…",
     },
     documents: {
       nav: "Documents",

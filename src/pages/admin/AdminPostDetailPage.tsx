@@ -10,8 +10,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { cn } from "@/lib/utils";
 import { executerEnLot } from "@/lib/lot";
 import {
+  apercuSujet,
   avancerUnPost,
   compteReferenceDuPost,
+  lancerPreparation,
   lirePost,
   listerMedias,
   listerSlides,
@@ -22,6 +24,7 @@ import {
   revoquerPost,
   supprimerSlide,
 } from "@/features/moteur/api";
+import { supabase } from "@/lib/supabase/client";
 import type { Media, PostSlide } from "@/features/moteur/types";
 
 function estPropre(slide: PostSlide): boolean {
@@ -305,7 +308,17 @@ export function AdminPostDetailPage() {
     }
   }
 
-  const post = useQuery({ queryKey: ["post", id], queryFn: () => lirePost(id!), enabled: Boolean(id) });
+  const post = useQuery({
+    queryKey: ["post", id],
+    queryFn: () => lirePost(id!),
+    enabled: Boolean(id),
+    // Pendant qu'un post de test se fabrique, on rafraîchit tout seul : la page
+    // se met à jour quand c'est prêt, même si le build a été lancé ailleurs.
+    refetchInterval: (q) => {
+      const d = q.state.data;
+      return d && d.est_test && d.pipeline_statut !== "done" ? 4000 : false;
+    },
+  });
   const slides = useQuery({
     queryKey: ["slides", id],
     queryFn: () => listerSlides(id!),
@@ -317,6 +330,66 @@ export function AdminPostDetailPage() {
     queryFn: () => compteReferenceDuPost(id!),
     enabled: Boolean(id),
   });
+
+  // --- PILOTE DE BUILD (posts de TEST) : nettoyage du sujet puis composition
+  // (Sophia), depuis la page, avec progression visible et REPRISE. Avant, tout se
+  // jouait dans un seul long appel : dès que l'onglet dormait, le test mourait.
+  const [build, setBuild] = React.useState<null | "nettoyage" | "sophia" | "echec">(null);
+  const buildRef = React.useRef<string | null>(null);
+  const enBuild = Boolean(post.data && post.data.est_test && post.data.pipeline_statut !== "done");
+
+  // Aperçu du sujet (images d'origine + statut nettoyage), poll pendant le build.
+  const apercu = useQuery({
+    queryKey: ["apercu-sujet", post.data?.sujet_id],
+    queryFn: () => apercuSujet(post.data!.sujet_id!),
+    enabled: enBuild && Boolean(post.data?.sujet_id),
+    refetchInterval: enBuild ? 3000 : false,
+  });
+
+  React.useEffect(() => {
+    const p = post.data;
+    if (!p || !p.est_test || p.pipeline_statut === "done") return;
+    if (buildRef.current === p.id) return; // déjà en cours pour ce post
+    buildRef.current = p.id;
+    (async () => {
+      try {
+        // 1 — Nettoyage du sujet (jusqu'à done ; le cleanImage retombe sur une
+        //     photo de la bibliothèque si le proxy échoue, donc ça aboutit).
+        if (p.sujet_id) {
+          for (let i = 0; i < 80; i += 1) {
+            const { data: s } = await supabase
+              .from("sujets")
+              .select("preparation_statut")
+              .eq("id", p.sujet_id)
+              .single();
+            if (s?.preparation_statut === "done") break;
+            if (s?.preparation_statut === "failed") return setBuild("echec");
+            setBuild("nettoyage");
+            await lancerPreparation(p.sujet_id).catch(() => {});
+            queryClient.invalidateQueries({ queryKey: ["apercu-sujet", p.sujet_id] });
+          }
+        }
+        // 2 — Composition : traduction du deck puis intégration de Sophia.
+        for (let i = 0; i < 15; i += 1) {
+          const { data: pp } = await supabase
+            .from("posts")
+            .select("pipeline_statut")
+            .eq("id", p.id)
+            .single();
+          if (pp?.pipeline_statut === "done") break;
+          if (pp?.pipeline_statut === "failed") return setBuild("echec");
+          setBuild("sophia");
+          await avancerUnPost(p.id).catch(() => {});
+        }
+        setBuild(null);
+        queryClient.invalidateQueries({ queryKey: ["post", p.id] });
+        queryClient.invalidateQueries({ queryKey: ["slides", p.id] });
+      } finally {
+        buildRef.current = null;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [post.data?.id, post.data?.est_test, post.data?.pipeline_statut]);
 
   const liste = slides.data ?? [];
   const aProbleme = liste.filter((s) => !estPropre(s)).length;
@@ -374,6 +447,49 @@ export function AdminPostDetailPage() {
         </div>
       </div>
       <p className="text-xs text-muted-foreground">{t("adminPost.revoquerAide")}</p>
+
+      {/* Fabrication en direct (posts de test) : nettoyage photo par photo, puis
+          Sophia, puis le QR apparaît. Reprend tout seul si l'onglet a dormi. */}
+      {enBuild && (
+        <Card className="border-primary/40">
+          <CardHeader className="pb-3">
+            {build === "echec" ? (
+              <CardTitle className="text-base text-destructive">{t("adminPost.buildEchec")}</CardTitle>
+            ) : (
+              <CardTitle className="flex items-center gap-2 text-base">
+                <span className="size-2 animate-pulse rounded-full bg-primary" />
+                {build === "sophia" ? t("adminPost.buildSophia") : t("adminPost.buildNettoyage")}
+              </CardTitle>
+            )}
+            <CardDescription>{t("adminPost.buildAide")}</CardDescription>
+          </CardHeader>
+          {apercu.data && apercu.data.length > 0 && (
+            <CardContent>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                {apercu.data.map((s) => (
+                  <div key={s.position} className="space-y-1">
+                    <img
+                      src={s.url_propre ?? s.url_brute ?? ""}
+                      alt=""
+                      className={cn(
+                        "aspect-[3/4] w-full rounded-md border object-cover",
+                        !s.url_propre && "opacity-70",
+                      )}
+                    />
+                    <p className="text-center text-[10px] font-medium">
+                      {s.url_propre ? (
+                        <span className="text-success">✓ {t("adminPost.buildNettoyee")}</span>
+                      ) : (
+                        <span className="text-muted-foreground">{t("adminPost.buildEnCours")}</span>
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="pb-3">

@@ -649,6 +649,12 @@ export const en = {
       confirmRevoquer:
         "Revoke this post and build another for this creator on this date? This slideshow won't be picked again.",
       revoquerAucun: "No other topic available right now — try later (the pipeline prepares new slideshows every night).",
+      buildNettoyage: "Cleaning the photos…",
+      buildSophia: "Integrating Sophia…",
+      buildEchec: "Build failed. Try another link or restart from the Tests page.",
+      buildAide: "It happens here, live. You can leave and come back — it resumes on its own. The QR and download appear once ready.",
+      buildNettoyee: "cleaned",
+      buildEnCours: "in progress…",
     },
     documents: {
       nav: "Documents",

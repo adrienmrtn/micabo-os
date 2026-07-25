@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { FlaskConical, Languages, Link2, Sparkles, Wand2 } from "lucide-react";
@@ -25,6 +25,7 @@ const selectClass =
  */
 function TesterUnTikTok() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const comptes = useQuery({ queryKey: ["comptes"], queryFn: listerComptes });
 
   const [lien, setLien] = React.useState("");
@@ -46,9 +47,15 @@ function TesterUnTikTok() {
   // où tu veux (il n'apparaît sur aucun calendrier de créateur).
   const compteEffectif = compteId || stylesDispo[0]?.id || "";
 
+  // Dès l'import réussi, on FILE sur la page du post : elle montre le nettoyage
+  // photo par photo, laisse remplacer une image qui rate, intègre Sophia, puis
+  // affiche le QR — et reprend toute seule si l'onglet a dormi.
   const tester = useMutation({
     mutationFn: () => assignerTikTok({ url: lien, compteId: compteEffectif, estTest: true }),
-    onSuccess: () => setLien(""),
+    onSuccess: (r) => {
+      setLien("");
+      navigate(`/admin/posts/${r.postId}`);
+    },
   });
 
   return (

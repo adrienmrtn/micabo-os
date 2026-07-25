@@ -917,34 +917,11 @@ export async function assignerTikTok(input: {
   const imp = await importerDepuisLien(input.url.trim(), compte?.compte_reference_id ?? null);
   if (!imp.sujetId) throw new Error(imp.error ?? "Aucun post photo trouvé à ce lien.");
 
-  // NETTOYAGE avant composition. Sans ça, la composition voit un sujet non
-  // « done », met le post en « attente_preparation » et le laisse SANS images —
-  // la préparation ne tournant qu'au cron de nuit, un test lancé en journée
-  // restait bloqué. On prépare donc CE sujet, étape par étape, jusqu'à ce qu'il
-  // soit prêt. Chaque appel avance d'un cran (OCR → pertinence → nettoyage de 2
-  // images) ET peut réessayer un nettoyage raté : sur un deck de ~10 images avec
-  // quelques reprises, ça fait facilement plus de 30 tours. La borne est donc
-  // large, et un échec réseau isolé n'interrompt pas la boucle (on retente au
-  // tour suivant). Un sujet DÉJÀ prêt (lien réutilisé) sort au premier tour.
-  const MAX_PREPARATION = 80;
-  for (let i = 0; i < MAX_PREPARATION; i += 1) {
-    const { data: s } = await supabase
-      .from("sujets")
-      .select("preparation_statut")
-      .eq("id", imp.sujetId)
-      .single();
-    if (s?.preparation_statut === "done") break;
-    if (s?.preparation_statut === "failed") {
-      throw new Error("Le nettoyage des photos a échoué. Réessaie ou change de lien.");
-    }
-    try {
-      await lancerPreparation(imp.sujetId);
-    } catch {
-      // Échec passager (proxy/Gemini saturé) : on retente au tour suivant plutôt
-      // que d'abandonner tout le test.
-    }
-  }
-
+  // On crée juste la COQUILLE du post et on rend la main TOUT DE SUITE. Le
+  // nettoyage puis la composition (Sophia) sont ensuite PILOTÉS depuis la page du
+  // post — progression visible, substitution d'image possible, et REPRISE si
+  // l'onglet a dormi. Avant, tout se jouait dans ce seul appel de plusieurs
+  // minutes : dès que l'ordi se mettait en veille, le test mourait sans trace.
   const post = await lancerComposition({
     compteId: input.compteId,
     sujetId: imp.sujetId,
@@ -952,29 +929,6 @@ export async function assignerTikTok(input: {
     date: input.date,
     estTest: input.estTest,
   });
-
-  // COMPOSITION jusqu'au bout. lancerComposition ne fait QUE créer/avancer d'un
-  // cran ; la fabrication (traduction du deck, puis intégration Sophia slide par
-  // slide) prend plusieurs passages. On boucle donc jusqu'à ce que le post soit
-  // « done », sinon il ressort sans images (c'était le cas ici : un seul appel).
-  const MAX_COMPOSITION = 15;
-  for (let i = 0; i < MAX_COMPOSITION; i += 1) {
-    const { data: p } = await supabase
-      .from("posts")
-      .select("pipeline_statut")
-      .eq("id", post.postId)
-      .single();
-    if (p?.pipeline_statut === "done") break;
-    if (p?.pipeline_statut === "failed") {
-      throw new Error("La composition du post a échoué. Réessaie ou change de lien.");
-    }
-    try {
-      await avancerUnPost(post.postId);
-    } catch {
-      // idem : un hoquet réseau ne doit pas condamner le test.
-    }
-  }
-
   return { postId: post.postId, reused: imp.reused };
 }
 
