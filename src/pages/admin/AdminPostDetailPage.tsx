@@ -447,6 +447,22 @@ export function AdminPostDetailPage() {
           </Badge>
         </div>
       </div>
+
+      {/* Mode du slideshow, bien visible en tête : l'admin voit d'un coup d'œil si
+          c'est un recyclé (repro fidèle), un remanié ou un nouveau. */}
+      <div
+        className={
+          post.data.type === "remanie"
+            ? "rounded-lg border border-amber-500/40 bg-amber-500/10 p-3"
+            : "rounded-lg border border-primary/40 bg-primary/10 p-3"
+        }
+      >
+        <p className="text-base font-bold">
+          {t(`type.${post.data.type}`)}
+        </p>
+        <p className="text-xs text-muted-foreground">{t(`adminPost.mode_${post.data.type}`)}</p>
+      </div>
+
       <p className="text-xs text-muted-foreground">{t("adminPost.revoquerAide")}</p>
 
       {/* Fabrication en direct (posts de test) : nettoyage photo par photo, puis

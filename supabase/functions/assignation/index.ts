@@ -181,9 +181,12 @@ function tirerType(repartition: Record<TypePost, number>): TypePost {
 }
 
 /**
- * Crée un post du type demandé. Le recyclage rejoue le meilleur post publié du
- * compte ; sans historique (compte neuf), il retombe sur une composition
- * normale — sinon un compte qui démarre n'aurait jamais rien à publier.
+ * Crée un post du type demandé.
+ *
+ * - RECYCLÉ (défaut) : on reproduit un TikTok du compte de référence (choisirSujet),
+ *   ses images NETTOYÉES + son texte traduit. C'est le cœur du système.
+ * - REMANIÉ : le texte d'une AUTRE source, revisualisé avec les images du poster.
+ *   Sans autre source exploitable, on retombe sur un recyclé.
  */
 // deno-lint-ignore no-explicit-any
 async function creerPost(
@@ -192,30 +195,25 @@ async function creerPost(
   jour: string,
   type: TypePost,
 ): Promise<{ postId: string; typeReel: string } | null> {
-  if (type === "recycle") {
-    const recycle = await recyclerMeilleurPost(supabase, compte, jour);
-    if (recycle) return { postId: recycle, typeReel: "recycle" };
-  }
-
   if (type === "remanie") {
     const remanie = await remanierPost(supabase, compte, jour);
     if (remanie) return { postId: remanie, typeReel: "remanie" };
   }
 
+  // recycle ET nouveau (et remanié sans autre source) : reproduction fidèle d'un
+  // TikTok de référence. On garde le type demandé (recycle → « Recyclé »), sauf un
+  // remanié qui a échoué et devient un recyclé.
   const sujet = await choisirSujet(supabase, compte, jour);
   if (!sujet) return null;
 
-  // Faute d'historique, un recopiage ou un remaniement devient un nouveau : on
-  // le dit, plutôt que d'étiqueter un post avec un type qu'il n'a pas.
-  const typeReel = type === "nouveau" ? type : `${type}→nouveau`;
-
+  const typeFinal: TypePost = type === "remanie" ? "recycle" : type;
   const postId = await creerCoquille(supabase, {
     compteId: compte.id,
     sujetId: sujet.id,
-    type: "nouveau",
+    type: typeFinal,
     date: jour,
   });
-  return { postId, typeReel };
+  return { postId, typeReel: typeFinal };
 }
 
 /**

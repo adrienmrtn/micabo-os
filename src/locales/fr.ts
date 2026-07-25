@@ -696,6 +696,12 @@ export const fr = {
       confirmSupprimerSlide: "Supprimer cette slide entière du post ? Les suivantes seront renumérotées.",
       qrTelechargement: "QR & téléchargement",
       revoquer: "Révoquer et trouver un nouveau",
+      mode_recycle:
+        "Recyclé : reproduction fidèle d'un TikTok du compte de référence — ses images nettoyées (texte retiré) + son texte traduit dans la langue du créateur, puis Sophia.",
+      mode_remanie:
+        "Remanié : le texte d'une AUTRE source (idée reprise), revisualisé avec des images de la bibliothèque du créateur — pas les images de l'autre source.",
+      mode_nouveau:
+        "Nouveau : composé depuis le pool commun de sujets (pas la source propre du créateur).",
       revoquerAide:
         "Si ce slideshow n'a pas de sens pour Sophia (thème non intégrable), révoque-le : on rejette CE slideshow (pas le hook — un autre post peut commencer pareil et rester bon) et on en refait un autre pour ce créateur à cette date.",
       revoquerEnCours: "Révocation et fabrication…",

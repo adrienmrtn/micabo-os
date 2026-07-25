@@ -696,6 +696,12 @@ export const en = {
       confirmSupprimerSlide: "Delete this entire slide from the post? The following ones will be renumbered.",
       qrTelechargement: "QR & download",
       revoquer: "Revoke and find a new one",
+      mode_recycle:
+        "Recycled: faithful reproduction of a reference-account TikTok — its cleaned images (text removed) + its text translated into the creator's language, then Sophia.",
+      mode_remanie:
+        "Reworked: text from ANOTHER source (idea reused), re-illustrated with images from the creator's library — not the other source's images.",
+      mode_nouveau:
+        "New: composed from the common topic pool (not the creator's own source).",
       revoquerAide:
         "If this slideshow makes no sense for Sophia (theme can't be integrated), revoke it: we reject THIS slideshow (not the hook — another post can start the same way and still be good) and build a new one for this creator on this date.",
       revoquerEnCours: "Revoking and building…",
