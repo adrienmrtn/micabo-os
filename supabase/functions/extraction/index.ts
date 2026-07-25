@@ -210,38 +210,10 @@ Deno.serve(async (request) => {
         }
         sujetsCrees += crees;
 
-        // NOTATION immédiate des sujets non notés de cette source (les nouveaux +
-        // un peu de retard), depuis la LÉGENDE (rapide, sans OCR). Sinon rien ne
-        // se note en journée (le cron de préparation ne tourne que la nuit) et le
-        // stock semble ne pas bouger. Retenus = visibles au stock tout de suite
-        // (brut) ; le nettoyage suit (cron / reproduction). Borné pour tenir dans
-        // une invocation.
-        const instructions = await chargerPrompt(supabase, "pertinence");
-        const { data: aNoter } = await supabase
-          .from("sujets")
-          .select("id, titre")
-          .eq("compte_reference_id", compte.id)
-          .is("pertinence_score", null)
-          .limit(10);
-        for (const s of aNoter ?? []) {
-          try {
-            const r = await scoreRelevance({
-              caption: s.titre ?? "",
-              hookText: "",
-              instructions,
-            });
-            const retenu = r.score >= SEUIL_PERTINENCE;
-            await supabase
-              .from("sujets")
-              .update({
-                pertinence_score: r.score,
-                pertinence_raison: r.reason,
-                statut: retenu ? "retenu" : "rejete",
-                preparation_statut: retenu ? "running" : "done",
-              })
-              .eq("id", s.id);
-          } catch { /* le cron de préparation le notera plus tard */ }
-        }
+        // La NOTATION (pertinence Sophia) se fait à la préparation, depuis le
+        // texte du HOOK (fiable), pas ici depuis la légende (souvent des hashtags
+        // → rejets à tort). « Fetch more » enchaîne côté client sur la préparation
+        // pour noter tout de suite, sans attendre le cron de nuit.
 
         await supabase
           .from("extractions")

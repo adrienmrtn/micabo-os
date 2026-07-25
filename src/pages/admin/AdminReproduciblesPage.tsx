@@ -17,6 +17,7 @@ import {
 import {
   ajouterLienAuStock,
   lancerExtraction,
+  lancerPreparation,
   listerReproduisibles,
   listerSources,
   type PostReproduisible,
@@ -104,7 +105,17 @@ function SectionSource({ source, posts }: { source: CompteReference; posts: Post
   const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["reproduisibles"] });
 
   const scraper = useMutation({
-    mutationFn: () => lancerExtraction(source.id),
+    mutationFn: async () => {
+      await lancerExtraction(source.id);
+      // Le cron de préparation ne tourne que la nuit : on note nous-mêmes les
+      // nouveaux sujets (la préparation lit le hook puis évalue la pertinence)
+      // pour qu'ils apparaissent au stock tout de suite, sans attendre.
+      for (let i = 0; i < 18; i += 1) {
+        const r = await lancerPreparation().catch(() => null);
+        if (r?.idle) break;
+        rafraichir(); // le stock se remplit au fil des notations
+      }
+    },
     onSuccess: rafraichir,
   });
   const ajouter = useMutation({

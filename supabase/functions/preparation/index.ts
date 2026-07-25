@@ -88,15 +88,23 @@ async function avancer(supabase: Supabase, sujet: any): Promise<string> {
       .update({ preparation_statut: "running" })
       .eq("id", sujet.id);
 
-    // 1 — PERTINENCE D'ABORD, depuis la seule LÉGENDE (rapide, sans OCR) : c'est
-    // ce qui décide si le sujet marcherait pour Sophia, donc s'il rejoint le
-    // stock. Un rejeté s'arrête là (aucun OCR ni nettoyage gaspillé). Un retenu
-    // enchaîne sur l'OCR (pour la traduction) puis le nettoyage — mais il est
-    // DÉJÀ visible au stock (en brut) dès maintenant.
+    // 1 — OCR du HOOK (slide 1) D'ABORD : c'est le signal FIABLE de pertinence.
+    // La légende n'est souvent que des hashtags (« #yoga #cortisol ») → noter
+    // là-dessus rejetait de bons posts à tort. On lit donc le vrai texte du hook,
+    // un seul appel, avant de trancher.
+    if (slides[0] && slides[0].texte_original === null) {
+      slides[0].texte_original = await ocrFrame(slides[0].raw_url);
+      await supabase.from("sujets").update({ structure_slides: slides }).eq("id", sujet.id);
+      return "ocr";
+    }
+
+    // 2 — PERTINENCE depuis le HOOK (+ la légende en appoint) : décide si le sujet
+    // marcherait pour Sophia. Un rejeté s'arrête là (pas d'OCR ni nettoyage du
+    // reste). Un retenu enchaîne — il est déjà visible au stock (brut).
     if (sujet.pertinence_score === null) {
       const { score, reason } = await scoreRelevance({
         caption: sujet.titre ?? "",
-        hookText: "",
+        hookText: slides[0]?.texte_original ?? "",
         instructions: await chargerPrompt(supabase, "pertinence"),
       });
 
@@ -114,8 +122,7 @@ async function avancer(supabase: Supabase, sujet: any): Promise<string> {
       return retenu ? "pertinence" : "rejete";
     }
 
-    // 2 — OCR sur le visuel BRUT (pour la traduction) : c'est la seule version
-    // qui porte encore le texte, le nettoyage vient justement l'effacer.
+    // 3 — OCR du RESTE des slides (pour la traduction) : le hook est déjà lu.
     const aOcr = slides.filter((s) => s.texte_original === null);
     if (aOcr.length > 0) {
       for (const slide of aOcr.slice(0, SLIDES_PAR_PASSAGE)) {
