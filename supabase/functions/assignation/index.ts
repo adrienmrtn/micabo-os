@@ -219,12 +219,16 @@ async function creerPost(
 }
 
 /**
- * Remanie un post existant : on reprend son sujet et ses visuels, mais tout le
- * texte est régénéré avec une consigne de reformulation. C'est ce qui distingue
- * un remanié d'un recyclé (copie à l'identique) et d'un nouveau (sujet inédit).
+ * REMANIÉ (Cas 2) : on prend un post reproduisible d'une AUTRE source de
+ * référence — son TEXTE (traduit vers la langue du poster à la composition, quelle
+ * que soit la langue d'origine) — mais les IMAGES viennent de la bibliothèque du
+ * compte du poster (`visuelsAlternatifs`, à la composition). Résultat : l'idée
+ * d'un autre compte, revisualisée avec les visuels propres du poster (donc ça ne
+ * trahit pas le réseau : les images ne sont pas celles de l'autre source).
  *
- * Sans post antérieur à remanier, on renvoie null et l'appelant retombe sur une
- * composition normale.
+ * On écarte les sujets déjà servis à CE compte dans les 14 jours (variété), on
+ * privilégie les plus vus, et on renvoie null s'il n'existe aucune autre source
+ * exploitable — l'appelant retombe alors sur une composition normale.
  */
 // deno-lint-ignore no-explicit-any
 async function remanierPost(
@@ -232,34 +236,49 @@ async function remanierPost(
   compte: any,
   jour: string,
 ): Promise<string | null> {
-  const { data: anciens } = await supabase
+  // Sujets reproduisibles d'une AUTRE source (langue indifférente : on traduit),
+  // les plus vus d'abord.
+  let q = supabase
+    .from("sujets")
+    .select("id")
+    .eq("preparation_statut", "done")
+    .in("statut", ["retenu", "utilise"])
+    .order("vues", { ascending: false, nullsFirst: false });
+  if (compte.compte_reference_id) {
+    q = q.neq("compte_reference_id", compte.compte_reference_id);
+  }
+  const { data: candidats } = await q;
+  if (!candidats || candidats.length === 0) return null;
+
+  // Historique de CE compte : dernière parution par sujet, pour appliquer la
+  // fenêtre de 14 jours (et écarter en priorité ce qu'il a déjà vu).
+  const { data: usages } = await supabase
     .from("posts")
-    .select("id, sujet_id")
+    .select("sujet_id, date_publication_prevue")
     .eq("compte_id", compte.id)
-    .not("sujet_id", "is", null)
-    .in("statut", ["publie", "valide_par_poster"])
-    .order("created_at")
-    .limit(20);
+    .not("sujet_id", "is", null);
+  const derniere = new Map<string, string>();
+  for (const u of usages ?? []) {
+    const d = u.date_publication_prevue ?? "";
+    if (!derniere.has(u.sujet_id) || d > derniere.get(u.sujet_id)!) derniere.set(u.sujet_id, d);
+  }
+  const limite = new Date(`${jour}T00:00:00Z`);
+  limite.setUTCDate(limite.getUTCDate() - 14);
+  const seuil = limite.toISOString().slice(0, 10);
+  const vuRecemment = (id: string) => {
+    const d = derniere.get(id);
+    return d !== undefined && d >= seuil;
+  };
 
-  if (!anciens || anciens.length === 0) return null;
-
-  // On évite de remanier deux fois le même aîné tant qu'il en reste d'autres.
-  const { data: dejaRemanies } = await supabase
-    .from("posts")
-    .select("source_post_id")
-    .eq("compte_id", compte.id)
-    .eq("type", "remanie")
-    .not("source_post_id", "is", null);
-
-  const dejaVus = new Set((dejaRemanies ?? []).map((p) => p.source_post_id));
-  const source = anciens.find((p) => !dejaVus.has(p.id)) ?? anciens[0];
+  const ids = candidats.map((c) => c.id as string);
+  const choisi = ids.find((id) => !vuRecemment(id)) ?? ids.find((id) => !derniere.has(id)) ?? ids[0];
+  if (!choisi) return null;
 
   return await creerCoquille(supabase, {
     compteId: compte.id,
-    sujetId: source.sujet_id!,
+    sujetId: choisi,
     type: "remanie",
     date: jour,
-    sourcePostId: source.id,
   });
 }
 
