@@ -127,6 +127,14 @@ Deno.serve(async (request) => {
         .single();
       if (!cible || cible.manager_id !== acces.userId) return json({ error: "forbidden" }, 403);
     }
+    // Supprimer un RECRUTEUR ne doit JAMAIS supprimer ses créateurs : on les
+    // détache d'abord (manager_id → null) pour qu'ils rejoignent « Sans recruteur ».
+    // (Le FK est déjà `on delete set null`, mais on l'explicite pour être sûr.)
+    await supabase
+      .from("profiles")
+      .update({ manager_id: null })
+      .eq("manager_id", body.userId);
+
     // On NE passe PAS par auth.admin.deleteUser : depuis la migration du projet
     // vers des clés JWT ES256, GoTrue rejette la suppression d'un utilisateur
     // réel (« unrecognized JWT kid <nil> »). On supprime la ligne auth.users en

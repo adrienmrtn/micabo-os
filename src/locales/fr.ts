@@ -402,6 +402,7 @@ export const fr = {
         "Saisis son nom et sa langue : son espace de recrutement est prêt à sa première connexion.",
       recruteurs: "Recruteurs",
       sansRecruteur: "Sans recruteur",
+      langueRecruteur: "Langue",
       aucunCreateur: "Aucun créateur.",
       reference: "Réf.",
       compteReference: "Compte de référence (source) — visible admin uniquement",
@@ -669,6 +670,8 @@ export const fr = {
       legende:
         "Une couleur par créateur. Clique un post pour l'éditer, glisse-le sur un autre jour pour le déplacer, ✕ pour le supprimer. Estompé = en cours de fabrication.",
       confirmSuppr: "Supprimer le post de {{nom}} ? Cette action est définitive.",
+      supprimerJour: "Supprimer tous les posts du jour",
+      confirmSupprimerJour: "Supprimer les {{count}} posts de ce jour ? Cette action est définitive.",
     },
     adminPost: {
       title: "Détail du post",

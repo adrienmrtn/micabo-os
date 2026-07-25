@@ -402,6 +402,7 @@ export const en = {
         "Enter their name and language: their recruiting workspace is ready on first login.",
       recruteurs: "Recruiters",
       sansRecruteur: "No recruiter",
+      langueRecruteur: "Language",
       aucunCreateur: "No creator.",
       reference: "Ref.",
       compteReference: "Reference account (source) — admin only",
@@ -669,6 +670,8 @@ export const en = {
       legende:
         "One color per creator. Click a post to edit it, drag it onto another day to move it, ✕ to delete it. Faded = being built.",
       confirmSuppr: "Delete {{nom}}'s post? This action is permanent.",
+      supprimerJour: "Delete all posts for this day",
+      confirmSupprimerJour: "Delete all {{count}} posts for this day? This action is permanent.",
     },
     adminPost: {
       title: "Post details",

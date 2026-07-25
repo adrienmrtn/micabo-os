@@ -729,6 +729,25 @@ export async function postsCalendrierAdmin(): Promise<PostCalendrierAdmin[]> {
 }
 
 /** Supprime un post et ses slides (cascade). Action admin, depuis le calendrier. */
+/** Supprime TOUS les posts (non-test) d'une journée. Renvoie le nombre supprimé. */
+export async function supprimerPostsDuJour(date: string): Promise<number> {
+  const { data, error } = await supabase
+    .from("posts")
+    .delete()
+    .eq("date_publication_prevue", date)
+    .eq("est_test", false)
+    .select("id");
+  if (error) throw error;
+  return (data ?? []).length;
+}
+
+/** Langue (nationalité) d'un recruteur — la langue par défaut de ses futurs
+ *  créateurs. Éditable par l'admin. */
+export async function majNationalite(userId: string, nationalite: string): Promise<void> {
+  const { error } = await supabase.from("profiles").update({ nationalite }).eq("id", userId);
+  if (error) throw error;
+}
+
 export async function supprimerPost(id: string): Promise<void> {
   const { error } = await supabase.from("posts").delete().eq("id", id);
   if (error) throw error;

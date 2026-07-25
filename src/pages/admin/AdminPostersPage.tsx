@@ -26,6 +26,7 @@ import {
   listerLanguesReference,
   listerPosters,
   majCoutMensuel,
+  majNationalite,
   majPoster,
   majUpwork,
   supprimerPoster,
@@ -179,6 +180,58 @@ function CoutMensuel({ poster }: { poster: PosterProfil }) {
  * reste en place : on ne demande à personne d'en choisir un autre.
  */
 const MOT_DE_PASSE_INITIAL = "12345678";
+
+/** Langue d'un recruteur (nationalité) : la langue par défaut de ses créateurs.
+ *  Affichée et éditable en ligne. */
+function LangueRecruteur({ recruteur }: { recruteur: PosterProfil }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
+  const [edite, setEdite] = React.useState(false);
+  const maj = useMutation({
+    mutationFn: (langue: string) => majNationalite(recruteur.id, langue),
+    onSuccess: () => {
+      setEdite(false);
+      queryClient.invalidateQueries({ queryKey: ["posters"] });
+    },
+  });
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <span>{t("posters.langueRecruteur")} :</span>
+      {edite ? (
+        <select
+          autoFocus
+          aria-label={t("posters.langueRecruteur")}
+          className={`${selectClass} h-7 w-28`}
+          defaultValue={recruteur.nationalite ?? ""}
+          disabled={maj.isPending}
+          onChange={(e) => e.target.value && maj.mutate(e.target.value)}
+        >
+          <option value="">—</option>
+          {langues.data?.map((l) => (
+            <option key={l} value={l}>
+              {nomLangue(l)}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <>
+          <span className="font-medium text-foreground">
+            {recruteur.nationalite ? nomLangue(recruteur.nationalite) : t("common.none")}
+          </span>
+          <button
+            type="button"
+            onClick={() => setEdite(true)}
+            className="text-primary underline underline-offset-2"
+          >
+            {t("common.edit")}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function AdminPostersPage() {
   const { t } = useTranslation();
@@ -468,6 +521,7 @@ export function AdminPostersPage() {
                     )}
                   </div>
                   <p className="truncate text-xs text-muted-foreground">{poster.email}</p>
+                  {poster.role === "hiring_manager" && <LangueRecruteur recruteur={poster} />}
                   <CreateurLiens
                     poster={poster}
                     onSave={(url) => enregistrerUpwork.mutate({ id: poster.id, url })}

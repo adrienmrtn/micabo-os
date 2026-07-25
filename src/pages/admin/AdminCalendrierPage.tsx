@@ -2,7 +2,7 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, EmptyState } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import {
   postsCalendrierAdmin,
   reassignerPost,
   supprimerPost,
+  supprimerPostsDuJour,
   type PostCalendrierAdmin,
 } from "@/features/moteur/api";
 import { cn } from "@/lib/utils";
@@ -67,6 +68,7 @@ export function AdminCalendrierPage() {
     onSuccess: rafraichir,
   });
   const supprimer = useMutation({ mutationFn: supprimerPost, onSuccess: rafraichir });
+  const supprimerJour = useMutation({ mutationFn: supprimerPostsDuJour, onSuccess: rafraichir });
 
   const maintenant = new Date();
   const [mois, setMois] = React.useState(() => ({
@@ -184,16 +186,34 @@ export function AdminCalendrierPage() {
                     surVol === date && "bg-primary/15 ring-1 ring-inset ring-primary",
                   )}
                 >
-                  <span
-                    className={cn(
-                      "inline-flex size-6 items-center justify-center rounded-full text-xs",
-                      estAujourdhui
-                        ? "bg-primary font-semibold text-primary-foreground"
-                        : "text-muted-foreground",
+                  <div className="group/jour flex items-center justify-between">
+                    <span
+                      className={cn(
+                        "inline-flex size-6 items-center justify-center rounded-full text-xs",
+                        estAujourdhui
+                          ? "bg-primary font-semibold text-primary-foreground"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {numero}
+                    </span>
+                    {/* Supprimer TOUS les posts du jour d'un coup. */}
+                    {duJour.length > 1 && (
+                      <button
+                        type="button"
+                        aria-label={t("adminCal.supprimerJour")}
+                        title={t("adminCal.supprimerJour")}
+                        disabled={supprimerJour.isPending}
+                        className="hidden shrink-0 rounded p-0.5 text-destructive hover:bg-destructive/10 group-hover/jour:block"
+                        onClick={() => {
+                          if (window.confirm(t("adminCal.confirmSupprimerJour", { count: duJour.length })))
+                            supprimerJour.mutate(date);
+                        }}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
                     )}
-                  >
-                    {numero}
-                  </span>
+                  </div>
 
                   {duJour.map((post) => (
                     <div
