@@ -25,6 +25,9 @@ const BUCKET = "medias";
 // vues) ET remplir le stock (objectif ≥ 10 slideshows reproductibles par source).
 // Beaucoup sont écartés (vidéos, pertinence < seuil), d'où la marge.
 const POSTS_PAR_COMPTE = 30;
+// Profondeur MAX qu'on demande à Apify pour une source (plus on a déjà de posts,
+// plus on descend loin dans le profil pour trouver de l'INÉDIT). Borne le coût.
+const MAX_PROFONDEUR = 100;
 
 /** Identifiant numérique stable d'un post, quelle que soit la forme de l'URL. */
 const idDe = (url: string) => url.match(/\/(?:photo|video)\/(\d+)/)?.[1] ?? url;
@@ -303,30 +306,37 @@ async function recupererPosts(
   supabase: Supabase,
   handle: string,
 ): Promise<PostScrape[]> {
-  let direct: ScrapedPost[] = [];
-  let echec: string | null = null;
-
-  try {
-    direct = await scrapeProfile(handle, POSTS_PAR_COMPTE);
-  } catch (error) {
-    echec = messageErreur(error);
-  }
-
-  if (direct.length > 0) {
-    // On garde les MEILLEURS d'abord : tri décroissant par vues. Le compte ne
-    // reprend donc pas ses derniers posts au hasard, mais ceux qui performent.
-    return [...direct].sort((a, b) => (b.stats?.vues ?? 0) - (a.stats?.vues ?? 0));
-  }
-
-  const urls = await listerDiaporamas(handle);
-
-  // Les posts déjà en base ne valent pas un run Apify de plus. On rapproche sur
-  // l'identifiant du post et non sur l'URL entière (cf. idDe module).
+  // Ce qu'on a DÉJÀ de cette source : on ne le reprend pas (dédup par l'id du
+  // post). Sert aussi à mesurer la profondeur déjà couverte.
   const { data: connus } = await supabase
     .from("sujets")
     .select("source_url")
     .ilike("source_url", `%/@${handle}/%`);
   const dejaVus = new Set((connus ?? []).map((s) => idDe(s.source_url ?? "")));
+
+  // PROFONDEUR PROGRESSIVE : l'acteur Apify renvoie toujours le HAUT du profil,
+  // donc sans ça on re-scrapait les mêmes liens à chaque demande. Plus on a déjà
+  // de posts de cette source, plus on demande loin — pour tomber sur de l'inédit.
+  const profondeur = Math.min(POSTS_PAR_COMPTE + dejaVus.size, MAX_PROFONDEUR);
+
+  let direct: ScrapedPost[] = [];
+  let echec: string | null = null;
+
+  try {
+    direct = await scrapeProfile(handle, profondeur);
+  } catch (error) {
+    echec = messageErreur(error);
+  }
+
+  if (direct.length > 0) {
+    // On ÉCARTE ce qu'on a déjà (pas de re-traitement), et on garde les plus vus
+    // d'abord parmi les INÉDITS.
+    return direct
+      .filter((p) => !dejaVus.has(idDe(p.webVideoUrl)))
+      .sort((a, b) => (b.stats?.vues ?? 0) - (a.stats?.vues ?? 0));
+  }
+
+  const urls = await listerDiaporamas(handle);
 
   const aFaire = urls
     .filter((u) => !dejaVus.has(idDe(u)))
