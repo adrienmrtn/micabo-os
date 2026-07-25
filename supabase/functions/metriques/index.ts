@@ -68,6 +68,26 @@ async function releverCompte(
   compteId: string,
   handle: string,
 ): Promise<number> {
+  // On scrape TOUJOURS le profil du compte (tous ses posts), indépendamment des
+  // liens collés : c'est la seule façon d'avoir des vues pour un compte qui a
+  // publié sans donner de lien.
+  const enLigne = await scrapeStats(handle, POSTS_RELEVES);
+
+  // Total AU NIVEAU DU COMPTE : somme des posts scrapés. Alimente l'analytics
+  // « par compte » même sans aucun lien.
+  const somme = (f: (s: (typeof enLigne)[number]["stats"]) => number) =>
+    enLigne.reduce((n, p) => n + (f(p.stats) || 0), 0);
+  await supabase.from("compte_metrics").insert({
+    compte_id: compteId,
+    vues: somme((s) => s.vues),
+    likes: somme((s) => s.likes),
+    commentaires: somme((s) => s.commentaires),
+    partages: somme((s) => s.partages),
+    nb_posts: enLigne.length,
+  });
+
+  // Relevé PAR POST pour ceux dont on a le lien (garde le détail par post :
+  // viraux, meilleurs posts…).
   const { data: posts } = await supabase
     .from("posts")
     .select("id, publie_url")
@@ -76,8 +96,6 @@ async function releverCompte(
     .not("publie_url", "is", null);
 
   if (!posts || posts.length === 0) return 0;
-
-  const enLigne = await scrapeStats(handle, POSTS_RELEVES);
 
   // TikTok sert la même URL sous plusieurs formes (paramètres, redirections) :
   // on compare sur l'identifiant numérique du post, stable.

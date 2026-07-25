@@ -318,7 +318,7 @@ export const fr = {
       voirTikTok: "Voir le TikTok",
       chercherPlus: "Aller chercher + de posts",
       recherche: "Scrape en cours…",
-      scrapeLance: "Scrape du profil lancé (API TikTok) — les nouveaux slideshows apparaîtront ici une fois nettoyés.",
+      scrapeLance: "Scrape du profil lancé (API TikTok) — les nouveaux slideshows pertinents apparaissent ici (aperçu brut) ; le nettoyage se fait à la reproduction.",
       ajouterLien: "Rentrer un lien",
       ajouter: "Ajouter au stock",
       ajoutEnCours: "Ajout…",
@@ -615,6 +615,7 @@ export const fr = {
       importLien: "Importer un slideshow depuis un lien TikTok",
       importLienDesc:
         "Colle le lien d'un post photo TikTok : on le récupère et on en fait un sujet, prêt à composer. Rattache-le au compte de référence pour que ses visuels rejoignent la bonne bibliothèque.",
+      rappelLien: "⚠️ N'oublie pas de copier le lien de TON TikTok que tu as posté quand tu as fini !",
       lienTikTok: "Lien du post TikTok",
       rattacherA: "Rattacher au compte de référence",
       importer: "Importer",

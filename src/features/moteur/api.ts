@@ -480,9 +480,6 @@ export interface PostReproduisible {
  * Les « posts reproduisibles » : sujets préparés et retenus (pertinents + assez
  * performants), prêts à être reproduits. Un appel unique résout les visuels.
  */
-/** Marqueur posé par l'import manuel d'un lien (extraction, flag reproductible). */
-const AJOUT_MANUEL = "Ajouté manuellement au stock";
-
 export async function listerReproduisibles(): Promise<PostReproduisible[]> {
   const { data: sujets, error } = await supabase
     .from("sujets")
@@ -493,17 +490,11 @@ export async function listerReproduisibles(): Promise<PostReproduisible[]> {
     .order("vues", { ascending: false, nullsFirst: false });
   if (error) throw error;
 
-  // On affiche les sujets déjà NETTOYÉS (preparation done)… et aussi les liens
-  // AJOUTÉS À LA MAIN encore en préparation : « il se stocke là » = on le voit
-  // tout de suite (aperçu brut), avec un badge « en préparation ». Les sujets
-  // auto-scrapés pas encore prêts restent cachés jusqu'à leur nettoyage.
-  const visibles = (sujets ?? []).filter(
-    (s) =>
-      (s as { preparation_statut?: string }).preparation_statut === "done" ||
-      (s as { pertinence_raison?: string }).pertinence_raison === AJOUT_MANUEL,
-  );
-
-  return visibles.map((s) => {
+  // On montre TOUT ce qui est retenu (pertinent + performant), aperçu brut, SANS
+  // attendre le nettoyage : le stock, c'est le catalogue de TikToks à reproduire.
+  // Le nettoyage (retrait du texte) ne sert qu'AU MOMENT de reproduire, pas pour
+  // figurer au stock. Un badge « en préparation » signale ceux pas encore nettoyés.
+  return (sujets ?? []).map((s) => {
     const slides = ((s.structure_slides ?? []) as SujetSlide[]).slice().sort((a, b) => a.position - b.position);
     // Aperçu = les images D'ORIGINE du TikTok (raw_url), pas les versions
     // nettoyées : un « post reproduisible », c'est le TikTok source qu'on décide

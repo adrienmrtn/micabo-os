@@ -432,6 +432,14 @@ export function PosterPostPage() {
         <Link to="/calendrier">{t("common.back")}</Link>
       </Button>
 
+      {/* Rappel : coller le lien de SON TikTok après publication — c'est ce qui
+          alimente les stats. Visible tant que le post n'est pas publié. */}
+      {!estAdmin && !publie && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-center text-base font-bold text-destructive">
+          {t("posts.rappelLien")}
+        </div>
+      )}
+
       {/* 1 — Enregistrer toutes les photos d'un coup, en tête. */}
       <Card>
         <CardContent className="space-y-3 pt-5">
