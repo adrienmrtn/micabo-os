@@ -41,12 +41,13 @@ const idDe = (url: string) => url.match(/\/(?:photo|video)\/(\d+)/)?.[1] ?? url;
 const SUJETS_PAR_PASSAGE = 5;
 
 /**
- * On ne re-scrape pas une source déjà vue dans les dernières 20 h : chaque
- * source est ainsi rafraîchie AU PLUS une fois par nuit (le cron tourne toutes
- * les 15 min et sert les sources restantes). Sans ce garde-fou, la même source
- * serait re-scrapée en boucle — des appels Apify pour rien une fois épuisée.
+ * On ne re-scrape pas une source déjà vue dans les dernières 8 h : ça permet de
+ * la réalimenter PLUSIEURS fois par nuit (le scrape descend plus profond à chaque
+ * fois — cf. profondeur progressive — et ne rapporte que de l'inédit), pour ne
+ * jamais rester à sec. Le garde-fou évite quand même la boucle serrée sur une
+ * source épuisée.
  */
-const RESCRAPE_APRES_H = 20;
+const RESCRAPE_APRES_H = 8;
 
 /**
  * Extraction : récupère les posts passés d'un compte de référence (propriété de

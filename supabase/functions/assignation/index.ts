@@ -407,6 +407,9 @@ async function choisirSujet(supabase: Supabase, compte: any, jour: string) {
       .select("id")
       .eq("preparation_statut", "done")
       .in("statut", ["retenu", "utilise"])
+      // Le filtre = le HOOK (retenu = pertinent pour Sophia) ; le TRI = les VUES
+      // (on rejoue d'abord ce qui a le mieux marché), pertinence en départage.
+      .order("vues", { ascending: false, nullsFirst: false })
       .order("pertinence_score", { ascending: false });
     if (ownSourceOnly && groupe.length > 0) {
       q = q.in("compte_reference_id", groupe);
