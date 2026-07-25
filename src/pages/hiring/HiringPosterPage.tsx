@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BarreChargement } from "@/components/ui/progress";
 import {
   Card,
   CardContent,
@@ -272,10 +273,17 @@ export function HiringPosterPage() {
                 {langueVerrouillee ? t("hiring.langueVerrouillee") : t("hiring.langueAide")}
               </p>
             </div>
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-2 space-y-3">
               <Button type="submit" disabled={creer.isPending || !langue}>
                 {creer.isPending ? t("hiring.enCours") : t("hiring.create")}
               </Button>
+              {/* L'identité (pseudo + bio + avatar) se génère en ~10-12 s : une
+                  barre pour suivre l'attente, plutôt qu'un simple « en cours ». */}
+              <BarreChargement
+                actif={creer.isPending}
+                dureeMs={13_000}
+                label={t("hiring.progressIdentite")}
+              />
               {creer.isError && (
                 <p className="mt-2 text-sm text-destructive">
                   {(creer.error as Error).message === "NO_FREE_REFERENCE"

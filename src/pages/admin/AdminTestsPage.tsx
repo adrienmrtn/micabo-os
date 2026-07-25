@@ -7,6 +7,7 @@ import { FlaskConical, Languages, Link2, Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BarreChargement } from "@/components/ui/progress";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { assignerTikTok, listerComptes, listerPostsTest, testerTraduction } from "@/features/moteur/api";
@@ -124,6 +125,8 @@ function TesterUnTikTok() {
           <Sparkles className="size-4" />
           {tester.isPending ? t("tests.enCours") : t("tests.tiktokLancer")}
         </Button>
+
+        <BarreChargement actif={tester.isPending} dureeMs={6_000} label={t("tests.enCours")} />
 
         {tester.isError && (
           <p className="text-sm text-destructive">{(tester.error as Error).message}</p>

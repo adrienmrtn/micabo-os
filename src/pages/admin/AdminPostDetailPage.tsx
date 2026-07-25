@@ -6,6 +6,7 @@ import { Check, ImageUp, QrCode, RefreshCcw, Sparkles, Trash2, X } from "lucide-
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { executerEnLot } from "@/lib/lot";
@@ -462,6 +463,28 @@ export function AdminPostDetailPage() {
               </CardTitle>
             )}
             <CardDescription>{t("adminPost.buildAide")}</CardDescription>
+            {build !== "echec" &&
+              (() => {
+                // Progression RÉELLE : part des slides déjà nettoyées (0-72 %),
+                // puis l'étape Sophia (90 %). Pas d'estimation au doigt mouillé.
+                const total = apercu.data?.length ?? 0;
+                const propres = apercu.data?.filter((s) => s.url_propre).length ?? 0;
+                const valeur =
+                  build === "sophia" ? 90 : total ? 8 + Math.round((propres / total) * 72) : 8;
+                return (
+                  <div className="space-y-1.5 pt-2">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>
+                        {build === "sophia"
+                          ? t("adminPost.buildSophia")
+                          : t("adminPost.buildNettoyageCompte", { propres, total })}
+                      </span>
+                      <span className="tabular-nums">{valeur}%</span>
+                    </div>
+                    <Progress value={valeur} />
+                  </div>
+                );
+              })()}
           </CardHeader>
           {apercu.data && apercu.data.length > 0 && (
             <CardContent>

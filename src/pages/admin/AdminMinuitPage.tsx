@@ -7,6 +7,7 @@ import { AlertTriangle, CheckCircle2, Clock, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { BarreChargement } from "@/components/ui/progress";
 import {
   Card,
   CardContent,
@@ -187,6 +188,13 @@ export function AdminMinuitPage() {
               {relancer.isPending ? t("minuit.enCours") : t("minuit.relancer")}
             </Button>
           </div>
+
+          <BarreChargement
+            actif={relancer.isPending}
+            dureeMs={9_000}
+            label={t("minuit.enCours")}
+          />
+
 
           {relancer.isSuccess && (
             <div className="rounded-md bg-success/10 p-3 text-sm text-success">

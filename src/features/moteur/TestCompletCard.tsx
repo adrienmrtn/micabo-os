@@ -6,6 +6,7 @@ import { FlaskConical } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase/client";
 import {
@@ -40,6 +41,9 @@ export function TestCompletCard() {
   const [type, setType] = React.useState("");
   const [typeProduit, setTypeProduit] = React.useState<string | null>(null);
   const [etape, setEtape] = React.useState<string | null>(null);
+  // Progression 0-100 : chaque phase connue avance la barre d'un cran, la
+  // composition la pousse pas à pas vers 95 % jusqu'au post fini (100 %).
+  const [prog, setProg] = React.useState(0);
   const [erreur, setErreur] = React.useState<string | null>(null);
   const [postId, setPostId] = React.useState<string | null>(null);
 
@@ -47,6 +51,7 @@ export function TestCompletCard() {
     setErreur(null);
     setPostId(null);
     setTypeProduit(null);
+    setProg(8);
 
     try {
       const compte = comptes.data?.find((c) => c.id === compteId);
@@ -54,6 +59,7 @@ export function TestCompletCard() {
 
       if (avecExtraction && compte.compte_reference_id) {
         setEtape(t("test.extraction"));
+        setProg(20);
         await lancerExtraction(compte.compte_reference_id);
       }
 
@@ -64,6 +70,7 @@ export function TestCompletCard() {
       if (!refId) throw new Error(t("test.pasDeReference"));
 
       setEtape(t("test.preparation"));
+      setProg(40);
       for (let i = 0; i < MAX_PREPARATION; i += 1) {
         const { count } = await supabase
           .from("sujets")
@@ -86,6 +93,7 @@ export function TestCompletCard() {
       }
 
       setEtape(t("test.assignation"));
+      setProg(62);
       const assignation = await lancerAssignation(compteId, type || undefined, true);
       // Le type réellement produit peut différer du type demandé : sans
       // historique, un recopiage devient un nouveau.
@@ -95,6 +103,9 @@ export function TestCompletCard() {
       setEtape(t("test.composition"));
       let dernier: string | null = null;
       for (let i = 0; i < MAX_COMPOSITION; i += 1) {
+        // La composition avance par petits pas : on pousse la barre de 78 vers
+        // 96 sans jamais toucher 100 avant le post réellement fini.
+        setProg(Math.min(96, 78 + i * 3));
         const { data } = await supabase
           .from("posts")
           .select("id, pipeline_statut")
@@ -113,11 +124,13 @@ export function TestCompletCard() {
       }
 
       if (!dernier) throw new Error(t("test.aucunPost"));
+      setProg(100);
       setPostId(dernier);
       setEtape(null);
     } catch (e) {
       setErreur(e instanceof Error ? e.message : String(e));
       setEtape(null);
+      setProg(0);
     }
   }
 
@@ -193,10 +206,16 @@ export function TestCompletCard() {
         </Button>
 
         {etape && (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="size-2 animate-pulse rounded-full bg-primary" />
-            {etape}
-          </p>
+          <div className="space-y-1.5">
+            <p className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-2">
+                <span className="size-2 animate-pulse rounded-full bg-primary" />
+                {etape}
+              </span>
+              <span className="tabular-nums">{Math.round(prog)}%</span>
+            </p>
+            <Progress value={prog} />
+          </div>
         )}
         {erreur && <p className="text-sm text-destructive">{erreur}</p>}
         {typeProduit && typeProduit.includes("→") && (
