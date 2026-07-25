@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
@@ -172,6 +172,10 @@ function LignePost({
 
 export function AdminPostsPage() {
   const { t } = useTranslation();
+  // Depuis Analytics, on arrive avec ?compte=<id> pour ne voir que ce compte
+  // (ex. aller ajouter les liens manquants d'un compte à 0 vue).
+  const [params, setParams] = useSearchParams();
+  const compteFiltre = params.get("compte");
 
   const posts = useQuery({ queryKey: ["posts"], queryFn: () => listerPosts() });
   const comptes = useQuery({ queryKey: ["comptes"], queryFn: listerComptes });
@@ -182,6 +186,11 @@ export function AdminPostsPage() {
     handle_tiktok: c.handle_tiktok,
   }));
 
+  const compteActif = listeComptes.find((c) => c.id === compteFiltre);
+  const postsAffiches = (posts.data ?? []).filter(
+    (p) => !compteFiltre || p.compte_id === compteFiltre,
+  );
+
   return (
     <div className="space-y-6">
       <Card>
@@ -190,11 +199,32 @@ export function AdminPostsPage() {
           <CardDescription>{t("posts.tousDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
+          {compteFiltre && (
+            <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm">
+              <span>
+                {t("posts.filtreCompte", {
+                  compte:
+                    compteActif?.persona_nom ??
+                    compteActif?.handle_tiktok ??
+                    compteFiltre.slice(0, 8),
+                })}
+              </span>
+              <button
+                type="button"
+                onClick={() => setParams({})}
+                className="text-primary underline underline-offset-2"
+              >
+                {t("posts.filtreTous")}
+              </button>
+            </div>
+          )}
           {posts.isPending && (
             <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
           )}
-          {posts.data?.length === 0 && <EmptyState title={t("posts.empty")} />}
-          {posts.data?.map((post) => (
+          {!posts.isPending && postsAffiches.length === 0 && (
+            <EmptyState title={t("posts.empty")} />
+          )}
+          {postsAffiches.map((post) => (
             <LignePost key={post.id} post={post} comptes={listeComptes} />
           ))}
         </CardContent>

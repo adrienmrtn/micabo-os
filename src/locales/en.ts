@@ -568,6 +568,8 @@ export const en = {
         "Scan this code to reopen this post on your mobile and save the photos.",
       tous: "All posts",
       tousDesc: "Change the assigned account or the planned publishing date.",
+      filtreCompte: "Filtered on: {{compte}}",
+      filtreTous: "See all accounts",
       creerManuel: "Create a post manually",
       creerManuelDesc:
         "Choose the account, topic and type without waiting for the midnight assignment.",
@@ -613,8 +615,9 @@ export const en = {
       publies: "Published",
       enAttente: "Pending",
       parCompte: "By account",
-      parCompteDesc: "Sum of each post's latest readings.",
+      parCompteDesc: "Sum of each post's latest readings. Click a row to see its posts.",
       aucunCompte: "No account.",
+      sansLien: "{{count}} published without a link",
       viraux: "Viral",
       virauxTitre: "Viral posts (D+7 · 30k+ views)",
       virauxDesc:

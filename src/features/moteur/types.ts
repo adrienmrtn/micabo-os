@@ -159,6 +159,8 @@ export interface StatsCompte {
   poster_nom: string | null;
   posts_total: number;
   posts_publies: number;
+  /** Publiés mais sans lien TikTok enregistré → non mesurables (0 vue « normal »). */
+  posts_sans_lien: number;
   posts_en_attente: number;
   vues_totales: number;
   likes_totaux: number;

@@ -1,7 +1,8 @@
 import * as React from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Flame, RefreshCw, TrendingUp } from "lucide-react";
+import { ChevronRight, Flame, LinkIcon, RefreshCw, TrendingUp } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -187,9 +188,10 @@ export function AdminAnalyticsPage() {
           {comptes.data?.length === 0 && <EmptyState title={t("analytics.aucunCompte")} />}
 
           {comptes.data?.map((c) => (
-            <div
+            <Link
               key={c.compte_id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
+              to={`/admin/posts?compte=${c.compte_id}`}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -198,20 +200,29 @@ export function AdminAnalyticsPage() {
                   </span>
                   {!c.is_active && <Badge variant="secondary">{t("sources.inactive")}</Badge>}
                   <Badge variant="outline">{c.langue.toUpperCase()}</Badge>
+                  {/* Un « 0 vue » avec des publiés sans lien n'est pas un bug :
+                      le relevé matche par le lien TikTok, qui manque ici. */}
+                  {Number(c.posts_sans_lien) > 0 && (
+                    <Badge variant="warning" className="gap-1">
+                      <LinkIcon className="size-3" />
+                      {t("analytics.sansLien", { count: Number(c.posts_sans_lien) })}
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {[c.poster_prenom, c.poster_nom].filter(Boolean).join(" ") || "—"}
                 </p>
               </div>
 
-              <div className="flex gap-4 text-sm tabular-nums">
+              <div className="flex items-center gap-4 text-sm tabular-nums">
                 <span title={t("analytics.vues")}>👁 {abrege(Number(c.vues_totales))}</span>
                 <span title={t("analytics.likes")}>♥ {abrege(Number(c.likes_totaux))}</span>
                 <span className="text-muted-foreground">
                   {c.posts_publies}/{c.posts_total}
                 </span>
+                <ChevronRight className="size-4 text-muted-foreground" />
               </div>
-            </div>
+            </Link>
           ))}
         </CardContent>
       </Card>

@@ -568,6 +568,8 @@ export const fr = {
         "Scanne ce code pour rouvrir ce post sur ton mobile et enregistrer les photos.",
       tous: "Tous les posts",
       tousDesc: "Change le compte assigné ou la date de publication prévue.",
+      filtreCompte: "Filtré sur : {{compte}}",
+      filtreTous: "Voir tous les comptes",
       creerManuel: "Créer un post à la main",
       creerManuelDesc:
         "Choisis le compte, le sujet et le type sans attendre l'assignation de minuit.",
@@ -613,8 +615,9 @@ export const fr = {
       publies: "Publiés",
       enAttente: "En attente",
       parCompte: "Par compte",
-      parCompteDesc: "Cumul des derniers relevés de chaque post.",
+      parCompteDesc: "Cumul des derniers relevés de chaque post. Clique une ligne pour voir ses posts.",
       aucunCompte: "Aucun compte.",
+      sansLien: "{{count}} publié(s) sans lien",
       viraux: "Viraux",
       virauxTitre: "Posts viraux (J+7 · +30k vues)",
       virauxDesc:
