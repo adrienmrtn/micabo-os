@@ -17,6 +17,8 @@ export interface CompteReference {
   style_profile: string | null;
   /** Genre des identités des posters qui reprennent cette source (prénom H/F). */
   genre: "homme" | "femme";
+  /** Source « conjointe » : rattachée à un compte principal (null = principal). */
+  parent_id: string | null;
   is_active: boolean;
   dernier_scrape_at: string | null;
   created_at: string;

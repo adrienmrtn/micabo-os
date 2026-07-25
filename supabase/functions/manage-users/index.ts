@@ -223,10 +223,13 @@ async function referenceLibre(
   supabase: Supabase,
   langue: string,
 ): Promise<string | null> {
+  // Seuls les comptes PRINCIPAUX (parent_id null) sont assignables à un poster ;
+  // les conjoints ne font qu'élargir la matière de leur principal.
   const { data: refs } = await supabase
     .from("comptes_reference")
     .select("id, langue")
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .is("parent_id", null);
   if (!refs || refs.length === 0) return null;
 
   // Sources déjà attribuées à un poster DE LA MÊME LANGUE (les seules à exclure).

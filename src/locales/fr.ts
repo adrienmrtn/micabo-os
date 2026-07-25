@@ -276,6 +276,11 @@ export const fr = {
       genre: "Genre des posters :",
       genreFemme: "Femme",
       genreHomme: "Homme",
+      conjoint: "Conjoint",
+      ajouterConjoint: "Ajouter un compte conjoint",
+      stock: "{{count}} slideshow(s) en stock",
+      stockFaible: "Stock faible — ajoute un compte conjoint pour élargir la matière.",
+      epuise: "Épuisé — ajoute un compte conjoint (source similaire) pour continuer.",
       confirmDelete: "Supprimer ce compte de référence ?",
     },
     sujets: {

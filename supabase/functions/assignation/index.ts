@@ -231,21 +231,38 @@ async function creerPost(
  * exploitable — l'appelant retombe alors sur une composition normale.
  */
 // deno-lint-ignore no-explicit-any
+/**
+ * Ids du GROUPE d'une source : le principal + ses conjoints (comptes de référence
+ * similaires rattachés). Le poster reste attaché au principal, mais on puise la
+ * matière dans tout le groupe — c'est ce qui prend le relais quand le principal
+ * s'épuise. Renvoie [] si pas de source.
+ */
+async function idsDuGroupe(supabase: Supabase, referenceId: string | null): Promise<string[]> {
+  if (!referenceId) return [];
+  const { data } = await supabase
+    .from("comptes_reference")
+    .select("id")
+    .or(`id.eq.${referenceId},parent_id.eq.${referenceId}`);
+  return (data ?? []).map((r) => r.id as string);
+}
+
 async function remanierPost(
   supabase: Supabase,
   compte: any,
   jour: string,
 ): Promise<string | null> {
   // Sujets reproduisibles d'une AUTRE source (langue indifférente : on traduit),
-  // les plus vus d'abord.
+  // les plus vus d'abord. « Autre » exclut TOUT le groupe du compte (principal +
+  // conjoints), pas seulement le principal.
+  const groupe = await idsDuGroupe(supabase, compte.compte_reference_id);
   let q = supabase
     .from("sujets")
     .select("id")
     .eq("preparation_statut", "done")
     .in("statut", ["retenu", "utilise"])
     .order("vues", { ascending: false, nullsFirst: false });
-  if (compte.compte_reference_id) {
-    q = q.neq("compte_reference_id", compte.compte_reference_id);
+  if (groupe.length > 0) {
+    q = q.not("compte_reference_id", "in", `(${groupe.join(",")})`);
   }
   const { data: candidats } = await q;
   if (!candidats || candidats.length === 0) return null;
@@ -381,8 +398,11 @@ async function choisirSujet(supabase: Supabase, compte: any, jour: string) {
     return d !== undefined && d >= seuil;
   };
 
+  // Le GROUPE du compte (principal + conjoints) : « sa source » au sens large.
+  const groupe = await idsDuGroupe(supabase, compte.compte_reference_id);
+
   // Sujets préparés (retenu/utilise), triés par pertinence. `ownSourceOnly` limite
-  // à la source du compte.
+  // au GROUPE du compte (principal + conjoints), pas au seul principal.
   const candidats = async (ownSourceOnly: boolean): Promise<string[]> => {
     let q = supabase
       .from("sujets")
@@ -390,8 +410,8 @@ async function choisirSujet(supabase: Supabase, compte: any, jour: string) {
       .eq("preparation_statut", "done")
       .in("statut", ["retenu", "utilise"])
       .order("pertinence_score", { ascending: false });
-    if (ownSourceOnly && compte.compte_reference_id) {
-      q = q.eq("compte_reference_id", compte.compte_reference_id);
+    if (ownSourceOnly && groupe.length > 0) {
+      q = q.in("compte_reference_id", groupe);
     }
     const { data } = await q;
     return (data ?? []).map((s) => s.id as string);

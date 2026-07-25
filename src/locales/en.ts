@@ -276,6 +276,11 @@ export const en = {
       genre: "Posters' gender:",
       genreFemme: "Female",
       genreHomme: "Male",
+      conjoint: "Linked",
+      ajouterConjoint: "Add a linked account",
+      stock: "{{count}} slideshow(s) in stock",
+      stockFaible: "Low stock — add a linked account to widen the material.",
+      epuise: "Out of stock — add a linked account (similar source) to keep going.",
       confirmDelete: "Delete this reference account?",
     },
     sujets: {

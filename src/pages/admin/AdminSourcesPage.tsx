@@ -20,6 +20,7 @@ import {
   lancerExtraction,
   listerSources,
   majSource,
+  stockParSource,
   supprimerSource,
 } from "@/features/moteur/api";
 import type { CompteReference } from "@/features/moteur/types";
@@ -93,34 +94,238 @@ function BoutonExtraire({ sourceId }: { sourceId: string }) {
   );
 }
 
-export function AdminSourcesPage() {
+/** Une ligne source (principal OU conjoint). Le conjoint est compact : pas de
+ *  toggle genre (hérité du principal) ni de prompt de voix. */
+function LigneSource({
+  source,
+  estConjoint = false,
+}: {
+  source: CompteReference;
+  estConjoint?: boolean;
+}) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
+  const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["sources"] });
+  const basculer = useMutation({
+    mutationFn: () => majSource(source.id, { is_active: !source.is_active }),
+    onSuccess: rafraichir,
+  });
+  const changerGenre = useMutation({
+    mutationFn: (g: "homme" | "femme") => majSource(source.id, { genre: g }),
+    onSuccess: rafraichir,
+  });
+  const retirer = useMutation({
+    mutationFn: () => supprimerSource(source.id),
+    onSuccess: rafraichir,
+  });
+
+  const lien = `https://www.tiktok.com/@${source.handle_tiktok.replace(/^@/, "")}`;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <a href={lien} target="_blank" rel="noreferrer" className="font-medium underline underline-offset-2">
+              @{source.handle_tiktok} ↗
+            </a>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard?.writeText(lien)}
+              className="text-xs text-muted-foreground underline underline-offset-2"
+            >
+              {t("sources.copierLien")}
+            </button>
+            {estConjoint && <Badge variant="outline">{t("sources.conjoint")}</Badge>}
+            {!source.is_active && <Badge variant="secondary">{t("sources.inactive")}</Badge>}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {[
+              source.niche,
+              source.dernier_scrape_at
+                ? t("sources.extraitLe", {
+                    date: new Date(source.dernier_scrape_at).toLocaleDateString(i18n.language),
+                  })
+                : t("sources.jamais"),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+
+          {/* Genre : sur le principal seulement (le groupe partage le même genre). */}
+          {!estConjoint && (
+            <div className="flex items-center gap-2 pt-2">
+              <span className="text-xs text-muted-foreground">{t("sources.genre")}</span>
+              <div className="inline-flex overflow-hidden rounded-md border">
+                {(["femme", "homme"] as const).map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    disabled={changerGenre.isPending}
+                    onClick={() => changerGenre.mutate(g)}
+                    className={
+                      source.genre === g
+                        ? "bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground"
+                        : "bg-background px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
+                    }
+                  >
+                    {g === "femme" ? t("sources.genreFemme") : t("sources.genreHomme")}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-start gap-2">
+          <BoutonExtraire sourceId={source.id} />
+          <Button size="sm" variant="outline" onClick={() => basculer.mutate()}>
+            {source.is_active ? t("sources.deactivate") : t("sources.activate")}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-destructive hover:text-destructive"
+            onClick={() => {
+              if (window.confirm(t("sources.confirmDelete"))) retirer.mutate();
+            }}
+          >
+            {t("common.delete")}
+          </Button>
+        </div>
+      </div>
+
+      {!estConjoint && <VoixSource source={source} />}
+    </div>
+  );
+}
+
+/** En dessous de ce stock (slideshows reproductibles du groupe), on invite à
+ *  ajouter un compte conjoint. */
+const SEUIL_STOCK = 10;
+
+/** Un groupe = un compte principal + ses conjoints (matière élargie), avec le
+ *  stock du groupe et le formulaire d'ajout d'un conjoint. */
+function GroupeSource({
+  primary,
+  conjoints,
+  stock,
+}: {
+  primary: CompteReference;
+  conjoints: CompteReference[];
+  stock: number;
+}) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [ouvert, setOuvert] = React.useState(false);
+  const [handle, setHandle] = React.useState("");
+  const [niche, setNiche] = React.useState("");
+
+  const ajouter = useMutation({
+    mutationFn: () =>
+      creerSource({
+        handle,
+        niche,
+        // Un conjoint hérite langue + genre de son principal (source « similaire »).
+        langue: primary.langue,
+        genre: primary.genre,
+        parent_id: primary.id,
+      }),
+    onSuccess: () => {
+      setHandle("");
+      setNiche("");
+      setOuvert(false);
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
+    },
+  });
+
+  const epuise = stock === 0;
+  const faible = stock < SEUIL_STOCK;
+
+  return (
+    <div className="space-y-3 rounded-lg border p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant={epuise ? "destructive" : faible ? "warning" : "success"}>
+          {t("sources.stock", { count: stock })}
+        </Badge>
+        {faible && (
+          <span className={epuise ? "text-xs text-destructive" : "text-xs text-warning"}>
+            {epuise ? t("sources.epuise") : t("sources.stockFaible")}
+          </span>
+        )}
+      </div>
+
+      <LigneSource source={primary} />
+
+      {conjoints.length > 0 && (
+        <div className="space-y-3 border-l-2 border-muted pl-3">
+          {conjoints.map((c) => (
+            <LigneSource key={c.id} source={c} estConjoint />
+          ))}
+        </div>
+      )}
+
+      {ouvert ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (handle.trim()) ajouter.mutate();
+          }}
+          className="flex flex-wrap items-center gap-2 border-l-2 border-dashed border-muted pl-3"
+        >
+          <Input
+            placeholder="@compte_conjoint"
+            value={handle}
+            onChange={(e) => setHandle(e.target.value)}
+            className="w-48"
+          />
+          <Input
+            placeholder={t("sources.niche")}
+            value={niche}
+            onChange={(e) => setNiche(e.target.value)}
+            className="w-48"
+          />
+          <Button type="submit" size="sm" disabled={ajouter.isPending}>
+            {ajouter.isPending ? t("common.saving") : t("sources.ajouterConjoint")}
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setOuvert(false)}>
+            {t("common.cancel")}
+          </Button>
+        </form>
+      ) : (
+        <Button size="sm" variant="outline" onClick={() => setOuvert(true)}>
+          + {t("sources.ajouterConjoint")}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+export function AdminSourcesPage() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
+  const stock = useQuery({ queryKey: ["stock-sources"], queryFn: stockParSource });
 
   const [handle, setHandle] = React.useState("");
   const [niche, setNiche] = React.useState("");
 
-  const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["sources"] });
   const ajouter = useMutation({
     mutationFn: () => creerSource({ handle, niche, langue: "fr" }),
     onSuccess: () => {
       setHandle("");
       setNiche("");
-      rafraichir();
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
     },
   });
-  const basculer = useMutation({
-    mutationFn: (input: { id: string; actif: boolean }) =>
-      majSource(input.id, { is_active: input.actif }),
-    onSuccess: rafraichir,
-  });
-  const changerGenre = useMutation({
-    mutationFn: (input: { id: string; genre: "homme" | "femme" }) =>
-      majSource(input.id, { genre: input.genre }),
-    onSuccess: rafraichir,
-  });
-  const retirer = useMutation({ mutationFn: supprimerSource, onSuccess: rafraichir });
+
+  const toutes = sources.data ?? [];
+  const principaux = toutes.filter((s) => !s.parent_id);
+  const conjointsDe = (id: string) => toutes.filter((s) => s.parent_id === id);
+  const stockGroupe = (p: CompteReference) => {
+    const st = stock.data ?? {};
+    return (st[p.id] ?? 0) + conjointsDe(p.id).reduce((n, c) => n + (st[c.id] ?? 0), 0);
+  };
 
   return (
     <Card>
@@ -162,104 +367,21 @@ export function AdminSourcesPage() {
           )}
         </form>
 
-        <div className="space-y-2">
+        <div className="space-y-3">
           {sources.isPending && (
             <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
           )}
-          {sources.data?.length === 0 && <EmptyState title={t("sources.empty")} />}
+          {!sources.isPending && principaux.length === 0 && (
+            <EmptyState title={t("sources.empty")} />
+          )}
 
-          {sources.data?.map((source) => (
-            <div key={source.id} className="space-y-3 rounded-lg border p-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <a
-                    href={`https://www.tiktok.com/@${source.handle_tiktok.replace(/^@/, "")}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-medium underline underline-offset-2"
-                  >
-                    @{source.handle_tiktok} ↗
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigator.clipboard?.writeText(
-                        `https://www.tiktok.com/@${source.handle_tiktok.replace(/^@/, "")}`,
-                      )
-                    }
-                    className="text-xs text-muted-foreground underline underline-offset-2"
-                  >
-                    {t("sources.copierLien")}
-                  </button>
-                  {!source.is_active && (
-                    <Badge variant="secondary">{t("sources.inactive")}</Badge>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {[
-                    source.niche,
-                    source.dernier_scrape_at
-                      ? t("sources.extraitLe", {
-                          date: new Date(source.dernier_scrape_at).toLocaleDateString(
-                            i18n.language,
-                          ),
-                        })
-                      : t("sources.jamais"),
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-
-                {/* Genre des prénoms des posters qui reprennent cette source. */}
-                <div className="flex items-center gap-2 pt-2">
-                  <span className="text-xs text-muted-foreground">{t("sources.genre")}</span>
-                  <div className="inline-flex overflow-hidden rounded-md border">
-                    {(["femme", "homme"] as const).map((g) => (
-                      <button
-                        key={g}
-                        type="button"
-                        disabled={changerGenre.isPending}
-                        onClick={() => changerGenre.mutate({ id: source.id, genre: g })}
-                        className={
-                          source.genre === g
-                            ? "bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground"
-                            : "bg-background px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
-                        }
-                      >
-                        {g === "femme" ? t("sources.genreFemme") : t("sources.genreHomme")}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2">
-                <BoutonExtraire sourceId={source.id} />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    basculer.mutate({ id: source.id, actif: !source.is_active })
-                  }
-                >
-                  {source.is_active ? t("sources.deactivate") : t("sources.activate")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => {
-                    if (window.confirm(t("sources.confirmDelete"))) retirer.mutate(source.id);
-                  }}
-                >
-                  {t("common.delete")}
-                </Button>
-              </div>
-              </div>
-
-              <VoixSource source={source} />
-            </div>
+          {principaux.map((p) => (
+            <GroupeSource
+              key={p.id}
+              primary={p}
+              conjoints={conjointsDe(p.id)}
+              stock={stockGroupe(p)}
+            />
           ))}
         </div>
       </CardContent>
