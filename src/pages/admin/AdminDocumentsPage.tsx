@@ -1,10 +1,12 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { Languages } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { BarreChargement } from "@/components/ui/progress";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import {
   Card,
@@ -13,7 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { listerDocuments, majDocument } from "@/features/moteur/api";
+import { listerDocuments, majDocument, traduireDocument } from "@/features/moteur/api";
 import type { DocumentEditable } from "@/features/moteur/api";
 
 function EditeurDocument({ doc }: { doc: DocumentEditable }) {
@@ -44,6 +46,22 @@ function EditeurDocument({ doc }: { doc: DocumentEditable }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents"] });
       queryClient.invalidateQueries({ queryKey: ["document", doc.cle] });
+    },
+  });
+
+  // Génère la version anglaise à partir du FRANÇAIS COURANT (y compris les
+  // modifications non encore enregistrées), sans sauvegarder : l'admin relit,
+  // puis clique « Enregistrer ». Ainsi il n'écrit qu'en français.
+  // Incrémenté à chaque traduction réussie : sert de `key` à l'éditeur EN pour le
+  // remonter APRÈS coup (il pose son contenu au montage, sinon il ne verrait pas
+  // le texte traduit).
+  const [versionEn, setVersionEn] = React.useState(0);
+  const traduire = useMutation({
+    mutationFn: () => traduireDocument(titre, contenu),
+    onSuccess: (r) => {
+      setTitreEn(r.titre_en);
+      setContenuEn(r.contenu_en);
+      setVersionEn((v) => v + 1);
     },
   });
 
@@ -90,12 +108,37 @@ function EditeurDocument({ doc }: { doc: DocumentEditable }) {
           </>
         ) : (
           <>
+            <div className="flex flex-wrap items-center gap-3 rounded-md bg-muted/40 p-2.5">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={traduire.isPending || !contenu.trim()}
+                onClick={() => traduire.mutate()}
+              >
+                <Languages className="size-4" />
+                {traduire.isPending ? t("documents.traduction") : t("documents.traduireFr")}
+              </Button>
+              <span className="text-xs text-muted-foreground">{t("documents.traduireAide")}</span>
+            </div>
+            <BarreChargement
+              actif={traduire.isPending}
+              dureeMs={9_000}
+              label={t("documents.traduction")}
+            />
+            {traduire.isError && (
+              <p className="text-xs text-destructive">{(traduire.error as Error).message}</p>
+            )}
             <Input
               value={titreEn}
               placeholder={t("documents.titreEnPlaceholder")}
               onChange={(e) => setTitreEn(e.target.value)}
             />
-            <RichTextEditor key="en" value={contenuEn} onChange={setContenuEn} />
+            <RichTextEditor
+              // Remonté après une traduction pour afficher le nouveau contenu.
+              key={`en-${versionEn}`}
+              value={contenuEn}
+              onChange={setContenuEn}
+            />
           </>
         )}
         <div className="flex items-center gap-3">

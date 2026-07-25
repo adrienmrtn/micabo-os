@@ -711,6 +711,47 @@ Réponds uniquement par OUI ou NON.`,
   }
 }
 
+/**
+ * Traduit un DOCUMENT (guide/FAQ) du français vers l'anglais en préservant le
+ * balisage HTML (le contenu vient d'un éditeur riche). On ne traduit que le
+ * texte visible, jamais les balises. Format à délimiteur (pas de JSON) : du HTML
+ * dans du JSON casse au moindre guillemet d'attribut mal échappé.
+ *
+ * Sert au bouton « Traduire en anglais » : l'admin n'écrit qu'en français, la
+ * version anglaise est générée, pas éditée deux fois.
+ */
+export async function translateDocumentToEnglish(input: {
+  titre: string;
+  contenuHtml: string;
+}): Promise<{ titre_en: string; contenu_en: string }> {
+  const prompt = `Translate the following document from French to ENGLISH.
+
+STRICT RULES:
+- The body is HTML from a rich-text editor. Keep every HTML tag, attribute and
+  structure EXACTLY as-is. Translate ONLY the human-readable text between tags.
+  Never add, remove or reorder tags. Leave URLs, code and proper nouns unchanged.
+- Natural, direct English. Address the reader as "you". Write the way a person
+  talks, not like marketing copy. Short sentences.
+- FORBIDDEN: the em dash (—) and en dash (–). Use a comma, period or colon.
+- Do not add emoji or exclamation marks that were not there.
+- "Sophia" stays "Sophia". "poster" (the role) stays "poster".
+
+Output EXACTLY in this format and nothing else (no code fence, no comment):
+TITLE: <translated title, one line>
+===BODY===
+<translated HTML body>
+
+TITLE: ${input.titre}
+===BODY===
+${input.contenuHtml}`;
+
+  const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }]);
+  const out = textOf(parts).replace(/^```(?:\w+)?\n?|```$/g, "").trim();
+  const m = out.match(/TITLE:\s*([\s\S]*?)\n===BODY===\n?([\s\S]*)$/);
+  if (!m) throw new Error("Traduction illisible (format inattendu)");
+  return { titre_en: m[1].trim(), contenu_en: m[2].trim() };
+}
+
 /** Vérifie qu'il ne reste pas de texte incrusté après nettoyage. */
 export async function verifyClean(base64Image: string, mimeType: string): Promise<boolean> {
   const parts = await callWithFallback(TEXT_MODELS, [

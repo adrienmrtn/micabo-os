@@ -523,6 +523,12 @@ export async function lireDocument(cle: string): Promise<DocumentEditable | null
   return (data as DocumentEditable) ?? null;
 }
 
+/** Traduit un document FR → EN (HTML préservé) sans l'enregistrer : le front
+ *  remplit les champs anglais, l'admin relit puis sauvegarde. Évite de tout
+ *  rédiger deux fois. */
+export const traduireDocument = (titre: string, contenu: string) =>
+  invoke<{ titre_en: string; contenu_en: string }>("traduire-doc", { titre, contenu });
+
 /** Édition d'un document (admin uniquement via RLS). */
 export async function majDocument(
   id: string,
