@@ -493,57 +493,18 @@ function sembleDegeneree(base64: string): boolean {
 }
 
 export async function cleanImage(imageUrl: string): Promise<string | null> {
-  // 0 — PROXY LOVABLE en priorité s'il est configuré. Sa sortie « texte » n'est
-  // pas re-vérifiée (verifyClean rejetait à tort des images denses en texte bien
-  // nettoyées), MAIS on refuse désormais une sortie DÉGÉNÉRÉE (noire/unie) : c'est
-  // le seul contrôle qui aurait évité que tout parte en noir. Une sortie noire →
-  // on tombe sur l'inpainting/génératif au lieu de la stocker.
+  // Nettoyage PAR LE PROXY, exclusivement. C'est le nettoyeur voulu, et il n'est
+  // pas censé échouer. Sa sortie est prise telle quelle, SAUF si elle est
+  // DÉGÉNÉRÉE (noire/unie) — ce garde-fou est la leçon du 24/07, où des centaines
+  // de slides sont parties toutes noires faute de ce contrôle.
+  //
+  // Plus d'inpainting (LaMa) ni de génératif Gemini : au moindre échec du proxy,
+  // on lève une erreur, et la composition substitue une photo DÉJÀ propre de la
+  // bibliothèque de la source (reparerVisuelsPerimes). C'est le seul repli voulu.
   const parProxy = await nettoyerViaProxy(imageUrl);
   if (parProxy && !sembleDegeneree(parProxy)) return parProxy;
-
-  const image = await fetchImageAsInline(imageUrl);
-
-  // 1 — INPAINTING, si le proxy n'est pas configuré. Il n'efface que la zone du
-  // texte, ne juge jamais le contenu (aucun refus) et ne régénère pas la
-  // personne. Voie de repli — VÉRIFIÉE ici, car l'effacement peut laisser du
-  // texte hors du masque.
-  let noteInpaint = "inpaint: aucune image (pas de zone, ou pas de clé)";
-  try {
-    const parInpaint = await inpaintFallback(image, imageUrl);
-    if (parInpaint && sembleDegeneree(parInpaint)) {
-      noteInpaint = "inpaint: sortie dégénérée (noire) rejetée";
-    } else if (parInpaint && (await verifyClean(parInpaint, "image/png"))) {
-      return parInpaint;
-    } else if (parInpaint) {
-      noteInpaint = "inpaint: texte encore visible après effacement";
-    }
-  } catch (error) {
-    // Le motif remonte au lieu d'être avalé : c'est ainsi qu'on a vu que les
-    // images trop grandes étaient rejetées par le service d'effacement.
-    noteInpaint = `inpaint: ${messageErreur(error)}`;
-  }
-
-  // 2 — REPLI GEMINI GÉNÉRATIF, seulement si l'inpainting n'a rien pu faire.
-  // La source d'ABORD, la consigne ensuite ; température basse et sortie image
-  // forcée. Vérifié aussi (le génératif peut halluciner ou laisser du texte).
-  const parts: Part[] = [image, { text: PROMPT_NETTOYAGE }];
-  const config: GenConfig = { temperature: 0.2, responseModalities: ["IMAGE"] };
-  const echecs: string[] = [];
-
-  for (const model of IMAGE_MODELS) {
-    try {
-      const sortie = await call(model, parts, config);
-      const data = imageDataOf(sortie);
-      if (data && sembleDegeneree(data)) echecs.push(`${model}: sortie dégénérée (noire) rejetée`);
-      else if (data && (await verifyClean(data, "image/png"))) return data;
-      else if (data) echecs.push(`${model}: texte encore visible après retouche`);
-      else echecs.push(`${model}: ${textOf(sortie).slice(0, 120) || "bloqué (aucune image)"}`);
-    } catch (error) {
-      echecs.push(`${model}: ${messageErreur(error)}`);
-    }
-  }
-
-  throw new RefusRetouche([noteInpaint, ...echecs].join(" | "));
+  if (parProxy) throw new RefusRetouche("proxy: sortie dégénérée (noire) rejetée");
+  throw new RefusRetouche("proxy: aucune image renvoyée (token manquant ou échec)");
 }
 
 /**
