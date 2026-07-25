@@ -28,6 +28,17 @@ export async function choisirVisuelSansVisage(
   supabase: Supabase,
   compteReferenceId: string | null,
 ): Promise<VisuelAvatar | null> {
+  // Avatars DÉJÀ attribués à d'autres comptes : on les évite, sinon deux posters
+  // qui tombent sur le pool global partagent la même photo de profil (bug vu :
+  // même avatar pour deux comptes alors que la bibliothèque est énorme).
+  const { data: dejaAvatars } = await supabase
+    .from("comptes")
+    .select("avatar_url")
+    .not("avatar_url", "is", null);
+  const pris = new Set((dejaAvatars ?? []).map((c) => c.avatar_url as string));
+  const premierLibre = (medias: VisuelAvatar[] | null) =>
+    (medias ?? []).find((m) => !pris.has(m.url)) ?? null;
+
   const connuSansVisage = async (limiterALaSource: boolean) => {
     let q = supabase
       .from("media_library")
@@ -36,10 +47,10 @@ export async function choisirVisuelSansVisage(
       .eq("texte_restant", false)
       .like("storage_path", "propre/%")
       .order("used_count")
-      .limit(1);
+      .limit(60);
     if (limiterALaSource && compteReferenceId) q = q.eq("compte_reference_id", compteReferenceId);
     const { data } = await q;
-    return data?.[0] ?? null;
+    return premierLibre(data);
   };
 
   const dejaSur =
@@ -59,6 +70,7 @@ export async function choisirVisuelSansVisage(
     const { data: candidats } = await q;
 
     for (const media of candidats ?? []) {
+      if (pris.has(media.url)) continue; // déjà l'avatar d'un autre compte
       const visage = await contientVisageIdentifiable(media.url);
       await supabase
         .from("media_library")

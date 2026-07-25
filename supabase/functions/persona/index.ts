@@ -1,6 +1,5 @@
 import { avatarPourSource } from "../_shared/avatar.ts";
 import { genererPersona } from "../_shared/gemini.ts";
-import { scrapeProfile, scrapeProfileBio } from "../_shared/apify.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
@@ -20,40 +19,18 @@ function nomDepuisHandle(handle: string): string {
 }
 
 /**
- * Le pseudo est-il libre sur TikTok ? On scrape le profil : s'il renvoie des
- * posts, le compte existe déjà (pris). Erreur / vide = on le considère libre.
- * Best-effort (un compte réel sans aucun post passerait pour libre), mais suffit
- * à éviter les collisions courantes.
+ * Un pseudo quasi certainement LIBRE sur TikTok — SANS appel réseau (instantané).
+ *
+ * On NE VÉRIFIE PLUS la dispo : c'est impossible de façon fiable ET rapide. Apify
+ * teste s'il y a des POSTS (rate un compte existant sans post — c'est ce qui a
+ * laissé passer @spezisuchti, pourtant pris), et la page de profil TikTok renvoie
+ * la même chose pour un @ pris ou libre. À la place, on garantit l'unicité par
+ * construction : le pseudo IA + 3-4 chiffres au hasard (« spezisuchti4827 ») a
+ * une probabilité infime d'être déjà pris. Instantané, et bien plus sûr qu'une
+ * vérif qui donne de faux « libre ».
  */
-async function handleLibre(handle: string): Promise<boolean> {
-  try {
-    const posts = await scrapeProfile(handle, 1);
-    return posts.length === 0;
-  } catch {
-    return true;
-  }
-}
-
-/**
- * Un pseudo LIBRE sur TikTok. On vérifie la dispo via Apify ; si le pseudo est
- * PRIS, on lui colle 3 chiffres au hasard et on RE-VÉRIFIE, jusqu'à en trouver
- * un de libre. Borné à quelques essais : un scrape Apify coûte ~10-30 s, et il
- * ne faut pas faire timeout la création. Si Apify est indisponible (on ne peut
- * pas trancher), on renvoie le candidat courant sans bloquer — le cron
- * `maintenance-auto` pourra réaffiner plus tard.
- */
-async function trouverHandleLibre(base: string): Promise<string> {
-  let candidat = base;
-  for (let essai = 0; essai < 4; essai += 1) {
-    try {
-      if (await handleLibre(candidat)) return candidat; // libre → on le garde
-    } catch {
-      return candidat; // Apify indispo : best-effort, on ne bloque pas
-    }
-    // Pris : on suffixe 3 chiffres et on retentera au tour suivant.
-    candidat = `${base}${Math.floor(Math.random() * 900) + 100}`;
-  }
-  return candidat; // tous pris après N essais : dernier candidat (best-effort)
+function trouverHandleLibre(base: string): string {
+  return `${base}${Math.floor(Math.random() * 900) + 100}`; // 3 chiffres au hasard
 }
 
 /** Racines par langue pour un pseudo de SECOURS (culture générale / savoir),
@@ -124,16 +101,11 @@ Deno.serve(async (request) => {
     // deno-lint-ignore no-explicit-any
     const reference = (compte as any).comptes_reference;
 
-    // Bio du compte de référence : on la capture UNE fois via Apify puis on la
-    // garde, pour inspirer la bio du poster sans re-scraper à chaque génération.
-    let referenceBio: string = reference?.bio ?? "";
-    if (!referenceBio && reference?.handle_tiktok) {
-      const meta = await scrapeProfileBio(reference.handle_tiktok);
-      if (meta?.bio) {
-        referenceBio = meta.bio;
-        await supabase.from("comptes_reference").update({ bio: meta.bio }).eq("id", reference.id);
-      }
-    }
+    // Bio du compte de référence, SEULEMENT si déjà en cache : on ne scrape PLUS
+    // via Apify ici (c'était ~15-30 s de blocage à la création, une des causes du
+    // « identité en cours » qui traîne). Sans cache, la bio est générée à partir
+    // de la niche — largement suffisant. Le cron peut cacher la bio de réf plus tard.
+    const referenceBio: string = reference?.bio ?? "";
 
     // L'IA d'abord ; mais si elle est indisponible (429 Gemini fréquent en
     // journée), on NE bloque PAS : on bascule sur une identité de secours
@@ -166,7 +138,7 @@ Deno.serve(async (request) => {
     let handleApplique: string | null = null;
 
     if (appliquer && pseudos.length > 0) {
-      handleApplique = await trouverHandleLibre(pseudos[0]);
+      handleApplique = trouverHandleLibre(pseudos[0]);
 
       await supabase
         .from("comptes")
