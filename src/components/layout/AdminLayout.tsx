@@ -10,6 +10,7 @@ import {
   Gauge,
   Images,
   MessageSquareQuote,
+  MoonStar,
   Recycle,
   Settings,
   Users,
@@ -39,6 +40,12 @@ export function AdminLayout() {
               description: t("navDesc.calendrier"),
             },
             { to: "/admin/posts", label: t("nav.posts"), icon: CalendarRange, description: t("navDesc.posts") },
+            {
+              to: "/admin/minuit",
+              label: t("nav.minuit"),
+              icon: MoonStar,
+              description: t("navDesc.minuit"),
+            },
             { to: "/admin/sources", label: t("nav.sources"), icon: AtSign, description: t("navDesc.sources") },
             {
               to: "/admin/reproduisibles",

@@ -946,10 +946,65 @@ export const lancerAssignation = (
 /** Simule le cron de minuit : assigne la journée à TOUS les comptes actifs pour
  *  la date choisie (comme minuit). */
 export const lancerAssignationJour = (date: string) =>
-  invoke<{ resultats: Array<{ compteId: string; crees: number; types?: string[] }> }>(
-    "assignation",
-    { date },
-  );
+  invoke<{
+    jour: string;
+    resultats: Array<{ compteId: string; crees: number; types?: string[]; erreur?: string }>;
+  }>("assignation", { date });
+
+/** Une ligne de suivi « minuit » : un compte actif, son quota du jour, et les
+ *  posts réellement produits ce jour-là (avec leur avancement et leurs erreurs). */
+export interface SuiviMinuit {
+  compteId: string;
+  nom: string;
+  handle: string | null;
+  avatar_url: string | null;
+  langue: string;
+  quota: number;
+  posts: Array<
+    Pick<Post, "id" | "type" | "statut" | "pipeline_statut" | "pipeline_etape" | "pipeline_erreur">
+  >;
+}
+
+/** État de l'assignation d'une date, compte par compte : ce que minuit a produit,
+ *  ce qui manque, ce qui a échoué. Ne déclenche rien — lecture seule. */
+export async function suiviAssignation(date: string): Promise<SuiviMinuit[]> {
+  const [comptesRes, postsRes, regRes] = await Promise.all([
+    supabase
+      .from("comptes")
+      .select("id, persona_nom, handle_tiktok, avatar_url, langue, posts_par_jour")
+      .eq("is_active", true)
+      .order("persona_nom", { nullsFirst: false }),
+    supabase
+      .from("posts")
+      .select("id, compte_id, type, statut, pipeline_statut, pipeline_etape, pipeline_erreur")
+      .eq("date_publication_prevue", date)
+      .eq("est_test", false)
+      .order("created_at"),
+    supabase.from("reglages").select("valeur").eq("cle", "frequence").maybeSingle(),
+  ]);
+  if (comptesRes.error) throw comptesRes.error;
+  if (postsRes.error) throw postsRes.error;
+
+  const quotaGlobal = (regRes.data?.valeur as { posts_par_jour?: number } | null)?.posts_par_jour ?? 2;
+
+  const parCompte = new Map<string, SuiviMinuit["posts"]>();
+  for (const p of postsRes.data ?? []) {
+    const liste = parCompte.get(p.compte_id) ?? [];
+    liste.push(p as SuiviMinuit["posts"][number]);
+    parCompte.set(p.compte_id, liste);
+  }
+
+  // deno-lint-ignore no-explicit-any
+  return (comptesRes.data ?? []).map((c: any) => ({
+    compteId: c.id,
+    nom: c.persona_nom ?? c.handle_tiktok ?? c.id.slice(0, 8),
+    handle: c.handle_tiktok,
+    avatar_url: c.avatar_url,
+    langue: c.langue,
+    quota: c.posts_par_jour ?? quotaGlobal,
+    posts: parCompte.get(c.id) ?? [],
+  }));
+}
 
 /** Un pas de fabrication pour un post précis (avance le pipeline d'une étape). */
 export const avancerUnPost = (postId: string) =>

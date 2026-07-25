@@ -23,6 +23,7 @@ import { AdminAnalyticsPage } from "@/pages/admin/AdminAnalyticsPage";
 import { AdminReviewsPage } from "@/pages/admin/AdminReviewsPage";
 import { AdminPostsPage } from "@/pages/admin/AdminPostsPage";
 import { AdminCalendrierPage } from "@/pages/admin/AdminCalendrierPage";
+import { AdminMinuitPage } from "@/pages/admin/AdminMinuitPage";
 import { AdminPostDetailPage } from "@/pages/admin/AdminPostDetailPage";
 import { AdminTestNettoyagePage } from "@/pages/admin/AdminTestNettoyagePage";
 import { AdminTestsPage } from "@/pages/admin/AdminTestsPage";
@@ -52,6 +53,7 @@ export function AppRouter() {
           <Route element={<AdminLayout />}>
             <Route path="/admin" element={<AdminPilotagePage />} />
             <Route path="/admin/calendrier" element={<AdminCalendrierPage />} />
+            <Route path="/admin/minuit" element={<AdminMinuitPage />} />
             <Route path="/admin/posts/:id" element={<AdminPostDetailPage />} />
             <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
             <Route path="/admin/posts" element={<AdminPostsPage />} />
