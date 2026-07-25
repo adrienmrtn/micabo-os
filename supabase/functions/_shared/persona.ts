@@ -147,7 +147,10 @@ export async function genererIdentite(
   }
 
   const handle = `${root}${Math.floor(Math.random() * 900) + 100}`; // 3 chiffres
-  return { handle, nom: nomAffiche, bio: bioDeSecours(langue) };
+  // Bio = le prénom (celui du @) + un « âge » aléatoire 20-30, façon « Jakob 24 ».
+  const age = Math.floor(Math.random() * 11) + 20; // 20 à 30 inclus
+  const bio = `${capitaliser(prenom)} ${age}`;
+  return { handle, nom: nomAffiche, bio };
 }
 
 /**
