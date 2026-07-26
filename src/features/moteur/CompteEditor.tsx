@@ -316,11 +316,14 @@ function InfosCompte({ compte }: { compte: CompteAvecDetails }) {
           onChange={(e) => setSource(e.target.value)}
         >
           <option value="">{t("common.none")}</option>
-          {sources.data?.map((s) => (
-            <option key={s.id} value={s.id}>
-              @{s.handle_tiktok}
-            </option>
-          ))}
+          {/* Seuls les comptes PRINCIPAUX sont assignables (pas les conjoints). */}
+          {sources.data
+            ?.filter((s) => !s.parent_id)
+            .map((s) => (
+              <option key={s.id} value={s.id}>
+                @{s.handle_tiktok}
+              </option>
+            ))}
         </select>
       </div>
       <div className="space-y-1.5 sm:col-span-2">

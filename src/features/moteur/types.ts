@@ -19,6 +19,8 @@ export interface CompteReference {
   genre: "homme" | "femme";
   /** Source « conjointe » : rattachée à un compte principal (null = principal). */
   parent_id: string | null;
+  /** Ordre d'assignation aux nouveaux posters (plus petit = assigné en premier). */
+  ordre_assignation: number | null;
   is_active: boolean;
   dernier_scrape_at: string | null;
   created_at: string;

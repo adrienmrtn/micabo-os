@@ -232,12 +232,16 @@ async function referenceLibre(
   langue: string,
 ): Promise<string | null> {
   // Seuls les comptes PRINCIPAUX (parent_id null) sont assignables à un poster ;
-  // les conjoints ne font qu'élargir la matière de leur principal.
+  // les conjoints ne font qu'élargir la matière de leur principal. Triés par
+  // ORDRE D'ASSIGNATION (défini par l'admin) : c'est lui qui décide qui vient
+  // ensuite, par langue.
   const { data: refs } = await supabase
     .from("comptes_reference")
-    .select("id, langue")
+    .select("id, langue, ordre_assignation")
     .eq("is_active", true)
-    .is("parent_id", null);
+    .is("parent_id", null)
+    .order("ordre_assignation", { ascending: true, nullsFirst: false })
+    .order("created_at");
   if (!refs || refs.length === 0) return null;
 
   // Sources déjà attribuées à un poster DE LA MÊME LANGUE (les seules à exclure).
@@ -251,8 +255,7 @@ async function referenceLibre(
   const libres = refs.filter((r) => !prisDansCetteLangue.has(r.id));
   if (libres.length === 0) return null;
 
-  // À qualité égale, préférer une source déjà dans la langue du poster (contenu
-  // natif, pas de traduction) ; sinon n'importe quelle source libre convient.
-  return (libres.find((r) => r.langue === langue) ?? libres[0]).id;
+  // La première LIBRE selon l'ordre d'assignation (l'admin range comme il veut).
+  return libres[0].id;
 }
 

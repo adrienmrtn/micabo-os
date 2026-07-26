@@ -48,6 +48,7 @@ export const en = {
       prompts: "Prompts",
       calendrier: "Calendar",
       minuit: "Midnight assignment",
+      assignSources: "Source order",
       reviews: "Reviews",
       tests: "Tests",
       hiring: "Recruiting",
@@ -80,6 +81,7 @@ export const en = {
       pilotage: "Overview and pipeline launch",
       calendrier: "All posts by day, drag and drop",
       minuit: "What midnight produced, and the errors",
+      assignSources: "Who gets assigned next, per language",
       analytics: "Performance by account and post",
       posts: "All generated posts",
       sources: "Reference TikTok accounts to draw from",
@@ -217,6 +219,21 @@ export const en = {
       aucunCompte: "No active account.",
       faitSur: "{{faits}}/{{quota}} post(s)",
       manquant: "{{count}} post(s) not created for this day.",
+    },
+    assignSources: {
+      title: "Source assignment order",
+      subtitle:
+        "When a new poster of a language is created, it gets the FREE source highest in the order below (one source = one poster per language).",
+      libres: "{{count}} free source(s)",
+      prochaine: "Next:",
+      puis: "then",
+      aucuneLibre: "No free source — add one (or a linked account).",
+      ordreTitle: "The order (move with the arrows)",
+      ordreDesc:
+        "Rank the sources: the highest one still free in a language will be assigned to that language's next poster.",
+      vide: "No primary source.",
+      monter: "Move up",
+      descendre: "Move down",
     },
     statut: {
       pending: "Pending",

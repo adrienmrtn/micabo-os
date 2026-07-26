@@ -9,6 +9,7 @@ import {
   FlaskConical,
   Gauge,
   Images,
+  ListOrdered,
   MessageSquareQuote,
   MoonStar,
   Recycle,
@@ -47,6 +48,12 @@ export function AdminLayout() {
               description: t("navDesc.minuit"),
             },
             { to: "/admin/sources", label: t("nav.sources"), icon: AtSign, description: t("navDesc.sources") },
+            {
+              to: "/admin/assignation-sources",
+              label: t("nav.assignSources"),
+              icon: ListOrdered,
+              description: t("navDesc.assignSources"),
+            },
             {
               to: "/admin/reproduisibles",
               label: t("nav.reproduisibles"),
