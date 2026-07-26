@@ -237,11 +237,9 @@ async function referenceLibre(
   // ensuite, par langue.
   const { data: refs } = await supabase
     .from("comptes_reference")
-    .select("id, langue, ordre_assignation")
+    .select("id, langue, ordre_assignation, ordre_par_langue, created_at")
     .eq("is_active", true)
-    .is("parent_id", null)
-    .order("ordre_assignation", { ascending: true, nullsFirst: false })
-    .order("created_at");
+    .is("parent_id", null);
   if (!refs || refs.length === 0) return null;
 
   // Sources déjà attribuées à un poster DE LA MÊME LANGUE (les seules à exclure).
@@ -255,7 +253,12 @@ async function referenceLibre(
   const libres = refs.filter((r) => !prisDansCetteLangue.has(r.id));
   if (libres.length === 0) return null;
 
-  // La première LIBRE selon l'ordre d'assignation (l'admin range comme il veut).
+  // Ordre PROPRE À CETTE LANGUE (l'admin range chaque langue à part), repli sur
+  // l'ordre global puis la date. On prend la première libre.
+  // deno-lint-ignore no-explicit-any
+  const rang = (r: any) =>
+    (r.ordre_par_langue?.[langue] as number | undefined) ?? r.ordre_assignation ?? 9999;
+  libres.sort((a, b) => rang(a) - rang(b) || String(a.created_at).localeCompare(String(b.created_at)));
   return libres[0].id;
 }
 

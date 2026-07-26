@@ -224,6 +224,9 @@ export const fr = {
       title: "Ordre d'assignation des sources",
       subtitle:
         "À la création d'un nouveau poster d'une langue, il reçoit la source LIBRE la plus haute dans l'ordre ci-dessous (une source = un poster par langue).",
+      subtitlePar:
+        "Une file par langue, rangée INDÉPENDAMMENT : une source peut être n°1 en allemand et n°5 en français. Le prochain poster d'une langue reçoit la source LIBRE la plus haute de SA file.",
+      pris: "Pris",
       libres: "{{count}} source(s) libre(s)",
       prochaine: "Prochaine :",
       puis: "puis",

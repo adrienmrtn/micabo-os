@@ -224,6 +224,9 @@ export const en = {
       title: "Source assignment order",
       subtitle:
         "When a new poster of a language is created, it gets the FREE source highest in the order below (one source = one poster per language).",
+      subtitlePar:
+        "One queue per language, ranked INDEPENDENTLY: a source can be #1 in German and #5 in French. A language's next poster gets the highest FREE source in ITS queue.",
+      pris: "Taken",
       libres: "{{count}} free source(s)",
       prochaine: "Next:",
       puis: "then",

@@ -19,8 +19,10 @@ export interface CompteReference {
   genre: "homme" | "femme";
   /** Source « conjointe » : rattachée à un compte principal (null = principal). */
   parent_id: string | null;
-  /** Ordre d'assignation aux nouveaux posters (plus petit = assigné en premier). */
+  /** Ordre d'assignation global (repli). Plus petit = assigné en premier. */
   ordre_assignation: number | null;
+  /** Ordre d'assignation PAR LANGUE : { fr: 2, de: 1, … } (l'emporte sur le global). */
+  ordre_par_langue: Record<string, number>;
   is_active: boolean;
   dernier_scrape_at: string | null;
   created_at: string;
