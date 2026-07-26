@@ -766,6 +766,8 @@ export const fr = {
       warmupRappel:
         "⚠️ N'oublie pas de warm up le compte avant de commencer à poster (et chaque semaine, scrolle 5-6 minutes pour que TikTok ne te prenne pas pour un robot) !",
       aujourdhui: "Aujourd'hui",
+      filtreLangue: "Filtrer par langue",
+      toutesLangues: "Toutes les langues",
       aVenir: "À venir",
       passe: "Passé",
       rien: "Rien de prévu aujourd'hui.",

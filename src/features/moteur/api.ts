@@ -695,6 +695,7 @@ export interface PostCalendrierAdmin {
   poster_prenom: string | null;
   poster_nom: string | null;
   sujet_titre: string | null;
+  langue: string | null;
 }
 
 /** Tous les posts, pour le calendrier admin. RLS admin = accès complet. */
@@ -705,7 +706,7 @@ export async function postsCalendrierAdmin(): Promise<PostCalendrierAdmin[]> {
     .from("posts")
     .select(
       "id, compte_id, date_publication_prevue, type, statut, pipeline_statut, publie_at, " +
-        "sujets(titre), comptes(persona_nom, handle_tiktok, profiles(prenom, nom))",
+        "sujets(titre), comptes(persona_nom, handle_tiktok, langue, profiles(prenom, nom))",
     )
     .order("date_publication_prevue", { ascending: false, nullsFirst: false })
     .limit(400);
@@ -725,6 +726,7 @@ export async function postsCalendrierAdmin(): Promise<PostCalendrierAdmin[]> {
     poster_prenom: p.comptes?.profiles?.prenom ?? null,
     poster_nom: p.comptes?.profiles?.nom ?? null,
     sujet_titre: p.sujets?.titre ?? null,
+    langue: p.comptes?.langue ?? null,
   }));
 }
 

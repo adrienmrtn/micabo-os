@@ -13,6 +13,7 @@ import {
   supprimerPostsDuJour,
   type PostCalendrierAdmin,
 } from "@/features/moteur/api";
+import { nomLangue } from "@/features/moteur/langues";
 import { cn } from "@/lib/utils";
 
 function isoDuJour(annee: number, mois: number, jour: number): string {
@@ -76,23 +77,35 @@ export function AdminCalendrierPage() {
     mois: maintenant.getMonth(),
   }));
   const [surVol, setSurVol] = React.useState<string | null>(null);
+  const [filtreLangue, setFiltreLangue] = React.useState("");
+
+  // Langues présentes au calendrier (pour le filtre).
+  const langues = React.useMemo(
+    () => [...new Set((posts ?? []).map((p) => p.langue).filter(Boolean))].sort() as string[],
+    [posts],
+  );
+
+  const postsFiltres = React.useMemo(
+    () => (filtreLangue ? (posts ?? []).filter((p) => p.langue === filtreLangue) : posts ?? []),
+    [posts, filtreLangue],
+  );
 
   const parJour = React.useMemo(() => {
     const carte = new Map<string, PostCalendrierAdmin[]>();
-    for (const post of posts ?? []) {
+    for (const post of postsFiltres) {
       const date = post.date_publication_prevue;
       if (!date) continue;
       carte.set(date, [...(carte.get(date) ?? []), post]);
     }
     return carte;
-  }, [posts]);
+  }, [postsFiltres]);
 
   // Légende : un créateur, sa couleur. Dédoublonné par compte.
   const legende = React.useMemo(() => {
     const vus = new Map<string, PostCalendrierAdmin>();
-    for (const post of posts ?? []) if (!vus.has(post.compte_id)) vus.set(post.compte_id, post);
+    for (const post of postsFiltres) if (!vus.has(post.compte_id)) vus.set(post.compte_id, post);
     return [...vus.values()];
-  }, [posts]);
+  }, [postsFiltres]);
 
   if (isPending) {
     return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
@@ -117,7 +130,23 @@ export function AdminCalendrierPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold capitalize tracking-tight">{nomDuMois}</h2>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          {langues.length > 1 && (
+            <select
+              aria-label={t("calendrier.filtreLangue")}
+              value={filtreLangue}
+              onChange={(e) => setFiltreLangue(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="">{t("calendrier.toutesLangues")}</option>
+              {langues.map((l) => (
+                <option key={l} value={l}>
+                  {nomLangue(l)}
+                </option>
+              ))}
+            </select>
+          )}
+          <div className="flex items-center gap-1">
           <Button size="icon" variant="ghost" aria-label={t("calendrier.moisPrecedent")} onClick={() => decaler(-1)}>
             <ChevronLeft />
           </Button>
@@ -131,6 +160,7 @@ export function AdminCalendrierPage() {
           <Button size="icon" variant="ghost" aria-label={t("calendrier.moisSuivant")} onClick={() => decaler(1)}>
             <ChevronRight />
           </Button>
+          </div>
         </div>
       </div>
 
