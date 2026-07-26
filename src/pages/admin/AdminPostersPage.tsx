@@ -26,7 +26,7 @@ import {
   listerLanguesReference,
   listerPosters,
   majCoutMensuel,
-  majNationalite,
+  majLanguesRecruteur,
   majPoster,
   majUpwork,
   supprimerPoster,
@@ -181,54 +181,48 @@ function CoutMensuel({ poster }: { poster: PosterProfil }) {
  */
 const MOT_DE_PASSE_INITIAL = "12345678";
 
-/** Langue d'un recruteur (nationalité) : la langue par défaut de ses créateurs.
- *  Affichée et éditable en ligne. */
+/** Langues gérées par un recruteur : il peut créer des créateurs dans CHACUNE.
+ *  Multi-sélection en chips (clic = active/désactive), enregistrée en direct. */
 function LangueRecruteur({ recruteur }: { recruteur: PosterProfil }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
-  const [edite, setEdite] = React.useState(false);
   const maj = useMutation({
-    mutationFn: (langue: string) => majNationalite(recruteur.id, langue),
-    onSuccess: () => {
-      setEdite(false);
-      queryClient.invalidateQueries({ queryKey: ["posters"] });
-    },
+    mutationFn: (l: string[]) => majLanguesRecruteur(recruteur.id, l),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["posters"] }),
   });
 
+  // Ses langues = profiles.langues, en ignorant le défaut « {fr} » non voulu si
+  // une nationalité existe (on ne montre que ce qui a du sens).
+  const actives = new Set(recruteur.langues ?? []);
+  const toutes = langues.data ?? [];
+
+  const basculer = (l: string) => {
+    const s = new Set(actives);
+    if (s.has(l)) s.delete(l);
+    else s.add(l);
+    maj.mutate([...s]);
+  };
+
   return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-      <span>{t("posters.langueRecruteur")} :</span>
-      {edite ? (
-        <select
-          autoFocus
-          aria-label={t("posters.langueRecruteur")}
-          className={`${selectClass} h-7 w-28`}
-          defaultValue={recruteur.nationalite ?? ""}
+    <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-xs text-muted-foreground">
+      <span>{t("posters.languesRecruteur")} :</span>
+      {toutes.map((l) => (
+        <button
+          key={l}
+          type="button"
           disabled={maj.isPending}
-          onChange={(e) => e.target.value && maj.mutate(e.target.value)}
+          onClick={() => basculer(l)}
+          className={
+            actives.has(l)
+              ? "rounded-full bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground"
+              : "rounded-full border px-2 py-0.5 text-[11px] hover:bg-muted"
+          }
         >
-          <option value="">—</option>
-          {langues.data?.map((l) => (
-            <option key={l} value={l}>
-              {nomLangue(l)}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <>
-          <span className="font-medium text-foreground">
-            {recruteur.nationalite ? nomLangue(recruteur.nationalite) : t("common.none")}
-          </span>
-          <button
-            type="button"
-            onClick={() => setEdite(true)}
-            className="text-primary underline underline-offset-2"
-          >
-            {t("common.edit")}
-          </button>
-        </>
-      )}
+          {nomLangue(l)}
+        </button>
+      ))}
+      {actives.size === 0 && <span className="text-destructive">{t("posters.aucuneLangue")}</span>}
     </div>
   );
 }

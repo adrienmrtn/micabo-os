@@ -197,16 +197,18 @@ export function HiringPosterPage() {
   const [langue, setLangue] = React.useState("");
   const [cree, setCree] = React.useState<{ email: string; persona: boolean } | null>(null);
 
-  // Un recruteur travaille DANS SA langue : si sa nationalité est posée et
-  // dispo, la langue est verrouillée dessus (il ne crée que des créateurs de sa
-  // langue). Sans nationalité, il choisit (repli).
-  const langueVerrouillee =
-    profil?.nationalite && langues.data?.includes(profil.nationalite) ? profil.nationalite : null;
+  // Les langues gérées par le recruteur (il peut créer des créateurs dans
+  // chacune) : ses `langues` croisées avec celles disponibles. S'il n'en a
+  // qu'une, elle est verrouillée ; plusieurs = il choisit ; aucune = repli sur
+  // toutes (ex. admin).
+  const mesLangues = (profil?.langues ?? []).filter((l) => langues.data?.includes(l));
+  const languesChoix = mesLangues.length > 0 ? mesLangues : (langues.data ?? []);
+  const langueVerrouillee = mesLangues.length === 1 ? mesLangues[0] : null;
 
   React.useEffect(() => {
-    if (langue || !langues.data?.length) return;
-    setLangue(langueVerrouillee ?? langues.data[0]);
-  }, [langues.data, langue, langueVerrouillee]);
+    if (langue || !languesChoix.length) return;
+    setLangue(languesChoix[0]);
+  }, [languesChoix, langue]);
 
   const creer = useMutation({
     mutationFn: () => creerPoster({ prenom, nom, password: MOT_DE_PASSE, langue }),
@@ -259,10 +261,10 @@ export function HiringPosterPage() {
                   onChange={(e) => setLangue(e.target.value)}
                   required
                 >
-                  {langues.data?.length === 0 && (
+                  {languesChoix.length === 0 && (
                     <option value="">{t("hiring.aucuneLangue")}</option>
                   )}
-                  {langues.data?.map((l) => (
+                  {languesChoix.map((l) => (
                     <option key={l} value={l}>
                       {l.toUpperCase()}
                     </option>

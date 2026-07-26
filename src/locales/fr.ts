@@ -423,6 +423,8 @@ export const fr = {
       recruteurs: "Recruteurs",
       sansRecruteur: "Sans recruteur",
       langueRecruteur: "Langue",
+      languesRecruteur: "Langues gérées",
+      aucuneLangue: "aucune — clique une langue",
       aucunCreateur: "Aucun créateur.",
       reference: "Réf.",
       compteReference: "Compte de référence (source) — visible admin uniquement",

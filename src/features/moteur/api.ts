@@ -748,6 +748,16 @@ export async function majNationalite(userId: string, nationalite: string): Promi
   if (error) throw error;
 }
 
+/** Langues gérées par un recruteur (il peut créer des créateurs dans chacune).
+ *  `nationalite` = la première, pour compatibilité. */
+export async function majLanguesRecruteur(userId: string, langues: string[]): Promise<void> {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ langues, nationalite: langues[0] ?? null })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
 export async function supprimerPost(id: string): Promise<void> {
   const { error } = await supabase.from("posts").delete().eq("id", id);
   if (error) throw error;

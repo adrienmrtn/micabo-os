@@ -89,7 +89,12 @@ Deno.serve(async (request) => {
         await supabase.from("user_roles").delete().eq("user_id", data.user.id);
         await supabase.from("user_roles").insert({ user_id: data.user.id, role: "hiring_manager" });
         if (langue) {
-          await supabase.from("profiles").update({ nationalite: langue }).eq("id", data.user.id);
+          // nationalite = langue primaire ; langues = l'ENSEMBLE géré (l'admin peut
+          // en ajouter ensuite pour qu'il crée des créateurs dans plusieurs langues).
+          await supabase
+            .from("profiles")
+            .update({ nationalite: langue, langues: [langue] })
+            .eq("id", data.user.id);
         }
       } else if (acces.role === "hiring_manager" && acces.userId !== "cron") {
         // Poster créé par un recruteur : on mémorise qui le gère, pour le grouper
