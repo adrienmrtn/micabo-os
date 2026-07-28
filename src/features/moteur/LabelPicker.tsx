@@ -25,6 +25,14 @@ export function LabelPicker({
     return <p className="text-xs text-muted-foreground">{t("common.loading")}</p>;
   }
 
+  if (labels.isError) {
+    return (
+      <p className="text-xs text-destructive">
+        {t("labels.erreurChargement")}: {(labels.error as Error).message}
+      </p>
+    );
+  }
+
   if (!labels.data?.length) {
     return <p className="text-xs text-muted-foreground">{t("labels.aucun")}</p>;
   }
@@ -91,9 +99,14 @@ export function LabelEditor({
   return (
     <div className="space-y-1.5">
       <p className="text-xs font-medium">{t("labels.title")}</p>
+      {q.isError && (
+        <p className="text-xs text-destructive">
+          {t("labels.erreurChargement")}: {(q.error as Error).message}
+        </p>
+      )}
       <LabelPicker
         selected={ids}
-        disabled={mut.isPending || q.isPending}
+        disabled={mut.isPending || q.isPending || q.isError}
         onChange={(next) => {
           setLocal(next);
           mut.mutate(next);

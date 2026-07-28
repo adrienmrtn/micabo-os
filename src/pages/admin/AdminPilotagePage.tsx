@@ -118,7 +118,7 @@ function LabelsPilotageCard() {
   const [couleur, setCouleur] = React.useState("#2f6f4e");
 
   const creer = useMutation({
-    mutationFn: () => creerLabel(nom, couleur),
+    mutationFn: () => creerLabel(nom.trim(), couleur),
     onSuccess: () => {
       setNom("");
       qc.invalidateQueries({ queryKey: ["labels"] });
@@ -161,12 +161,30 @@ function LabelsPilotageCard() {
               onChange={(e) => setCouleur(e.target.value)}
             />
           </div>
-          <Button type="submit" disabled={creer.isPending}>
+          <Button type="submit" disabled={creer.isPending || !nom.trim()}>
             {creer.isPending ? t("common.saving") : t("labels.creer")}
           </Button>
         </form>
+        {creer.isError && (
+          <p className="text-xs text-destructive">
+            {t("labels.erreurCreation")}: {(creer.error as Error).message}
+          </p>
+        )}
+        {supprimer.isError && (
+          <p className="text-xs text-destructive">
+            {t("labels.erreurSuppression")}: {(supprimer.error as Error).message}
+          </p>
+        )}
 
         <div className="list-enter flex flex-wrap gap-2">
+          {labels.isPending && (
+            <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
+          )}
+          {labels.isError && (
+            <p className="text-xs text-destructive">
+              {t("labels.erreurChargement")}: {(labels.error as Error).message}
+            </p>
+          )}
           {(labels.data ?? []).map((lab) => (
             <div
               key={lab.id}
@@ -188,8 +206,8 @@ function LabelsPilotageCard() {
               </button>
             </div>
           ))}
-          {!labels.isPending && (labels.data?.length ?? 0) === 0 && (
-            <p className="text-xs text-muted-foreground">{t("labels.aucun")}</p>
+          {!labels.isPending && !labels.isError && (labels.data?.length ?? 0) === 0 && (
+            <p className="text-xs text-muted-foreground">{t("labels.aucunIci")}</p>
           )}
         </div>
       </CardContent>
