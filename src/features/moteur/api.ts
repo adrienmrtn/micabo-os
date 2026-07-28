@@ -1035,6 +1035,13 @@ export const lancerAssignationContenu = (opts?: {
     forcer: opts?.forcer ?? false,
   });
 
+/** Drain variations v-next : un contenu gagnant → un remix. */
+export const lancerVariations = (forcer = false) =>
+  invoke<{ ok: boolean; idle?: boolean; contenuId?: string; parentId?: string; langue?: string }>(
+    "variations",
+    { forcer },
+  );
+
 /** Importe un slideshow depuis un lien TikTok collé à la main : scrape ce seul
  *  post et en fait un sujet, rattaché à un compte de référence (pour que ses
  *  visuels rejoignent la bonne bibliothèque). Le nettoyage et la composition

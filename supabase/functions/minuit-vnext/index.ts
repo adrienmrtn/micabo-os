@@ -1,6 +1,7 @@
 import { assignerTousComptes } from "../_shared/assignation_contenu.ts";
 import { scrapeStats } from "../_shared/apify.ts";
 import { majScoresDepuisPassages } from "../_shared/scoring.ts";
+import { avancerVariations } from "../_shared/variations.ts";
 import {
   assertAuthorised,
   aujourdhuiParis,
@@ -22,7 +23,7 @@ const POSTS_RELEVES = 30;
  * Le contenu est déjà pré-cuit à l'import : pas de composition ici.
  *
  *   {}  → pipeline complet (si reglages.moteur_vnext.actif)
- *   { etapes?: ['stats'|'scores'|'assignation'], compteId?, date?, forcer? }
+ *   { etapes?: ['stats'|'scores'|'assignation'|'variations'], compteId?, date?, forcer? }
  */
 Deno.serve(async (request) => {
   const denied = await assertAuthorised(request);
@@ -70,6 +71,10 @@ Deno.serve(async (request) => {
         compteId,
         Boolean(body?.forcerAssignation),
       );
+    }
+    if (etapes.includes("variations")) {
+      // Un candidat par passage minuit ; le drain `variations` en fait plus souvent.
+      out.variations = await avancerVariations(supabase);
     }
 
     return json(out);

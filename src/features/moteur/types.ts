@@ -273,6 +273,8 @@ export interface Contenu {
   import_tentatives: number;
   parent_id: string | null;
   profondeur: number;
+  /** Langue qui a déclenché la variation (null si contenu original). */
+  variation_langue: string | null;
   created_at: string;
 }
 
