@@ -44,16 +44,16 @@ Deno.serve(async (request) => {
     // deno-lint-ignore no-explicit-any
     const refId = (post as any)?.comptes?.compte_reference_id ?? null;
 
-    // 1 — Tentative de nettoyage (proxy Lovable en priorité, cf. cleanImage).
+    // 1 — Tentative de nettoyage (Seedream en priorité, cf. cleanImage).
     if (slide.reference_url) {
       try {
-        // On re-vérifie la sortie : le proxy renvoie parfois l'image SANS l'avoir
+        // On re-vérifie la sortie : le moteur renvoie parfois l'image SANS l'avoir
         // nettoyée. Si du texte reste, on ne la garde pas → on passe au
         // remplacement par une photo propre de la bibliothèque.
-        const propreBase64 = await cleanImage(slide.reference_url);
-        if (propreBase64 && (await verifyClean(propreBase64, "image/png"))) {
+        const propre = await cleanImage(slide.reference_url);
+        if (propre && (await verifyClean(propre.base64, "image/png"))) {
           const path = `propre/manuel/${slide.id}.png`;
-          const bytes = Uint8Array.from(atob(propreBase64), (c) => c.charCodeAt(0));
+          const bytes = Uint8Array.from(atob(propre.base64), (c) => c.charCodeAt(0));
           const { error: upErr } = await supabase.storage
             .from(BUCKET)
             .upload(path, bytes, { contentType: "image/png", upsert: true });
@@ -80,7 +80,7 @@ Deno.serve(async (request) => {
           if (insErr) throw insErr;
 
           await supabase.from("post_slides").update({ media_id: media.id }).eq("id", slide.id);
-          return json({ ok: true, nettoyee: true });
+          return json({ ok: true, nettoyee: true, moteur: propre.moteur });
         }
       } catch (error) {
         console.warn(`[renettoyer] nettoyage échoué, on remplace : ${messageErreur(error)}`);

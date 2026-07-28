@@ -31,6 +31,14 @@ interface Slide {
   media_id: string | null;
 }
 
+/** Une seule slide par `position` (la dernière gagne). Évite le
+ *  `post_slides_post_id_position_key` quand `structure_slides` a des doublons. */
+function slidesParPositionUnique(slides: Slide[]): Slide[] {
+  const parPos = new Map<number, Slide>();
+  for (const s of slides) parPos.set(s.position, s);
+  return [...parPos.values()].sort((a, b) => a.position - b.position);
+}
+
 export interface DemandeComposition {
   compteId: string;
   sujetId: string;
@@ -110,7 +118,7 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
       .single();
     if (!sujet) throw new Error("Sujet introuvable");
 
-    const slides: Slide[] = sujet.structure_slides ?? [];
+    const slides: Slide[] = slidesParPositionUnique(sujet.structure_slides ?? []);
     if (slides.length === 0) throw new Error("Sujet sans visuel");
 
     const { data: existantes } = await supabase
@@ -196,26 +204,42 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
       // remplace les périmées par une image propre encore présente (sinon null).
       await reparerVisuelsPerimes(supabase, compte, slides, visuels);
 
-      const { data: creees, error: errInsert } = await supabase
+      const rows = slides.map((s) => ({
+        post_id: post.id,
+        position: s.position,
+        media_id: visuels.get(s.position) ?? null,
+        texte_overlay: parPosition.get(s.position) ?? "",
+        position_sophia: false,
+        // Le visuel d'origine, texte encore incrusté : c'est le modèle de
+        // placement que le poster recopie dans TikTok.
+        reference_url: s.raw_url ?? null,
+      }));
+
+      // Upsert sur (post_id, position) : idempotent si deux workers traduisent
+      // en parallèle, ou si un retry retombe sur des slides déjà créées.
+      // (l'ancien `.insert` levait `post_slides_post_id_position_key`).
+      const { data: creees, error: errUpsert } = await supabase
         .from("post_slides")
-        .insert(
-          slides.map((s) => ({
-            post_id: post.id,
-            position: s.position,
-            media_id: visuels.get(s.position) ?? null,
-            texte_overlay: parPosition.get(s.position) ?? "",
-            position_sophia: false,
-            // Le visuel d'origine, texte encore incrusté : c'est le modèle de
-            // placement que le poster recopie dans TikTok.
-            reference_url: s.raw_url ?? null,
-          })),
-        )
+        .upsert(rows, { onConflict: "post_id,position" })
         .select("media_id");
-      // On VÉRIFIE l'insertion : sans ça, un échec (ex. media_id périmé) était
-      // avalé, le post repartait « traduction » sans jamais créer de slide, et
-      // bloquait toute la file (il passe avant les posts en attente). On lève
-      // l'erreur → le post est marqué `failed` avec la cause, la file avance.
-      if (errInsert) throw new Error(`Insertion des slides échouée : ${errInsert.message}`);
+
+      if (errUpsert) {
+        // Filet : contrainte unique encore vue (course rare). Si les slides
+        // sont là, on continue ; sinon on remonte l'erreur.
+        const concurrent = errUpsert.code === "23505" ||
+          /post_slides_post_id_position_key|duplicate key/i.test(errUpsert.message);
+        if (concurrent) {
+          const { data: deja } = await supabase
+            .from("post_slides")
+            .select("media_id")
+            .eq("post_id", post.id);
+          if (deja && deja.length > 0) {
+            await marquerVisuelsUtilises(supabase, compte.id, post.id, deja);
+            return "traduction";
+          }
+        }
+        throw new Error(`Insertion des slides échouée : ${errUpsert.message}`);
+      }
 
       await marquerVisuelsUtilises(supabase, compte.id, post.id, creees ?? []);
 

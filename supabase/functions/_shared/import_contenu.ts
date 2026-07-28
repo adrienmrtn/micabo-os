@@ -585,7 +585,8 @@ async function nettoyerSlide(
 ): Promise<string | null> {
   let propreBase64: string | null;
   try {
-    propreBase64 = await cleanImage(slide.raw_url);
+    const propre = await cleanImage(slide.raw_url);
+    propreBase64 = propre?.base64 ?? null;
   } catch (error) {
     console.warn(
       `[import nettoyage] contenu=${contenu.id} slide=${slide.position} ${messageErreur(error)}`,

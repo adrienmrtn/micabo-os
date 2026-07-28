@@ -41,16 +41,16 @@ Deno.serve(async (request) => {
       return json({ ok: true, nettoyee: true, note: "déjà nettoyée" });
     }
 
-    const propreBase64 = await cleanImage(media.url);
-    if (!propreBase64) return json({ ok: false, nettoyee: false, motif: "aucune image renvoyée" });
+    const propre = await cleanImage(media.url);
+    if (!propre) return json({ ok: false, nettoyee: false, motif: "aucune image renvoyée" });
     // Le proxy renvoie parfois l'image non nettoyée en disant « réussi » : on
     // vérifie qu'il n'y a plus de texte avant de la marquer propre.
-    if (!(await verifyClean(propreBase64, "image/png"))) {
+    if (!(await verifyClean(propre.base64, "image/png"))) {
       return json({ ok: false, nettoyee: false, motif: "texte encore présent après nettoyage" });
     }
 
     const path = `propre/manuel/${media.id}.png`;
-    const bytes = Uint8Array.from(atob(propreBase64), (c) => c.charCodeAt(0));
+    const bytes = Uint8Array.from(atob(propre.base64), (c) => c.charCodeAt(0));
     const { error: upErr } = await supabase.storage
       .from(BUCKET)
       .upload(path, bytes, { contentType: "image/png", upsert: true });
@@ -69,7 +69,7 @@ Deno.serve(async (request) => {
       .eq("id", media.id);
     if (majErr) throw majErr;
 
-    return json({ ok: true, nettoyee: true, url });
+    return json({ ok: true, nettoyee: true, url, moteur: propre.moteur });
   } catch (error) {
     return json({ ok: false, nettoyee: false, erreur: messageErreur(error) }, 500);
   }
