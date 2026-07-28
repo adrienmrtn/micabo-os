@@ -803,7 +803,7 @@ export const renettoyerSlide = (postSlideId: string) =>
     nettoyee: boolean;
     remplacee?: boolean;
     verifie_sans_texte?: boolean;
-    moteur?: "seedream" | "proxy";
+    moteur?: "seedream" | "proxy" | "inpaint";
     erreur?: string;
     motif?: string;
   }>("renettoyer", { postSlideId });
@@ -857,7 +857,7 @@ export const nettoyerMedia = (mediaId: string) =>
   invoke<{
     ok: boolean;
     nettoyee: boolean;
-    moteur?: "seedream" | "proxy";
+    moteur?: "seedream" | "proxy" | "inpaint";
     erreur?: string;
   }>("nettoyer-media", { mediaId });
 
@@ -866,7 +866,7 @@ export const nettoyerTest = (url: string) =>
   invoke<{
     ok: boolean;
     url?: string;
-    moteur?: "seedream" | "proxy";
+    moteur?: "seedream" | "proxy" | "inpaint";
     erreur?: string;
     motif?: string;
   }>("nettoyer-test", { url });

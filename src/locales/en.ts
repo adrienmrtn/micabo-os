@@ -749,6 +749,7 @@ export const en = {
       moteurSeedream: "Fal · Seedream 5.0",
       viaSeedream: "Cleaned via Seedream (Fal)",
       viaProxy: "Cleaned via proxy (fallback)",
+      viaInpaint: "Cleaned via LaMa inpaint (fallback)",
       pasEncore: "Click \"Test\"",
       echec: "Failed — see the message",
     },

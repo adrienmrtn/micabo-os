@@ -749,6 +749,7 @@ export const fr = {
       moteurSeedream: "Fal · Seedream 5.0",
       viaSeedream: "Nettoyé via Seedream (Fal)",
       viaProxy: "Nettoyé via proxy (repli)",
+      viaInpaint: "Nettoyé via LaMa inpaint (repli)",
       pasEncore: "Clique « Tester »",
       echec: "Échec — voir le message",
     },

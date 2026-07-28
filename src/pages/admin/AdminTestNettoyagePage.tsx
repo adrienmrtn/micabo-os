@@ -13,7 +13,7 @@ import { mediasBrutsParSource, nettoyerTest, type MediaTest } from "@/features/m
 type EtatTest =
   | { statut: "repos" }
   | { statut: "encours" }
-  | { statut: "ok"; url: string; moteur?: "seedream" | "proxy" }
+  | { statut: "ok"; url: string; moteur?: "seedream" | "proxy" | "inpaint" }
   | { statut: "echec"; erreur?: string };
 
 const REPOS: EtatTest = { statut: "repos" };
@@ -95,7 +95,11 @@ function CarteTest({
 
       {etat.statut === "ok" && etat.moteur ? (
         <p className="text-[10px] text-muted-foreground">
-          {etat.moteur === "seedream" ? t("testNet.viaSeedream") : t("testNet.viaProxy")}
+          {etat.moteur === "seedream"
+            ? t("testNet.viaSeedream")
+            : etat.moteur === "inpaint"
+              ? t("testNet.viaInpaint")
+              : t("testNet.viaProxy")}
         </p>
       ) : null}
       {etat.statut === "echec" && etat.erreur ? (
