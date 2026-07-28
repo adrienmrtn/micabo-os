@@ -14,6 +14,8 @@ import type {
   Reglages,
   Sujet,
   SujetSlide,
+  Label,
+  Contenu,
 } from "./types";
 
 /** Date du jour en YYYY-MM-DD, en heure locale — le poster raisonne sur sa
@@ -956,6 +958,9 @@ export async function lireReglages(): Promise<Reglages> {
       tarif_base_mensuel: 0,
       tarif_par_post_jour: 0,
     },
+    moteur_vnext: (map.get("moteur_vnext") as Reglages["moteur_vnext"] | undefined) ?? {
+      actif: false,
+    },
   };
 }
 
@@ -1287,3 +1292,177 @@ export const testerScrape = (compteReferenceId: string) =>
   invoke<{ ok: boolean; handle: string; posts: PostScrapeTest[]; error?: string }>("extraction", {
     testScrape: compteReferenceId,
   });
+
+// --- Labels / contenus v-next ------------------------------------------------
+
+function slugify(nom: string): string {
+  return (
+    nom
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "label"
+  );
+}
+
+export async function listerLabels(): Promise<Label[]> {
+  const { data, error } = await supabase.from("labels").select("*").order("nom");
+  if (error) throw error;
+  return data as Label[];
+}
+
+export async function creerLabel(nom: string, couleur?: string | null): Promise<Label> {
+  const base = slugify(nom);
+  let slug = base;
+  for (let i = 0; i < 5; i += 1) {
+    const { data, error } = await supabase
+      .from("labels")
+      .insert({ nom: nom.trim(), slug, couleur: couleur ?? null })
+      .select()
+      .single();
+    if (!error && data) return data as Label;
+    if (error?.code !== "23505") throw error;
+    slug = `${base}-${i + 2}`;
+  }
+  throw new Error("Impossible de créer le label (slug pris)");
+}
+
+export async function majLabel(
+  id: string,
+  patch: { nom?: string; couleur?: string | null },
+): Promise<void> {
+  const body: Record<string, unknown> = { ...patch };
+  if (patch.nom) body.slug = slugify(patch.nom);
+  const { error } = await supabase.from("labels").update(body).eq("id", id);
+  if (error) throw error;
+}
+
+export async function supprimerLabel(id: string): Promise<void> {
+  const { error } = await supabase.from("labels").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function labelsDuCompte(compteId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("compte_labels")
+    .select("label_id")
+    .eq("compte_id", compteId);
+  if (error) throw error;
+  return (data ?? []).map((r) => r.label_id as string);
+}
+
+export async function labelsDeLaSource(compteReferenceId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("compte_reference_labels")
+    .select("label_id")
+    .eq("compte_reference_id", compteReferenceId);
+  if (error) throw error;
+  return (data ?? []).map((r) => r.label_id as string);
+}
+
+export async function labelsDuContenu(contenuId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("contenu_labels")
+    .select("label_id")
+    .eq("contenu_id", contenuId);
+  if (error) throw error;
+  return (data ?? []).map((r) => r.label_id as string);
+}
+
+async function syncLabels(
+  table: "compte_labels" | "compte_reference_labels" | "contenu_labels",
+  fk: string,
+  fkValue: string,
+  labelIds: string[],
+): Promise<void> {
+  const { error: delErr } = await supabase.from(table).delete().eq(fk, fkValue);
+  if (delErr) throw delErr;
+  if (labelIds.length === 0) return;
+  const rows = labelIds.map((label_id) => ({ [fk]: fkValue, label_id }));
+  const { error } = await supabase.from(table).insert(rows);
+  if (error) throw error;
+}
+
+export const setLabelsCompte = (compteId: string, labelIds: string[]) =>
+  syncLabels("compte_labels", "compte_id", compteId, labelIds);
+
+export const setLabelsSource = (compteReferenceId: string, labelIds: string[]) =>
+  syncLabels("compte_reference_labels", "compte_reference_id", compteReferenceId, labelIds);
+
+export const setLabelsContenu = (contenuId: string, labelIds: string[]) =>
+  syncLabels("contenu_labels", "contenu_id", contenuId, labelIds);
+
+/** Applique rétroactivement les labels d'une source à tous ses contenus. */
+export async function propagerLabelsSource(compteReferenceId: string): Promise<number> {
+  const labelIds = await labelsDeLaSource(compteReferenceId);
+  const { data: contenus, error } = await supabase
+    .from("contenus")
+    .select("id")
+    .eq("compte_reference_id", compteReferenceId);
+  if (error) throw error;
+  for (const c of contenus ?? []) {
+    await setLabelsContenu(c.id, labelIds);
+  }
+  return contenus?.length ?? 0;
+}
+
+export interface ContenuListe extends Contenu {
+  labels?: Label[];
+  scores?: Array<{ langue: string; score: number; nb_passages: number }>;
+}
+
+export async function listerContenus(opts?: {
+  statut?: string;
+  limit?: number;
+}): Promise<ContenuListe[]> {
+  let q = supabase
+    .from("contenus")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(opts?.limit ?? 80);
+  if (opts?.statut) q = q.eq("statut", opts.statut);
+  const { data, error } = await q;
+  if (error) throw error;
+  const contenus = (data ?? []) as Contenu[];
+  if (contenus.length === 0) return [];
+
+  const ids = contenus.map((c) => c.id);
+  const [{ data: liens }, { data: scores }] = await Promise.all([
+    supabase.from("contenu_labels").select("contenu_id, label_id, labels(*)").in("contenu_id", ids),
+    supabase
+      .from("contenu_langues")
+      .select("contenu_id, langue, score, nb_passages")
+      .in("contenu_id", ids),
+  ]);
+
+  const labelsPar = new Map<string, Label[]>();
+  for (const l of liens ?? []) {
+    const row = l as unknown as { contenu_id: string; labels: Label | null };
+    if (!row.labels) continue;
+    const list = labelsPar.get(row.contenu_id) ?? [];
+    list.push(row.labels);
+    labelsPar.set(row.contenu_id, list);
+  }
+  const scoresPar = new Map<string, NonNullable<ContenuListe["scores"]>>();
+  for (const s of scores ?? []) {
+    const list = scoresPar.get(s.contenu_id) ?? [];
+    list.push({ langue: s.langue, score: s.score, nb_passages: s.nb_passages });
+    scoresPar.set(s.contenu_id, list);
+  }
+
+  return contenus.map((c) => ({
+    ...c,
+    labels: labelsPar.get(c.id) ?? [],
+    scores: scoresPar.get(c.id) ?? [],
+  }));
+}
+
+/** Coût mensuel = base + posts_par_jour × unitaire. */
+export function coutMensuelCalcule(
+  postsParJour: number,
+  paiement: { tarif_base_mensuel: number; tarif_par_post_jour: number },
+): number {
+  return paiement.tarif_base_mensuel + postsParJour * paiement.tarif_par_post_jour;
+}

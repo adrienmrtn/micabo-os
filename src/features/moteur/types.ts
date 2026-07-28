@@ -184,6 +184,7 @@ export interface Reglages {
   /** Réglages moteur v-next (présents dès la migration 0141). */
   scoring: ReglagesScoring;
   paiement: ReglagesPaiement;
+  moteur_vnext: { actif: boolean };
 }
 
 export interface StatsCompte {

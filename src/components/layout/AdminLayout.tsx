@@ -49,10 +49,10 @@ export function AdminLayout() {
             },
             { to: "/admin/sources", label: t("nav.sources"), icon: AtSign, description: t("navDesc.sources") },
             {
-              to: "/admin/assignation-sources",
-              label: t("nav.assignSources"),
+              to: "/admin/contenus",
+              label: t("nav.contenus"),
               icon: ListOrdered,
-              description: t("navDesc.assignSources"),
+              description: t("navDesc.contenus"),
             },
             {
               to: "/admin/reproduisibles",

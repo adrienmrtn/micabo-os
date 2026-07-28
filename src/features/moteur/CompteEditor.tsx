@@ -6,13 +6,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LabelEditor } from "@/features/moteur/LabelPicker";
 import {
+  coutMensuelCalcule,
   genererPersona,
+  labelsDuCompte,
+  lireReglages,
   listerLanguesReference,
   listerMedias,
   listerSources,
   majCompte,
   majUpwork,
+  setLabelsCompte,
   supprimerCompte,
 } from "@/features/moteur/api";
 import { nomLangue } from "@/features/moteur/langues";
@@ -235,8 +240,21 @@ function ReglagesCompte({ compte }: { compte: CompteAvecDetails }) {
           </Button>
         )}
       </div>
+      <CoutEstime postsParJour={parJour} />
       <p className="text-xs text-muted-foreground">{t("comptes.reglagesHint")}</p>
     </div>
+  );
+}
+
+function CoutEstime({ postsParJour }: { postsParJour: number }) {
+  const { t } = useTranslation();
+  const reglages = useQuery({ queryKey: ["reglages"], queryFn: lireReglages });
+  if (!reglages.data) return null;
+  const cout = coutMensuelCalcule(postsParJour, reglages.data.paiement);
+  return (
+    <p className="text-xs text-muted-foreground">
+      {t("paiement.coutEstime", { cout, posts: postsParJour })}
+    </p>
   );
 }
 
@@ -383,6 +401,13 @@ export function CompteEditor({ compte }: { compte: CompteAvecDetails }) {
       </div>
 
       <InfosCompte compte={compte} />
+      <div className="rounded-lg border p-3">
+        <LabelEditor
+          queryKey={["compte-labels", compte.id]}
+          load={() => labelsDuCompte(compte.id)}
+          save={(ids) => setLabelsCompte(compte.id, ids)}
+        />
+      </div>
       <ChoixAvatar compte={compte} />
       <GenerationPersona compte={compte} />
       <ReglagesCompte compte={compte} />
