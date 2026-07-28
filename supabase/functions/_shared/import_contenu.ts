@@ -1,0 +1,676 @@
+import { downloadImage, scrapePost, scrapeProfile, type ScrapedPost } from "./apify.ts";
+import {
+  cleanImage,
+  integrateSophia,
+  ocrFrame,
+  scoreRelevance,
+  translateSlideshow,
+  verifyClean,
+} from "./gemini.ts";
+import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
+
+export type Supabase = ReturnType<typeof serviceClient>;
+
+const BUCKET = "medias";
+export const LANGUES_CIBLES = ["fr", "en", "de", "it", "es", "pt"] as const;
+const SLIDES_PAR_PASSAGE = 2;
+const MAX_TENTATIVES_NETTOYAGE = 4;
+const MAX_TENTATIVES_SOPHIA = 15;
+const CONTENUS_PAR_SCRAPE = 5;
+
+export interface SlideBrut {
+  position: number;
+  raw_url: string;
+  reference_url?: string | null;
+  media_id: string | null;
+  texte_original?: string | null;
+  tentatives?: number;
+}
+
+export interface SlideLangue {
+  position: number;
+  texte_overlay: string | null;
+  position_sophia: boolean;
+}
+
+function sophiaParDefaut(langue: string): string {
+  const par: Record<string, string> = {
+    fr: "Envie d'en apprendre plus chaque jour ? L'appli Sophia t'apprend une culture générale de dingue en quelques minutes. Teste-la 👀",
+    en: "Want to learn something new every day? The Sophia app teaches you wild general knowledge in minutes. Give it a try 👀",
+    es: "¿Quieres aprender algo nuevo cada día? La app Sophia te enseña cultura general increíble en minutos. Pruébala 👀",
+  };
+  return par[langue] ?? par.en;
+}
+
+const idDe = (url: string) => url.match(/\/(?:photo|video)\/(\d+)/)?.[1] ?? url;
+
+async function lireScoring(supabase: Supabase) {
+  const { data } = await supabase.from("reglages").select("valeur").eq("cle", "scoring").maybeSingle();
+  const v = (data?.valeur ?? {}) as Record<string, number>;
+  return {
+    prior: v.score_prior ?? 50,
+    k: v.regularisation_k ?? 5,
+    pertinence: v.pertinence_seuil ?? 50,
+  };
+}
+
+function scoreBaseDepuisVues(vues: number | null | undefined): number {
+  return Math.min(
+    100,
+    Math.max(50, 50 + Math.log(1 + (vues ?? 0)) / Math.log(1 + 5_000_000) * 50),
+  );
+}
+
+function scoreInitial(base: number, prior: number, k: number, langueSource: boolean): number {
+  const kk = langueSource ? k / 2 : k * 2;
+  return (kk * prior + base) / (kk + 1);
+}
+
+/** Hérite les labels du compte de référence + labels explicites. */
+export async function attacherLabels(
+  supabase: Supabase,
+  contenuId: string,
+  compteReferenceId: string | null,
+  labelIds: string[] | null,
+): Promise<void> {
+  const ids = new Set<string>(labelIds ?? []);
+  if (compteReferenceId) {
+    const { data } = await supabase
+      .from("compte_reference_labels")
+      .select("label_id")
+      .eq("compte_reference_id", compteReferenceId);
+    for (const row of data ?? []) ids.add(row.label_id);
+  }
+  if (ids.size === 0) return;
+  await supabase.from("contenu_labels").upsert(
+    [...ids].map((label_id) => ({ contenu_id: contenuId, label_id })),
+    { onConflict: "contenu_id,label_id" },
+  );
+}
+
+async function stockerVisuelBrut(
+  supabase: Supabase,
+  postId: string,
+  position: number,
+  sourceUrl: string,
+): Promise<string> {
+  try {
+    const bytes = await downloadImage(sourceUrl);
+    const path = `brut/${postId}/${position}.jpg`;
+    const { error } = await supabase.storage
+      .from(BUCKET)
+      .upload(path, bytes, { contentType: "image/jpeg", upsert: true });
+    if (error) throw error;
+    return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+  } catch {
+    return sourceUrl;
+  }
+}
+
+/** Crée un contenu depuis un post scrapé (idempotent sur source_url). */
+export async function creerContenuDepuisPost(
+  supabase: Supabase,
+  post: ScrapedPost,
+  compteReferenceId: string | null,
+  labelIds: string[] | null = null,
+  langueSource = "fr",
+): Promise<{ id: string; reused: boolean }> {
+  const { data: existant } = await supabase
+    .from("contenus")
+    .select("id")
+    .eq("source_url", post.webVideoUrl)
+    .maybeSingle();
+  if (existant) {
+    await attacherLabels(supabase, existant.id, compteReferenceId, labelIds);
+    return { id: existant.id, reused: true };
+  }
+
+  const slides: SlideBrut[] = [];
+  for (const [index, url] of post.imageUrls.entries()) {
+    const position = index + 1;
+    const raw = await stockerVisuelBrut(supabase, post.postId, position, url);
+    slides.push({
+      position,
+      raw_url: raw,
+      reference_url: raw,
+      media_id: null,
+      texte_original: null,
+    });
+  }
+
+  const { data: contenu, error } = await supabase
+    .from("contenus")
+    .insert({
+      titre: post.text.slice(0, 160) || "Sans titre",
+      structure_slides: slides,
+      compte_reference_id: compteReferenceId,
+      source_url: post.webVideoUrl,
+      langue_source: langueSource,
+      musique_url: post.musicUrl,
+      musique_titre: post.musicTitle,
+      vues_source: post.stats?.vues ?? null,
+      statut: "brouillon",
+      import_statut: "pending",
+      import_etape: null,
+      profondeur: 0,
+    })
+    .select("id")
+    .single();
+  if (error || !contenu) throw error ?? new Error("Création contenu échouée");
+
+  await attacherLabels(supabase, contenu.id, compteReferenceId, labelIds);
+  await assurerContenuLangues(supabase, contenu.id, langueSource, post.stats?.vues ?? null);
+  return { id: contenu.id, reused: false };
+}
+
+export async function assurerContenuLangues(
+  supabase: Supabase,
+  contenuId: string,
+  langueSource: string,
+  vuesSource: number | null,
+): Promise<void> {
+  const scoring = await lireScoring(supabase);
+  const base = scoreBaseDepuisVues(vuesSource);
+  const { data: existantes } = await supabase
+    .from("contenu_langues")
+    .select("langue")
+    .eq("contenu_id", contenuId);
+  const deja = new Set((existantes ?? []).map((r) => r.langue));
+
+  const rows = LANGUES_CIBLES.filter((l) => !deja.has(l)).map((langue) => ({
+    contenu_id: contenuId,
+    langue,
+    slides: [] as SlideLangue[],
+    score: scoreInitial(base, scoring.prior, scoring.k, langue === langueSource),
+    nb_passages: 0,
+    score_maj_at: new Date().toISOString(),
+  }));
+  if (rows.length > 0) {
+    const { error } = await supabase.from("contenu_langues").insert(rows);
+    if (error) throw error;
+  }
+}
+
+/** Import d'un lien TikTok isolé. */
+export async function importerLien(
+  supabase: Supabase,
+  postUrl: string,
+  compteReferenceId: string | null,
+  labelIds: string[] | null,
+): Promise<{ id: string; reused: boolean }> {
+  const [post] = await scrapePost(postUrl);
+  if (!post) throw new Error("Post introuvable ou non scrapable");
+  if (post.imageUrls.length === 0) throw new Error("Pas un diaporama (aucune image)");
+
+  let langue = "fr";
+  if (compteReferenceId) {
+    const { data: ref } = await supabase
+      .from("comptes_reference")
+      .select("langue")
+      .eq("id", compteReferenceId)
+      .maybeSingle();
+    langue = ref?.langue ?? "fr";
+  }
+  return creerContenuDepuisPost(supabase, post, compteReferenceId, labelIds, langue);
+}
+
+/** Scrape un compte de référence : crée jusqu'à N contenus inédits. */
+export async function importerCompteReference(
+  supabase: Supabase,
+  compteReferenceId: string,
+): Promise<{ crees: number; ids: string[] }> {
+  const { data: ref } = await supabase
+    .from("comptes_reference")
+    .select("id, handle_tiktok, langue")
+    .eq("id", compteReferenceId)
+    .single();
+  if (!ref) throw new Error("Compte de référence introuvable");
+
+  const { data: connusContenu } = await supabase.from("contenus").select("source_url");
+  const deja = new Set((connusContenu ?? []).map((s) => idDe(s.source_url ?? "")));
+
+  const posts = await scrapeProfile(ref.handle_tiktok, 30);
+  const inedits = posts
+    .filter((p) => p.imageUrls.length > 0 && !deja.has(idDe(p.webVideoUrl)))
+    .sort((a, b) => (b.stats?.vues ?? 0) - (a.stats?.vues ?? 0));
+
+  const ids: string[] = [];
+  let crees = 0;
+  for (const post of inedits) {
+    if (crees >= CONTENUS_PAR_SCRAPE) break;
+    const r = await creerContenuDepuisPost(
+      supabase,
+      post,
+      compteReferenceId,
+      null,
+      ref.langue ?? "fr",
+    );
+    if (!r.reused) {
+      crees += 1;
+      ids.push(r.id);
+    }
+  }
+
+  await supabase
+    .from("comptes_reference")
+    .update({ dernier_scrape_at: new Date().toISOString() })
+    .eq("id", compteReferenceId);
+
+  return { crees, ids };
+}
+
+async function marquer(
+  supabase: Supabase,
+  contenuId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase.from("contenus").update(patch).eq("id", contenuId);
+  if (error) throw error;
+}
+
+/**
+ * Avance le pipeline d'UN pas. Ordre :
+ * OCR hook → pertinence → OCR reste → nettoyage (1×) → traduction (1 langue)
+ * → Sophia (1 langue) → scores → valide.
+ */
+// deno-lint-ignore no-explicit-any
+export async function avancerImport(supabase: Supabase, contenu: any): Promise<string> {
+  const slides: SlideBrut[] = [...(contenu.structure_slides ?? [])];
+  const langueSource: string = contenu.langue_source ?? "fr";
+
+  try {
+    if (slides.length === 0) throw new Error("Contenu sans visuel");
+
+    await marquer(supabase, contenu.id, {
+      import_statut: "running",
+      import_erreur: null,
+    });
+
+    // Reprise / backfill : réhydrate l'OCR depuis la langue source si besoin
+    // (structure_slides migrée sans texte_original).
+    if (slides.some((s) => s.texte_original == null)) {
+      const { data: srcLang } = await supabase
+        .from("contenu_langues")
+        .select("slides")
+        .eq("contenu_id", contenu.id)
+        .eq("langue", langueSource)
+        .maybeSingle();
+      const srcSlides = (srcLang?.slides ?? []) as SlideLangue[];
+      if (srcSlides.length > 0) {
+        const parPos = new Map(srcSlides.map((s) => [s.position, s.texte_overlay]));
+        for (const s of slides) {
+          if (s.texte_original == null && parPos.has(s.position)) {
+            s.texte_original = parPos.get(s.position) ?? "";
+          }
+        }
+      }
+    }
+
+    await assurerContenuLangues(
+      supabase,
+      contenu.id,
+      langueSource,
+      contenu.vues_source ?? null,
+    );
+
+    // 1 — OCR du hook
+    if (slides[0] && (slides[0].texte_original === null || slides[0].texte_original === undefined)) {
+      slides[0].texte_original = await ocrFrame(slides[0].raw_url);
+      await marquer(supabase, contenu.id, {
+        structure_slides: slides,
+        import_etape: "ocr",
+      });
+      return "ocr";
+    }
+
+    // 2 — Pertinence (garde Sophia)
+    if (contenu.pertinence_score === null || contenu.pertinence_score === undefined) {
+      const scoring = await lireScoring(supabase);
+      const { score, reason } = await scoreRelevance({
+        caption: contenu.titre ?? "",
+        hookText: slides[0]?.texte_original ?? "",
+        instructions: await chargerPrompt(supabase, "pertinence"),
+      });
+      const retenu = score >= scoring.pertinence;
+      await marquer(supabase, contenu.id, {
+        pertinence_score: score,
+        pertinence_raison: reason,
+        statut: retenu ? "brouillon" : "rejete",
+        import_statut: retenu ? "running" : "done",
+        import_etape: retenu ? "pertinence" : "rejete",
+      });
+      return retenu ? "pertinence" : "rejete";
+    }
+
+    if (contenu.statut === "rejete") {
+      await marquer(supabase, contenu.id, { import_statut: "done", import_etape: "rejete" });
+      return "rejete";
+    }
+
+    // 3 — OCR du reste
+    const aOcr = slides.filter((s) => s.texte_original === null || s.texte_original === undefined);
+    if (aOcr.length > 0) {
+      for (const slide of aOcr.slice(0, SLIDES_PAR_PASSAGE)) {
+        slide.texte_original = await ocrFrame(slide.raw_url);
+      }
+      // Sync OCR → langue source
+      const slidesSource: SlideLangue[] = slides.map((s) => ({
+        position: s.position,
+        texte_overlay: s.texte_original ?? "",
+        position_sophia: false,
+      }));
+      await supabase
+        .from("contenu_langues")
+        .update({ slides: slidesSource })
+        .eq("contenu_id", contenu.id)
+        .eq("langue", langueSource);
+      await marquer(supabase, contenu.id, {
+        structure_slides: slides,
+        import_etape: "ocr",
+      });
+      return "ocr";
+    }
+
+    // Sync source si pas encore fait
+    {
+      const { data: cl } = await supabase
+        .from("contenu_langues")
+        .select("slides")
+        .eq("contenu_id", contenu.id)
+        .eq("langue", langueSource)
+        .maybeSingle();
+      const vides = !cl?.slides || (Array.isArray(cl.slides) && cl.slides.length === 0);
+      if (vides) {
+        const slidesSource: SlideLangue[] = slides.map((s) => ({
+          position: s.position,
+          texte_overlay: s.texte_original ?? "",
+          position_sophia: false,
+        }));
+        await supabase
+          .from("contenu_langues")
+          .update({ slides: slidesSource })
+          .eq("contenu_id", contenu.id)
+          .eq("langue", langueSource);
+      }
+    }
+
+    // 4 — Nettoyage image UNE fois (language-agnostique)
+    const aNettoyer = slides.filter((s) => !s.media_id);
+    if (aNettoyer.length > 0) {
+      for (const slide of aNettoyer.slice(0, SLIDES_PAR_PASSAGE)) {
+        const propre = await nettoyerSlide(supabase, contenu, slide);
+        if (propre) {
+          slide.media_id = propre;
+          slide.tentatives = undefined;
+        } else {
+          slide.tentatives = (slide.tentatives ?? 0) + 1;
+          if (slide.tentatives >= MAX_TENTATIVES_NETTOYAGE) {
+            slide.media_id = await stockerBrut(supabase, contenu, slide);
+          }
+        }
+        await marquer(supabase, contenu.id, {
+          structure_slides: slides,
+          import_etape: "nettoyage",
+        });
+      }
+      return "nettoyage";
+    }
+
+    // 5 — Traduction : une langue cible manquante par passage
+    const { data: langues } = await supabase
+      .from("contenu_langues")
+      .select("id, langue, slides")
+      .eq("contenu_id", contenu.id);
+
+    const aTraduire = (langues ?? []).find((l) => {
+      if (l.langue === langueSource) return false;
+      const s = l.slides as SlideLangue[] | null;
+      return !s || s.length === 0 || s.every((x) => !x.texte_overlay);
+    });
+
+    if (aTraduire) {
+      const voix = await voixSource(supabase, contenu.compte_reference_id);
+      const dedie = await chargerPrompt(supabase, `traduction_${aTraduire.langue}`);
+      const base = dedie ??
+        (aTraduire.langue === "fr" ? await chargerPrompt(supabase, "traduction") : undefined);
+      const regles = [base, voix ? `Voix propre à cette source :\n${voix}` : null]
+        .filter(Boolean)
+        .join("\n\n");
+
+      const traductions = await translateSlideshow({
+        slides: slides.map((s) => ({
+          position: s.position,
+          original: s.texte_original ?? "",
+        })),
+        sourceTitle: contenu.titre ?? "",
+        rules: regles || undefined,
+        langue: aTraduire.langue,
+        variation: false,
+      });
+      const parPos = new Map(traductions.map((t) => [t.position, t.translated]));
+      const deck: SlideLangue[] = slides.map((s) => ({
+        position: s.position,
+        texte_overlay: parPos.get(s.position) ?? "",
+        position_sophia: false,
+      }));
+      await supabase.from("contenu_langues").update({ slides: deck }).eq("id", aTraduire.id);
+      await marquer(supabase, contenu.id, { import_etape: "traduction" });
+      return "traduction";
+    }
+
+    // 6 — Sophia : une langue sans placement par passage
+    const aSophia = (langues ?? []).find((l) => {
+      const s = (l.slides ?? []) as SlideLangue[];
+      return s.length > 0 && !s.some((x) => x.position_sophia);
+    });
+
+    if (aSophia) {
+      const deck = [...((aSophia.slides ?? []) as SlideLangue[])];
+      const { data: corrections } = await supabase
+        .from("corrections")
+        .select("texte_origine, texte_corrige")
+        .order("created_at", { ascending: false })
+        .limit(40);
+
+      const placement = await integrateSophia({
+        masterPrompt: (await chargerPrompt(supabase, "placement_sophia")) ?? "",
+        corrections: (corrections ?? []).map((c) => ({
+          original_text: c.texte_origine,
+          corrected_text: c.texte_corrige,
+        })),
+        slides: deck.map((s) => ({ position: s.position, text: s.texte_overlay ?? "" })),
+        caption: contenu.titre ?? "",
+        langue: aSophia.langue,
+      });
+
+      if (placement) {
+        const idx = deck.findIndex((s) => s.position === placement.chosenPosition);
+        if (idx >= 0) {
+          deck[idx] = {
+            ...deck[idx],
+            texte_overlay: placement.variants[placement.bestIndex],
+            position_sophia: true,
+          };
+          await supabase.from("contenu_langues").update({ slides: deck }).eq("id", aSophia.id);
+          await marquer(supabase, contenu.id, {
+            import_etape: "sophia",
+            import_tentatives: 0,
+          });
+          return "sophia";
+        }
+      }
+
+      const tentatives = (contenu.import_tentatives ?? 0) + 1;
+      if (tentatives < MAX_TENTATIVES_SOPHIA) {
+        await marquer(supabase, contenu.id, {
+          import_statut: "pending",
+          import_etape: "sophia",
+          import_tentatives: tentatives,
+        });
+        return "sophia_retry";
+      }
+
+      // Repli
+      const derniere = deck[deck.length - 1];
+      if (derniere) {
+        derniere.texte_overlay = sophiaParDefaut(aSophia.langue);
+        derniere.position_sophia = true;
+        await supabase.from("contenu_langues").update({ slides: deck }).eq("id", aSophia.id);
+      }
+      await marquer(supabase, contenu.id, {
+        import_etape: "sophia",
+        import_tentatives: 0,
+        import_erreur: "Sophia placée en repli (texte par défaut)",
+      });
+      return "sophia_repli";
+    }
+
+    // 7 — Recalcule scores cold-start puis valide
+    const scoring = await lireScoring(supabase);
+    const base = scoreBaseDepuisVues(contenu.vues_source);
+    for (const l of langues ?? []) {
+      await supabase
+        .from("contenu_langues")
+        .update({
+          score: scoreInitial(base, scoring.prior, scoring.k, l.langue === langueSource),
+          score_maj_at: new Date().toISOString(),
+        })
+        .eq("id", l.id);
+    }
+
+    // Strip texte_original des slides partagées (reste language-agnostique)
+    const slidesPropres = slides.map((s) => ({
+      position: s.position,
+      media_id: s.media_id,
+      raw_url: s.raw_url,
+      reference_url: s.reference_url ?? s.raw_url,
+    }));
+
+    await marquer(supabase, contenu.id, {
+      structure_slides: slidesPropres,
+      statut: "valide",
+      import_statut: "done",
+      import_etape: "done",
+      import_erreur: null,
+      import_tentatives: 0,
+    });
+    return "done";
+  } catch (error) {
+    await marquer(supabase, contenu.id, {
+      import_statut: "failed",
+      import_erreur: messageErreur(error),
+    });
+    return "failed";
+  }
+}
+
+async function voixSource(
+  supabase: Supabase,
+  compteReferenceId: string | null,
+): Promise<string | null> {
+  if (!compteReferenceId) return null;
+  const { data } = await supabase
+    .from("comptes_reference")
+    .select("style_profile")
+    .eq("id", compteReferenceId)
+    .maybeSingle();
+  return data?.style_profile ?? null;
+}
+
+// deno-lint-ignore no-explicit-any
+async function nettoyerSlide(
+  supabase: Supabase,
+  contenu: any,
+  slide: SlideBrut,
+): Promise<string | null> {
+  let propreBase64: string | null;
+  try {
+    propreBase64 = await cleanImage(slide.raw_url);
+  } catch (error) {
+    console.warn(
+      `[import nettoyage] contenu=${contenu.id} slide=${slide.position} ${messageErreur(error)}`,
+    );
+    return null;
+  }
+  if (!propreBase64) return null;
+  if (!(await verifyClean(propreBase64, "image/png"))) return null;
+
+  const path = `propre/${contenu.id}/${slide.position}.png`;
+  const bytes = Uint8Array.from(atob(propreBase64), (c) => c.charCodeAt(0));
+  const { error: upErr } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, bytes, { contentType: "image/png", upsert: true });
+  if (upErr) throw upErr;
+  const url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+
+  const { data: media, error } = await supabase
+    .from("media_library")
+    .upsert(
+      {
+        compte_reference_id: contenu.compte_reference_id,
+        contenu_id: contenu.id,
+        storage_path: path,
+        url,
+        source: "nettoye_reference",
+        langue: contenu.langue_source,
+        visage_identifiable: null,
+        verifie_le: new Date().toISOString(),
+        texte_restant: false,
+      },
+      { onConflict: "storage_path" },
+    )
+    .select("id")
+    .single();
+  if (error) throw error;
+  return media.id;
+}
+
+// deno-lint-ignore no-explicit-any
+async function stockerBrut(
+  supabase: Supabase,
+  contenu: any,
+  slide: SlideBrut,
+): Promise<string> {
+  const { data: media, error } = await supabase
+    .from("media_library")
+    .upsert(
+      {
+        compte_reference_id: contenu.compte_reference_id,
+        contenu_id: contenu.id,
+        storage_path: `brut/${contenu.id}/${slide.position}`,
+        url: slide.raw_url,
+        source: "nettoye_reference",
+        langue: contenu.langue_source,
+        visage_identifiable: null,
+        verifie_le: new Date().toISOString(),
+        texte_restant: true,
+      },
+      { onConflict: "storage_path" },
+    )
+    .select("id")
+    .single();
+  if (error) throw error;
+  return media.id;
+}
+
+/** Prochain contenu à faire avancer (file d'import). */
+export async function prochainContenu(
+  supabase: Supabase,
+  contenuId: string | null,
+  // deno-lint-ignore no-explicit-any
+): Promise<any | null> {
+  let query = supabase
+    .from("contenus")
+    .select("*")
+    .in("import_statut", ["pending", "running", "failed"]);
+
+  if (contenuId) query = query.eq("id", contenuId);
+  else {
+    query = query
+      .order("pertinence_score", { ascending: true, nullsFirst: true })
+      .order("created_at");
+  }
+
+  const { data } = await query.limit(1);
+  return data?.[0] ?? null;
+}

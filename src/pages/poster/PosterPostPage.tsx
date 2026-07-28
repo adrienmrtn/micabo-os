@@ -358,12 +358,15 @@ export function PosterPostPage() {
   });
 
   const publier = useMutation({
-    mutationFn: () =>
-      majPost(id!, {
+    mutationFn: () => {
+      const lien = lienPublie.trim();
+      if (!lien) throw new Error(t("posts.lienObligatoire"));
+      return majPost(id!, {
         statut: "publie",
         publie_at: new Date().toISOString(),
-        publie_url: lienPublie.trim() || null,
-      }),
+        publie_url: lien,
+      });
+    },
     onSuccess: rafraichir,
   });
 
@@ -674,12 +677,20 @@ export function PosterPostPage() {
                   placeholder="https://www.tiktok.com/@..."
                   value={lienPublie}
                   onChange={(e) => setLienPublie(e.target.value)}
+                  required
                 />
+                <p className="text-xs text-muted-foreground">{t("posts.lienObligatoireAide")}</p>
               </div>
+
+              {publier.isError && (
+                <p className="text-sm text-destructive">
+                  {publier.error instanceof Error ? publier.error.message : t("posts.lienObligatoire")}
+                </p>
+              )}
 
               <Button
                 className="w-full"
-                disabled={publier.isPending}
+                disabled={publier.isPending || !lienPublie.trim()}
                 onClick={() => publier.mutate()}
               >
                 {publier.isPending ? t("common.saving") : t("posts.marquerPublie")}

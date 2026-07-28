@@ -3,85 +3,47 @@
 @tailwind utilities;
 
 /**
- * Palette : violet profond en couleur de marque (Sophia), gris légèrement
- * chauds en neutres, corail réservé à l'urgence — la carte « à poster
- * aujourd'hui » est la seule chose qui doit crier dans l'interface.
+ * Direction « atelier éditorial » — clair, sapin / encre, papier texturé.
+ * Pas de violet, pas de glow, pas de crème terracotta.
  */
 @layer base {
   :root {
-    --background: 250 33% 99%;
-    --foreground: 250 20% 12%;
+    --background: 110 12% 97%;
+    --foreground: 165 22% 12%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 250 20% 12%;
+    --card: 80 20% 99%;
+    --card-foreground: 165 22% 12%;
 
-    --primary: 262 72% 52%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 158 38% 26%;
+    --primary-foreground: 80 30% 98%;
 
-    --secondary: 255 30% 95%;
-    --secondary-foreground: 262 45% 32%;
+    --secondary: 140 10% 93%;
+    --secondary-foreground: 158 28% 22%;
 
-    --muted: 252 22% 96%;
-    --muted-foreground: 250 8% 46%;
+    --muted: 120 10% 94%;
+    --muted-foreground: 160 8% 40%;
 
-    --accent: 262 60% 96%;
-    --accent-foreground: 262 55% 34%;
+    --accent: 150 18% 92%;
+    --accent-foreground: 158 35% 22%;
 
-    --destructive: 3 82% 58%;
+    --destructive: 8 52% 42%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 152 58% 40%;
+    --success: 152 42% 32%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 33 92% 50%;
-    --warning-foreground: 30 60% 12%;
+    --warning: 28 70% 42%;
+    --warning-foreground: 30 40% 98%;
 
-    --border: 252 18% 90%;
-    --input: 252 18% 88%;
-    --ring: 262 72% 52%;
+    --border: 140 10% 86%;
+    --input: 140 10% 84%;
+    --ring: 158 38% 26%;
 
-    --sidebar: 258 32% 14%;
-    --sidebar-foreground: 255 20% 82%;
-    --sidebar-active: 262 65% 62%;
+    --sidebar: 168 22% 11%;
+    --sidebar-foreground: 120 12% 78%;
+    --sidebar-active: 152 40% 42%;
 
-    --radius: 0.85rem;
-  }
-
-  .dark {
-    --background: 255 22% 8%;
-    --foreground: 255 15% 94%;
-
-    --card: 256 20% 11%;
-    --card-foreground: 255 15% 94%;
-
-    --primary: 262 70% 64%;
-    --primary-foreground: 258 40% 10%;
-
-    --secondary: 256 18% 18%;
-    --secondary-foreground: 255 20% 90%;
-
-    --muted: 256 18% 16%;
-    --muted-foreground: 255 10% 62%;
-
-    --accent: 258 25% 20%;
-    --accent-foreground: 262 60% 82%;
-
-    --destructive: 3 70% 55%;
-    --destructive-foreground: 0 0% 100%;
-
-    --success: 152 45% 45%;
-    --success-foreground: 0 0% 100%;
-
-    --warning: 33 80% 55%;
-    --warning-foreground: 30 60% 10%;
-
-    --border: 256 16% 22%;
-    --input: 256 16% 24%;
-    --ring: 262 70% 64%;
-
-    --sidebar: 257 26% 11%;
-    --sidebar-foreground: 255 15% 78%;
-    --sidebar-active: 262 60% 62%;
+    --radius: 0.5rem;
   }
 
   * {
@@ -94,35 +56,66 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family:
-      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-      "Helvetica Neue", Arial, sans-serif;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: "ss01", "ss02";
+    background-image:
+      radial-gradient(ellipse 90% 60% at 10% -20%, hsl(158 30% 70% / 0.18), transparent 55%),
+      radial-gradient(ellipse 70% 50% at 100% 0%, hsl(40 20% 80% / 0.25), transparent 50%),
+      url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+    background-attachment: fixed;
   }
 
-  /* Les listes défilables du produit (nav, files) n'ont pas besoin d'une
-     barre système épaisse qui casse la mise en page. */
+  .font-display {
+    font-family: "Fraunces", ui-serif, Georgia, serif;
+    font-optical-sizing: auto;
+  }
+
   .scrollbar-slim::-webkit-scrollbar {
-    height: 6px;
-    width: 6px;
+    height: 5px;
+    width: 5px;
   }
   .scrollbar-slim::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-border;
+    @apply rounded-sm bg-border;
   }
 }
 
 @layer components {
-  .surface-gradient {
+  .surface-atelier {
     background-image:
-      radial-gradient(
-        60rem 40rem at 15% -10%,
-        hsl(var(--primary) / 0.12),
-        transparent 60%
-      ),
-      radial-gradient(
-        50rem 35rem at 100% 0%,
-        hsl(262 72% 52% / 0.08),
-        transparent 55%
-      );
+      radial-gradient(ellipse 80% 50% at 20% -10%, hsl(158 35% 45% / 0.14), transparent 55%),
+      radial-gradient(ellipse 60% 40% at 95% 10%, hsl(40 25% 70% / 0.2), transparent 50%),
+      linear-gradient(180deg, hsl(110 14% 96%) 0%, hsl(140 10% 94%) 100%);
+  }
+
+  .brand-mark {
+    @apply inline-flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground;
+    font-family: "Fraunces", ui-serif, Georgia, serif;
+    font-weight: 600;
+    font-size: 1.15rem;
+    letter-spacing: -0.02em;
+  }
+
+  .list-enter > * {
+    animation: rise-in 0.45s ease-out both;
+  }
+  .list-enter > *:nth-child(1) { animation-delay: 0.03s; }
+  .list-enter > *:nth-child(2) { animation-delay: 0.06s; }
+  .list-enter > *:nth-child(3) { animation-delay: 0.09s; }
+  .list-enter > *:nth-child(4) { animation-delay: 0.12s; }
+  .list-enter > *:nth-child(5) { animation-delay: 0.15s; }
+  .list-enter > *:nth-child(6) { animation-delay: 0.18s; }
+  .list-enter > *:nth-child(7) { animation-delay: 0.21s; }
+  .list-enter > *:nth-child(8) { animation-delay: 0.24s; }
+  .list-enter > *:nth-child(n + 9) { animation-delay: 0.28s; }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

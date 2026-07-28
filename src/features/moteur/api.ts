@@ -14,6 +14,8 @@ import type {
   Reglages,
   Sujet,
   SujetSlide,
+  Label,
+  Contenu,
 } from "./types";
 
 /** Date du jour en YYYY-MM-DD, en heure locale — le poster raisonne sur sa
@@ -645,7 +647,25 @@ export async function reordonnerSlides(slides: PostSlide[]): Promise<void> {
 }
 
 export async function majPost(id: string, patch: Partial<Post>): Promise<void> {
+  if (patch.statut === "publie" && !String(patch.publie_url ?? "").trim()) {
+    throw new Error("Lien TikTok obligatoire pour marquer comme publié");
+  }
   const { error } = await supabase.from("posts").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+export async function majPassage(
+  id: string,
+  patch: Partial<{
+    statut: string;
+    publie_at: string | null;
+    publie_url: string | null;
+  }>,
+): Promise<void> {
+  if (patch.statut === "publie" && !String(patch.publie_url ?? "").trim()) {
+    throw new Error("Lien TikTok obligatoire pour marquer comme publié");
+  }
+  const { error } = await supabase.from("passages").update(patch).eq("id", id);
   if (error) throw error;
 }
 
@@ -919,6 +939,28 @@ export async function lireReglages(): Promise<Reglages> {
       posts_par_jour: 2,
       tout_recycle: true,
     },
+    scoring: (map.get("scoring") as Reglages["scoring"] | undefined) ?? {
+      ewma_alpha: 0.3,
+      regularisation_k: 5,
+      transfert_inter_langue: 0.15,
+      top_k: 5,
+      temperature: 0.7,
+      saturation_jours: 7,
+      saturation_penalite: 0.2,
+      variation_seuil_score: 80,
+      variation_min_passages: 3,
+      variation_age_jours: 5,
+      variation_profondeur_max: 2,
+      score_prior: 50,
+      pertinence_seuil: 50,
+    },
+    paiement: (map.get("paiement") as Reglages["paiement"] | undefined) ?? {
+      tarif_base_mensuel: 0,
+      tarif_par_post_jour: 0,
+    },
+    moteur_vnext: (map.get("moteur_vnext") as Reglages["moteur_vnext"] | undefined) ?? {
+      actif: false,
+    },
   };
 }
 
@@ -952,6 +994,58 @@ export const lancerExtraction = (compteReferenceId?: string) =>
 
 export const lancerPreparation = (sujetId?: string) =>
   invoke<{ etape?: string; idle?: boolean }>("preparation", { sujetId: sujetId ?? null });
+
+/** Pipeline v-next : avance d'un pas l'import pré-calculé d'un contenu (ou la file). */
+export const lancerImportContenu = (contenuId?: string) =>
+  invoke<{ ok: boolean; contenuId?: string; etape?: string; idle?: boolean }>("import-contenu", {
+    contenuId: contenuId ?? null,
+  });
+
+/** Import v-next d'un TikTok isolé (labels optionnels) → contenu en file de pré-calcul. */
+export const importerContenuDepuisLien = (
+  postUrl: string,
+  compteReferenceId: string | null,
+  labelIds?: string[],
+) =>
+  invoke<{ ok: boolean; contenuId: string; reused: boolean; etape?: string }>("import-contenu", {
+    postUrl,
+    compteReferenceId,
+    labelIds: labelIds ?? null,
+  });
+
+/** Scrape v-next d'un compte de référence → jusqu'à N contenus en file. */
+export const scraperSourceVersContenus = (compteReferenceId: string) =>
+  invoke<{ ok: boolean; crees: number; ids: string[] }>("import-contenu", {
+    compteReferenceId,
+    scrape: true,
+  });
+
+/** Pipeline minuit v-next : stats passages → scores → assignation contenus. */
+export const lancerMinuitVnext = (body: Record<string, unknown> = {}) =>
+  invoke<{ ok: boolean; saute?: boolean; jour?: string }>("minuit-vnext", body);
+
+export const lancerScoringVnext = (compteId?: string) =>
+  invoke<{ ok: boolean; contenus: number; comptes: number }>("scoring", {
+    compteId: compteId ?? null,
+  });
+
+export const lancerAssignationContenu = (opts?: {
+  compteId?: string;
+  date?: string;
+  forcer?: boolean;
+}) =>
+  invoke<{ ok: boolean; jour: string; resultats: unknown[] }>("assignation-contenu", {
+    compteId: opts?.compteId ?? null,
+    date: opts?.date ?? null,
+    forcer: opts?.forcer ?? false,
+  });
+
+/** Drain variations v-next : un contenu gagnant → un remix. */
+export const lancerVariations = (forcer = false) =>
+  invoke<{ ok: boolean; idle?: boolean; contenuId?: string; parentId?: string; langue?: string }>(
+    "variations",
+    { forcer },
+  );
 
 /** Importe un slideshow depuis un lien TikTok collé à la main : scrape ce seul
  *  post et en fait un sujet, rattaché à un compte de référence (pour que ses
@@ -1198,3 +1292,177 @@ export const testerScrape = (compteReferenceId: string) =>
   invoke<{ ok: boolean; handle: string; posts: PostScrapeTest[]; error?: string }>("extraction", {
     testScrape: compteReferenceId,
   });
+
+// --- Labels / contenus v-next ------------------------------------------------
+
+function slugify(nom: string): string {
+  return (
+    nom
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "label"
+  );
+}
+
+export async function listerLabels(): Promise<Label[]> {
+  const { data, error } = await supabase.from("labels").select("*").order("nom");
+  if (error) throw error;
+  return data as Label[];
+}
+
+export async function creerLabel(nom: string, couleur?: string | null): Promise<Label> {
+  const base = slugify(nom);
+  let slug = base;
+  for (let i = 0; i < 5; i += 1) {
+    const { data, error } = await supabase
+      .from("labels")
+      .insert({ nom: nom.trim(), slug, couleur: couleur ?? null })
+      .select()
+      .single();
+    if (!error && data) return data as Label;
+    if (error?.code !== "23505") throw error;
+    slug = `${base}-${i + 2}`;
+  }
+  throw new Error("Impossible de créer le label (slug pris)");
+}
+
+export async function majLabel(
+  id: string,
+  patch: { nom?: string; couleur?: string | null },
+): Promise<void> {
+  const body: Record<string, unknown> = { ...patch };
+  if (patch.nom) body.slug = slugify(patch.nom);
+  const { error } = await supabase.from("labels").update(body).eq("id", id);
+  if (error) throw error;
+}
+
+export async function supprimerLabel(id: string): Promise<void> {
+  const { error } = await supabase.from("labels").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function labelsDuCompte(compteId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("compte_labels")
+    .select("label_id")
+    .eq("compte_id", compteId);
+  if (error) throw error;
+  return (data ?? []).map((r) => r.label_id as string);
+}
+
+export async function labelsDeLaSource(compteReferenceId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("compte_reference_labels")
+    .select("label_id")
+    .eq("compte_reference_id", compteReferenceId);
+  if (error) throw error;
+  return (data ?? []).map((r) => r.label_id as string);
+}
+
+export async function labelsDuContenu(contenuId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("contenu_labels")
+    .select("label_id")
+    .eq("contenu_id", contenuId);
+  if (error) throw error;
+  return (data ?? []).map((r) => r.label_id as string);
+}
+
+async function syncLabels(
+  table: "compte_labels" | "compte_reference_labels" | "contenu_labels",
+  fk: string,
+  fkValue: string,
+  labelIds: string[],
+): Promise<void> {
+  const { error: delErr } = await supabase.from(table).delete().eq(fk, fkValue);
+  if (delErr) throw delErr;
+  if (labelIds.length === 0) return;
+  const rows = labelIds.map((label_id) => ({ [fk]: fkValue, label_id }));
+  const { error } = await supabase.from(table).insert(rows);
+  if (error) throw error;
+}
+
+export const setLabelsCompte = (compteId: string, labelIds: string[]) =>
+  syncLabels("compte_labels", "compte_id", compteId, labelIds);
+
+export const setLabelsSource = (compteReferenceId: string, labelIds: string[]) =>
+  syncLabels("compte_reference_labels", "compte_reference_id", compteReferenceId, labelIds);
+
+export const setLabelsContenu = (contenuId: string, labelIds: string[]) =>
+  syncLabels("contenu_labels", "contenu_id", contenuId, labelIds);
+
+/** Applique rétroactivement les labels d'une source à tous ses contenus. */
+export async function propagerLabelsSource(compteReferenceId: string): Promise<number> {
+  const labelIds = await labelsDeLaSource(compteReferenceId);
+  const { data: contenus, error } = await supabase
+    .from("contenus")
+    .select("id")
+    .eq("compte_reference_id", compteReferenceId);
+  if (error) throw error;
+  for (const c of contenus ?? []) {
+    await setLabelsContenu(c.id, labelIds);
+  }
+  return contenus?.length ?? 0;
+}
+
+export interface ContenuListe extends Contenu {
+  labels?: Label[];
+  scores?: Array<{ langue: string; score: number; nb_passages: number }>;
+}
+
+export async function listerContenus(opts?: {
+  statut?: string;
+  limit?: number;
+}): Promise<ContenuListe[]> {
+  let q = supabase
+    .from("contenus")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(opts?.limit ?? 80);
+  if (opts?.statut) q = q.eq("statut", opts.statut);
+  const { data, error } = await q;
+  if (error) throw error;
+  const contenus = (data ?? []) as Contenu[];
+  if (contenus.length === 0) return [];
+
+  const ids = contenus.map((c) => c.id);
+  const [{ data: liens }, { data: scores }] = await Promise.all([
+    supabase.from("contenu_labels").select("contenu_id, label_id, labels(*)").in("contenu_id", ids),
+    supabase
+      .from("contenu_langues")
+      .select("contenu_id, langue, score, nb_passages")
+      .in("contenu_id", ids),
+  ]);
+
+  const labelsPar = new Map<string, Label[]>();
+  for (const l of liens ?? []) {
+    const row = l as unknown as { contenu_id: string; labels: Label | null };
+    if (!row.labels) continue;
+    const list = labelsPar.get(row.contenu_id) ?? [];
+    list.push(row.labels);
+    labelsPar.set(row.contenu_id, list);
+  }
+  const scoresPar = new Map<string, NonNullable<ContenuListe["scores"]>>();
+  for (const s of scores ?? []) {
+    const list = scoresPar.get(s.contenu_id) ?? [];
+    list.push({ langue: s.langue, score: s.score, nb_passages: s.nb_passages });
+    scoresPar.set(s.contenu_id, list);
+  }
+
+  return contenus.map((c) => ({
+    ...c,
+    labels: labelsPar.get(c.id) ?? [],
+    scores: scoresPar.get(c.id) ?? [],
+  }));
+}
+
+/** Coût mensuel = base + posts_par_jour × unitaire. */
+export function coutMensuelCalcule(
+  postsParJour: number,
+  paiement: { tarif_base_mensuel: number; tarif_par_post_jour: number },
+): number {
+  return paiement.tarif_base_mensuel + postsParJour * paiement.tarif_par_post_jour;
+}

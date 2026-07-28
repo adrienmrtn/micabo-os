@@ -7,7 +7,7 @@ const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElemen
     <div
       ref={ref}
       className={cn(
-        "rounded-lg border bg-card text-card-foreground shadow-card",
+        "rounded-md border border-border/80 bg-card/90 text-card-foreground shadow-card",
         className,
       )}
       {...props}
@@ -27,7 +27,7 @@ const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTML
   ({ className, ...props }, ref) => (
     <h3
       ref={ref}
-      className={cn("text-base font-semibold leading-tight tracking-tight", className)}
+      className={cn("font-display text-lg font-semibold leading-tight tracking-tight", className)}
       {...props}
     />
   ),
@@ -70,9 +70,9 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-6 py-12 text-center">
+    <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed px-6 py-12 text-center">
       {icon && (
-        <div className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <div className="flex size-11 items-center justify-center rounded-md bg-muted text-muted-foreground">
           {icon}
         </div>
       )}

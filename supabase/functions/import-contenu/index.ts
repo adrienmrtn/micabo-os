@@ -1,0 +1,124 @@
+import {
+  avancerImport,
+  importerCompteReference,
+  importerLien,
+  prochainContenu,
+} from "../_shared/import_contenu.ts";
+import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
+
+/**
+ * Import pré-calculé v-next : scrape → OCR → pertinence → nettoyage (1×) →
+ * traduction TOUTES langues → Sophia par langue → score → pool `valide`.
+ *
+ * Avance par petits pas (Edge Function) ; le cron (ou l'admin) rappelle.
+ *
+ *   {}                              → prochain contenu en file
+ *   { contenuId }                   → ce contenu
+ *   { postUrl, compteReferenceId?, labelIds? } → TikTok isolé + file
+ *   { compteReferenceId, scrape: true } → scrape source (N contenus) + file
+ */
+Deno.serve(async (request) => {
+  const denied = await assertAuthorised(request);
+  if (denied) return denied;
+
+  const supabase = serviceClient();
+
+  // deno-lint-ignore no-explicit-any
+  let body: any = {};
+  try {
+    body = await request.json();
+  } catch {
+    // corps vide
+  }
+
+  try {
+    // Entrée : lien isolé
+    if (body?.postUrl) {
+      const cree = await importerLien(
+        supabase,
+        String(body.postUrl),
+        body.compteReferenceId ?? null,
+        Array.isArray(body.labelIds) ? body.labelIds : null,
+      );
+      // Enchaîne un pas tout de suite pour ne pas attendre le cron.
+      const contenu = await prochainContenu(supabase, cree.id);
+      if (!contenu) return json({ ok: true, contenuId: cree.id, reused: cree.reused, idle: true });
+      const etape = await avancerImport(supabase, contenu);
+      return json({
+        ok: true,
+        contenuId: cree.id,
+        reused: cree.reused,
+        etape,
+      });
+    }
+
+    // Entrée : scrape compte de référence
+    if (body?.compteReferenceId && body?.scrape) {
+      const r = await importerCompteReference(supabase, String(body.compteReferenceId));
+      return json({ ok: true, crees: r.crees, ids: r.ids });
+    }
+
+    const contenuId: string | null = body?.contenuId ?? null;
+    let contenu = await prochainContenu(supabase, contenuId);
+
+    // Backfill : contenus déjà « done » (ex. migrés) mais langues cibles vides.
+    if (!contenu && !contenuId) {
+      contenu = await prochainBackfill(supabase);
+    }
+
+    if (!contenu) return json({ ok: true, idle: true });
+
+    const etape = await avancerImport(supabase, contenu);
+    return json({ ok: true, contenuId: contenu.id, etape });
+  } catch (error) {
+    return json({ ok: false, error: messageErreur(error) }, 500);
+  }
+});
+
+/** Remet en file un contenu valide auquel il manque traductions / Sophia. */
+async function prochainBackfill(
+  supabase: ReturnType<typeof serviceClient>,
+  // deno-lint-ignore no-explicit-any
+): Promise<any | null> {
+  const { data: candidats } = await supabase
+    .from("contenus")
+    .select("id, langue_source")
+    .eq("statut", "valide")
+    .eq("import_statut", "done")
+    .order("created_at")
+    .limit(20);
+
+  for (const c of candidats ?? []) {
+    const { data: langues } = await supabase
+      .from("contenu_langues")
+      .select("langue, slides")
+      .eq("contenu_id", c.id);
+
+    const manque = (langues ?? []).some((l) => {
+      const slides = (l.slides ?? []) as Array<{ texte_overlay?: string; position_sophia?: boolean }>;
+      if (l.langue === c.langue_source) {
+        return slides.length === 0 || !slides.some((s) => s.position_sophia);
+      }
+      return (
+        slides.length === 0 ||
+        slides.every((s) => !s.texte_overlay) ||
+        !slides.some((s) => s.position_sophia)
+      );
+    });
+
+    if (!manque) continue;
+
+    await supabase
+      .from("contenus")
+      .update({
+        import_statut: "pending",
+        import_etape: "backfill",
+        import_erreur: null,
+      })
+      .eq("id", c.id);
+
+    const { data: full } = await supabase.from("contenus").select("*").eq("id", c.id).single();
+    return full;
+  }
+  return null;
+}

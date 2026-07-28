@@ -11,8 +11,9 @@ import { useAuth } from "./AuthContext";
 function EnAttente() {
   const { t } = useTranslation();
   return (
-    <div className="surface-gradient flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
-      <h1 className="text-xl font-semibold">{t("auth.pendingTitle")}</h1>
+    <div className="surface-atelier flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
+      <p className="font-display text-3xl font-semibold tracking-tight">Sophia</p>
+      <h1 className="text-lg font-semibold">{t("auth.pendingTitle")}</h1>
       <p className="max-w-sm text-sm text-muted-foreground">{t("auth.pendingBody")}</p>
       <Button variant="outline" onClick={() => signOut()}>
         {t("auth.logout")}

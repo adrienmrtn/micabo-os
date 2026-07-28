@@ -15,11 +15,15 @@ import {
   CardTitle,
   EmptyState,
 } from "@/components/ui/card";
+import { LabelEditor } from "@/features/moteur/LabelPicker";
 import {
   creerSource,
+  labelsDeLaSource,
   lancerExtraction,
   listerSources,
   majSource,
+  propagerLabelsSource,
+  setLabelsSource,
   stockParSource,
   supprimerSource,
 } from "@/features/moteur/api";
@@ -195,6 +199,17 @@ function LigneSource({
         </div>
       </div>
 
+      <div className="border-t pt-3">
+        <LabelEditor
+          queryKey={["source-labels", source.id]}
+          load={() => labelsDeLaSource(source.id)}
+          save={async (ids) => {
+            await setLabelsSource(source.id, ids);
+            await propagerLabelsSource(source.id);
+          }}
+        />
+        <p className="mt-1 text-[11px] text-muted-foreground">{t("labels.retroactif")}</p>
+      </div>
       {!estConjoint && <VoixSource source={source} />}
     </div>
   );
