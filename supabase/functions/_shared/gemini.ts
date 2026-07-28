@@ -1,6 +1,7 @@
 import { downloadImage } from "./apify.ts";
 import { messageErreur } from "./supabase.ts";
 import { dimensionsImage, effacerTexte, type Zone } from "./inpaint.ts";
+import { nettoyerViaSeedream } from "./fal_seedream.ts";
 import { nettoyerViaProxy } from "./proxy.ts";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -493,18 +494,24 @@ function sembleDegeneree(base64: string): boolean {
 }
 
 export async function cleanImage(imageUrl: string): Promise<string | null> {
-  // Nettoyage PAR LE PROXY, exclusivement. C'est le nettoyeur voulu, et il n'est
-  // pas censé échouer. Sa sortie est prise telle quelle, SAUF si elle est
-  // DÉGÉNÉRÉE (noire/unie) — ce garde-fou est la leçon du 24/07, où des centaines
-  // de slides sont parties toutes noires faute de ce contrôle.
+  // Voie principale : Fal AI Seedream 5.0 Pro Edit (`FAL_KEY`).
+  // Repli legacy : proxy Lovable (`CLEAN_PHOTO_PROXY_TOKEN`) si Seedream
+  // n'est pas configuré. Sortie dégénérée (noire) toujours rejetée.
   //
-  // Plus d'inpainting (LaMa) ni de génératif Gemini : au moindre échec du proxy,
-  // on lève une erreur, et la composition substitue une photo DÉJÀ propre de la
-  // bibliothèque de la source (reparerVisuelsPerimes). C'est le seul repli voulu.
+  // En cas d'échec net, l'appelant substitue une photo déjà propre de la
+  // bibliothèque (reparerVisuelsPerimes) — comportement inchangé.
+
+  const parSeedream = await nettoyerViaSeedream(imageUrl);
+  if (parSeedream && !sembleDegeneree(parSeedream)) return parSeedream;
+  if (parSeedream) throw new RefusRetouche("seedream: sortie dégénérée (noire) rejetée");
+
   const parProxy = await nettoyerViaProxy(imageUrl);
   if (parProxy && !sembleDegeneree(parProxy)) return parProxy;
   if (parProxy) throw new RefusRetouche("proxy: sortie dégénérée (noire) rejetée");
-  throw new RefusRetouche("proxy: aucune image renvoyée (token manquant ou échec)");
+
+  throw new RefusRetouche(
+    "nettoyage: configure FAL_KEY (Seedream) — ou CLEAN_PHOTO_PROXY_TOKEN en repli",
+  );
 }
 
 /**
