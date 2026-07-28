@@ -972,6 +972,31 @@ export const lancerExtraction = (compteReferenceId?: string) =>
 export const lancerPreparation = (sujetId?: string) =>
   invoke<{ etape?: string; idle?: boolean }>("preparation", { sujetId: sujetId ?? null });
 
+/** Pipeline v-next : avance d'un pas l'import pré-calculé d'un contenu (ou la file). */
+export const lancerImportContenu = (contenuId?: string) =>
+  invoke<{ ok: boolean; contenuId?: string; etape?: string; idle?: boolean }>("import-contenu", {
+    contenuId: contenuId ?? null,
+  });
+
+/** Import v-next d'un TikTok isolé (labels optionnels) → contenu en file de pré-calcul. */
+export const importerContenuDepuisLien = (
+  postUrl: string,
+  compteReferenceId: string | null,
+  labelIds?: string[],
+) =>
+  invoke<{ ok: boolean; contenuId: string; reused: boolean; etape?: string }>("import-contenu", {
+    postUrl,
+    compteReferenceId,
+    labelIds: labelIds ?? null,
+  });
+
+/** Scrape v-next d'un compte de référence → jusqu'à N contenus en file. */
+export const scraperSourceVersContenus = (compteReferenceId: string) =>
+  invoke<{ ok: boolean; crees: number; ids: string[] }>("import-contenu", {
+    compteReferenceId,
+    scrape: true,
+  });
+
 /** Importe un slideshow depuis un lien TikTok collé à la main : scrape ce seul
  *  post et en fait un sujet, rattaché à un compte de référence (pour que ses
  *  visuels rejoignent la bonne bibliothèque). Le nettoyage et la composition

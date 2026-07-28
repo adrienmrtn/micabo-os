@@ -270,6 +270,7 @@ export interface Contenu {
   import_statut: ImportStatut;
   import_etape: string | null;
   import_erreur: string | null;
+  import_tentatives: number;
   parent_id: string | null;
   profondeur: number;
   created_at: string;
