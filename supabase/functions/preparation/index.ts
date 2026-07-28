@@ -202,20 +202,20 @@ async function nettoyerVersBibliotheque(
   try {
     // cleanImage rend une sortie de confiance (proxy) ou déjà vérifiée en interne
     // (repli inpaint/génératif). Elle réessaie déjà le proxy 5× avec backoff.
-    propreBase64 = await cleanImage(slide.raw_url);
+    const propre = await cleanImage(slide.raw_url);
+    propreBase64 = propre?.base64 ?? null;
   } catch (error) {
-    // Surcharge Gemini/proxy ou refus : échec de CE passage, pas du sujet. On
-    // renvoie null pour re-tenter plus tard, quand Gemini se sera dégagé.
+    // Surcharge Seedream/proxy ou refus : échec de CE passage, pas du sujet. On
+    // renvoie null pour re-tenter plus tard.
     console.warn(`[nettoyage échec] sujet=${sujet.id} slide=${slide.position} ${messageErreur(error)}`);
     return null;
   }
   if (!propreBase64) return null;
 
-  // CONTRÔLE : le proxy renvoie PARFOIS l'image sans l'avoir nettoyée (il dit
+  // CONTRÔLE : le moteur renvoie PARFOIS l'image sans l'avoir nettoyée (il dit
   // « réussi » quand même). On ne la stocke donc pas comme propre à l'aveugle :
   // s'il reste du texte incrusté, on renvoie null → re-tentée au passage suivant
-  // (le proxy réussit souvent au 2e coup), puis remplacée par une photo propre
-  // de la bibliothèque en dernier recours. Le poster n'a jamais de texte résiduel.
+  // puis remplacée par une photo propre de la bibliothèque en dernier recours.
   if (!(await verifyClean(propreBase64, "image/png"))) {
     console.warn(`[nettoyage non abouti] sujet=${sujet.id} slide=${slide.position} — texte encore présent`);
     return null;

@@ -199,7 +199,13 @@ export function AdminBibliothequePage() {
             </Button>
           )}
         </div>
-        {lot && <p className="pt-1 text-xs text-muted-foreground">{t("adminPost.lotAide")}</p>}
+        {lot && (
+          <p className="pt-1 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">{t("testNet.moteurSeedream")}</span>
+            {" — "}
+            {t("adminPost.lotAide")}
+          </p>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">

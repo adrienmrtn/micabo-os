@@ -493,20 +493,33 @@ function sembleDegeneree(base64: string): boolean {
   }
 }
 
-export async function cleanImage(imageUrl: string): Promise<string | null> {
-  // Voie principale : Fal AI Seedream 5.0 Pro Edit (`FAL_KEY`).
-  // Repli legacy : proxy Lovable (`CLEAN_PHOTO_PROXY_TOKEN`) si Seedream
-  // n'est pas configuré. Sortie dégénérée (noire) toujours rejetée.
-  //
-  // En cas d'échec net, l'appelant substitue une photo déjà propre de la
-  // bibliothèque (reparerVisuelsPerimes) — comportement inchangé.
+/** Moteur effectivement utilisé pour un nettoyage réussi. */
+export type MoteurNettoyage = "seedream" | "proxy";
 
+export interface ImageNettoyee {
+  base64: string;
+  moteur: MoteurNettoyage;
+}
+
+/**
+ * Voie principale : Fal AI Seedream 5.0 Pro Edit (`FAL_KEY`).
+ * Repli legacy : proxy Lovable (`CLEAN_PHOTO_PROXY_TOKEN`) si Seedream
+ * n'est pas configuré. Sortie dégénérée (noire) toujours rejetée.
+ *
+ * Renvoie aussi le `moteur` pour que l'UI puisse afficher « Seedream » /
+ * « proxy » précisément.
+ */
+export async function cleanImage(imageUrl: string): Promise<ImageNettoyee | null> {
   const parSeedream = await nettoyerViaSeedream(imageUrl);
-  if (parSeedream && !sembleDegeneree(parSeedream)) return parSeedream;
+  if (parSeedream && !sembleDegeneree(parSeedream)) {
+    return { base64: parSeedream, moteur: "seedream" };
+  }
   if (parSeedream) throw new RefusRetouche("seedream: sortie dégénérée (noire) rejetée");
 
   const parProxy = await nettoyerViaProxy(imageUrl);
-  if (parProxy && !sembleDegeneree(parProxy)) return parProxy;
+  if (parProxy && !sembleDegeneree(parProxy)) {
+    return { base64: parProxy, moteur: "proxy" };
+  }
   if (parProxy) throw new RefusRetouche("proxy: sortie dégénérée (noire) rejetée");
 
   throw new RefusRetouche(

@@ -23,19 +23,19 @@ Deno.serve(async (request) => {
   if (!url) return json({ error: "url requise" }, 400);
 
   try {
-    const propreBase64 = await cleanImage(url);
-    if (!propreBase64) return json({ ok: false, motif: "aucune image renvoyée" });
+    const propre = await cleanImage(url);
+    if (!propre) return json({ ok: false, motif: "aucune image renvoyée" });
 
     const supabase = serviceClient();
     const chemin = `test/${crypto.randomUUID()}.png`;
-    const bytes = Uint8Array.from(atob(propreBase64), (c) => c.charCodeAt(0));
+    const bytes = Uint8Array.from(atob(propre.base64), (c) => c.charCodeAt(0));
     const { error } = await supabase.storage
       .from(BUCKET)
       .upload(chemin, bytes, { contentType: "image/png", upsert: true });
     if (error) throw error;
 
     const publique = supabase.storage.from(BUCKET).getPublicUrl(chemin).data.publicUrl;
-    return json({ ok: true, url: publique });
+    return json({ ok: true, url: publique, moteur: propre.moteur });
   } catch (error) {
     return json({ ok: false, erreur: messageErreur(error) }, 500);
   }

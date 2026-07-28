@@ -803,6 +803,7 @@ export const renettoyerSlide = (postSlideId: string) =>
     nettoyee: boolean;
     remplacee?: boolean;
     verifie_sans_texte?: boolean;
+    moteur?: "seedream" | "proxy";
     erreur?: string;
     motif?: string;
   }>("renettoyer", { postSlideId });
@@ -853,11 +854,22 @@ export async function supprimerSlide(slideId: string): Promise<void> {
 
 /** Nettoie une photo de la bibliothèque à la demande (bouton admin). */
 export const nettoyerMedia = (mediaId: string) =>
-  invoke<{ ok: boolean; nettoyee: boolean; erreur?: string }>("nettoyer-media", { mediaId });
+  invoke<{
+    ok: boolean;
+    nettoyee: boolean;
+    moteur?: "seedream" | "proxy";
+    erreur?: string;
+  }>("nettoyer-media", { mediaId });
 
 /** Nettoyage de test NON destructif : renvoie l'image nettoyée sans rien écraser. */
 export const nettoyerTest = (url: string) =>
-  invoke<{ ok: boolean; url?: string; erreur?: string; motif?: string }>("nettoyer-test", { url });
+  invoke<{
+    ok: boolean;
+    url?: string;
+    moteur?: "seedream" | "proxy";
+    erreur?: string;
+    motif?: string;
+  }>("nettoyer-test", { url });
 
 /** Visuels bruts (à texte) regroupés par compte de référence, pour l'écran de test. */
 export interface MediaTest {

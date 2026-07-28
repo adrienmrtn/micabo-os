@@ -13,7 +13,7 @@ import { mediasBrutsParSource, nettoyerTest, type MediaTest } from "@/features/m
 type EtatTest =
   | { statut: "repos" }
   | { statut: "encours" }
-  | { statut: "ok"; url: string }
+  | { statut: "ok"; url: string; moteur?: "seedream" | "proxy" }
   | { statut: "echec"; erreur?: string };
 
 const REPOS: EtatTest = { statut: "repos" };
@@ -33,7 +33,7 @@ function avecTimeout<T>(promesse: Promise<T>, ms: number): Promise<T> {
 async function testerImage(media: MediaTest): Promise<EtatTest> {
   try {
     const res = await avecTimeout(nettoyerTest(media.url), 130000);
-    if (res.ok && res.url) return { statut: "ok", url: res.url };
+    if (res.ok && res.url) return { statut: "ok", url: res.url, moteur: res.moteur };
     return { statut: "echec", erreur: res.erreur ?? res.motif };
   } catch (error) {
     return { statut: "echec", erreur: (error as Error)?.message };
@@ -68,8 +68,9 @@ function CarteTest({
             {t("testNet.apres")}
           </figcaption>
           {enCours ? (
-            <div className="flex aspect-[3/4] items-center justify-center rounded border bg-muted/40 text-[11px] text-muted-foreground">
-              {t("testNet.enCours")}
+            <div className="flex aspect-[3/4] flex-col items-center justify-center gap-1 rounded border bg-muted/40 px-2 text-center text-[11px] text-muted-foreground">
+              <span>{t("testNet.enCours")}</span>
+              <span className="font-medium text-foreground">{t("testNet.moteurSeedream")}</span>
             </div>
           ) : etat.statut === "ok" ? (
             <img src={etat.url} alt="" className="aspect-[3/4] w-full rounded border object-cover" />
@@ -92,6 +93,11 @@ function CarteTest({
         {enCours ? t("testNet.enCours") : t("testNet.tester")}
       </Button>
 
+      {etat.statut === "ok" && etat.moteur ? (
+        <p className="text-[10px] text-muted-foreground">
+          {etat.moteur === "seedream" ? t("testNet.viaSeedream") : t("testNet.viaProxy")}
+        </p>
+      ) : null}
       {etat.statut === "echec" && etat.erreur ? (
         <p className="text-[10px] text-destructive">{etat.erreur}</p>
       ) : null}
