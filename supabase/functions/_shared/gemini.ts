@@ -465,36 +465,130 @@ Réponds UNIQUEMENT en JSON, sans bloc de code ni commentaire :
  * aucun n'a rendu d'image — l'appelant conserve alors l'original plutôt que de
  * casser le slideshow.
  */
-const PROMPT_NETTOYAGE = `Tu fais une restauration photo subtile.
-1. Retire uniquement les éléments ajoutés PAR-DESSUS la photo : textes, sous-titres, stickers, watermarks, noms d'utilisateur, boutons, appels à l'action, logos d'interface, watermark TikTok.
-2. Reconstitue l'arrière-plan sous ces éléments de façon naturelle et invisible.
-3. Ne modifie JAMAIS la personne, le visage, les mains, les vêtements, les objets réels, le fond, la lumière, les couleurs, ni le cadrage.
-4. Ne génère aucun texte, logo, badge ou watermark supplémentaire.
-5. Renvoie uniquement l'image nettoyée.`;
+/** Aligné sur Seedream : consigne courte, pas de régénération. */
+const PROMPT_NETTOYAGE = "Keep the photo, only get rid of the text overlay.";
 
 /**
- * Une image DÉGÉNÉRÉE (quasi entièrement noire/unie) : elle se compresse en un
- * PNG minuscule pour ses dimensions. `verifyClean` ne l'attrape PAS (une image
- * noire n'a « pas de texte » → jugée propre), d'où le désastre du 24/07 où des
- * centaines de slides ont été stockées toutes noires. Ce garde-fou, lui, refuse
- * tout ce qui pèse moins de ~50 Ko/mégapixel — un vrai visuel photo n'est jamais
- * aussi compressible. En cas de doute (dimensions illisibles) on n'écarte pas.
+ * Une image DÉGÉNÉRÉE (quasi entièrement noire/unie).
+ *
+ * `verifyClean` ne l'attrape PAS (noir = « pas de texte » → jugée propre).
+ * Signaux :
+ *  1. Compressibilité extrême (< ~40 Ko/MP) → cadre uni.
+ *  2. Luminance moyenne très basse (décodage JPEG/PNG) → noir Fal safety.
+ *  3. Zone grise 40–90 Ko/MP + image sombre → suspect (souvent noir compressé
+ *     qui passait l'ancien seuil à 50).
  */
-function sembleDegeneree(base64: string): boolean {
+async function sembleDegeneree(base64: string): Promise<boolean> {
   try {
     const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
     const dims = dimensionsImage(bytes);
     if (!dims || dims.w === 0 || dims.h === 0) return false;
     const megapixels = (dims.w * dims.h) / 1_000_000;
     const koParMp = bytes.length / 1024 / Math.max(megapixels, 0.01);
-    return koParMp < 50;
+    if (koParMp < 40) return true;
+
+    const mean = await luminanceMoyenne(bytes);
+    if (mean !== null && mean < 18) return true;
+    if (koParMp < 90 && mean !== null && mean < 35) return true;
+    return false;
   } catch {
     return false;
   }
 }
 
+/** Luminance moyenne 0–255, ou null si décodage impossible. */
+async function luminanceMoyenne(bytes: Uint8Array): Promise<number | null> {
+  // JPEG
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+    try {
+      const { decode } = await import("npm:jpeg-js@0.4.4");
+      const { data, width, height } = decode(bytes, { maxMemoryUsageInMB: 64 });
+      if (!width || !height || !data?.length) return null;
+      const step = Math.max(1, Math.floor((width * height) / 4000));
+      let sum = 0;
+      let n = 0;
+      for (let p = 0; p < width * height; p += step) {
+        const i = p * 4;
+        const r = data[i] ?? 0;
+        const g = data[i + 1] ?? 0;
+        const b = data[i + 2] ?? 0;
+        sum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        n += 1;
+      }
+      return n ? sum / n : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // PNG 8-bit RGB/RGBA : inflate IDAT puis échantillonner
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    try {
+      const bitDepth = bytes[24]!;
+      const colorType = bytes[25]!;
+      if (bitDepth !== 8 || (colorType !== 2 && colorType !== 6)) return null;
+      const bpp = colorType === 6 ? 4 : 3;
+      const dv = new DataView(bytes.buffer, bytes.byteOffset);
+      const w = dv.getUint32(16);
+      const h = dv.getUint32(20);
+
+      const idats: Uint8Array[] = [];
+      let i = 8;
+      while (i + 8 <= bytes.length) {
+        const len = dv.getUint32(i);
+        const type = String.fromCharCode(
+          bytes[i + 4]!,
+          bytes[i + 5]!,
+          bytes[i + 6]!,
+          bytes[i + 7]!,
+        );
+        const start = i + 8;
+        const end = start + len;
+        if (end + 4 > bytes.length) break;
+        if (type === "IDAT") idats.push(bytes.subarray(start, end));
+        if (type === "IEND") break;
+        i = end + 4;
+      }
+      if (idats.length === 0) return null;
+      const fused = new Uint8Array(idats.reduce((n, c) => n + c.length, 0));
+      let off = 0;
+      for (const c of idats) {
+        fused.set(c, off);
+        off += c.length;
+      }
+      const raw = new Uint8Array(
+        await new Response(
+          new Blob([fused]).stream().pipeThrough(new DecompressionStream("deflate")),
+        ).arrayBuffer(),
+      );
+      const stride = 1 + w * bpp;
+      if (raw.length < stride * h) return null;
+      const stepY = Math.max(1, Math.floor(h / 64));
+      const stepX = Math.max(1, Math.floor(w / 64));
+      let sum = 0;
+      let n = 0;
+      for (let y = 0; y < h; y += stepY) {
+        const row = y * stride + 1; // skip filter byte
+        for (let x = 0; x < w; x += stepX) {
+          const p = row + x * bpp;
+          const r = raw[p] ?? 0;
+          const g = raw[p + 1] ?? 0;
+          const b = raw[p + 2] ?? 0;
+          sum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          n += 1;
+        }
+      }
+      return n ? sum / n : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 /** Moteur effectivement utilisé pour un nettoyage réussi. */
-export type MoteurNettoyage = "seedream" | "proxy";
+export type MoteurNettoyage = "seedream" | "proxy" | "inpaint";
 
 export interface ImageNettoyee {
   base64: string;
@@ -502,28 +596,54 @@ export interface ImageNettoyee {
 }
 
 /**
- * Voie principale : Fal AI Seedream 5.0 Pro Edit (`FAL_KEY`).
- * Repli legacy : proxy Lovable (`CLEAN_PHOTO_PROXY_TOKEN`) si Seedream
- * n'est pas configuré. Sortie dégénérée (noire) toujours rejetée.
+ * Nettoyage pour le recyclage :
+ *  1. Seedream (prompt : keep the photo, only get rid of the text overlay)
+ *  2. Proxy Lovable
+ *  3. LaMa inpaint (Replicate) — pas de modération, sauve les photos refusées
+ *     par le checker partenaire ByteDance
  *
- * Renvoie aussi le `moteur` pour que l'UI puisse afficher « Seedream » /
- * « proxy » précisément.
+ * Toute sortie noire/dégénérée est rejetée ; on enchaîne sur le repli suivant.
  */
 export async function cleanImage(imageUrl: string): Promise<ImageNettoyee | null> {
-  const parSeedream = await nettoyerViaSeedream(imageUrl);
-  if (parSeedream && !sembleDegeneree(parSeedream)) {
-    return { base64: parSeedream, moteur: "seedream" };
+  try {
+    const parSeedream = await nettoyerViaSeedream(imageUrl);
+    if (parSeedream && !(await sembleDegeneree(parSeedream))) {
+      return { base64: parSeedream, moteur: "seedream" };
+    }
+    if (parSeedream) {
+      console.warn("[cleanImage] Seedream noir/dégénéré — repli suivant");
+    }
+  } catch (error) {
+    console.warn(`[cleanImage] Seedream échec — repli suivant: ${messageErreur(error)}`);
   }
-  if (parSeedream) throw new RefusRetouche("seedream: sortie dégénérée (noire) rejetée");
 
-  const parProxy = await nettoyerViaProxy(imageUrl);
-  if (parProxy && !sembleDegeneree(parProxy)) {
-    return { base64: parProxy, moteur: "proxy" };
+  try {
+    const parProxy = await nettoyerViaProxy(imageUrl);
+    if (parProxy && !(await sembleDegeneree(parProxy))) {
+      return { base64: parProxy, moteur: "proxy" };
+    }
+    if (parProxy) {
+      console.warn("[cleanImage] proxy noir/dégénéré — repli inpaint");
+    }
+  } catch (error) {
+    console.warn(`[cleanImage] proxy échec — repli inpaint: ${messageErreur(error)}`);
   }
-  if (parProxy) throw new RefusRetouche("proxy: sortie dégénérée (noire) rejetée");
+
+  try {
+    const image = await fetchImageAsInline(imageUrl);
+    const parInpaint = await inpaintFallback(image, imageUrl);
+    if (parInpaint && !(await sembleDegeneree(parInpaint))) {
+      return { base64: parInpaint, moteur: "inpaint" };
+    }
+    if (parInpaint) {
+      console.warn("[cleanImage] inpaint noir/dégénéré");
+    }
+  } catch (error) {
+    console.warn(`[cleanImage] inpaint échec: ${messageErreur(error)}`);
+  }
 
   throw new RefusRetouche(
-    "nettoyage: configure FAL_KEY (Seedream) — ou CLEAN_PHOTO_PROXY_TOKEN en repli",
+    "nettoyage: Seedream/proxy/inpaint indisponibles ou sorties noires",
   );
 }
 
