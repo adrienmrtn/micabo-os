@@ -10,6 +10,10 @@ export default {
       screens: { "2xl": "1400px" },
     },
     extend: {
+      fontFamily: {
+        sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ['"Fraunces"', "ui-serif", "Georgia", "serif"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -56,26 +60,31 @@ export default {
       },
       borderRadius: {
         lg: "var(--radius)",
-        md: "calc(var(--radius) - 4px)",
-        sm: "calc(var(--radius) - 8px)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
       },
       boxShadow: {
-        card: "0 1px 2px hsl(250 20% 12% / 0.04), 0 4px 16px hsl(250 20% 12% / 0.06)",
-        lifted: "0 2px 4px hsl(250 20% 12% / 0.05), 0 12px 32px hsl(250 20% 12% / 0.10)",
+        card: "0 1px 0 hsl(165 20% 12% / 0.04)",
+        lifted: "0 1px 2px hsl(165 20% 12% / 0.05), 0 8px 24px hsl(165 20% 12% / 0.06)",
       },
       keyframes: {
         "fade-in": {
-          from: { opacity: "0", transform: "translateY(4px)" },
+          from: { opacity: "0", transform: "translateY(6px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
         "slide-in": {
           from: { transform: "translateX(-100%)" },
           to: { transform: "translateX(0)" },
         },
+        "brand-in": {
+          from: { opacity: "0", transform: "translateY(14px) scale(0.98)" },
+          to: { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
       },
       animation: {
-        "fade-in": "fade-in 0.2s ease-out",
-        "slide-in": "slide-in 0.2s ease-out",
+        "fade-in": "fade-in 0.35s ease-out",
+        "slide-in": "slide-in 0.25s ease-out",
+        "brand-in": "brand-in 0.55s cubic-bezier(0.22, 1, 0.36, 1)",
       },
     },
   },

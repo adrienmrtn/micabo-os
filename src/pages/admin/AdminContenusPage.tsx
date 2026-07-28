@@ -53,9 +53,9 @@ export function AdminContenusPage() {
             <EmptyState title={t("contenus.empty")} />
           )}
 
-          <div className="space-y-3">
+          <div className="list-enter space-y-3">
             {(contenus.data ?? []).map((c) => (
-              <div key={c.id} className="space-y-2 rounded-lg border p-3">
+              <div key={c.id} className="space-y-2 border border-border/80 bg-card/60 p-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium">{c.titre || t("contenus.sansTitre")}</p>

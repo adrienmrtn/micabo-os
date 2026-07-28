@@ -37,10 +37,10 @@ function NavList({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () =
               title={description}
               className={({ isActive }) =>
                 cn(
-                  "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                  "group flex items-center gap-3 border-l-2 border-transparent px-3 py-2 text-sm transition-colors",
                   isActive
-                    ? "bg-sidebar-active/20 font-medium text-white"
-                    : "text-sidebar-foreground/85 hover:bg-white/[0.06] hover:text-white",
+                    ? "border-sidebar-active bg-white/[0.06] font-medium text-white"
+                    : "text-sidebar-foreground/85 hover:bg-white/[0.04] hover:text-white",
                 )
               }
             >
@@ -63,11 +63,20 @@ function NavList({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () =
   );
 }
 
-function Brand({ title }: { title: string }) {
+function Brand(_props: { title: string }) {
   return (
-    <div className="flex items-center gap-2.5 px-5 py-5">
-      <img src="/favicon.svg" alt="Sophia" className="size-9 shrink-0 rounded-xl shadow-sm" />
-      <span className="truncate text-[15px] font-semibold tracking-tight text-white">{title}</span>
+    <div className="flex items-center gap-3 px-5 py-6">
+      <span className="brand-mark shrink-0" aria-hidden>
+        S
+      </span>
+      <div className="min-w-0">
+        <p className="font-display truncate text-lg font-semibold tracking-tight text-white">
+          Sophia
+        </p>
+        <p className="truncate text-[10px] uppercase tracking-[0.16em] text-sidebar-foreground/45">
+          Atelier
+        </p>
+      </div>
     </div>
   );
 }

@@ -93,9 +93,11 @@ async function compter(table: string): Promise<number> {
 
 function Compteur({ label, valeur }: { label: string; valeur: number | undefined }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <p className="text-2xl font-semibold tabular-nums">{valeur ?? "—"}</p>
-      <p className="text-sm text-muted-foreground">{label}</p>
+    <div className="border border-border/80 bg-card/80 px-4 py-3">
+      <p className="font-display text-2xl font-semibold tabular-nums tracking-tight">
+        {valeur ?? "—"}
+      </p>
+      <p className="text-xs text-muted-foreground">{label}</p>
     </div>
   );
 }
@@ -164,11 +166,11 @@ function LabelsPilotageCard() {
           </Button>
         </form>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="list-enter flex flex-wrap gap-2">
           {(labels.data ?? []).map((lab) => (
             <div
               key={lab.id}
-              className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
+              className="flex items-center gap-1 border border-border/80 px-2 py-1 text-xs"
             >
               <span
                 className="size-2.5 rounded-full"
@@ -290,7 +292,7 @@ export function AdminPilotagePage() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+      <div className="list-enter grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
         <Compteur label={t("pilotage.contenus")} valeur={stats.data?.contenus} />
         <Compteur label={t("pilotage.passages")} valeur={stats.data?.passages} />
         <Compteur label={t("pilotage.labels")} valeur={stats.data?.labels} />

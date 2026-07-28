@@ -1,11 +1,12 @@
 export const fr = {
   translation: {
     app: {
-      name: "Sophia System - Slideshows",
+      name: "Sophia",
     },
     auth: {
       loginTitle: "Connexion",
       loginSubtitle: "Accède à ton espace",
+      tagline: "Le moteur éditorial qui compose, score et publie — sans friction.",
       welcome: "Bienvenue",
       chooseAccess: "Choisis ton type d'accès pour continuer",
       accessAdmin: "Accès Admin",
