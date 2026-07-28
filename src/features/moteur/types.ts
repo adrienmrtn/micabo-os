@@ -44,6 +44,9 @@ export interface Compte {
   /** null = suit les réglages globaux. */
   repartition: { recycle: number; remanie: number; nouveau: number } | null;
   posts_par_jour: number | null;
+  /** Forme du compte (EWMA), défaut 50. */
+  score: number;
+  score_maj_at: string | null;
 }
 
 export interface CompteAvecDetails extends Compte {
@@ -80,6 +83,8 @@ export interface Media {
   id: string;
   compte_id: string | null;
   compte_reference_id: string | null;
+  /** Lien optionnel vers un contenu v-next (biblio partagée). */
+  contenu_id: string | null;
   storage_path: string;
   url: string;
   source: MediaSource;
@@ -146,6 +151,27 @@ export interface PosterProfil {
   role: "admin" | "poster" | "hiring_manager" | null;
 }
 
+export interface ReglagesScoring {
+  ewma_alpha: number;
+  regularisation_k: number;
+  transfert_inter_langue: number;
+  top_k: number;
+  temperature: number;
+  saturation_jours: number;
+  saturation_penalite: number;
+  variation_seuil_score: number;
+  variation_min_passages: number;
+  variation_age_jours: number;
+  variation_profondeur_max: number;
+  score_prior: number;
+  pertinence_seuil: number;
+}
+
+export interface ReglagesPaiement {
+  tarif_base_mensuel: number;
+  tarif_par_post_jour: number;
+}
+
 export interface Reglages {
   repartition: { recycle: number; remanie: number; nouveau: number };
   frequence: { posts_par_jour: number };
@@ -155,6 +181,9 @@ export interface Reglages {
     posts_par_jour: number;
     tout_recycle: boolean;
   };
+  /** Réglages moteur v-next (présents dès la migration 0141). */
+  scoring: ReglagesScoring;
+  paiement: ReglagesPaiement;
 }
 
 export interface StatsCompte {
@@ -190,4 +219,92 @@ export interface StatsPost {
   likes: number | null;
   commentaires: number | null;
   partages: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Moteur v-next (schéma 0141) — tables côte à côte jusqu'au cutover.
+// ---------------------------------------------------------------------------
+
+export type ContenuStatut = "brouillon" | "valide" | "rejete";
+export type PassageStatut = "brouillon" | "assigne" | "valide_par_poster" | "publie";
+export type ImportStatut = "pending" | "running" | "done" | "failed";
+
+export interface Label {
+  id: string;
+  nom: string;
+  slug: string;
+  couleur: string | null;
+  created_at: string;
+}
+
+/** Slide language-agnostique d'un contenu (visuel partagé). */
+export interface ContenuSlide {
+  position: number;
+  media_id: string | null;
+  raw_url?: string | null;
+  reference_url?: string | null;
+}
+
+/** Slide traduite + placement Sophia (par langue). */
+export interface ContenuLangueSlide {
+  position: number;
+  texte_overlay: string | null;
+  position_sophia: boolean;
+}
+
+export interface Contenu {
+  id: string;
+  titre: string;
+  structure_slides: ContenuSlide[];
+  compte_reference_id: string | null;
+  sujet_id: string | null;
+  source_url: string | null;
+  langue_source: string;
+  musique_url: string | null;
+  musique_titre: string | null;
+  musique_plateforme: string | null;
+  vues_source: number | null;
+  pertinence_score: number | null;
+  pertinence_raison: string | null;
+  statut: ContenuStatut;
+  import_statut: ImportStatut;
+  import_etape: string | null;
+  import_erreur: string | null;
+  parent_id: string | null;
+  profondeur: number;
+  created_at: string;
+}
+
+export interface ContenuLangue {
+  id: string;
+  contenu_id: string;
+  langue: string;
+  slides: ContenuLangueSlide[];
+  score: number;
+  nb_passages: number;
+  score_maj_at: string | null;
+  created_at: string;
+}
+
+export interface Passage {
+  id: string;
+  contenu_id: string;
+  compte_id: string;
+  langue: string;
+  date_publication_prevue: string | null;
+  statut: PassageStatut;
+  slides: ContenuLangueSlide[];
+  musique_url: string | null;
+  musique_titre: string | null;
+  musique_plateforme: string | null;
+  hashtags: string | null;
+  publie_at: string | null;
+  publie_url: string | null;
+  vues: number | null;
+  likes: number | null;
+  commentaires: number | null;
+  partages: number | null;
+  stats_maj_at: string | null;
+  post_id: string | null;
+  created_at: string;
 }

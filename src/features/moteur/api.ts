@@ -919,6 +919,25 @@ export async function lireReglages(): Promise<Reglages> {
       posts_par_jour: 2,
       tout_recycle: true,
     },
+    scoring: (map.get("scoring") as Reglages["scoring"] | undefined) ?? {
+      ewma_alpha: 0.3,
+      regularisation_k: 5,
+      transfert_inter_langue: 0.15,
+      top_k: 5,
+      temperature: 0.7,
+      saturation_jours: 7,
+      saturation_penalite: 0.2,
+      variation_seuil_score: 80,
+      variation_min_passages: 3,
+      variation_age_jours: 5,
+      variation_profondeur_max: 2,
+      score_prior: 50,
+      pertinence_seuil: 50,
+    },
+    paiement: (map.get("paiement") as Reglages["paiement"] | undefined) ?? {
+      tarif_base_mensuel: 0,
+      tarif_par_post_jour: 0,
+    },
   };
 }
 
