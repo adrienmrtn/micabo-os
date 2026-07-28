@@ -121,6 +121,31 @@ async function releverCompte(
     releves += 1;
   }
 
+  // Passages v-next : même rapprochement par publie_url.
+  const { data: passages } = await supabase
+    .from("passages")
+    .select("id, publie_url")
+    .eq("compte_id", compteId)
+    .eq("statut", "publie")
+    .not("publie_url", "is", null);
+
+  for (const passage of passages ?? []) {
+    const complet = await resoudreLien(passage.publie_url!);
+    const stats = parId.get(idDuLien(complet));
+    if (!stats) continue;
+    await supabase
+      .from("passages")
+      .update({
+        vues: stats.vues,
+        likes: stats.likes,
+        commentaires: stats.commentaires,
+        partages: stats.partages,
+        stats_maj_at: new Date().toISOString(),
+      })
+      .eq("id", passage.id);
+    releves += 1;
+  }
+
   return releves;
 }
 

@@ -645,7 +645,25 @@ export async function reordonnerSlides(slides: PostSlide[]): Promise<void> {
 }
 
 export async function majPost(id: string, patch: Partial<Post>): Promise<void> {
+  if (patch.statut === "publie" && !String(patch.publie_url ?? "").trim()) {
+    throw new Error("Lien TikTok obligatoire pour marquer comme publié");
+  }
   const { error } = await supabase.from("posts").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+export async function majPassage(
+  id: string,
+  patch: Partial<{
+    statut: string;
+    publie_at: string | null;
+    publie_url: string | null;
+  }>,
+): Promise<void> {
+  if (patch.statut === "publie" && !String(patch.publie_url ?? "").trim()) {
+    throw new Error("Lien TikTok obligatoire pour marquer comme publié");
+  }
+  const { error } = await supabase.from("passages").update(patch).eq("id", id);
   if (error) throw error;
 }
 
@@ -995,6 +1013,26 @@ export const scraperSourceVersContenus = (compteReferenceId: string) =>
   invoke<{ ok: boolean; crees: number; ids: string[] }>("import-contenu", {
     compteReferenceId,
     scrape: true,
+  });
+
+/** Pipeline minuit v-next : stats passages → scores → assignation contenus. */
+export const lancerMinuitVnext = (body: Record<string, unknown> = {}) =>
+  invoke<{ ok: boolean; saute?: boolean; jour?: string }>("minuit-vnext", body);
+
+export const lancerScoringVnext = (compteId?: string) =>
+  invoke<{ ok: boolean; contenus: number; comptes: number }>("scoring", {
+    compteId: compteId ?? null,
+  });
+
+export const lancerAssignationContenu = (opts?: {
+  compteId?: string;
+  date?: string;
+  forcer?: boolean;
+}) =>
+  invoke<{ ok: boolean; jour: string; resultats: unknown[] }>("assignation-contenu", {
+    compteId: opts?.compteId ?? null,
+    date: opts?.date ?? null,
+    forcer: opts?.forcer ?? false,
   });
 
 /** Importe un slideshow depuis un lien TikTok collé à la main : scrape ce seul

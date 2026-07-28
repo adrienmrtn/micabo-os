@@ -601,6 +601,8 @@ export const en = {
       marquerPublie: "Mark as published",
       publieLe: "Published on {{date}}",
       lienPublie: "Published post link",
+      lienObligatoire: "Paste your TikTok post link to mark as published.",
+      lienObligatoireAide: "Required: without the link we cannot measure performance.",
       valider: "Approve this post",
       valide: "Approved",
       monterSlide: "Move up",

@@ -1,0 +1,170 @@
+import { assignerTousComptes } from "../_shared/assignation_contenu.ts";
+import { scrapeStats } from "../_shared/apify.ts";
+import { majScoresDepuisPassages } from "../_shared/scoring.ts";
+import {
+  assertAuthorised,
+  aujourdhuiParis,
+  json,
+  messageErreur,
+  serviceClient,
+} from "../_shared/supabase.ts";
+
+type Supabase = ReturnType<typeof serviceClient>;
+
+const POSTS_RELEVES = 30;
+
+/**
+ * Minuit v-next (rapide) :
+ *   1) FETCH stats des passages publiés (via publie_url)
+ *   2) MAJ scores contenu[langue] → transfert → EWMA comptes
+ *   3) ASSIGNATION labels ∩ + top-K + saturation
+ *
+ * Le contenu est déjà pré-cuit à l'import : pas de composition ici.
+ *
+ *   {}  → pipeline complet (si reglages.moteur_vnext.actif)
+ *   { etapes?: ['stats'|'scores'|'assignation'], compteId?, date?, forcer? }
+ */
+Deno.serve(async (request) => {
+  const denied = await assertAuthorised(request);
+  if (denied) return denied;
+
+  const supabase = serviceClient();
+  // deno-lint-ignore no-explicit-any
+  let body: any = {};
+  try {
+    body = await request.json();
+  } catch {
+    // vide
+  }
+
+  try {
+    const { data: flag } = await supabase
+      .from("reglages")
+      .select("valeur")
+      .eq("cle", "moteur_vnext")
+      .maybeSingle();
+    const actif = Boolean((flag?.valeur as { actif?: boolean } | null)?.actif);
+    // forcer: true contourne le flag (tests admin)
+    if (!actif && !body?.forcer) {
+      return json({ ok: true, saute: true, raison: "moteur_vnext inactif" });
+    }
+
+    const etapes: string[] = Array.isArray(body?.etapes)
+      ? body.etapes
+      : ["stats", "scores", "assignation"];
+    const jour = body?.date ?? aujourdhuiParis();
+    const compteId: string | null = body?.compteId ?? null;
+
+    const out: Record<string, unknown> = { ok: true, jour };
+
+    if (etapes.includes("stats")) {
+      out.stats = await releverPassages(supabase, compteId);
+    }
+    if (etapes.includes("scores")) {
+      out.scores = await majScoresDepuisPassages(supabase, { compteId });
+    }
+    if (etapes.includes("assignation")) {
+      out.assignation = await assignerTousComptes(
+        supabase,
+        jour,
+        compteId,
+        Boolean(body?.forcerAssignation),
+      );
+    }
+
+    return json(out);
+  } catch (error) {
+    return json({ ok: false, error: messageErreur(error) }, 500);
+  }
+});
+
+async function releverPassages(
+  supabase: Supabase,
+  compteId: string | null,
+): Promise<Array<{ compteId: string; releves: number; erreur?: string }>> {
+  let query = supabase
+    .from("comptes")
+    .select("id, handle_tiktok")
+    .eq("is_active", true)
+    .not("handle_tiktok", "is", null);
+  if (compteId) query = query.eq("id", compteId);
+
+  const { data: comptes, error } = await query;
+  if (error) throw error;
+
+  const resultats: Array<{ compteId: string; releves: number; erreur?: string }> = [];
+
+  for (const compte of comptes ?? []) {
+    try {
+      const releves = await releverComptePassages(
+        supabase,
+        compte.id,
+        compte.handle_tiktok!,
+      );
+      resultats.push({ compteId: compte.id, releves });
+    } catch (e) {
+      resultats.push({
+        compteId: compte.id,
+        releves: 0,
+        erreur: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+  return resultats;
+}
+
+async function releverComptePassages(
+  supabase: Supabase,
+  compteId: string,
+  handle: string,
+): Promise<number> {
+  const enLigne = await scrapeStats(handle, POSTS_RELEVES);
+
+  const { data: passages } = await supabase
+    .from("passages")
+    .select("id, publie_url")
+    .eq("compte_id", compteId)
+    .eq("statut", "publie")
+    .not("publie_url", "is", null);
+
+  if (!passages || passages.length === 0) return 0;
+
+  const idDuLien = (url: string) => url.match(/\/(?:photo|video)\/(\d+)/)?.[1] ?? url;
+  const parId = new Map(enLigne.map((p) => [idDuLien(p.webVideoUrl), p.stats]));
+
+  let releves = 0;
+  for (const passage of passages) {
+    const complet = await resoudreLien(passage.publie_url!);
+    const stats = parId.get(idDuLien(complet));
+    if (!stats) continue;
+
+    await supabase
+      .from("passages")
+      .update({
+        vues: stats.vues,
+        likes: stats.likes,
+        commentaires: stats.commentaires,
+        partages: stats.partages,
+        stats_maj_at: new Date().toISOString(),
+      })
+      .eq("id", passage.id);
+    releves += 1;
+  }
+  return releves;
+}
+
+async function resoudreLien(url: string): Promise<string> {
+  if (!/\/\/(?:vm|vt)\.tiktok\.com/i.test(url)) return url;
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+      },
+    });
+    return res.url || url;
+  } catch {
+    return url;
+  }
+}

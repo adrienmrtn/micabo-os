@@ -601,6 +601,8 @@ export const fr = {
       marquerPublie: "Marquer comme publié",
       publieLe: "Publié le {{date}}",
       lienPublie: "Lien du post publié",
+      lienObligatoire: "Colle le lien de ton post TikTok pour marquer comme publié.",
+      lienObligatoireAide: "Obligatoire : sans lien, on ne peut pas mesurer les performances.",
       valider: "Valider ce post",
       valide: "Validé",
       monterSlide: "Monter",
