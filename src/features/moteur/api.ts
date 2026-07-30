@@ -1231,6 +1231,56 @@ export async function nettoyerMedia(
   };
 }
 
+export type JobReimportPhoto = {
+  contenuId: string;
+  position: number;
+};
+
+/** Jobs réimport pour un contenu (slides avec brut source). */
+export function jobsReimportDepuisSlides(
+  contenuId: string,
+  slides: ContenuSlide[] | null | undefined,
+): JobReimportPhoto[] {
+  const jobs: JobReimportPhoto[] = [];
+  for (const s of slides ?? []) {
+    if (s.raw_url || s.reference_url) {
+      jobs.push({ contenuId, position: s.position });
+    }
+  }
+  return jobs;
+}
+
+/**
+ * Toutes les slides des contenus `valide` qui ont une URL source (brut TikTok).
+ * Sert au lot « réimporter photos » — texte / OCR / decks inchangés.
+ */
+export async function listerJobsReimportPhotosValides(): Promise<JobReimportPhoto[]> {
+  const jobs: JobReimportPhoto[] = [];
+  const pageSize = 200;
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from("contenus")
+      .select("id, structure_slides")
+      .eq("statut", "valide")
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    for (const row of batch) {
+      jobs.push(
+        ...jobsReimportDepuisSlides(
+          row.id as string,
+          (row.structure_slides ?? []) as ContenuSlide[],
+        ),
+      );
+    }
+    if (batch.length < pageSize) break;
+    from += pageSize;
+  }
+  return jobs;
+}
+
 /** Re-nettoie une slide d'un slideshow v-next (structure_slides). */
 export async function renettoyerSlideContenu(
   contenuId: string,
@@ -1241,6 +1291,7 @@ export async function renettoyerSlideContenu(
     return invoke<{
       ok: boolean;
       nettoyee: boolean;
+      remplacee?: boolean;
       moteur?: "text_removal" | "replicate_text_removal";
       mediaId?: string;
       url?: string;
@@ -1256,6 +1307,7 @@ export async function renettoyerSlideContenu(
   return {
     ok: fin.ok !== false && fin.statut !== "echec",
     nettoyee: Boolean(fin.nettoyee),
+    remplacee: Boolean(fin.remplacee),
     moteur: fin.moteur,
     mediaId: typeof fin.mediaId === "string" ? fin.mediaId : undefined,
     url: fin.url,
