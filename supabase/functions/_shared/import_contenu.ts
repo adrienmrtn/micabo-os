@@ -1285,6 +1285,7 @@ async function nettoyerSlide(
       `upload OK → media_id=${media.id} · labels KO: ${messageErreur(e)}`,
     );
   }
+
   rapport.ok = true;
   return { mediaId: media.id, rapport };
 }
