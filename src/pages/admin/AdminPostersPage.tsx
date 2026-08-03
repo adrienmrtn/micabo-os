@@ -26,6 +26,7 @@ import {
   demarrerWarmup,
   skipWarmup,
   labelsDesComptes,
+  labelsDuHmUgcVideo,
   listerComptes,
   listerLabels,
   listerLanguesReference,
@@ -36,13 +37,20 @@ import {
   majPoster,
   majUpwork,
   setLabelsCompte,
+  setLabelsHmUgcVideo,
   supprimerPoster,
 } from "@/features/moteur/api";
+import { LabelPicker } from "@/features/moteur/LabelPicker";
 import { listerUgcPersonas } from "@/features/ugc/api";
 import { nomLangue } from "@/features/moteur/langues";
 import { WarmupBadge } from "@/features/moteur/WarmupBadge";
 import { phaseCreateur, type PhaseCreateur } from "@/features/moteur/warmup";
 import type { CompteAvecDetails, Label as LabelType, PosterProfil } from "@/features/moteur/types";
+
+const filtreLabelUgcVideoThematique = (lab: {
+  slug: string;
+  ugc_ai_video: boolean;
+}) => Boolean(lab.ugc_ai_video) && lab.slug !== "ugc-ai-video";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
@@ -339,6 +347,44 @@ function LabelsCompteSelect({
   );
 }
 
+/** Labels thématiques UGC AI VIDEO d’un HM (propagés aux futurs créateurs). */
+function HmUgcVideoLabelsEditeur({ profileId }: { profileId: string }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const q = useQuery({
+    queryKey: ["hm-ugc-video-labels", profileId],
+    queryFn: () => labelsDuHmUgcVideo(profileId),
+  });
+  const [local, setLocal] = React.useState<string[] | null>(null);
+  const ids = local ?? q.data ?? [];
+
+  const maj = useMutation({
+    mutationFn: (next: string[]) => setLabelsHmUgcVideo(profileId, next),
+    onSuccess: () => {
+      setLocal(null);
+      void queryClient.invalidateQueries({ queryKey: ["hm-ugc-video-labels", profileId] });
+    },
+  });
+
+  return (
+    <div className="space-y-1.5 border-t border-dashed pt-2">
+      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        {t("posters.hmUgcAiVideoLabels")}
+      </Label>
+      <LabelPicker
+        selected={ids}
+        disabled={maj.isPending || q.isPending}
+        filter={filtreLabelUgcVideoThematique}
+        onChange={(next) => {
+          setLocal(next);
+          maj.mutate(next);
+        }}
+      />
+      <p className="text-[11px] text-muted-foreground">{t("posters.hmUgcAiVideoLabelsAide")}</p>
+    </div>
+  );
+}
+
 export function AdminPostersPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -428,17 +474,27 @@ export function AdminPostersPage() {
   const [recPrenom, setRecPrenom] = React.useState("");
   const [recNom, setRecNom] = React.useState("");
   const [recLangues, setRecLangues] = React.useState<string[]>([]);
+  const [recUgcAiVideo, setRecUgcAiVideo] = React.useState(false);
+  const [recUgcLabels, setRecUgcLabels] = React.useState<string[]>([]);
   const [recCree, setRecCree] = React.useState<{ email: string } | null>(null);
   const basculerRecLangue = (l: string) =>
     setRecLangues((prev) => (prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l]));
   const creerRec = useMutation({
     mutationFn: () =>
-      creerRecruteur({ prenom: recPrenom, nom: recNom, langues: recLangues }),
+      creerRecruteur({
+        prenom: recPrenom,
+        nom: recNom,
+        langues: recLangues,
+        ugc_ai_video: recUgcAiVideo,
+        ugc_ai_video_label_ids: recUgcAiVideo ? recUgcLabels : undefined,
+      }),
     onSuccess: (r) => {
       setRecCree({ email: r.email });
       setRecPrenom("");
       setRecNom("");
       setRecLangues([]);
+      setRecUgcAiVideo(false);
+      setRecUgcLabels([]);
       rafraichir();
     },
   });
@@ -638,10 +694,47 @@ export function AdminPostersPage() {
               </div>
               <p className="text-xs text-muted-foreground">{t("posters.languesRecruteurAide")}</p>
             </div>
+            <div className="sm:col-span-3 space-y-1.5">
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={recUgcAiVideo}
+                  onChange={(e) => {
+                    setRecUgcAiVideo(e.target.checked);
+                    if (!e.target.checked) setRecUgcLabels([]);
+                  }}
+                />
+                <span>
+                  <span className="font-medium">{t("posters.hmUgcAiVideo")}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {t("posters.hmUgcAiVideoAide")}
+                  </span>
+                </span>
+              </label>
+              {recUgcAiVideo && (
+                <div className="space-y-1.5 rounded-md border border-dashed p-3">
+                  <Label>{t("posters.hmUgcAiVideoLabels")}</Label>
+                  <LabelPicker
+                    selected={recUgcLabels}
+                    onChange={setRecUgcLabels}
+                    filter={filtreLabelUgcVideoThematique}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("posters.hmUgcAiVideoLabelsAide")}
+                  </p>
+                </div>
+              )}
+            </div>
             <div className="sm:col-span-3">
               <Button
                 type="submit"
-                disabled={creerRec.isPending || !recPrenom.trim() || recLangues.length === 0}
+                disabled={
+                  creerRec.isPending ||
+                  !recPrenom.trim() ||
+                  recLangues.length === 0 ||
+                  (recUgcAiVideo && recUgcLabels.length === 0)
+                }
               >
                 {creerRec.isPending ? t("common.saving") : t("posters.creerRecruteur")}
               </Button>
@@ -801,6 +894,9 @@ export function AdminPostersPage() {
                   {poster.role === "hiring_manager" && (
                     <Badge variant="secondary">{t("hiring.badge")}</Badge>
                   )}
+                  {poster.role === "hiring_manager" && poster.hm_ugc_ai_video && (
+                    <Badge>{t("posters.hmUgcAiVideoBadge")}</Badge>
+                  )}
                   {!poster.is_active && (
                     <Badge variant="secondary">{t("posters.disabled")}</Badge>
                   )}
@@ -825,7 +921,23 @@ export function AdminPostersPage() {
                       }
                     />
                   )}
-                  {estPoster && compte?.ugc_ai && (
+                  {estPoster && compte?.ugc_ai_video && (
+                    <Badge
+                      title={
+                        compte.ugc_persona_id
+                          ? t("posters.ugcPersona", {
+                              nom:
+                                personaParId.get(compte.ugc_persona_id) ??
+                                compte.persona_nom ??
+                                "—",
+                            })
+                          : t("posters.ugcSansPersona")
+                      }
+                    >
+                      {t("posters.ugcAiVideoBadge")}
+                    </Badge>
+                  )}
+                  {estPoster && compte?.ugc_ai && !compte.ugc_ai_video && (
                     <Badge
                       title={
                         compte.ugc_persona_id
@@ -841,14 +953,16 @@ export function AdminPostersPage() {
                       UGC
                     </Badge>
                   )}
-                  {estPoster && compte?.ugc_ai && compte.ugc_persona_id && (
+                  {estPoster &&
+                    (compte?.ugc_ai || compte?.ugc_ai_video) &&
+                    compte.ugc_persona_id && (
                     <Badge variant="outline" className="max-w-[10rem] truncate">
                       {personaParId.get(compte.ugc_persona_id) ??
                         compte.persona_nom ??
                         compte.ugc_persona_id.slice(0, 8)}
                     </Badge>
                   )}
-                  {estPoster && compte && labs.length === 0 && (
+                  {estPoster && compte && labs.length === 0 && !compte.ugc_ai_video && (
                     <Badge variant="warning">{t("posters.sansLabels")}</Badge>
                   )}
                   {estPoster && poster.score != null && (
@@ -882,6 +996,9 @@ export function AdminPostersPage() {
                 </div>
 
                 {poster.role === "hiring_manager" && <LangueRecruteur recruteur={poster} />}
+                {poster.role === "hiring_manager" && poster.hm_ugc_ai_video && (
+                  <HmUgcVideoLabelsEditeur profileId={poster.id} />
+                )}
 
                 {estPoster && compte && (
                   <div className="grid gap-2 border-t border-dashed pt-2 sm:grid-cols-2">

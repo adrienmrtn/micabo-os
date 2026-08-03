@@ -327,7 +327,7 @@ export async function listerPosters(): Promise<PosterProfil[]> {
   const { data: profils, error } = await supabase
     .from("profiles")
     .select(
-      "id, prenom, nom, email, langues, nationalite, upwork_url, manager_id, is_active, must_change_password, cout_mensuel",
+      "id, prenom, nom, email, langues, nationalite, upwork_url, manager_id, is_active, must_change_password, cout_mensuel, hm_ugc_ai_video",
     )
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -370,6 +370,9 @@ export async function listerPosters(): Promise<PosterProfil[]> {
     const compte = compteParPoster.get(p.id);
     return {
       ...p,
+      hm_ugc_ai_video: Boolean(
+        (p as { hm_ugc_ai_video?: boolean }).hm_ugc_ai_video,
+      ),
       role: (parUtilisateur.get(p.id) ?? null) as PosterProfil["role"],
       compte_id: compte?.id ?? null,
       handle_tiktok: compte?.handle_tiktok ?? null,
@@ -447,6 +450,10 @@ export function creerRecruteur(input: {
   /** @deprecated préfère `langues` */
   langue?: string;
   langues?: string[];
+  /** HM UGC AI VIDEO : créateurs = marque + labels HM + persona. */
+  ugc_ai_video?: boolean;
+  /** Labels thématiques UGC AI VIDEO assignés au HM. */
+  ugc_ai_video_label_ids?: string[];
 }) {
   const langues =
     input.langues?.filter(Boolean) ??
@@ -459,6 +466,12 @@ export function creerRecruteur(input: {
     password: "12345678",
     langue: langues[0],
     langues,
+    ...(input.ugc_ai_video
+      ? {
+          ugc_ai_video: true,
+          ugc_ai_video_label_ids: input.ugc_ai_video_label_ids ?? [],
+        }
+      : {}),
   });
 }
 
@@ -3617,13 +3630,22 @@ export async function listerLabelIdsAvecUgc(): Promise<string[]> {
   return [...new Set((data ?? []).map((r) => r.label_id as string).filter(Boolean))];
 }
 
-export async function creerLabel(nom: string, couleur?: string | null): Promise<Label> {
+export async function creerLabel(
+  nom: string,
+  couleur?: string | null,
+  opts?: { ugc_ai_video?: boolean },
+): Promise<Label> {
   const base = slugify(nom);
   let slug = base;
   for (let i = 0; i < 5; i += 1) {
     const { data, error } = await supabase
       .from("labels")
-      .insert({ nom: nom.trim(), slug, couleur: couleur ?? null })
+      .insert({
+        nom: nom.trim(),
+        slug,
+        couleur: couleur ?? null,
+        ugc_ai_video: Boolean(opts?.ugc_ai_video),
+      })
       .select()
       .single();
     if (!error && data) return data as Label;
@@ -3635,7 +3657,7 @@ export async function creerLabel(nom: string, couleur?: string | null): Promise<
 
 export async function majLabel(
   id: string,
-  patch: { nom?: string; couleur?: string | null },
+  patch: { nom?: string; couleur?: string | null; ugc_ai_video?: boolean },
 ): Promise<void> {
   const body: Record<string, unknown> = { ...patch };
   if (patch.nom) body.slug = slugify(patch.nom);
@@ -3644,7 +3666,54 @@ export async function majLabel(
 }
 
 export async function supprimerLabel(id: string): Promise<void> {
+  const { data: lab } = await supabase
+    .from("labels")
+    .select("slug")
+    .eq("id", id)
+    .maybeSingle();
+  if (lab?.slug === "ugc-ai-video") {
+    throw new Error("LABEL_MARQUE_PROTEGE");
+  }
   const { error } = await supabase.from("labels").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** Labels du pool UGC AI VIDEO (optionnellement hors marque système). */
+export async function listerLabelsUgcAiVideo(opts?: {
+  inclureMarque?: boolean;
+}): Promise<Label[]> {
+  const tous = await listerLabels();
+  return tous.filter(
+    (l) =>
+      l.ugc_ai_video &&
+      (opts?.inclureMarque || l.slug !== "ugc-ai-video"),
+  );
+}
+
+export async function labelsDuHmUgcVideo(profileId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("hm_ugc_video_labels")
+    .select("label_id")
+    .eq("profile_id", profileId);
+  if (error) throw error;
+  return (data ?? []).map((r) => r.label_id as string);
+}
+
+/** Remplace les labels thématiques UGC AI VIDEO d’un HM. */
+export async function setLabelsHmUgcVideo(
+  profileId: string,
+  labelIds: string[],
+): Promise<void> {
+  const { error: delErr } = await supabase
+    .from("hm_ugc_video_labels")
+    .delete()
+    .eq("profile_id", profileId);
+  if (delErr) throw delErr;
+  const uniques = [...new Set(labelIds.filter(Boolean))];
+  if (uniques.length === 0) return;
+  const { error } = await supabase.from("hm_ugc_video_labels").insert(
+    uniques.map((label_id) => ({ profile_id: profileId, label_id })),
+  );
   if (error) throw error;
 }
 
