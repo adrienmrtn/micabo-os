@@ -928,6 +928,7 @@ export const fr = {
       subtitle:
         "TikToks importés : visuels + texte OCR à l'import. Traduction et pub Sophia à l'assignation minuit (par langue).",
       empty: "Aucun slideshow importé pour l'instant.",
+      emptyFiltre: "Aucun slideshow pour ce filtre (label / statut / UGC).",
       sansImage: "Sans image",
       detail: "Détail du slideshow",
       langueSource: "Langue d'origine",
