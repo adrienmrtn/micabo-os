@@ -465,7 +465,7 @@ export const en = {
       subtitle:
         "Trigger the steps manually. Each run consumes Apify or Gemini credit.",
       subtitleNew:
-        "Overview fed by the ELO update (catch-up): views, rankings, posting alerts.",
+        "Overview fed by the ELO update (catch-up): views and rankings.",
       autoTitre: "The engine runs on its own",
       autoDesc:
         "Extraction, cleaning, translation, midnight assignment: all automatic (nightly crons). To test manually, go to the Tests page.",
@@ -487,14 +487,6 @@ export const en = {
         "Snapshot exists, but no Δ yet (need at least two days). Re-run an ELO catch-up to freeze the next point.",
       dernierDelta: "Latest Δ:",
       totalVues: "total {{n}}",
-      alerte1Titre: "Alert 1 — no post today",
-      alerte1Desc:
-        "Last post was yesterday (Paris day), nothing today yet. A post today clears the alert.",
-      alerte2Titre: "Alert 2 — 2+ days without a post",
-      alerte2Desc:
-        "Last post was 2+ days ago (Paris day of publie_at).",
-      pasVeille: "Today pending",
-      joursSans: "{{n}}d",
       eloBasTitre: "Account ELO — bottom 5",
       eloBasDesc: "Accounts to watch (weak form).",
       eloTopTitre: "Account ELO ranking",
