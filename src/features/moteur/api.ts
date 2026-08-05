@@ -3611,6 +3611,92 @@ export async function suiviAssignation(date: string): Promise<SuiviMinuit[]> {
     }));
 }
 
+/**
+ * Pourquoi minuit n'a pas rempli le quota d'un compte (même logique que l'Edge
+ * `diagnostiquerPoolVide`) — sans créer de post.
+ */
+export async function diagnostiquerQuotaCompte(compteId: string): Promise<string> {
+  const { data: compte, error: errC } = await supabase
+    .from("comptes")
+    .select("id, langue, ugc_ai, ugc_ai_video, ugc_persona_id, posts_par_jour")
+    .eq("id", compteId)
+    .maybeSingle();
+  if (errC) throw errC;
+  if (!compte) return "Compte introuvable.";
+
+  if (compte.ugc_ai_video) {
+    return "Compte UGC AI VIDEO — hors assignation slideshow (pipeline vidéos à part).";
+  }
+  if (compte.ugc_ai && !compte.ugc_persona_id) {
+    return "Compte UGC AI sans persona — assigne un persona UGC (4 angles) sur le créateur.";
+  }
+
+  const langue = (compte.langue as string) || "fr";
+  const ugcAi = Boolean(compte.ugc_ai) && !compte.ugc_ai_video;
+
+  const { data: labelsCompte, error: errL } = await supabase
+    .from("compte_labels")
+    .select("label_id, labels(nom)")
+    .eq("compte_id", compteId);
+  if (errL) throw errL;
+
+  const labelIds = (labelsCompte ?? []).map((l) => l.label_id as string);
+  // deno-lint-ignore no-explicit-any
+  const labelNoms = (labelsCompte ?? [])
+    .map((l: any) => l.labels?.nom as string | undefined)
+    .filter(Boolean) as string[];
+  const labelsTxt =
+    labelNoms.length > 0 ? labelNoms.join(", ") : `${labelIds.length} label(s)`;
+
+  if (labelIds.length === 0) {
+    return "Aucun label sur ce compte — ajoute un label pour que minuit puisse piocher.";
+  }
+
+  const { data: liens } = await supabase
+    .from("contenu_labels")
+    .select("contenu_id")
+    .in("label_id", labelIds);
+  const idsLabel = [...new Set((liens ?? []).map((l) => l.contenu_id as string))];
+  if (idsLabel.length === 0) {
+    return `Aucun slideshow tagué « ${labelsTxt} » dans la bibliothèque.`;
+  }
+
+  const { data: prets } = await supabase
+    .from("contenus")
+    .select("id")
+    .eq("statut", "valide")
+    .eq("import_statut", "done")
+    .eq("ugc_compatible", ugcAi)
+    .in("id", idsLabel);
+  const idsPrets = (prets ?? []).map((c) => c.id as string);
+  if (idsPrets.length === 0) {
+    return (
+      `${idsLabel.length} slideshow(s) « ${labelsTxt} » mais aucun valide + import terminé` +
+      (ugcAi ? " + checkmark UGC" : " (non-UGC)") +
+      "."
+    );
+  }
+
+  const { count } = await supabase
+    .from("contenu_langues")
+    .select("contenu_id", { count: "exact", head: true })
+    .eq("langue", langue)
+    .in("contenu_id", idsPrets);
+  const nLangue = count ?? 0;
+  if (nLangue === 0) {
+    return (
+      `${idsPrets.length} slideshow(s) « ${labelsTxt} » prêts, mais aucun éligible en ` +
+      `${langue.toUpperCase()} (pas de score ELO langue à l'import pour cette langue).`
+    );
+  }
+
+  return (
+    `Pool « ${labelsTxt} » × ${langue.toUpperCase()} trop mince ou déjà tout assigné ` +
+    `(${nLangue} candidat(s) ELO) — importe / labellise d'autres slideshows, ` +
+    `ou baisse le quota du créateur.`
+  );
+}
+
 /** Un pas de fabrication pour un post précis (avance le pipeline d'une étape). */
 export const avancerUnPost = (postId: string) =>
   invoke<{ ok: boolean; etape?: string }>("composition", { postId });

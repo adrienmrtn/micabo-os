@@ -384,7 +384,9 @@ export const fr = {
       comptesIncompletsAide:
         "Créateurs sans leur quota du jour : posts manquants, ou au moins un post en échec. Clique pour voir qui, la langue, et la cause.",
       comptesIncompletsDetail: "Qui est incomplet — où et pourquoi",
-      causeManquantTitre: "Quota incomplet",
+      causeManquantTitre: "Posts manquants",
+      causePourquoiTitre: "Pourquoi minuit n’a pas complété",
+      causePourquoiChargement: "Diagnostic du pool…",
       causeEchecTitre: "Post en échec",
       causeEchecSansDetail: "Échec pipeline (pas de détail)",
       causeRaisonTitre: "Raison assignation",
