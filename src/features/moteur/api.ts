@@ -4036,16 +4036,72 @@ async function metasMediasPropres(
 export async function listerContenus(opts?: {
   statut?: string;
   limit?: number;
+  /** Filtre serveur par label (évite le piège « top N récents » côté client). */
+  labelId?: string | null;
+  /** Contenu sans aucun label. */
+  sansLabel?: boolean;
 }): Promise<ContenuListe[]> {
+  const limit = opts?.limit ?? 80;
+  let idsFiltres: string[] | null = null;
+
+  if (opts?.labelId) {
+    const { data: liensLab, error: errLab } = await supabase
+      .from("contenu_labels")
+      .select("contenu_id")
+      .eq("label_id", opts.labelId);
+    if (errLab) throw errLab;
+    idsFiltres = [...new Set((liensLab ?? []).map((r) => r.contenu_id as string))];
+    if (idsFiltres.length === 0) return [];
+  } else if (opts?.sansLabel) {
+    // Contenu dont l'id n'apparaît dans aucune ligne contenu_labels.
+    const [{ data: tous }, { data: avecLabel }] = await Promise.all([
+      supabase.from("contenus").select("id").order("created_at", { ascending: false }).limit(2000),
+      supabase.from("contenu_labels").select("contenu_id"),
+    ]);
+    const pris = new Set((avecLabel ?? []).map((r) => r.contenu_id as string));
+    idsFiltres = (tous ?? [])
+      .map((c) => c.id as string)
+      .filter((id) => !pris.has(id))
+      .slice(0, limit);
+    if (idsFiltres.length === 0) return [];
+  }
+
   let q = supabase
     .from("contenus")
     .select("*")
     .order("created_at", { ascending: false })
-    .limit(opts?.limit ?? 80);
+    .limit(limit);
   if (opts?.statut) q = q.eq("statut", opts.statut);
+  if (idsFiltres) {
+    // Chunk .in() pour rester sous la limite URL PostgREST.
+    const chunk = 80;
+    const contenus: Contenu[] = [];
+    for (let i = 0; i < idsFiltres.length; i += chunk) {
+      const slice = idsFiltres.slice(i, i + chunk);
+      let qChunk = supabase
+        .from("contenus")
+        .select("*")
+        .in("id", slice)
+        .order("created_at", { ascending: false });
+      if (opts?.statut) qChunk = qChunk.eq("statut", opts.statut);
+      const { data, error } = await qChunk;
+      if (error) throw error;
+      contenus.push(...((data ?? []) as Contenu[]));
+    }
+    contenus.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const tronques = contenus.slice(0, limit);
+    if (tronques.length === 0) return [];
+    return enrichirContenusListe(tronques);
+  }
+
   const { data, error } = await q;
   if (error) throw error;
   const contenus = (data ?? []) as Contenu[];
+  if (contenus.length === 0) return [];
+  return enrichirContenusListe(contenus);
+}
+
+async function enrichirContenusListe(contenus: Contenu[]): Promise<ContenuListe[]> {
   if (contenus.length === 0) return [];
 
   const ids = contenus.map((c) => c.id);

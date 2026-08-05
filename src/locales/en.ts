@@ -927,6 +927,7 @@ export const en = {
       subtitle:
         "Imported TikToks: visuals + OCR text at import. Translation and Sophia ad at midnight assignment (per language).",
       empty: "No imported slideshow yet.",
+      emptyFiltre: "No slideshow for this filter (label / status / UGC).",
       sansImage: "No image",
       detail: "Slideshow detail",
       langueSource: "Source language",

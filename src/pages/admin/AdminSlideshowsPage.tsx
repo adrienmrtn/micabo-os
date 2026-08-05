@@ -1346,11 +1346,14 @@ export function AdminSlideshowsPage() {
   }, [searchParams]);
 
   const contenus = useQuery({
-    queryKey: ["slideshows", filtre],
+    queryKey: ["slideshows", filtre, filtreLabel],
     queryFn: () =>
       listerContenus({
         statut: filtre === "tous" ? undefined : filtre,
         limit: 200,
+        labelId:
+          filtreLabel && filtreLabel !== "__none__" ? filtreLabel : undefined,
+        sansLabel: filtreLabel === "__none__",
       }),
   });
 
@@ -1380,12 +1383,13 @@ export function AdminSlideshowsPage() {
   }, [labelsTous.data, contenus.data]);
 
   const contenusTries = React.useMemo(() => {
+    // Label déjà filtré côté serveur ; UGC reste client.
     const filtres = filtreSlideshows(contenus.data ?? [], {
-      labelId: filtreLabel,
+      labelId: null,
       ugc: filtreUgc,
     });
     return trierSlideshows(filtres, tri);
-  }, [contenus.data, filtreLabel, filtreUgc, tri]);
+  }, [contenus.data, filtreUgc, tri]);
 
   function fermerDetail() {
     setOuvert(null);
@@ -1579,7 +1583,13 @@ export function AdminSlideshowsPage() {
             <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
           )}
           {!contenus.isPending && contenusTries.length === 0 && (
-            <EmptyState title={t("slideshows.empty")} />
+            <EmptyState
+              title={
+                filtreLabel || filtreUgc !== "tous" || filtre !== "tous"
+                  ? t("slideshows.emptyFiltre")
+                  : t("slideshows.empty")
+              }
+            />
           )}
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
