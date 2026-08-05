@@ -465,7 +465,7 @@ export const fr = {
       subtitle:
         "Déclenche les étapes à la main. Chaque passage consomme du crédit Apify ou Gemini.",
       subtitleNew:
-        "Vue d’ensemble alimentée par l’update ELO (rattrapage) : vues, classements, alertes posts.",
+        "Vue d’ensemble alimentée par l’update ELO (rattrapage) : vues et classements.",
       autoTitre: "Le moteur tourne tout seul",
       autoDesc:
         "Extraction, nettoyage, traduction, assignation à minuit : tout est automatique (crons de nuit). Pour tester à la main, va sur la page Tests.",
@@ -487,14 +487,6 @@ export const fr = {
         "Snapshot présent, mais pas encore de Δ (il faut au moins deux jours). Relance un rattrapage ELO pour figer la suite.",
       dernierDelta: "Dernier Δ :",
       totalVues: "total {{n}}",
-      alerte1Titre: "Alerte 1 — pas posté aujourd’hui",
-      alerte1Desc:
-        "Dernier post hier (jour Paris), rien aujourd’hui encore. Un post d’aujourd’hui retire l’alerte.",
-      alerte2Titre: "Alerte 2 — 2 jours ou + sans post",
-      alerte2Desc:
-        "Le dernier post date d’il y a 2 jours ou plus (jour Paris de publie_at).",
-      pasVeille: "Aujourd’hui en retard",
-      joursSans: "{{n}}j",
       eloBasTitre: "ELO compte — les 5 plus bas",
       eloBasDesc: "Comptes à surveiller (forme faible).",
       eloTopTitre: "Classement ELO compte",

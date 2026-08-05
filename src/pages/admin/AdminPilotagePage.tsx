@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -366,73 +366,6 @@ export function AdminPilotagePage() {
               <GraphVuesDelta serie={d.vuesSerie} />
             </CardContent>
           </Card>
-
-          {(d.alertes.niveau2.length > 0 || d.alertes.niveau1.length > 0) && (
-            <div className="grid gap-3 lg:grid-cols-2">
-              {d.alertes.niveau2.length > 0 && (
-                <Card className="border-destructive/40">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-destructive">
-                      <AlertTriangle className="size-4" />
-                      {t("pilotage.alerte2Titre")}
-                    </CardTitle>
-                    <CardDescription>{t("pilotage.alerte2Desc")}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-1.5">
-                    {d.alertes.niveau2.map((a) => (
-                      <Link
-                        key={a.compte_id}
-                        to={`/admin/createurs/${a.compte_id}`}
-                        className="flex items-center justify-between gap-2 rounded-md border border-destructive/20 bg-destructive/5 px-2.5 py-2 text-sm hover:bg-destructive/10"
-                      >
-                        <span className="truncate font-medium">
-                          {a.nom}
-                          {a.handle ? (
-                            <span className="ml-1.5 text-xs text-muted-foreground">
-                              @{a.handle}
-                            </span>
-                          ) : null}
-                        </span>
-                        <Badge variant="destructive">
-                          {t("pilotage.joursSans", { n: a.joursSansPost })}
-                        </Badge>
-                      </Link>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-              {d.alertes.niveau1.length > 0 && (
-                <Card className="border-warning/40">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-warning">
-                      <AlertTriangle className="size-4" />
-                      {t("pilotage.alerte1Titre")}
-                    </CardTitle>
-                    <CardDescription>{t("pilotage.alerte1Desc")}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-1.5">
-                    {d.alertes.niveau1.map((a) => (
-                      <Link
-                        key={a.compte_id}
-                        to={`/admin/createurs/${a.compte_id}`}
-                        className="flex items-center justify-between gap-2 rounded-md border border-warning/20 bg-warning/5 px-2.5 py-2 text-sm hover:bg-warning/10"
-                      >
-                        <span className="truncate font-medium">
-                          {a.nom}
-                          {a.handle ? (
-                            <span className="ml-1.5 text-xs text-muted-foreground">
-                              @{a.handle}
-                            </span>
-                          ) : null}
-                        </span>
-                        <Badge variant="warning">{t("pilotage.pasVeille")}</Badge>
-                      </Link>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
 
           <div className="grid gap-4 lg:grid-cols-2">
             <RangList
