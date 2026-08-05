@@ -384,7 +384,9 @@ export const en = {
       comptesIncompletsAide:
         "Creators missing their daily quota: missing posts, or at least one failed post. Click to see who, language, and the cause.",
       comptesIncompletsDetail: "Who is incomplete — where and why",
-      causeManquantTitre: "Incomplete quota",
+      causeManquantTitre: "Missing posts",
+      causePourquoiTitre: "Why midnight didn’t fill the quota",
+      causePourquoiChargement: "Diagnosing the pool…",
       causeEchecTitre: "Failed post",
       causeEchecSansDetail: "Pipeline failure (no detail)",
       causeRaisonTitre: "Assignment reason",

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import {
   aujourdhuiParis,
+  diagnostiquerQuotaCompte,
   ecrireReglage,
   lancerAssignationJour,
   lancerAssignationJourLive,
@@ -249,6 +250,35 @@ function causesCompteIncomplet(
     causes.push({ kind: "raisonAssign", texte: raisonRelance });
   }
   return causes;
+}
+
+/** Charge le « pourquoi » réel (pool / labels / langue) pour un quota manquant. */
+function PourquoiQuota({ compteId }: { compteId: string }) {
+  const { t } = useTranslation();
+  const diag = useQuery({
+    queryKey: ["diag-quota", compteId],
+    queryFn: () => diagnostiquerQuotaCompte(compteId),
+    staleTime: 30_000,
+  });
+  if (diag.isPending) {
+    return (
+      <p className="text-[11px] text-muted-foreground">{t("minuit.causePourquoiChargement")}</p>
+    );
+  }
+  if (diag.isError) {
+    return (
+      <p className="text-[11px] text-destructive">
+        {(diag.error as Error).message}
+      </p>
+    );
+  }
+  return (
+    <p className="text-[11px] leading-snug text-muted-foreground">
+      <span className="font-medium text-foreground">{t("minuit.causePourquoiTitre")}</span>
+      {" — "}
+      {diag.data}
+    </p>
+  );
 }
 
 /** Un compteur en tête de page (comptes / prêts / en cours / échoués). */
@@ -740,12 +770,20 @@ export function AdminMinuitPage() {
                           {causes.map((c, i) => {
                             if (c.kind === "manquant") {
                               return (
-                                <li key={`m-${i}`} className="text-warning">
-                                  <span className="font-medium">
-                                    {t("minuit.causeManquantTitre")}
-                                  </span>
-                                  {" — "}
-                                  {t("minuit.manquant", { count: c.manquants })}
+                                <li key={`m-${i}`} className="space-y-1 text-warning">
+                                  <p>
+                                    <span className="font-medium">
+                                      {t("minuit.causeManquantTitre")}
+                                    </span>
+                                    {" — "}
+                                    {t("minuit.manquant", { count: c.manquants })}
+                                    {" "}
+                                    ({t("minuit.faitSur", {
+                                      faits: c.faits,
+                                      quota: c.quota,
+                                    })})
+                                  </p>
+                                  <PourquoiQuota compteId={l.compteId} />
                                 </li>
                               );
                             }
