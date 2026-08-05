@@ -221,27 +221,33 @@ export function bioDeSecours(langue: string): string {
   return BIO_SECOURS[langue] ?? BIO_SECOURS.fr;
 }
 
-/** Charge le label principal d'un compte (sans embed fragile). */
+/** Charge le label principal d'un compte (hors marque système ugc-ai-video). */
 export async function labelDuCompte(
   supabase: Supabase,
   compteId: string,
-): Promise<{ labelId: string; labelNom: string } | null> {
-  const { data: cl } = await supabase
+): Promise<{ labelId: string; labelNom: string; genre: Genre | null } | null> {
+  const { data: cls } = await supabase
     .from("compte_labels")
     .select("label_id")
-    .eq("compte_id", compteId)
-    .limit(1)
-    .maybeSingle();
-  const labelId = (cl?.label_id as string | undefined) ?? null;
-  if (!labelId) return null;
-  const { data: lab } = await supabase
+    .eq("compte_id", compteId);
+  const ids = (cls ?? []).map((r) => r.label_id as string).filter(Boolean);
+  if (ids.length === 0) return null;
+
+  const { data: labs } = await supabase
     .from("labels")
-    .select("nom, slug")
-    .eq("id", labelId)
-    .maybeSingle();
-  const labelNom = (lab?.nom as string | undefined) ?? (lab?.slug as string | undefined) ?? null;
-  if (!labelNom) return { labelId, labelNom: labelId };
-  return { labelId, labelNom };
+    .select("id, nom, slug, genre")
+    .in("id", ids);
+  const lab =
+    (labs ?? []).find((l) => (l.slug as string) !== "ugc-ai-video") ??
+    (labs ?? [])[0] ??
+    null;
+  if (!lab?.id) return null;
+  const labelNom =
+    (lab.nom as string | undefined) ?? (lab.slug as string | undefined) ?? (lab.id as string);
+  const genreRaw = lab.genre as string | null | undefined;
+  const genre: Genre | null =
+    genreRaw === "homme" || genreRaw === "femme" ? genreRaw : null;
+  return { labelId: lab.id as string, labelNom, genre };
 }
 
 function motsCulture(theme: ThemeLabel, langue: string): string[] {
@@ -334,7 +340,11 @@ export async function genererIdentite(
 export async function appliquerIdentiteInstantanee(
   supabase: Supabase,
   compteId: string,
-  labelHint?: { labelId: string | null; labelNom?: string | null },
+  labelHint?: {
+    labelId: string | null;
+    labelNom?: string | null;
+    genre?: Genre | null;
+  },
 ): Promise<{ applique: boolean; handle: string | null }> {
   const { data: compte, error } = await supabase
     .from("comptes")
@@ -345,24 +355,36 @@ export async function appliquerIdentiteInstantanee(
 
   let labelId = labelHint?.labelId ?? null;
   let labelNom = labelHint?.labelNom ?? null;
-  if (!labelId || !labelNom) {
+  let labelGenre: Genre | null =
+    labelHint?.genre === "homme" || labelHint?.genre === "femme"
+      ? labelHint.genre
+      : null;
+  if (!labelId || !labelNom || !labelGenre) {
     const lab = await labelDuCompte(supabase, compteId);
     labelId = labelId ?? lab?.labelId ?? null;
     labelNom = labelNom ?? lab?.labelNom ?? null;
-  } else if (labelId && !labelNom) {
+    labelGenre = labelGenre ?? lab?.genre ?? null;
+  }
+  if (labelId && (!labelNom || !labelGenre)) {
     const { data: lab } = await supabase
       .from("labels")
-      .select("nom, slug")
+      .select("nom, slug, genre")
       .eq("id", labelId)
       .maybeSingle();
-    labelNom = (lab?.nom as string | undefined) ?? (lab?.slug as string | undefined) ?? null;
+    labelNom =
+      labelNom ??
+      (lab?.nom as string | undefined) ??
+      (lab?.slug as string | undefined) ??
+      null;
+    const g = lab?.genre as string | null | undefined;
+    if (!labelGenre && (g === "homme" || g === "femme")) labelGenre = g;
   }
 
   // deno-lint-ignore no-explicit-any
   const genreSource: Genre =
     (compte as any).comptes_reference?.genre === "homme" ? "homme" : "femme";
-  // Label genré gagne TOUJOURS (alpha_male → homme, clean_girl → femme).
-  const genre = genreDuLabel(labelNom) ?? genreSource;
+  // Genre du label (colonne) > heuristique nom > genre source.
+  const genre = labelGenre ?? genreDuLabel(labelNom) ?? genreSource;
 
   const identite = await genererIdentite(supabase, compte.langue, genre, labelNom);
   const avatar = await avatarPourCompte(supabase, {

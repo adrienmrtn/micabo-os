@@ -69,7 +69,7 @@ Deno.serve(async (request) => {
     // deno-lint-ignore no-explicit-any
     const genreSource: Genre =
       (compte as any).comptes_reference?.genre === "homme" ? "homme" : "femme";
-    const genre = genreDuLabel(labelNom) ?? genreSource;
+    const genre = lab?.genre ?? genreDuLabel(labelNom) ?? genreSource;
 
     const identite = await genererIdentite(supabase, compte.langue, genre, labelNom);
     const avatar = await avatarPourCompte(supabase, {

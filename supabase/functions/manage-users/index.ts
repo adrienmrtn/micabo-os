@@ -39,7 +39,7 @@ interface PersonaUgcLibre {
  * sans métadonnées ; label forcé parmi ceux qui ont des slideshows ugc_compatible.
  * File vide → label classique le moins utilisé pour la LANGUE.
  * HM `hm_ugc_ai_video` → comptes ugc_ai_video, persona unique (pool partagé),
- * labels = labels HM (`hm_ugc_video_labels`) + marque système `ugc-ai-video`.
+ * labels = labels HM (`hm_ugc_video_labels`) ; marque = checkmark `comptes.ugc_ai_video`.
  */
 Deno.serve(async (request) => {
   // Préflight CORS : doit répondre 2xx AVANT tout parse JSON, sinon le
@@ -532,20 +532,12 @@ async function remplacerHmUgcVideoLabels(
   );
 }
 
-/** Marque système + labels thématiques du HM du créateur. */
+/** Labels thématiques du HM (pas la marque système — c’est un checkmark compte). */
 async function labelsPourCreateurUgcVideo(
   supabase: Supabase,
   posterId: string,
 ): Promise<string[]> {
   const ids = new Set<string>();
-
-  const { data: marque } = await supabase
-    .from("labels")
-    .select("id")
-    .eq("slug", "ugc-ai-video")
-    .eq("ugc_ai_video", true)
-    .maybeSingle();
-  if (marque?.id) ids.add(marque.id as string);
 
   const { data: profil } = await supabase
     .from("profiles")
@@ -752,7 +744,7 @@ async function avatarDepuisFacePersona(
  * Compte créé avec warmup NON démarré (started/ends null).
  * Label posé tout de suite ; identité instantanée.
  * UGC slideshow : ugc_ai + persona + nom persona + avatar face stripée.
- * UGC AI VIDEO : ugc_ai_video + persona + labels HM + marque `ugc-ai-video`.
+ * UGC AI VIDEO : ugc_ai_video + persona + labels HM (thématiques).
  */
 /** Quota d'assignation journalier : 1–3, défaut 2 à la création. */
 function normaliserPostsParJour(n: unknown): number {

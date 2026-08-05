@@ -3763,10 +3763,16 @@ function slugify(nom: string): string {
   );
 }
 
+/** Marque système (checkmark compte/HM) — jamais un label thématique sélectionnable. */
+export function estMarqueUgcAiVideo(lab: { slug?: string | null }): boolean {
+  return lab.slug === "ugc-ai-video";
+}
+
+/** Labels thématiques (hors marque système `ugc-ai-video`). */
 export async function listerLabels(): Promise<Label[]> {
   const { data, error } = await supabase.from("labels").select("*").order("nom");
   if (error) throw error;
-  return data as Label[];
+  return ((data ?? []) as Label[]).filter((l) => !estMarqueUgcAiVideo(l));
 }
 
 /** Labels qui ont au moins un slideshow `ugc_compatible` (file UGC admin). */
@@ -3782,10 +3788,14 @@ export async function listerLabelIdsAvecUgc(): Promise<string[]> {
 export async function creerLabel(
   nom: string,
   couleur?: string | null,
-  opts?: { ugc_ai_video?: boolean },
+  opts?: { ugc_ai_video?: boolean; genre?: "homme" | "femme" },
 ): Promise<Label> {
   const base = slugify(nom);
+  if (base === "ugc-ai-video") {
+    throw new Error("LABEL_MARQUE_RESERVE");
+  }
   let slug = base;
+  const genre = opts?.genre === "homme" || opts?.genre === "femme" ? opts.genre : "femme";
   for (let i = 0; i < 5; i += 1) {
     const { data, error } = await supabase
       .from("labels")
@@ -3794,6 +3804,7 @@ export async function creerLabel(
         slug,
         couleur: couleur ?? null,
         ugc_ai_video: Boolean(opts?.ugc_ai_video),
+        genre,
       })
       .select()
       .single();
@@ -3806,7 +3817,12 @@ export async function creerLabel(
 
 export async function majLabel(
   id: string,
-  patch: { nom?: string; couleur?: string | null; ugc_ai_video?: boolean },
+  patch: {
+    nom?: string;
+    couleur?: string | null;
+    ugc_ai_video?: boolean;
+    genre?: "homme" | "femme" | null;
+  },
 ): Promise<void> {
   const body: Record<string, unknown> = { ...patch };
   if (patch.nom) body.slug = slugify(patch.nom);
@@ -3827,16 +3843,13 @@ export async function supprimerLabel(id: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Labels du pool UGC AI VIDEO (optionnellement hors marque système). */
-export async function listerLabelsUgcAiVideo(opts?: {
+/** Labels thématiques du pool UGC AI VIDEO (jamais la marque système). */
+export async function listerLabelsUgcAiVideo(_opts?: {
+  /** @deprecated la marque n’est plus listée */
   inclureMarque?: boolean;
 }): Promise<Label[]> {
   const tous = await listerLabels();
-  return tous.filter(
-    (l) =>
-      l.ugc_ai_video &&
-      (opts?.inclureMarque || l.slug !== "ugc-ai-video"),
-  );
+  return tous.filter((l) => l.ugc_ai_video);
 }
 
 export async function labelsDuHmUgcVideo(profileId: string): Promise<string[]> {

@@ -22,9 +22,14 @@ import {
   ecrireReglage,
   lireReglages,
   listerLabels,
+  majLabel,
   supprimerLabel,
 } from "@/features/moteur/api";
+import type { LabelGenre } from "@/features/moteur/types";
 import { cn } from "@/lib/utils";
+
+const selectClass =
+  "h-9 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
 function abrege(n: number): string {
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -38,15 +43,23 @@ function LabelsPilotageCard() {
   const labels = useQuery({ queryKey: ["labels"], queryFn: listerLabels });
   const [nom, setNom] = React.useState("");
   const [couleur, setCouleur] = React.useState("#2f6f4e");
+  const [genre, setGenre] = React.useState<LabelGenre>("femme");
   const [ugcAiVideo, setUgcAiVideo] = React.useState(false);
 
   const creer = useMutation({
-    mutationFn: () => creerLabel(nom.trim(), couleur, { ugc_ai_video: ugcAiVideo }),
+    mutationFn: () =>
+      creerLabel(nom.trim(), couleur, { ugc_ai_video: ugcAiVideo, genre }),
     onSuccess: () => {
       setNom("");
+      setGenre("femme");
       setUgcAiVideo(false);
       qc.invalidateQueries({ queryKey: ["labels"] });
     },
+  });
+  const changerGenre = useMutation({
+    mutationFn: (input: { id: string; genre: LabelGenre }) =>
+      majLabel(input.id, { genre: input.genre }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["labels"] }),
   });
   const supprimer = useMutation({
     mutationFn: (id: string) => supprimerLabel(id),
@@ -83,6 +96,18 @@ function LabelsPilotageCard() {
               onChange={(e) => setCouleur(e.target.value)}
             />
           </div>
+          <div className="space-y-1">
+            <Label htmlFor="labGenre">{t("labels.genre")}</Label>
+            <select
+              id="labGenre"
+              className={selectClass}
+              value={genre}
+              onChange={(e) => setGenre(e.target.value as LabelGenre)}
+            >
+              <option value="femme">{t("labels.genreFemme")}</option>
+              <option value="homme">{t("labels.genreHomme")}</option>
+            </select>
+          </div>
           <label className="flex items-center gap-2 pb-2 text-xs">
             <input
               type="checkbox"
@@ -95,34 +120,48 @@ function LabelsPilotageCard() {
             {creer.isPending ? t("common.saving") : t("labels.creer")}
           </Button>
         </form>
+        <p className="text-xs text-muted-foreground">{t("labels.genreAide")}</p>
         <p className="text-xs text-muted-foreground">{t("labels.ugcAiVideoAide")}</p>
         <div className="list-enter flex flex-wrap gap-2">
           {(labels.data ?? []).map((lab) => (
             <div
               key={lab.id}
-              className="flex items-center gap-1 border border-border/80 px-2 py-1 text-xs"
+              className="flex items-center gap-1.5 border border-border/80 px-2 py-1 text-xs"
             >
               <span
                 className="size-2.5 rounded-full"
                 style={{ backgroundColor: lab.couleur ?? "#888" }}
               />
               <span className="font-medium">{lab.nom}</span>
+              <select
+                className="h-7 rounded border border-input bg-background px-1 text-[11px]"
+                value={lab.genre === "homme" ? "homme" : "femme"}
+                disabled={changerGenre.isPending}
+                title={t("labels.genre")}
+                onChange={(e) =>
+                  changerGenre.mutate({
+                    id: lab.id,
+                    genre: e.target.value as LabelGenre,
+                  })
+                }
+              >
+                <option value="femme">{t("labels.genreFemme")}</option>
+                <option value="homme">{t("labels.genreHomme")}</option>
+              </select>
               {lab.ugc_ai_video && (
                 <Badge variant="outline" className="text-[10px]">
                   {t("labels.ugcAiVideoBadge")}
                 </Badge>
               )}
-              {lab.slug !== "ugc-ai-video" && (
-                <button
-                  type="button"
-                  className="ml-1 text-muted-foreground hover:text-destructive"
-                  onClick={() => {
-                    if (confirm(t("labels.confirmDelete"))) supprimer.mutate(lab.id);
-                  }}
-                >
-                  ×
-                </button>
-              )}
+              <button
+                type="button"
+                className="ml-1 text-muted-foreground hover:text-destructive"
+                onClick={() => {
+                  if (confirm(t("labels.confirmDelete"))) supprimer.mutate(lab.id);
+                }}
+              >
+                ×
+              </button>
             </div>
           ))}
         </div>

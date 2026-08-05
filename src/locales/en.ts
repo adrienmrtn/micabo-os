@@ -886,14 +886,20 @@ export const en = {
     labels: {
       title: "Labels",
       gestion: "Labels / niches",
-      gestionDesc: "Many-to-many bridge between sources, contents and creator accounts. Set manually.",
+      gestionDesc:
+        "Bridge between sources, contents and creators. UGC AI VIDEO mode is a checkmark (account / recruiter), not a label.",
       nom: "Name",
       couleur: "Color",
+      genre: "Gender",
+      genreHomme: "Male",
+      genreFemme: "Female",
+      genreAide:
+        "Label gender sets TikTok first/last names for creators that carry this label.",
       creer: "Create",
-      ugcAiVideo: "UGC AI VIDEO",
+      ugcAiVideo: "UGC AI VIDEO pool",
       ugcAiVideoBadge: "UGC VIDEO",
       ugcAiVideoAide:
-        "Check to create a UGC AI VIDEO pool label (assignable to video HMs; required for reactions / utilisations).",
+        "Check for a thematic video-pool label (HM + reactions / utilisations). Not the « UGC AI VIDEO » checkmark.",
       aucun: "No labels yet — create some in Pilotage.",
       aucunIci: "No labels yet — create one above.",
       erreurChargement: "Could not load labels",
