@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, Clock, RefreshCw } from "lucide-react";
@@ -17,13 +18,16 @@ import {
 import {
   aujourdhuiParis,
   ecrireReglage,
+  lancerAssignationJour,
   lancerAssignationJourLive,
   lancerRattrapageEloLive,
   lireReglages,
   suiviAssignation,
   type RattrapageEloBrief,
   type RattrapageEloLog,
+  type SuiviMinuit,
 } from "@/features/moteur/api";
+import { nomLangue } from "@/features/moteur/langues";
 import { cn } from "@/lib/utils";
 
 function fmtScore(n: number): string {
@@ -213,6 +217,40 @@ function BriefRattrapageElo({
   );
 }
 
+type CauseIncomplet =
+  | { kind: "manquant"; manquants: number; faits: number; quota: number }
+  | { kind: "echec"; postId: string; erreur: string | null }
+  | { kind: "raisonAssign"; texte: string };
+
+function causesCompteIncomplet(
+  ligne: SuiviMinuit,
+  raisonRelance?: string | null,
+): CauseIncomplet[] {
+  const causes: CauseIncomplet[] = [];
+  const manquants = Math.max(0, ligne.quota - ligne.posts.length);
+  if (manquants > 0) {
+    causes.push({
+      kind: "manquant",
+      manquants,
+      faits: ligne.posts.length,
+      quota: ligne.quota,
+    });
+  }
+  for (const p of ligne.posts) {
+    if (p.pipeline_statut === "failed") {
+      causes.push({
+        kind: "echec",
+        postId: p.id,
+        erreur: p.pipeline_erreur,
+      });
+    }
+  }
+  if (raisonRelance) {
+    causes.push({ kind: "raisonAssign", texte: raisonRelance });
+  }
+  return causes;
+}
+
 /** Un compteur en tête de page (comptes / prêts / en cours / échoués). */
 function Tuile({
   icon: Icon,
@@ -220,12 +258,16 @@ function Tuile({
   label,
   aide,
   ton,
+  onClick,
+  actif,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   valeur: number;
   label: string;
   aide?: string;
   ton: "neutre" | "ok" | "attente" | "echec";
+  onClick?: () => void;
+  actif?: boolean;
 }) {
   const couleur = {
     neutre: "text-foreground",
@@ -233,15 +275,28 @@ function Tuile({
     attente: "text-warning",
     echec: "text-destructive",
   }[ton];
+  const Wrapper = onClick ? "button" : "div";
   return (
-    <div className="flex items-center gap-3 rounded-lg border p-3" title={aide}>
+    <Wrapper
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      title={aide}
+      className={cn(
+        "flex w-full items-center gap-3 rounded-lg border p-3 text-left",
+        onClick && "transition-colors hover:bg-muted/40",
+        onClick && valeur > 0 && "cursor-pointer",
+        actif && "border-primary/50 bg-primary/5 ring-1 ring-primary/30",
+      )}
+    >
       <Icon className={`size-5 shrink-0 ${couleur}`} />
       <div className="min-w-0">
         <p className={`text-xl font-semibold ${couleur}`}>{valeur}</p>
-        <p className="text-xs text-muted-foreground">{label}</p>
-        {aide && <p className="mt-1 text-[11px] leading-snug text-muted-foreground/90">{aide}</p>}
+        <p className="text-xs text-muted-foreground">
+          {label}
+          {onClick && valeur > 0 ? " →" : ""}
+        </p>
       </div>
-    </div>
+    </Wrapper>
   );
 }
 
@@ -266,6 +321,7 @@ export function AdminMinuitPage() {
   const reglages = useQuery({ queryKey: ["reglages"], queryFn: lireReglages });
   const autoEnPause = reglages.data?.assignation_auto.actif === false;
   const vnextInactif = reglages.data?.moteur_vnext.actif === false;
+  const [detailIncompletsOuvert, setDetailIncompletsOuvert] = React.useState(false);
 
   /**
    * Pause cron minuit / rattrapage auto — UNIQUEMENT via ce toggle.
@@ -287,6 +343,13 @@ export function AdminMinuitPage() {
   const [phaseRelance, setPhaseRelance] = React.useState<"idle" | "elo" | "assignation">("idle");
   const phaseRelanceRef = React.useRef(phaseRelance);
   phaseRelanceRef.current = phaseRelance;
+
+  const assignerUn = useMutation({
+    mutationFn: (compteId: string) => lancerAssignationJour(date, compteId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["suivi-minuit", date] });
+    },
+  });
 
   function invaliderApresElo() {
     void queryClient.invalidateQueries({ queryKey: ["posters"] });
@@ -413,14 +476,24 @@ export function AdminMinuitPage() {
     (p) => p.pipeline_statut === "running" || p.pipeline_statut === "pending",
   ).length;
   const echoues = posts.filter((p) => p.pipeline_statut === "failed").length;
-  const comptesEnEchec = lignes.filter(
-    (l) => l.posts.some((p) => p.pipeline_statut === "failed") || l.posts.length < l.quota,
-  ).length;
 
   // Comptes qui n'ont rien reçu (erreur dure ou pool vide expliqué).
   const erreursAssignation = (relancer.data?.resultats ?? []).filter(
     (r) => r.erreur || (r.crees === 0 && r.raison),
   );
+  const raisonParCompte = new Map(
+    erreursAssignation.map((r) => [r.compteId, r.erreur ?? r.raison ?? ""] as const),
+  );
+
+  const comptesIncomplets = lignes
+    .filter(
+      (l) => l.posts.some((p) => p.pipeline_statut === "failed") || l.posts.length < l.quota,
+    )
+    .map((l) => ({
+      ligne: l,
+      causes: causesCompteIncomplet(l, raisonParCompte.get(l.compteId) || null),
+    }));
+  const comptesEnEchec = comptesIncomplets.length;
 
   return (
     <div className="space-y-6">
@@ -609,8 +682,129 @@ export function AdminMinuitPage() {
               label={t("minuit.comptesIncomplets")}
               aide={t("minuit.comptesIncompletsAide")}
               ton={comptesEnEchec > 0 ? "echec" : "neutre"}
+              actif={detailIncompletsOuvert}
+              onClick={
+                comptesEnEchec > 0
+                  ? () => setDetailIncompletsOuvert((o) => !o)
+                  : undefined
+              }
             />
           </div>
+
+          {detailIncompletsOuvert && comptesIncomplets.length > 0 && (
+            <div className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+              <div>
+                <p className="text-sm font-medium">{t("minuit.comptesIncompletsDetail")}</p>
+                <p className="text-xs text-muted-foreground">{t("minuit.comptesIncompletsAide")}</p>
+              </div>
+              <ul className="space-y-2">
+                {comptesIncomplets.map(({ ligne: l, causes }) => (
+                  <li
+                    key={l.compteId}
+                    className="rounded-md border bg-background/80 p-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {l.avatar_url ? (
+                            <img
+                              src={l.avatar_url}
+                              alt=""
+                              className="size-7 rounded-full border object-cover"
+                            />
+                          ) : (
+                            <div className="size-7 rounded-full border bg-muted" />
+                          )}
+                          <Link
+                            to={`/admin/createurs/${l.compteId}`}
+                            className="font-medium underline-offset-2 hover:underline"
+                          >
+                            {l.nom}
+                          </Link>
+                          {l.handle && (
+                            <span className="text-xs text-muted-foreground">
+                              @{l.handle.replace(/^@/, "")}
+                            </span>
+                          )}
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                            {nomLangue(l.langue)}
+                          </span>
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            {t("minuit.faitSur", {
+                              faits: l.posts.length,
+                              quota: l.quota,
+                            })}
+                          </span>
+                        </div>
+                        <ul className="space-y-1 pl-9 text-xs">
+                          {causes.map((c, i) => {
+                            if (c.kind === "manquant") {
+                              return (
+                                <li key={`m-${i}`} className="text-warning">
+                                  <span className="font-medium">
+                                    {t("minuit.causeManquantTitre")}
+                                  </span>
+                                  {" — "}
+                                  {t("minuit.manquant", { count: c.manquants })}
+                                </li>
+                              );
+                            }
+                            if (c.kind === "echec") {
+                              return (
+                                <li key={`e-${c.postId}`} className="text-destructive">
+                                  <span className="font-medium">
+                                    {t("minuit.causeEchecTitre")}
+                                  </span>
+                                  {" — "}
+                                  {c.erreur?.trim() || t("minuit.causeEchecSansDetail")}
+                                  {" · "}
+                                  <Link
+                                    to={`/admin/posts/${c.postId}`}
+                                    className="underline underline-offset-2"
+                                  >
+                                    {t("minuit.voirPost")}
+                                  </Link>
+                                </li>
+                              );
+                            }
+                            return (
+                              <li key={`r-${i}`} className="text-muted-foreground">
+                                <span className="font-medium text-foreground">
+                                  {t("minuit.causeRaisonTitre")}
+                                </span>
+                                {" — "}
+                                {c.texte}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          assignerUn.isPending ||
+                          relancer.isPending ||
+                          rattrapageElo.isPending
+                        }
+                        title={t("minuit.assignerUnAide")}
+                        onClick={() => assignerUn.mutate(l.compteId)}
+                      >
+                        {assignerUn.isPending && assignerUn.variables === l.compteId
+                          ? t("minuit.enCours")
+                          : t("minuit.assignerUn")}
+                      </Button>
+                    </div>
+                    {assignerUn.isError && assignerUn.variables === l.compteId && (
+                      <p className="mt-2 pl-9 text-xs text-destructive">
+                        {(assignerUn.error as Error).message}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
