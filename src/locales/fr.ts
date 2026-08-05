@@ -704,8 +704,11 @@ export const fr = {
     },
     posters: {
       title: "Posters",
-      subtitle:
-        "Crée les accès de tes freelances. Le poster devra choisir son propre mot de passe à sa première connexion.",
+      subtitle: "Créateurs et recruteurs.",
+      creerPosterDesc: "Crée un accès créateur (email généré + mot de passe).",
+      aideTitre: "Aide",
+      aideAcces:
+        "Crée les accès de tes freelances. Identifiants : email généré + mot de passe affiché à la création.",
       prenom: "Prénom",
       nom: "Nom",
       emailGenere: "Email généré",
@@ -746,6 +749,8 @@ export const fr = {
         "Chaque créateur reçoit ces labels + la marque « UGC AI VIDEO ». Crée des labels UGC AI VIDEO dans Pilotage.",
       eloCompte: "ELO {{score}}",
       eloCompteAide: "Forme du compte (moyenne pondérée des derniers posts mesurés)",
+      eloMoyen: "ELO moyen {{score}}",
+      eloMoyenAide: "Moyenne ELO des créateurs rattachés à ce recruteur",
       createursDuRecruteur: "Créateurs rattachés",
       filtrePhase: "Phase",
       filtreLangue: "Langue",

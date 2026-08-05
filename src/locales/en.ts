@@ -704,8 +704,11 @@ export const en = {
     },
     posters: {
       title: "Posters",
-      subtitle:
-        "Create access for your freelancers. The poster will choose their own password on first login.",
+      subtitle: "Creators and recruiters.",
+      creerPosterDesc: "Create a creator login (generated email + password).",
+      aideTitre: "Help",
+      aideAcces:
+        "Create access for your freelancers. Credentials: generated email + password shown on creation.",
       prenom: "First name",
       nom: "Last name",
       emailGenere: "Generated email",
@@ -746,6 +749,8 @@ export const en = {
         "Each creator gets these labels + the « UGC AI VIDEO » mark. Create UGC AI VIDEO labels in Pilotage.",
       eloCompte: "ELO {{score}}",
       eloCompteAide: "Account form (recency-weighted average of last measured posts)",
+      eloMoyen: "Avg ELO {{score}}",
+      eloMoyenAide: "Average ELO of creators assigned to this recruiter",
       createursDuRecruteur: "Assigned creators",
       filtrePhase: "Phase",
       filtreLangue: "Language",
