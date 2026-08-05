@@ -51,7 +51,7 @@ export function AdminUgcVideosPage() {
   });
   const labelsUgc = useQuery({
     queryKey: ["labels-ugc-ai-video"],
-    queryFn: () => listerLabelsUgcAiVideo({ inclureMarque: true }),
+    queryFn: () => listerLabelsUgcAiVideo(),
   });
   const labelNom = React.useMemo(() => {
     const m = new Map<string, string>();

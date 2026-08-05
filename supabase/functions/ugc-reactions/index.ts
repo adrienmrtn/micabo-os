@@ -91,10 +91,11 @@ async function assertLabelUgcAiVideo(
   if (!labelId) return json({ error: "LABEL_UGC_AI_VIDEO_REQUIS" }, 400);
   const { data } = await supabase
     .from("labels")
-    .select("id, ugc_ai_video")
+    .select("id, ugc_ai_video, slug")
     .eq("id", labelId)
     .maybeSingle();
-  if (!data?.id || !data.ugc_ai_video) {
+  // La marque système n’est pas un label thématique (checkmark compte / HM).
+  if (!data?.id || !data.ugc_ai_video || data.slug === "ugc-ai-video") {
     return json({ error: "LABEL_UGC_AI_VIDEO_INVALIDE" }, 400);
   }
   return data.id as string;

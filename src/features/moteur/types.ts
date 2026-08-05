@@ -301,6 +301,8 @@ export type ContenuStatut = "brouillon" | "valide" | "rejete";
 export type PassageStatut = "brouillon" | "assigne" | "valide_par_poster" | "publie";
 export type ImportStatut = "pending" | "running" | "done" | "failed";
 
+export type LabelGenre = "homme" | "femme";
+
 export interface Label {
   id: string;
   nom: string;
@@ -309,6 +311,8 @@ export interface Label {
   created_at: string;
   /** Pool UGC AI VIDEO (HM vidéo + reactions/utilisations). */
   ugc_ai_video: boolean;
+  /** Genre imposé pour les prénoms TikTok des créateurs de ce label. */
+  genre: LabelGenre | null;
 }
 
 /** Slide language-agnostique d'un contenu (visuel partagé). */
