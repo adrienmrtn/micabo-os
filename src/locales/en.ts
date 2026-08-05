@@ -381,6 +381,8 @@ export const en = {
       enCoursLabel: "In progress",
       echoues: "Failed",
       comptesIncomplets: "Incomplete accounts",
+      comptesIncompletsAide:
+        "Creators who don’t have their daily quota: missing posts, or at least one failed post. Use “Assign” on the account row to fill the gap.",
       parCompte: "Per-account detail",
       parCompteDesc:
         "Each active account, its daily quota, and assigned passages (labels ∩ score). You can assign one creator at a time.",
@@ -487,7 +489,7 @@ export const en = {
         "Snapshot exists, but no Δ yet (need at least two days). Re-run an ELO catch-up to freeze the next point.",
       dernierDelta: "Latest Δ:",
       totalVues: "total {{n}}",
-      eloBasTitre: "Account ELO — bottom 5",
+      eloBasTitre: "Account ELO — bottom 10",
       eloBasDesc: "Accounts to watch (weak form).",
       eloTopTitre: "Account ELO ranking",
       eloTopDesc: "Best form scores (recency-weighted post average).",

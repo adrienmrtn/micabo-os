@@ -218,11 +218,13 @@ function Tuile({
   icon: Icon,
   valeur,
   label,
+  aide,
   ton,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   valeur: number;
   label: string;
+  aide?: string;
   ton: "neutre" | "ok" | "attente" | "echec";
 }) {
   const couleur = {
@@ -232,11 +234,12 @@ function Tuile({
     echec: "text-destructive",
   }[ton];
   return (
-    <div className="flex items-center gap-3 rounded-lg border p-3">
-      <Icon className={`size-5 ${couleur}`} />
-      <div>
+    <div className="flex items-center gap-3 rounded-lg border p-3" title={aide}>
+      <Icon className={`size-5 shrink-0 ${couleur}`} />
+      <div className="min-w-0">
         <p className={`text-xl font-semibold ${couleur}`}>{valeur}</p>
         <p className="text-xs text-muted-foreground">{label}</p>
+        {aide && <p className="mt-1 text-[11px] leading-snug text-muted-foreground/90">{aide}</p>}
       </div>
     </div>
   );
@@ -597,6 +600,7 @@ export function AdminMinuitPage() {
               icon={AlertTriangle}
               valeur={comptesEnEchec}
               label={t("minuit.comptesIncomplets")}
+              aide={t("minuit.comptesIncompletsAide")}
               ton={comptesEnEchec > 0 ? "echec" : "neutre"}
             />
           </div>

@@ -351,10 +351,10 @@ export function AdminPostDetailPage() {
         navigate("/admin/calendrier");
         return;
       }
-      // On fabrique le nouveau post pas à pas jusqu'à ce qu'il soit prêt.
+      // v-next : déjà pipeline done. Legacy : on avance jusqu'à prêt.
       for (let i = 0; i < 40; i += 1) {
         const r = await avancerUnPost(newPostId).catch(() => null);
-        if (r?.etape === "done" || r?.etape === "failed") break;
+        if (!r || r.etape === "done" || r.etape === "failed") break;
       }
       setRevoq(null);
       navigate(`/admin/posts/${newPostId}`);

@@ -1,3 +1,4 @@
+import { assignerTousComptes } from "../_shared/assignation_contenu.ts";
 import { assertRole, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 const MAX_RECHARGES_CREATEUR = 2;
@@ -8,11 +9,11 @@ const MAX_RECHARGES_CREATEUR = 2;
  *
  *   Admin  : { postId } → { ok, newPostId }
  *   Poster : { postId } → { ok, newPostId, recharges_createur, restantes }
- *            — max 2 recharges, uniquement si non publié ; le nouveau post
- *              reçoit le compteur incrémenté ; fabrication avancée jusqu'à done.
+ *            — max 2 recharges, uniquement si non publié.
  *
  * v-next (`type=contenu`) : rejette le contenu, supprime le passage lié + le
- * post, puis relance l'assignation forcée (labels ∩ score).
+ * post, puis relance l'assignation forcée (labels ∩ score). Le pont post est
+ * déjà `pipeline_statut=done` (pas de boucle composition).
  *
  * Legacy (sujet) : rejette le sujet puis même flux.
  *
@@ -135,21 +136,40 @@ Deno.serve(async (request) => {
       await supabase.from("passages").delete().eq("id", o.id);
     }
 
-    // Assignation forcée v-next (même endpoint — cutover)
-    const secret = Deno.env.get("CRON_SECRET");
-    const base = new URL(request.url);
-    const prefix = base.pathname.replace(/revoquer-post\/?$/, "");
-    const urlAssign = `${base.origin}${prefix}assignation`;
-    await fetch(urlAssign, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-cron-secret": secret ?? "" },
-      body: JSON.stringify({
-        compteId,
-        date: jour,
-        forcer: true,
-        manuel: true,
-      }),
-    }).catch(() => null);
+    // Assignation forcée in-process (évite un fetch HTTP imbriqué + timeout 150s
+    // sur la boucle composition). ignorerWarmup : un créateur en warmup doit
+    // quand même pouvoir recharger un slideshow buggé.
+    const resultats = await assignerTousComptes(supabase, jour, compteId, {
+      forcer: true,
+      ignorerWarmup: true,
+    });
+    const assign = resultats[0];
+    if (assign?.erreur) {
+      return json({
+        ok: true,
+        newPostId: null,
+        error: "RECHARGE_AUCUN",
+        detail: assign.erreur,
+        recharges_createur: acces.role === "poster" ? rechargesSuivantes : undefined,
+        restantes:
+          acces.role === "poster"
+            ? Math.max(0, MAX_RECHARGES_CREATEUR - rechargesSuivantes)
+            : undefined,
+      });
+    }
+    if (!assign || (assign.crees ?? 0) < 1) {
+      return json({
+        ok: true,
+        newPostId: null,
+        error: "RECHARGE_AUCUN",
+        detail: assign?.raison ?? "Aucun passage créé",
+        recharges_createur: acces.role === "poster" ? rechargesSuivantes : undefined,
+        restantes:
+          acces.role === "poster"
+            ? Math.max(0, MAX_RECHARGES_CREATEUR - rechargesSuivantes)
+            : undefined,
+      });
+    }
 
     const { data: neuf } = await supabase
       .from("posts")
@@ -179,6 +199,7 @@ Deno.serve(async (request) => {
       .select("id", { count: "exact", head: true })
       .eq("post_id", neuf.id);
     if ((count ?? 0) === 0) {
+      await supabase.from("posts").delete().eq("id", neuf.id);
       return json({
         ok: true,
         newPostId: null,
@@ -191,23 +212,9 @@ Deno.serve(async (request) => {
       });
     }
 
-    // Côté créateur : fabriquer jusqu'à done (sinon posts_poster le masque).
-    if (acces.role === "poster") {
-      const urlComp = `${base.origin}${prefix}composition`;
-      for (let i = 0; i < 40; i += 1) {
-        const r = await fetch(urlComp, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-cron-secret": secret ?? "",
-          },
-          body: JSON.stringify({ postId: neuf.id }),
-        }).catch(() => null);
-        if (!r) break;
-        const bodyComp = await r.json().catch(() => ({}));
-        if (bodyComp?.etape === "done" || bodyComp?.etape === "failed") break;
-      }
-    }
+    // v-next : le post est déjà pipeline done à la matérialisation.
+    // Pas de boucle composition ici (c'était la cause principale des timeouts
+    // Edge 150s → bouton créateur « Load an entirely new post » cassé).
 
     return json({
       ok: true,
