@@ -381,6 +381,8 @@ export const fr = {
       enCoursLabel: "En cours",
       echoues: "En échec",
       comptesIncomplets: "Comptes incomplets",
+      comptesIncompletsAide:
+        "Créateurs qui n’ont pas leur quota du jour : posts manquants, ou au moins un post en échec. Utilise « Assigner » sur la ligne du compte pour compléter.",
       parCompte: "Détail par compte",
       parCompteDesc:
         "Chaque compte actif, son quota du jour, et les passages assignés (labels ∩ score). Tu peux assigner un créateur seul.",
@@ -487,7 +489,7 @@ export const fr = {
         "Snapshot présent, mais pas encore de Δ (il faut au moins deux jours). Relance un rattrapage ELO pour figer la suite.",
       dernierDelta: "Dernier Δ :",
       totalVues: "total {{n}}",
-      eloBasTitre: "ELO compte — les 5 plus bas",
+      eloBasTitre: "ELO compte — les 10 plus bas",
       eloBasDesc: "Comptes à surveiller (forme faible).",
       eloTopTitre: "Classement ELO compte",
       eloTopDesc: "Meilleurs scores de forme (moyenne pondérée des posts).",

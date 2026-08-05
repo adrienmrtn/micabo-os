@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { FlaskConical, Languages, Link2, Sparkles, Wand2 } from "lucide-react";
+import { FlaskConical, Languages, Link2, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { SimulerMinuitCard } from "@/features/moteur/SimulerMinuitCard";
 import { SimulerMinuitCompteCard } from "@/features/moteur/SimulerMinuitCompteCard";
 import { SimulerUgcVideoAssignationCard } from "@/features/moteur/SimulerUgcVideoAssignationCard";
 import { TestCompletCard } from "@/features/moteur/TestCompletCard";
+
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
@@ -211,27 +212,6 @@ function TestTraduction() {
   );
 }
 
-/** Le test nettoyage vit sur sa propre page : ici juste un raccourci. */
-function TestNettoyageCard() {
-  const { t } = useTranslation();
-  return (
-    <Card>
-      <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-5">
-        <div className="flex items-center gap-2">
-          <Wand2 className="size-4 text-primary" />
-          <div>
-            <p className="text-sm font-medium">{t("tests.nettoyageTitre")}</p>
-            <p className="text-xs text-muted-foreground">{t("tests.nettoyageDesc")}</p>
-          </div>
-        </div>
-        <Button asChild variant="outline">
-          <Link to="/admin/test-nettoyage">{t("tests.nettoyageBouton")}</Link>
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
 /** Les posts de test récents, pour les retrouver (ils n'apparaissent sur aucun
  *  calendrier). Statut « done » = prêt à ouvrir (QR, téléchargement). */
 function TestsRecents() {
@@ -294,7 +274,6 @@ const TESTS = [
   { value: "tiktok", titreKey: "tests.tiktokTitre", descKey: "tests.tiktokDesc", render: () => <TesterUnTikTok /> },
   { value: "traduction", titreKey: "tests.tradTitre", descKey: "tests.tradDesc", render: () => <TestTraduction /> },
   { value: "complet", titreKey: "tests.completTitre", descKey: "tests.completDesc", render: () => <TestCompletCard /> },
-  { value: "nettoyage", titreKey: "tests.nettoyageTitre", descKey: "tests.nettoyageDesc", render: () => <TestNettoyageCard /> },
 ] as const;
 
 export function AdminTestsPage() {

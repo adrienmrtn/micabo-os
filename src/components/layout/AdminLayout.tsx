@@ -15,7 +15,6 @@ import {
   UserRound,
   Users,
   Video,
-  Wand2,
 } from "lucide-react";
 
 import { AppShell } from "./AppShell";
@@ -87,12 +86,6 @@ export function AdminLayout() {
           title: t("navSection.tests"),
           items: [
             { to: "/admin/tests", label: t("nav.tests"), icon: FlaskConical, description: t("navDesc.tests") },
-            {
-              to: "/admin/test-nettoyage",
-              label: t("nav.testNettoyage"),
-              icon: Wand2,
-              description: t("navDesc.testNettoyage"),
-            },
           ],
         },
         {

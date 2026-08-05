@@ -29,6 +29,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   compteReferenceDuPost,
+  dernierPostCompteJour,
   lirePost,
   lireReglages,
   listerMedias,
@@ -422,14 +423,17 @@ export function PosterPostPage() {
 
   /** Slideshow buggé : rejette le contenu et en refabrique un autre (max 2). */
   async function rechargerEntierement() {
-    if (!id) return;
+    if (!id || !post.data) return;
     const utilisees = Math.min(
       MAX_RECHARGES_CREATEUR,
-      Math.max(0, Number(post.data?.recharges_createur) || 0),
+      Math.max(0, Number(post.data.recharges_createur) || 0),
     );
     const restantesApres = Math.max(0, MAX_RECHARGES_CREATEUR - utilisees - 1);
     if (!window.confirm(t("posts.rechargerConfirm", { restantes: restantesApres }))) return;
     setRechargeMsg(t("posts.rechargerEnCours"));
+    const compteId = post.data.compte_id;
+    const jour = post.data.date_publication_prevue;
+    const ancienId = id;
     try {
       const r = await rechargerPostCreateur(id);
       if (!r.newPostId) {
@@ -441,8 +445,22 @@ export function PosterPostPage() {
       setRechargeMsg(t("posts.rechargerOk"));
       navigate(`/posts/${r.newPostId}`, { replace: true });
     } catch (e) {
-      setRechargeMsg(null);
       const msg = (e as Error).message;
+      // Timeout / erreur après delete : le nouveau post peut déjà exister.
+      if (compteId && jour && !msg.includes("RECHARGE_LIMITE") && !msg.includes("RECHARGE_PUBLIE")) {
+        try {
+          const recup = await dernierPostCompteJour(compteId, jour, ancienId);
+          if (recup) {
+            queryClient.invalidateQueries({ queryKey: ["mes-posts"] });
+            setRechargeMsg(t("posts.rechargerOk"));
+            navigate(`/posts/${recup}`, { replace: true });
+            return;
+          }
+        } catch {
+          // ignore — on affiche l'erreur d'origine
+        }
+      }
+      setRechargeMsg(null);
       if (msg.includes("RECHARGE_LIMITE")) window.alert(t("posts.rechargerLimite"));
       else if (msg.includes("RECHARGE_PUBLIE")) window.alert(t("posts.rechargerPublie"));
       else if (msg.includes("RECHARGE_AUCUN")) window.alert(t("posts.rechargerAucun"));

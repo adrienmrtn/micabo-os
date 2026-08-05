@@ -1463,7 +1463,7 @@ export async function chargerPilotageDashboard(): Promise<PilotageDashboard> {
     })),
     eloBas: [...eloListe]
       .sort((a, b) => a.score - b.score)
-      .slice(0, 5)
+      .slice(0, 10)
       .map(({ compte_id, nom, handle, score }) => ({
         compte_id,
         nom,
@@ -3629,6 +3629,29 @@ export const revoquerPost = (postId: string) =>
 
 /** Alias créateur : même Edge, contrôles ownership + quota côté serveur. */
 export const rechargerPostCreateur = revoquerPost;
+
+/**
+ * Dernier post done d'un compte pour un jour (hors `exclureId`).
+ * Sert de filet si la recharge Edge a timeout après avoir créé le nouveau post.
+ */
+export async function dernierPostCompteJour(
+  compteId: string,
+  date: string,
+  exclureId?: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("posts")
+    .select("id")
+    .eq("compte_id", compteId)
+    .eq("date_publication_prevue", date)
+    .eq("est_test", false)
+    .eq("pipeline_statut", "done")
+    .order("created_at", { ascending: false })
+    .limit(5);
+  if (error) throw error;
+  const trouve = (data ?? []).find((p) => p.id !== exclureId);
+  return (trouve?.id as string | undefined) ?? null;
+}
 
 /** Les posts d'une date donnée avec leur avancement, pour suivre en direct la
  *  simulation de minuit. */
