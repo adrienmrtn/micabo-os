@@ -265,6 +265,7 @@ export function AdminMinuitPage() {
 
   const reglages = useQuery({ queryKey: ["reglages"], queryFn: lireReglages });
   const autoEnPause = reglages.data?.assignation_auto.actif === false;
+  const vnextInactif = reglages.data?.moteur_vnext.actif === false;
 
   /**
    * Pause cron minuit / rattrapage auto — UNIQUEMENT via ce toggle.
@@ -459,6 +460,12 @@ export function AdminMinuitPage() {
               </span>
             </label>
           </div>
+
+          {vnextInactif && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {t("minuit.vnextInactifBanner")}
+            </div>
+          )}
 
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
