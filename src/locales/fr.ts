@@ -382,7 +382,13 @@ export const fr = {
       echoues: "En échec",
       comptesIncomplets: "Comptes incomplets",
       comptesIncompletsAide:
-        "Créateurs qui n’ont pas leur quota du jour : posts manquants, ou au moins un post en échec. Utilise « Assigner » sur la ligne du compte pour compléter.",
+        "Créateurs sans leur quota du jour : posts manquants, ou au moins un post en échec. Clique pour voir qui, la langue, et la cause.",
+      comptesIncompletsDetail: "Qui est incomplet — où et pourquoi",
+      causeManquantTitre: "Quota incomplet",
+      causeEchecTitre: "Post en échec",
+      causeEchecSansDetail: "Échec pipeline (pas de détail)",
+      causeRaisonTitre: "Raison assignation",
+      voirPost: "Voir le post",
       parCompte: "Détail par compte",
       parCompteDesc:
         "Chaque compte actif, son quota du jour, et les passages assignés (labels ∩ score). Tu peux assigner un créateur seul.",
