@@ -168,102 +168,146 @@ function LabelsPilotageCard() {
   );
 }
 
-/** Courbe des Δ vues journaliers (j0 − j1), figés à l’update ELO. */
+/** Courbe des vues quotidiennes (totaux snapshot) — survol = vues exactes. */
 function GraphVuesDelta({
   serie,
 }: {
   serie: Array<{ jour: string; vues_delta: number | null; vues_totales: number }>;
 }) {
   const { t, i18n } = useTranslation();
-  // Recalcule un Δ d’affichage si le snapshot l’a laissé null (trou d’un jour).
-  const points = serie
-    .map((s, i) => {
-      if (s.vues_delta != null) return { ...s, vues_delta: s.vues_delta };
-      const prev = i > 0 ? serie[i - 1] : null;
-      if (!prev) return { ...s, vues_delta: null as number | null };
-      return { ...s, vues_delta: s.vues_totales - prev.vues_totales };
-    })
-    .filter((s): s is typeof s & { vues_delta: number } => s.vues_delta != null);
+  const [hover, setHover] = React.useState<number | null>(null);
 
   if (serie.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">{t("pilotage.vuesVide")}</p>
     );
   }
-  if (points.length === 0) {
-    const last = serie[serie.length - 1]!;
-    return (
-      <div className="space-y-1">
-        <p className="text-sm text-muted-foreground">{t("pilotage.vuesSansDelta")}</p>
-        <p className="text-sm">
-          <span className="text-muted-foreground">{t("pilotage.totalVues", { n: abrege(last.vues_totales) })}</span>
-          <span className="text-muted-foreground"> · {last.jour}</span>
-        </p>
-      </div>
-    );
-  }
-  const max = Math.max(...points.map((p) => Math.abs(p.vues_delta)), 1);
-  /** Hauteur fixe en px — un % sur parent `height: auto` donnait des barres à 0. */
-  const chartH = 160;
+
+  const points = serie;
+  const vals = points.map((p) => p.vues_totales);
+  const minV = Math.min(...vals);
+  const maxV = Math.max(...vals);
+  const pad = (maxV - minV) * 0.1 || Math.max(maxV * 0.05, 1);
+  const yMin = Math.max(0, minV - pad);
+  const yMax = maxV + pad;
+
+  const W = 640;
+  const H = 168;
+  const padL = 10;
+  const padR = 10;
+  const padT = 14;
+  const padB = 10;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+
+  const coords = points.map((p, i) => {
+    const x =
+      padL + (points.length === 1 ? innerW / 2 : (i / (points.length - 1)) * innerW);
+    const y =
+      padT + innerH - ((p.vues_totales - yMin) / (yMax - yMin || 1)) * innerH;
+    return { ...p, x, y };
+  });
+
+  const pathD = coords
+    .map((c, i) => `${i === 0 ? "M" : "L"}${c.x.toFixed(1)},${c.y.toFixed(1)}`)
+    .join(" ");
+
+  const fmtExact = (n: number) =>
+    Math.round(n).toLocaleString(i18n.language === "fr" ? "fr-FR" : "en-US");
+  const fmtJour = (jour: string) =>
+    new Date(`${jour}T12:00:00`).toLocaleDateString(i18n.language, {
+      day: "numeric",
+      month: "short",
+    });
+
+  const last = points[points.length - 1]!;
+  const lastDelta = (() => {
+    if (last.vues_delta != null) return last.vues_delta;
+    if (points.length < 2) return null;
+    return last.vues_totales - points[points.length - 2]!.vues_totales;
+  })();
+  const tip = hover != null ? coords[hover]! : null;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-end gap-1.5" style={{ height: chartH }}>
-        {points.map((p) => {
-          const d = p.vues_delta;
-          const hPx = Math.max(6, Math.round((Math.abs(d) / max) * chartH));
-          return (
-            <div
-              key={p.jour}
-              className="group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end"
-              title={`${p.jour}: ${d >= 0 ? "+" : ""}${abrege(d)}`}
-            >
-              <div
-                className={cn(
-                  "w-full max-w-[36px] rounded-t-sm transition-colors",
-                  d >= 0 ? "bg-emerald-600/80 group-hover:bg-emerald-600" : "bg-amber-600/80",
-                )}
-                style={{ height: hPx }}
+      <div className="relative">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="h-40 w-full overflow-visible"
+          role="img"
+          aria-label={t("pilotage.vuesTitre")}
+        >
+          <path
+            d={pathD}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.25"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            className="text-emerald-700"
+          />
+          {coords.map((c, i) => (
+            <g key={c.jour}>
+              {/* Zone de survol élargie */}
+              <circle
+                cx={c.x}
+                cy={c.y}
+                r={14}
+                fill="transparent"
+                className="cursor-crosshair"
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover(null)}
               />
-            </div>
-          );
-        })}
+              <circle
+                cx={c.x}
+                cy={c.y}
+                r={hover === i ? 5.5 : 3.5}
+                className={cn(
+                  "pointer-events-none fill-emerald-700 stroke-background",
+                  hover === i ? "stroke-[2.5]" : "stroke-2",
+                )}
+              />
+            </g>
+          ))}
+        </svg>
+        {tip && (
+          <div
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+10px)] rounded-md border bg-card px-2.5 py-1.5 text-xs shadow-lifted"
+            style={{
+              left: `${(tip.x / W) * 100}%`,
+              top: `${(tip.y / H) * 100}%`,
+            }}
+          >
+            <p className="font-medium text-foreground">{fmtJour(tip.jour)}</p>
+            <p className="tabular-nums text-muted-foreground">
+              {t("pilotage.vuesExactes", { n: fmtExact(tip.vues_totales) })}
+            </p>
+          </div>
+        )}
       </div>
       <div className="flex justify-between text-[10px] text-muted-foreground">
-        <span>
-          {new Date(`${points[0]!.jour}T12:00:00`).toLocaleDateString(i18n.language, {
-            day: "numeric",
-            month: "short",
-          })}
-        </span>
-        <span>
-          {new Date(`${points[points.length - 1]!.jour}T12:00:00`).toLocaleDateString(
-            i18n.language,
-            { day: "numeric", month: "short" },
-          )}
-        </span>
+        <span>{fmtJour(points[0]!.jour)}</span>
+        <span>{fmtJour(last.jour)}</span>
       </div>
-      {(() => {
-        const last = points[points.length - 1]!;
-        return (
-          <p className="text-sm">
-            <span className="text-muted-foreground">{t("pilotage.dernierDelta")} </span>
+      <p className="text-sm">
+        <span className="text-muted-foreground">
+          {t("pilotage.totalVues", { n: fmtExact(last.vues_totales) })}
+        </span>
+        {lastDelta != null && (
+          <>
+            <span className="text-muted-foreground"> · {t("pilotage.dernierDelta")} </span>
             <span
               className={cn(
                 "font-semibold tabular-nums",
-                last.vues_delta >= 0 ? "text-success" : "text-warning",
+                lastDelta >= 0 ? "text-success" : "text-warning",
               )}
             >
-              {last.vues_delta >= 0 ? "+" : ""}
-              {abrege(last.vues_delta)}
+              {lastDelta >= 0 ? "+" : ""}
+              {fmtExact(lastDelta)}
             </span>
-            <span className="text-muted-foreground">
-              {" "}
-              · {t("pilotage.totalVues", { n: abrege(last.vues_totales) })}
-            </span>
-          </p>
-        );
-      })()}
+          </>
+        )}
+      </p>
     </div>
   );
 }

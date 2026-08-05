@@ -398,6 +398,8 @@ export const fr = {
         "Process auto en pause — le cron de minuit ne tourne pas. Relancer reste manuel (ELO → assignation) sans réactiver l’auto.",
       pauseOn: "En pause (manuel seul)",
       pauseOff: "Auto actif",
+      vnextInactifBanner:
+        "Runtime v-next désactivé (Réglages) — le cron de minuit part bien, mais il saute l’assignation. Réactive « Activer le runtime v-next » pour que minuit travaille sans toi.",
       rattrapageElo: "Rattrapage ELO (4j)",
       rattrapageEloAide:
         "Relève les vues des posts publiés (4 derniers jours), met à jour l’ELO langue (↑/↓) et l’ELO compte (≤10 posts).",
@@ -482,11 +484,12 @@ export const fr = {
       vide: "Rien à afficher pour l’instant.",
       vuesTitre: "Vues quotidiennes (tous comptes)",
       vuesDesc:
-        "Δ vues = total du jour − total du snapshot précédent, figé à chaque update ELO (rattrapage).",
+        "Total des vues (tous comptes) à chaque snapshot ELO. Survole un point pour le nombre exact.",
       vuesVide:
         "Pas encore de snapshot — lance un Rattrapage ELO depuis Assignation de minuit.",
       vuesSansDelta:
         "Snapshot présent, mais pas encore de Δ (il faut au moins deux jours). Relance un rattrapage ELO pour figer la suite.",
+      vuesExactes: "{{n}} vues",
       dernierDelta: "Dernier Δ :",
       totalVues: "total {{n}}",
       eloBasTitre: "ELO compte — les 10 plus bas",

@@ -398,6 +398,8 @@ export const en = {
         "Auto processes paused — the midnight cron is not running. Re-run stays manual (ELO → assignment) and does not re-enable auto.",
       pauseOn: "Paused (manual only)",
       pauseOff: "Auto on",
+      vnextInactifBanner:
+        "v-next runtime is off (Settings) — the midnight cron fires, but assignment is skipped. Turn on “Enable v-next runtime” so midnight runs without you.",
       rattrapageElo: "ELO catch-up (4d)",
       rattrapageEloAide:
         "Fetches views for published posts (last 4 days), updates language ELO (↑/↓) and account ELO (≤10 posts).",
@@ -482,11 +484,12 @@ export const en = {
       vide: "Nothing to show yet.",
       vuesTitre: "Daily views (all accounts)",
       vuesDesc:
-        "Δ views = day total − previous snapshot total, frozen on each ELO update (catch-up).",
+        "Total views (all accounts) at each ELO snapshot. Hover a point for the exact count.",
       vuesVide:
         "No snapshot yet — run an ELO catch-up from Midnight assignment.",
       vuesSansDelta:
         "Snapshot exists, but no Δ yet (need at least two days). Re-run an ELO catch-up to freeze the next point.",
+      vuesExactes: "{{n}} views",
       dernierDelta: "Latest Δ:",
       totalVues: "total {{n}}",
       eloBasTitre: "Account ELO — bottom 10",
