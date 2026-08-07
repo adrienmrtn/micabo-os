@@ -58,6 +58,19 @@ function nomAffiche(p: PosterProfil): string {
   return [p.prenom, p.nom].filter(Boolean).join(" ") || p.email || "—";
 }
 
+/** Handle TikTok normalisé (`@foo`) + URL profil, ou null si absent. */
+function lienTikTokHandle(handle: string | null | undefined): {
+  at: string;
+  url: string;
+} | null {
+  const raw = (handle ?? "").trim().replace(/^@+/, "");
+  if (!raw) return null;
+  return {
+    at: `@${raw}`,
+    url: `https://www.tiktok.com/@${raw}`,
+  };
+}
+
 /** Petits drapeaux en haut à droite des cartes grille (aperçu rapide des langues). */
 function DrapeauxLangues({ codes }: { codes: string[] }) {
   const uniques = [...new Set(codes.filter(Boolean))];
@@ -154,15 +167,18 @@ function CreateurUpwork({
   const { t } = useTranslation();
   const [edit, setEdit] = React.useState(false);
   const [url, setUrl] = React.useState(poster.upwork_url ?? "");
-  const tiktok = poster.handle_tiktok
-    ? `https://www.tiktok.com/@${poster.handle_tiktok.replace(/^@/, "")}`
-    : null;
+  const tiktok = lienTikTokHandle(poster.handle_tiktok);
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       {tiktok && (
-        <a href={tiktok} target="_blank" rel="noreferrer" className="underline underline-offset-2">
-          TikTok ↗
+        <a
+          href={tiktok.url}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2"
+        >
+          {tiktok.at}
         </a>
       )}
       {!edit && poster.upwork_url && (
@@ -914,9 +930,8 @@ export function AdminPostersPage() {
 
   const carteCreateur = (poster: PosterProfil) => {
     const compte = compteDe.get(poster.id);
-    const tiktok = poster.handle_tiktok
-      ? `https://www.tiktok.com/@${poster.handle_tiktok.replace(/^@/, "")}`
-      : null;
+    // Préfère le handle du compte TikTok (source de vérité), sinon profil.
+    const tiktok = lienTikTokHandle(compte?.handle_tiktok ?? poster.handle_tiktok);
     return (
       <article
         key={poster.id}
@@ -948,13 +963,13 @@ export function AdminPostersPage() {
           )}
           {tiktok && (
             <a
-              href={tiktok}
+              href={tiktok.url}
               target="_blank"
               rel="noreferrer"
               className="underline underline-offset-2"
               onClick={(e) => e.stopPropagation()}
             >
-              TikTok ↗
+              {tiktok.at}
             </a>
           )}
           <WarmupBadge
