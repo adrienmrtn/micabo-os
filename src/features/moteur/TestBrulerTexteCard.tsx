@@ -23,9 +23,10 @@ import {
   type ContenuListe,
 } from "@/features/moteur/api";
 import {
+  affinerZonesDepuisBrut,
   assurerPoliceTikTok,
   brulerTexteSurImage,
-  calculerTaillesSlideshow,
+  calculerFractionsTaille,
   type SlideBurnInput,
   type ZoneBurn,
 } from "@/features/moteur/brulerTexteCanvas";
@@ -90,6 +91,7 @@ function zonesDepuisEvent(
     nbLignes: z.nbLignes != null ? Number(z.nbLignes) : undefined,
     role: z.role === "titre" || z.role === "corps" ? z.role : undefined,
     texte: String(z.texte ?? ""),
+    texteSource: z.texteSource != null ? String(z.texteSource) : undefined,
   }));
 }
 
@@ -220,6 +222,7 @@ export function TestBrulerTexteCard() {
             aBurner.push({
               position: pos,
               propreUrl: ev.propreUrl,
+              brutUrl: ev.brutUrl,
               zones,
             });
             setPreviews((prev) => {
@@ -230,7 +233,7 @@ export function TestBrulerTexteCard() {
                 brutUrl: ev.brutUrl ?? "",
                 texteTraduit: ev.texteTraduit ?? "",
                 statut: "attente",
-                detail: "en file (taille unifiée)…",
+                detail: "en file…",
               });
               return next.sort((a, b) => a.position - b.position);
             });
@@ -246,14 +249,34 @@ export function TestBrulerTexteCard() {
         return;
       }
 
-      push(`calcul taille unifiée sur ${aBurner.length} slide(s)…`);
+      push(`échantillonnage couleur depuis brut (${aBurner.length} slide(s))…`);
       setPreviews((prev) =>
-        prev.map((p) => ({ ...p, statut: "encours", detail: "taille…" })),
+        prev.map((p) => ({ ...p, statut: "encours", detail: "couleur…" })),
       );
-      const tailles = await calculerTaillesSlideshow(aBurner);
-      push(`taille corps=${tailles.corps}px · titre=${tailles.titre}px`);
-
+      const affinés: SlideBurnInput[] = [];
       for (const slide of aBurner) {
+        let zones = slide.zones;
+        if (slide.brutUrl) {
+          try {
+            zones = await affinerZonesDepuisBrut(slide.brutUrl, slide.zones);
+            push(
+              `#${slide.position} couleur ${zones.map((z) => z.couleur + (z.ombre ? "+stroke" : "")).join(", ")}`,
+            );
+          } catch (e) {
+            push(
+              `#${slide.position} sample couleur échec · ${e instanceof Error ? e.message : e}`,
+            );
+          }
+        }
+        affinés.push({ ...slide, zones });
+      }
+
+      const { corpsFrac, titreFrac } = calculerFractionsTaille(affinés);
+      push(
+        `taille unifiée corps=${(corpsFrac * 100).toFixed(1)}%H · titre=${(titreFrac * 100).toFixed(1)}%H`,
+      );
+
+      for (const slide of affinés) {
         setPreviews((prev) =>
           prev.map((p) =>
             p.position === slide.position
@@ -263,9 +286,10 @@ export function TestBrulerTexteCard() {
         );
         try {
           const url = await brulerTexteSurImage(slide.propreUrl, slide.zones, {
-            tailleCorps: tailles.corps,
-            tailleTitre: tailles.titre,
+            corpsFrac,
+            titreFrac,
           });
+          const couleurs = slide.zones.map((z) => z.couleur).join("/");
           setPreviews((prev) =>
             prev.map((p) =>
               p.position === slide.position
@@ -273,12 +297,12 @@ export function TestBrulerTexteCard() {
                     ...p,
                     previewUrl: url,
                     statut: "ok",
-                    detail: `corps ${tailles.corps}px`,
+                    detail: couleurs,
                   }
                 : p,
             ),
           );
-          push(`#${slide.position} burn OK`);
+          push(`#${slide.position} burn OK · ${couleurs}`);
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           setPreviews((prev) =>

@@ -192,8 +192,9 @@ Deno.serve(async (request) => {
         });
       }
 
-      const lignes = repartirTexteSurZones(texteTraduit, zones.length);
-      const zonesBurn = zones.map((z, i) => ({
+      const zonesNorm = normaliserZonesTitreCorps(zones);
+      const lignes = repartirTexteSurZones(texteTraduit, zonesNorm);
+      const zonesBurn = zonesNorm.map((z, i) => ({
         x: z.x,
         y: z.y,
         w: z.w,
@@ -258,24 +259,187 @@ Deno.serve(async (request) => {
   }
 });
 
-/** Répartit le texte traduit sur N zones (split newlines, sinon tout dans la + grande). */
-function repartirTexteSurZones(texte: string, n: number): string[] {
-  if (n <= 0) return [];
-  const lines = texte
-    .split(/\n+/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (n === 1) return [texte.trim()];
-  if (lines.length === n) return lines;
-  if (lines.length > n) {
-    // Fusionne le surplus dans la dernière zone.
-    const head = lines.slice(0, n - 1);
-    const tail = lines.slice(n - 1).join("\n");
-    return [...head, tail];
+function nbMots(s: string): number {
+  return s.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/**
+ * Fusionne les faux splits Gemini : plusieurs zones « corps » collées → une seule.
+ * Garde titre + corps distincts s'ils sont clairement séparés.
+ */
+function normaliserZonesTitreCorps(
+  zones: ZoneTexteIncruste[],
+): ZoneTexteIncruste[] {
+  if (zones.length <= 1) return zones;
+
+  // Recalcule les rôles depuis le texte SOURCE (plus fiable que le flag seul).
+  const withRole = zones.map((z) => {
+    const mots = nbMots(z.texte);
+    const lignes = Math.max(1, z.nbLignes || z.texte.split(/\n/).filter((l) => l.trim()).length);
+    let role: "titre" | "corps" = z.role;
+    if (mots <= 7 && lignes <= 2) role = "titre";
+    else if (mots >= 10 || lignes >= 3) role = "corps";
+    return { ...z, role };
+  });
+
+  const titres = withRole.filter((z) => z.role === "titre");
+  const corps = withRole.filter((z) => z.role === "corps");
+
+  // Cas typique : 1 titre + N corps → fusionne les corps
+  if (titres.length === 1 && corps.length >= 1) {
+    const c0 = corps[0]!;
+    let x = c0.x;
+    let y = c0.y;
+    let x2 = c0.x + c0.w;
+    let y2 = c0.y + c0.h;
+    const textes: string[] = [];
+    let nbLignes = 0;
+    let ombre = c0.ombre;
+    for (const c of corps) {
+      x = Math.min(x, c.x);
+      y = Math.min(y, c.y);
+      x2 = Math.max(x2, c.x + c.w);
+      y2 = Math.max(y2, c.y + c.h);
+      textes.push(c.texte.trim());
+      nbLignes += Math.max(1, c.nbLignes);
+      ombre = ombre || c.ombre;
+    }
+    const mergeCorps: ZoneTexteIncruste = {
+      ...c0,
+      x,
+      y,
+      w: Math.min(0.95, x2 - x),
+      h: Math.min(0.7, y2 - y),
+      texte: textes.join("\n"),
+      nbLignes: Math.max(nbLignes, textes.length),
+      ombre,
+      role: "corps",
+    };
+    return [titres[0]!, mergeCorps].sort((a, b) => a.y - b.y || a.x - b.x);
   }
-  // Moins de lignes que de zones : remplit puis vide.
-  const out = [...lines];
-  while (out.length < n) out.push("");
+
+  // Que des corps / que des titres mal taggés → une seule zone englobante
+  if (titres.length === 0 || corps.length === 0) {
+    const z0 = withRole[0]!;
+    let x = z0.x;
+    let y = z0.y;
+    let x2 = z0.x + z0.w;
+    let y2 = z0.y + z0.h;
+    const textes: string[] = [];
+    let nbLignes = 0;
+    let ombre = false;
+    for (const z of withRole) {
+      x = Math.min(x, z.x);
+      y = Math.min(y, z.y);
+      x2 = Math.max(x2, z.x + z.w);
+      y2 = Math.max(y2, z.y + z.h);
+      textes.push(z.texte.trim());
+      nbLignes += Math.max(1, z.nbLignes);
+      ombre = ombre || z.ombre;
+    }
+    const totalMots = nbMots(textes.join(" "));
+    return [{
+      ...z0,
+      x,
+      y,
+      w: Math.min(0.95, x2 - x),
+      h: Math.min(0.7, y2 - y),
+      texte: textes.join("\n"),
+      nbLignes: Math.max(nbLignes, 3),
+      ombre,
+      role: totalMots <= 7 ? "titre" : "corps",
+    }];
+  }
+
+  return withRole;
+}
+
+/**
+ * Répartit le texte traduit sur les zones (titre/corps) en respectant
+ * les proportions du texte SOURCE, pas un split newline naïf.
+ */
+function repartirTexteSurZones(
+  texte: string,
+  zones: ZoneTexteIncruste[],
+): string[] {
+  const t = texte.trim();
+  if (zones.length === 0) return [];
+  if (zones.length === 1) return [t];
+
+  const lignes = t.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+
+  // Titre + corps : cas le plus fréquent
+  if (
+    zones.length === 2 &&
+    zones.some((z) => z.role === "titre") &&
+    zones.some((z) => z.role === "corps")
+  ) {
+    const iTitre = zones.findIndex((z) => z.role === "titre");
+    const iCorps = zones.findIndex((z) => z.role === "corps");
+    const srcTitre = zones[iTitre]!.texte;
+    const motsTitreSrc = Math.max(1, nbMots(srcTitre));
+
+    let titre = "";
+    let corps = "";
+
+    if (lignes.length >= 2) {
+      // 1ère ligne courte → titre ; sinon proportion mots source
+      const l0 = lignes[0]!;
+      if (nbMots(l0) <= Math.max(8, motsTitreSrc + 2)) {
+        titre = l0;
+        corps = lignes.slice(1).join("\n");
+      } else {
+        const words = t.split(/\s+/).filter(Boolean);
+        const n = Math.min(words.length - 1, Math.max(1, motsTitreSrc));
+        titre = words.slice(0, n).join(" ");
+        corps = words.slice(n).join(" ");
+      }
+    } else {
+      const words = t.split(/\s+/).filter(Boolean);
+      const n = Math.min(words.length - 1, Math.max(1, Math.round(motsTitreSrc * 1.1)));
+      if (words.length <= 3) {
+        // Trop court : tout en titre, corps vide évité → tout en corps si zone corps plus grande
+        if ((zones[iCorps]!.h) >= (zones[iTitre]!.h)) {
+          titre = "";
+          corps = t;
+        } else {
+          titre = t;
+          corps = "";
+        }
+      } else {
+        titre = words.slice(0, n).join(" ");
+        corps = words.slice(n).join(" ");
+      }
+    }
+
+    const out = ["", ""];
+    out[iTitre] = titre;
+    out[iCorps] = corps || (titre ? "" : t);
+    // Si corps vide et titre plein alors qu'on attendait les deux → bascule
+    if (!out[iCorps] && out[iTitre] && nbMots(out[iTitre]!) > 10) {
+      const words = out[iTitre]!.split(/\s+/);
+      const n = Math.min(words.length - 1, Math.max(1, motsTitreSrc));
+      out[iTitre] = words.slice(0, n).join(" ");
+      out[iCorps] = words.slice(n).join(" ");
+    }
+    return out;
+  }
+
+  // N zones : split proportionnel aux longueurs source
+  const poids = zones.map((z) => Math.max(1, nbMots(z.texte)));
+  const total = poids.reduce((a, b) => a + b, 0);
+  const words = t.split(/\s+/).filter(Boolean);
+  const out: string[] = [];
+  let cursor = 0;
+  for (let i = 0; i < zones.length; i += 1) {
+    if (i === zones.length - 1) {
+      out.push(words.slice(cursor).join(" "));
+      break;
+    }
+    const n = Math.max(1, Math.round((poids[i]! / total) * words.length));
+    out.push(words.slice(cursor, cursor + n).join(" "));
+    cursor += n;
+  }
   return out;
 }
 

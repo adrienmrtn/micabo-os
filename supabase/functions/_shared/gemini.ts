@@ -978,7 +978,9 @@ export async function analyserTexteIncrusteBrut(
   const prompt = `Tu analyses une photo TikTok slideshow avec du TEXTE INCRUSTÉ brûlé sur l'image.
 
 Règles STRICTES :
-1. Un paragraphe / un bloc visuel = UNE zone. Regroupe les lignes d'un même texte. Si titre + corps clairement séparés (taille ou couleur différente), deux zones.
+1. MAXIMUM 2 zones par image : éventuellement 1 "titre" (accroche courte, plus grande) + 1 "corps".
+   Regroupe TOUTES les lignes du paragraphe corps en UNE seule zone. Ne découpe JAMAIS une ligne = une zone.
+   S'il n'y a qu'un seul style/taille → UNE seule zone role="corps" (ou "titre" si ≤2 lignes courtes).
 2. Box x,y,w,h en FRACTIONS 0..1 (origine haut-gauche) :
    - largeur typique w = 0.78 à 0.90
    - hauteur = du haut de la 1ère ligne au bas de la dernière (+ ~3%)

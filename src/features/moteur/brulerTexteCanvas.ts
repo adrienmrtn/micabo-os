@@ -13,11 +13,15 @@ export interface ZoneBurn {
   nbLignes?: number;
   /** Distinction titre / corps (taille). */
   role?: "titre" | "corps";
+  /** Texte source OCR (pour infos / debug). */
+  texteSource?: string;
 }
 
 export type SlideBurnInput = {
   position: number;
   propreUrl: string;
+  /** Image brute (texte encore visible) — pour échantillonner la vraie couleur. */
+  brutUrl?: string;
   zones: ZoneBurn[];
 };
 
@@ -25,6 +29,19 @@ const APPLE_EMOJI_CDN =
   "https://cdn.jsdelivr.net/npm/emoji-datasource-apple@15.1.2/img/apple/64";
 
 const EMOJI_RE = /\p{Extended_Pictographic}/u;
+
+/** Palette TikTok fréquente — matching tolérant lors du sampling. */
+const PALETTE = [
+  { hex: "#FFFFFF", r: 255, g: 255, b: 255 },
+  { hex: "#000000", r: 0, g: 0, b: 0 },
+  { hex: "#FE2C55", r: 254, g: 44, b: 85 },
+  { hex: "#FFE600", r: 255, g: 230, b: 0 },
+  { hex: "#25F4EE", r: 37, g: 244, b: 238 },
+  { hex: "#FF6A3D", r: 255, g: 106, b: 61 },
+  { hex: "#A855F7", r: 168, g: 85, b: 247 },
+  { hex: "#22C55E", r: 34, g: 197, b: 94 },
+  { hex: "#3B82F6", r: 59, g: 130, b: 246 },
+] as const;
 
 let fontReady: Promise<void> | null = null;
 const emojiCache = new Map<string, HTMLImageElement | null>();
@@ -64,35 +81,187 @@ function contrasteStroke(hex: string): string {
   return lum > 0.55 ? "#000000" : "#FFFFFF";
 }
 
-/**
- * Ne snap que les teintes clairement blanc / rose TikTok.
- * Sinon on garde le hex Gemini (éviter #FFFFFE → ok, mais pas #E8C4A0 → blanc).
- */
-function normaliserCouleur(hex: string): string {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return "#FFFFFF";
-  const raw = m[1]!.toUpperCase();
-  const n = parseInt(raw, 16);
-  const r = (n >> 16) & 255;
-  const g = (n >> 8) & 255;
-  const b = n & 255;
+function rgbToHex(r: number, g: number, b: number): string {
+  const h = (n: number) =>
+    Math.max(0, Math.min(255, Math.round(n)))
+      .toString(16)
+      .padStart(2, "0");
+  return `#${h(r)}${h(g)}${h(b)}`.toUpperCase();
+}
 
-  // Blanc / quasi-blanc / gris très clair de fill
-  if (r >= 235 && g >= 235 && b >= 235) return "#FFFFFF";
-  // Noir / quasi-noir
-  if (r <= 35 && g <= 35 && b <= 35) return "#000000";
-  // Rose / magenta TikTok (#FE2C55 et proches)
-  const distRose =
-    Math.abs(r - 0xfe) + Math.abs(g - 0x2c) + Math.abs(b - 0x55);
-  if (distRose < 90 && r > 200 && g < 120 && b > 60 && b < 160) {
-    return "#FE2C55";
+function dist2(
+  a: { r: number; g: number; b: number },
+  b: { r: number; g: number; b: number },
+): number {
+  const dr = a.r - b.r;
+  const dg = a.g - b.g;
+  const db = a.b - b.b;
+  return dr * dr + dg * dg + db * db;
+}
+
+function snapPalette(r: number, g: number, b: number): string {
+  // Blanc / noir d'abord (seuils larges — fill réel souvent un peu gris)
+  if (r > 210 && g > 210 && b > 210) return "#FFFFFF";
+  if (r < 45 && g < 45 && b < 45) return "#000000";
+
+  let bestHex: string = "#FFFFFF";
+  let bestD = Infinity;
+  for (const p of PALETTE) {
+    const d = dist2({ r, g, b }, p);
+    if (d < bestD) {
+      bestD = d;
+      bestHex = p.hex;
+    }
   }
-  // Jaune TikTok fréquent
-  if (r > 230 && g > 200 && b < 80) return "#FFE600";
-  // Cyan / bleu clair fréquent
-  if (r < 100 && g > 180 && b > 220) return `#${raw}`;
+  // Si trop loin de toute palette connue, garder le hex mesuré
+  if (bestD > 90 * 90 * 3) return rgbToHex(r, g, b);
+  return bestHex;
+}
 
-  return `#${raw}`;
+/**
+ * Échantillonne la VRAIE couleur de fill (+ présence de contour) depuis le brut.
+ * Gemini se trompe souvent ; les pixels ne mentent pas.
+ */
+export async function echantillonnerStyleZone(
+  brutUrl: string,
+  zone: { x: number; y: number; w: number; h: number },
+): Promise<{ couleur: string; ombre: boolean }> {
+  const img = await chargerImage(brutUrl);
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+
+  // Canvas réduit pour vitesse
+  const maxSide = 360;
+  const scale = Math.min(1, maxSide / Math.max(iw, ih));
+  const cw = Math.max(1, Math.round(iw * scale));
+  const ch = Math.max(1, Math.round(ih * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return { couleur: "#FFFFFF", ombre: false };
+  ctx.drawImage(img, 0, 0, cw, ch);
+
+  const pad = 0.06;
+  const zx = Math.max(0, Math.floor((zone.x + zone.w * pad) * cw));
+  const zy = Math.max(0, Math.floor((zone.y + zone.h * pad) * ch));
+  const zw = Math.max(1, Math.floor(zone.w * (1 - 2 * pad) * cw));
+  const zh = Math.max(1, Math.floor(zone.h * (1 - 2 * pad) * ch));
+  const data = ctx.getImageData(zx, zy, Math.min(zw, cw - zx), Math.min(zh, ch - zy));
+  const px = data.data;
+  const n = px.length / 4;
+  if (n < 20) return { couleur: "#FFFFFF", ombre: false };
+
+  // Fond ≈ moyenne des bords de la zone
+  let br = 0;
+  let bg = 0;
+  let bb = 0;
+  let bn = 0;
+  const ww = data.width;
+  const hh = data.height;
+  for (let y = 0; y < hh; y += 1) {
+    for (let x = 0; x < ww; x += 1) {
+      const edge = x < 2 || y < 2 || x >= ww - 2 || y >= hh - 2;
+      if (!edge) continue;
+      const i = (y * ww + x) * 4;
+      br += px[i]!;
+      bg += px[i + 1]!;
+      bb += px[i + 2]!;
+      bn += 1;
+    }
+  }
+  if (bn === 0) {
+    br = bg = bb = 128;
+  } else {
+    br /= bn;
+    bg /= bn;
+    bb /= bn;
+  }
+
+  // Buckets palette + compteur « texte » (pixels contrastés vs fond)
+  const scores = new Map<string, number>();
+  let darkNearBright = 0;
+  let brightCount = 0;
+
+  const step = Math.max(1, Math.floor(Math.sqrt(n) / 40));
+  for (let y = 1; y < hh - 1; y += step) {
+    for (let x = 1; x < ww - 1; x += step) {
+      const i = (y * ww + x) * 4;
+      const r = px[i]!;
+      const g = px[i + 1]!;
+      const b = px[i + 2]!;
+      const contrast = Math.sqrt(dist2({ r, g, b }, { r: br, g: bg, b: bb }));
+      if (contrast < 55) continue; // trop proche du fond
+
+      const sat = Math.max(r, g, b) - Math.min(r, g, b);
+      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      // Ignore les pixels « photo » peu saturés et mi-gris (sauf blanc/noir fort)
+      const isWhite = r > 210 && g > 210 && b > 210;
+      const isBlack = r < 45 && g < 45 && b < 45;
+      const isVivid = sat > 70 && (lum < 220 || sat > 100);
+      if (!isWhite && !isBlack && !isVivid) continue;
+
+      const hex = snapPalette(r, g, b);
+      // Pondère les blancs/vivids (fill) plus que le noir (souvent stroke)
+      const poids = hex === "#000000" ? 0.35 : isWhite || isVivid ? 1.4 : 1;
+      scores.set(hex, (scores.get(hex) ?? 0) + poids);
+
+      if (lum > 180) {
+        brightCount += 1;
+        // Voisins sombres → indice de contour
+        for (const [dx, dy] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ] as const) {
+          const j = ((y + dy) * ww + (x + dx)) * 4;
+          const lr = 0.2126 * px[j]! + 0.7152 * px[j + 1]! + 0.0722 * px[j + 2]!;
+          if (lr < 70) {
+            darkNearBright += 1;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // Retire le noir du ranking fill s'il y a une autre couleur dominante
+  const entries = [...scores.entries()].sort((a, b) => b[1] - a[1]);
+  let couleur = "#FFFFFF";
+  if (entries.length > 0) {
+    const top = entries[0]!;
+    if (top[0] === "#000000" && entries.length > 1 && entries[1]![1] > top[1] * 0.35) {
+      couleur = entries[1]![0];
+    } else if (top[0] === "#000000" && brightCount > 10) {
+      // Noir dominant mais beaucoup de pixels clairs → fill blanc + stroke
+      couleur = "#FFFFFF";
+    } else {
+      couleur = top[0];
+    }
+  }
+
+  const ombre =
+    brightCount > 8 && darkNearBright / Math.max(1, brightCount) > 0.28;
+
+  return { couleur, ombre };
+}
+
+/** Remplace couleur/ombre Gemini par l'échantillon pixel du brut. */
+export async function affinerZonesDepuisBrut(
+  brutUrl: string,
+  zones: ZoneBurn[],
+): Promise<ZoneBurn[]> {
+  const out: ZoneBurn[] = [];
+  for (const z of zones) {
+    try {
+      const style = await echantillonnerStyleZone(brutUrl, z);
+      out.push({ ...z, couleur: style.couleur, ombre: style.ombre });
+    } catch {
+      out.push(z);
+    }
+  }
+  return out;
 }
 
 function emojiToUnified(emoji: string): string {
@@ -258,9 +427,10 @@ function geometryZone(
   const x = zx * canvasW;
   const y = z.y * canvasH;
   const w = zw * canvasW;
-  const h = Math.max(z.h * canvasH, canvasH * 0.18);
+  // Hauteur de zone : on élargit un peu pour ne pas forcer un shrink de police
+  const h = Math.max(z.h * canvasH, canvasH * 0.2);
   const padX = w * 0.03;
-  const padY = h * 0.04;
+  const padY = h * 0.02;
   return {
     x,
     y,
@@ -272,66 +442,13 @@ function geometryZone(
 }
 
 function roleZone(z: ZoneBurn): "titre" | "corps" {
-  if (z.role === "titre" || z.role === "corps") return z.role;
-  const t = (z.texte ?? "").trim();
-  const mots = t.split(/\s+/).filter(Boolean).length;
-  const lignes = z.nbLignes ?? t.split(/\n/).filter((l) => l.trim()).length;
-  // Court + peu de lignes → titre
-  if (mots <= 6 && lignes <= 2) return "titre";
+  // Rôle explicite Gemini / edge — ne pas reclasseer selon le texte traduit
+  if (z.role === "titre") return "titre";
+  if (z.role === "corps") return "corps";
   return "corps";
 }
 
-/**
- * Taille candidate d'une zone (fit libre dans sa box).
- */
-function fitFontSize(
-  ctx: CanvasRenderingContext2D,
-  texte: string,
-  maxW: number,
-  maxH: number,
-  family: string,
-  nbLignesHint?: number,
-  tailleMax?: number,
-): { size: number; lines: string[] } {
-  const hiCap = Math.min(
-    tailleMax ?? 92,
-    Math.min(92, Math.max(22, Math.floor(maxH * 0.42))),
-  );
-  let lo = 14;
-  let hi = hiCap;
-  let best = lo;
-  let bestLines = [texte];
-
-  while (lo <= hi) {
-    const mid = Math.floor((lo + hi) / 2);
-    ctx.font = `700 ${mid}px ${family}`;
-    let lines = wrapLines(ctx, texte, maxW, mid);
-
-    if (nbLignesHint && nbLignesHint > 1 && lines.length < nbLignesHint) {
-      let virtW = maxW;
-      for (let i = 0; i < 8 && lines.length < nbLignesHint; i += 1) {
-        virtW *= 0.88;
-        lines = wrapLines(ctx, texte, virtW, mid);
-      }
-    }
-
-    const lineH = mid * 1.22;
-    const totalH = lines.length * lineH;
-    const maxLineW = Math.max(...lines.map((l) => mesurerLigne(ctx, l, mid)), 0);
-    if (totalH <= maxH && maxLineW <= maxW * 1.02) {
-      best = mid;
-      bestLines = lines;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-
-  ctx.font = `700 ${best}px ${family}`;
-  return { size: best, lines: bestLines };
-}
-
-/** Wrap à une taille fixée ; réduit légèrement si ça déborde. */
+/** Wrap à taille fixée. Réduit au plus de 8 % pour éviter les écarts inter-slides. */
 function wrapATaille(
   ctx: CanvasRenderingContext2D,
   texte: string,
@@ -341,8 +458,11 @@ function wrapATaille(
   tailleCible: number,
   nbLignesHint?: number,
 ): { size: number; lines: string[] } {
-  let size = Math.max(12, Math.round(tailleCible));
-  for (let guard = 0; guard < 24; guard += 1) {
+  const cible = Math.max(12, Math.round(tailleCible));
+  const plancher = Math.max(12, Math.round(cible * 0.92));
+  let size = cible;
+
+  while (size >= plancher) {
     ctx.font = `700 ${size}px ${family}`;
     let lines = wrapLines(ctx, texte, maxW, size);
     if (nbLignesHint && nbLignesHint > 1 && lines.length < nbLignesHint) {
@@ -352,16 +472,18 @@ function wrapATaille(
         lines = wrapLines(ctx, texte, virtW, size);
       }
     }
-    const lineH = size * 1.22;
+    const lineH = size * 1.2;
     const totalH = lines.length * lineH;
     const maxLineW = Math.max(...lines.map((l) => mesurerLigne(ctx, l, size)), 0);
-    if (totalH <= maxH && maxLineW <= maxW * 1.02) {
+    if (totalH <= maxH * 1.08 && maxLineW <= maxW * 1.03) {
       return { size, lines };
     }
     size -= 1;
-    if (size < 12) break;
   }
-  return fitFontSize(ctx, texte, maxW, maxH, family, nbLignesHint);
+
+  // Dernier recours : garder le plancher même si ça déborde un peu
+  ctx.font = `700 ${plancher}px ${family}`;
+  return { size: plancher, lines: wrapLines(ctx, texte, maxW, plancher) };
 }
 
 function median(nums: number[]): number {
@@ -372,60 +494,49 @@ function median(nums: number[]): number {
 }
 
 /**
- * Estime une taille corps (et titre) unique pour tout le slideshow.
- * Les slides TikTok gardent en général la même taille de corps.
+ * Tailles en FRACTION de la hauteur d'image — cohérent même si résolutions varient.
+ * Basé uniquement sur la géométrie source (h / nbLignes), pas sur le fit du texte traduit.
  */
-export async function calculerTaillesSlideshow(
+export function calculerFractionsTaille(
   slides: SlideBurnInput[],
-): Promise<{ corps: number; titre: number }> {
-  await assurerPoliceTikTok();
-  const family = '"TikTok Sans", "Arial Black", Impact, sans-serif';
-  const taillesCorps: number[] = [];
-  const taillesTitre: number[] = [];
+): { corpsFrac: number; titreFrac: number } {
+  const corps: number[] = [];
+  const titres: number[] = [];
 
   for (const slide of slides) {
-    if (!slide.zones.length) continue;
-    const img = await chargerImage(slide.propreUrl);
-    const cw = img.naturalWidth || img.width;
-    const ch = img.naturalHeight || img.height;
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    if (!ctx) continue;
-
     for (const z of slide.zones) {
-      const texte = (z.texte ?? "").trim();
-      if (!texte) continue;
-      const g = geometryZone(z, cw, ch);
-      // Estimation géométrique depuis le brut (h / nbLignes)
-      const nb = Math.max(1, z.nbLignes ?? 4);
-      const estimeGeo = Math.round(((z.h * ch) / nb) / 1.22);
-      const { size } = fitFontSize(
-        ctx,
-        texte,
-        g.maxW,
-        g.maxH,
-        family,
-        z.nbLignes,
-      );
-      // Mélange fit box + hint géométrique source
-      const candidate = Math.round(size * 0.55 + estimeGeo * 0.45);
-      if (roleZone(z) === "titre") taillesTitre.push(candidate);
-      else taillesCorps.push(candidate);
+      if (!(z.texte ?? "").trim()) continue;
+      const nb = Math.max(1, z.nbLignes ?? 3);
+      // hauteur d'une ligne / hauteur image
+      const lineFrac = z.h / nb;
+      // facteur empattement TikTok ≈ 0.78 du line-height
+      const fontFrac = lineFrac * 0.78;
+      if (roleZone(z) === "titre") titres.push(fontFrac);
+      else corps.push(fontFrac);
     }
   }
 
-  let corps = Math.round(median(taillesCorps));
-  if (!corps) corps = Math.round(median(taillesTitre)) || 36;
-  // Borne raisonnable 9:16
-  corps = Math.max(22, Math.min(56, corps));
+  let corpsFrac = median(corps);
+  if (!corpsFrac) corpsFrac = median(titres) || 0.035;
+  // Bornes raisonnables 9:16 (~28–56 px sur 1080)
+  corpsFrac = Math.max(0.024, Math.min(0.055, corpsFrac));
 
-  let titre = Math.round(median(taillesTitre));
-  if (!titre) titre = Math.round(corps * 1.2);
-  // Titre un peu plus grand, mais pas disproportionné
-  titre = Math.max(corps, Math.min(72, titre));
-  if (titre < corps * 1.08) titre = Math.round(corps * 1.18);
+  let titreFrac = median(titres);
+  if (!titreFrac) titreFrac = corpsFrac * 1.22;
+  titreFrac = Math.max(corpsFrac * 1.1, Math.min(0.07, titreFrac));
 
-  return { corps, titre };
+  return { corpsFrac, titreFrac };
+}
+
+/** @deprecated alias — renvoie px pour une hauteur de référence 1080. */
+export async function calculerTaillesSlideshow(
+  slides: SlideBurnInput[],
+): Promise<{ corps: number; titre: number }> {
+  const { corpsFrac, titreFrac } = calculerFractionsTaille(slides);
+  return {
+    corps: Math.round(corpsFrac * 1080),
+    titre: Math.round(titreFrac * 1080),
+  };
 }
 
 function dessinerLigne(
@@ -471,10 +582,10 @@ function dessinerLigne(
     if (avecContour) {
       ctx.lineWidth = strokeW;
       ctx.strokeStyle = stroke;
-      ctx.shadowColor = "rgba(0,0,0,0.4)";
-      ctx.shadowBlur = size * 0.1;
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = size * 0.08;
       ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = Math.max(1, size * 0.03);
+      ctx.shadowOffsetY = Math.max(1, size * 0.025);
       ctx.strokeText(run.value, x, cy);
       ctx.shadowColor = "transparent";
       ctx.shadowBlur = 0;
@@ -487,9 +598,12 @@ function dessinerLigne(
 }
 
 export type OptionsBurn = {
-  /** Taille forcée corps (px). */
+  /** Fraction hauteur image pour le corps (ex. 0.034). */
+  corpsFrac?: number;
+  /** Fraction hauteur image pour le titre. */
+  titreFrac?: number;
+  /** @deprecated px absolus — préférer les fractions. */
   tailleCorps?: number;
-  /** Taille forcée titre (px). */
   tailleTitre?: number;
 };
 
@@ -515,36 +629,44 @@ export async function brulerTexteSurImage(
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
   const family = '"TikTok Sans", "Arial Black", Impact, sans-serif';
+  const corpsPx =
+    options.corpsFrac != null
+      ? Math.round(options.corpsFrac * canvas.height)
+      : options.tailleCorps;
+  const titrePx =
+    options.titreFrac != null
+      ? Math.round(options.titreFrac * canvas.height)
+      : options.tailleTitre ?? (corpsPx != null ? Math.round(corpsPx * 1.22) : undefined);
+
   for (const z of zones) {
     const texte = (z.texte ?? "").trim();
     if (!texte) continue;
 
     const g = geometryZone(z, canvas.width, canvas.height);
     const role = roleZone(z);
-    const cible =
-      role === "titre"
-        ? (options.tailleTitre ?? options.tailleCorps)
-        : options.tailleCorps;
+    const cible = role === "titre" ? (titrePx ?? corpsPx) : corpsPx;
+
+    // Zone plus haute pour le wrap : on n'enferme pas trop le texte traduit
+    const maxH = Math.max(g.maxH, (cible ?? 36) * (z.nbLignes ?? 5) * 1.25);
 
     const { size, lines } = cible
-      ? wrapATaille(
+      ? wrapATaille(ctx, texte, g.maxW, maxH, family, cible, z.nbLignes)
+      : wrapATaille(
           ctx,
           texte,
           g.maxW,
-          g.maxH,
+          maxH,
           family,
-          cible,
+          Math.round(canvas.height * 0.034),
           z.nbLignes,
-        )
-      : fitFontSize(ctx, texte, g.maxW, g.maxH, family, z.nbLignes);
+        );
 
-    const lineH = size * 1.22;
+    const lineH = size * 1.2;
     const blockH = lines.length * lineH;
-    let cy = g.y + Math.max(g.h * 0.04, (g.h - blockH) * 0.15) + size * 0.85;
+    let cy = g.y + Math.max(g.h * 0.03, (g.h - blockH) * 0.12) + size * 0.85;
     const cx = g.x + g.w / 2;
-    const fill = normaliserCouleur(z.couleur || "#FFFFFF");
+    const fill = z.couleur || "#FFFFFF";
     const stroke = contrasteStroke(fill);
-    // Contour UNIQUEMENT si détecté sur le brut
     const avecContour = z.ombre === true;
 
     ctx.font = `700 ${size}px ${family}`;
@@ -563,12 +685,24 @@ export async function brulerTexteSurImage(
 export async function brulerSlideshow(
   slides: SlideBurnInput[],
 ): Promise<Map<number, string>> {
-  const tailles = await calculerTaillesSlideshow(slides);
+  // Affine couleurs depuis brut
+  const affinés: SlideBurnInput[] = [];
+  for (const s of slides) {
+    if (s.brutUrl) {
+      affinés.push({
+        ...s,
+        zones: await affinerZonesDepuisBrut(s.brutUrl, s.zones),
+      });
+    } else {
+      affinés.push(s);
+    }
+  }
+  const { corpsFrac, titreFrac } = calculerFractionsTaille(affinés);
   const out = new Map<number, string>();
-  for (const slide of slides) {
+  for (const slide of affinés) {
     const dataUrl = await brulerTexteSurImage(slide.propreUrl, slide.zones, {
-      tailleCorps: tailles.corps,
-      tailleTitre: tailles.titre,
+      corpsFrac,
+      titreFrac,
     });
     out.set(slide.position, dataUrl);
   }
