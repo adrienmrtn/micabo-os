@@ -2053,6 +2053,7 @@ export type BurnTexteEvent = {
     couleur?: string;
     ombre?: boolean;
     nbLignes?: number;
+    role?: "titre" | "corps";
     texte?: string;
     texteSource?: string;
   }>;

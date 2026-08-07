@@ -163,7 +163,7 @@ Deno.serve(async (request) => {
       }
 
       if (zones.length === 0) {
-        // Fallback : une zone centrale avec le texte traduit (style blanc + ombre).
+        // Fallback : zone centrale (blanc, sans contour forcé).
         zones = [{
           x: 0.08,
           y: 0.38,
@@ -171,8 +171,9 @@ Deno.serve(async (request) => {
           h: 0.32,
           texte: texteTraduit,
           couleur: "#FFFFFF",
-          ombre: true,
+          ombre: false,
           nbLignes: Math.max(3, texteTraduit.split(/\s+/).length > 20 ? 6 : 4),
+          role: "corps",
         }];
         emit({
           etape: "analyse",
@@ -187,7 +188,7 @@ Deno.serve(async (request) => {
           position: pos,
           zones,
           texteTraduit,
-          detail: `${zones.length} bloc(s) détecté(s)`,
+          detail: `${zones.length} bloc(s) · ${zones.map((z) => z.couleur + (z.ombre ? "+stroke" : "")).join(", ")}`,
         });
       }
 
@@ -200,6 +201,7 @@ Deno.serve(async (request) => {
         couleur: z.couleur,
         ombre: z.ombre,
         nbLignes: z.nbLignes,
+        role: z.role,
         texte: lignes[i] ?? "",
         texteSource: z.texte,
       }));

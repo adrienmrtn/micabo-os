@@ -957,12 +957,14 @@ export interface ZoneTexteIncruste {
   h: number;
   /** Texte lu dans ce bloc (source). */
   texte: string;
-  /** Couleur dominante du texte #RRGGBB. */
+  /** Couleur FILL des lettres #RRGGBB (jamais le contour). */
   couleur: string;
-  /** true si ombre / stroke visible. */
+  /** true UNIQUEMENT s'il y a un contour/stroke ou ombre nette autour des lettres. */
   ombre: boolean;
   /** Nombre de lignes visuelles du bloc sur le brut. */
   nbLignes: number;
+  /** Titre court vs corps/paragraphe. */
+  role: "titre" | "corps";
 }
 
 /**
@@ -973,25 +975,33 @@ export async function analyserTexteIncrusteBrut(
   imageUrl: string,
 ): Promise<ZoneTexteIncruste[]> {
   const image = await fetchImageAsInline(imageUrl);
-  const prompt = `Tu analyses une photo TikTok slideshow (style Classic) avec du TEXTE INCRUSTÉ brûlé.
+  const prompt = `Tu analyses une photo TikTok slideshow avec du TEXTE INCRUSTÉ brûlé sur l'image.
 
 Règles STRICTES :
-1. Un paragraphe = UN seul bloc (regroupe TOUTES les lignes du même texte). Ne découpe PAS une ligne = une zone.
+1. Un paragraphe / un bloc visuel = UNE zone. Regroupe les lignes d'un même texte. Si titre + corps clairement séparés (taille ou couleur différente), deux zones.
 2. Box x,y,w,h en FRACTIONS 0..1 (origine haut-gauche) :
-   - largeur typique w = 0.78 à 0.90 (texte centré, marges latérales)
-   - hauteur = du haut de la 1ère ligne au bas de la dernière (+ ~3% marge)
-   - y = haut réel du bloc (souvent milieu / tiers bas de l'image)
-3. texte : transcription EXACTE, emojis inclus, minuscules telles quelles
-4. nbLignes : nombre de lignes VISUELLES exact (compte chaque retour à la ligne à l'écran)
-5. couleur : fill des lettres en #RRGGBB
-   - blanc pur → #FFFFFF
-   - rose/magenta TikTok → #FE2C55
-   - autre → la teinte réelle (pas le contour noir)
-6. ombre : true s'il y a un contour noir / ombre autour des lettres (presque toujours true en Classic)
+   - largeur typique w = 0.78 à 0.90
+   - hauteur = du haut de la 1ère ligne au bas de la dernière (+ ~3%)
+3. texte : transcription EXACTE, emojis inclus
+4. nbLignes : lignes VISUELLES exactes
+5. role : "titre" si accroche courte (≤ ~6 mots, 1–2 lignes), sinon "corps"
+6. COULEUR (critique — fill des lettres UNIQUEMENT) :
+   - Regarde l'INTÉRIEUR des lettres, PAS le contour noir, PAS le fond photo, PAS l'emoji
+   - Blanc / off-white → #FFFFFF
+   - Rose / magenta TikTok → #FE2C55
+   - Jaune vif → #FFE600
+   - Noir → #000000
+   - Autre → hex réel le plus proche (ex. #FF8C00, #00F2EA…)
+   - Si blanc avec contour noir : couleur = #FFFFFF (pas #000000)
+   - Si rose avec contour noir : couleur = #FE2C55
+7. ombre (contour) — NE PAS mettre true par défaut :
+   - true SEULEMENT s'il y a un contour/stroke net (noir ou blanc) OU une ombre portée visible autour de CHAQUE lettre
+   - false si texte plat sans bordure (même sur fond sombre avec simple dégradé derrière)
+   - Beaucoup de slides n'ont PAS de bordure : false est fréquent et correct
 
 Ignore watermarks TikTok (@username, logo) et UI.
 Réponds UNIQUEMENT par un tableau JSON :
-[{"x":0.08,"y":0.42,"w":0.84,"h":0.28,"texte":"va marcher 🪻\\nça améliore…","couleur":"#FE2C55","ombre":true,"nbLignes":7}]
+[{"x":0.08,"y":0.42,"w":0.84,"h":0.28,"texte":"va marcher 🪻\\nça améliore…","couleur":"#FE2C55","ombre":true,"nbLignes":7,"role":"corps"}]
 Réponds [] si aucun texte incrusté.`;
 
   for (let essai = 0; essai < 2; essai += 1) {
@@ -1022,12 +1032,22 @@ function parserZonesTexteIncruste(texte: string): ZoneTexteIncruste[] {
     if (!t) continue;
     let couleur = String(raw.couleur ?? raw.color ?? "#FFFFFF").trim();
     if (!/^#[0-9A-Fa-f]{6}$/.test(couleur)) couleur = "#FFFFFF";
-    const ombre = raw.ombre === false || raw.shadow === false ? false : true;
+    else couleur = `#${couleur.replace(/^#/, "").toUpperCase()}`;
+    // ombre : défaut FALSE (beaucoup de slides sans bordure). true seulement si explicite.
+    const ombreRaw = raw.ombre ?? raw.shadow ?? raw.stroke ?? raw.contour;
+    const ombre = ombreRaw === true || ombreRaw === "true" || ombreRaw === 1;
     const nbRaw = Number(raw.nbLignes ?? raw.nb_lignes ?? raw.lines ?? 0);
     const fromNewlines = t.split(/\n/).filter((l) => l.trim()).length;
     const nbLignes = Number.isFinite(nbRaw) && nbRaw >= 1
       ? Math.round(nbRaw)
       : Math.max(1, fromNewlines);
+    const roleRaw = String(raw.role ?? raw.type ?? "").toLowerCase();
+    let role: "titre" | "corps" =
+      roleRaw === "titre" || roleRaw === "title" || roleRaw === "heading"
+        ? "titre"
+        : "corps";
+    const mots = t.split(/\s+/).filter(Boolean).length;
+    if (role === "corps" && mots <= 6 && nbLignes <= 2) role = "titre";
     // Élargit les boxes trop étroites (erreurs fréquentes du modèle).
     let { x, y, w, h } = z;
     if (w < 0.7) {
@@ -1036,7 +1056,7 @@ function parserZonesTexteIncruste(texte: string): ZoneTexteIncruste[] {
       x = Math.max(0.04, Math.min(0.12, mid - w / 2));
     }
     if (h < 0.12) h = Math.min(0.4, Math.max(0.18, h * 1.8));
-    out.push({ x, y, w, h, texte: t, couleur, ombre, nbLignes });
+    out.push({ x, y, w, h, texte: t, couleur, ombre, nbLignes, role });
   }
   // Haut → bas pour mapper les lignes traduites.
   out.sort((a, b) => a.y - b.y || a.x - b.x);

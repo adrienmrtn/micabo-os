@@ -22,6 +22,8 @@ import {
 import {
   assurerPoliceTikTok,
   brulerTexteSurImage,
+  calculerTaillesSlideshow,
+  type SlideBurnInput,
   type ZoneBurn,
 } from "@/features/moteur/brulerTexteCanvas";
 
@@ -38,9 +40,27 @@ type PreviewSlide = {
   statut: "attente" | "encours" | "ok" | "saute" | "echec";
 };
 
+function zonesDepuisEvent(
+  zones: NonNullable<BurnTexteEvent["zones"]>,
+): ZoneBurn[] {
+  return zones.map((z) => ({
+    x: Number(z.x),
+    y: Number(z.y),
+    w: Number(z.w),
+    h: Number(z.h),
+    couleur: String(z.couleur ?? "#FFFFFF"),
+    // Contour seulement si explicitement true (pas de défaut true)
+    ombre: z.ombre === true,
+    nbLignes: z.nbLignes != null ? Number(z.nbLignes) : undefined,
+    role: z.role === "titre" || z.role === "corps" ? z.role : undefined,
+    texte: String(z.texte ?? ""),
+  }));
+}
+
 /**
  * Test admin : burn texte traduit sur images propres (Canvas).
  * Analyse boxes+couleur sur le brut. Aucune sauvegarde.
+ * Taille de police unifiée sur tout le slideshow (titre vs corps).
  */
 export function TestBrulerTexteCard() {
   const { t } = useTranslation();
@@ -70,6 +90,8 @@ export function TestBrulerTexteCard() {
     const push = (l: string) =>
       setLogs((prev) => [...prev.slice(-60), l]);
 
+    const aBurner: SlideBurnInput[] = [];
+
     try {
       push(t("tests.brulerDebut", { langue: nomLangue(langue) }));
       await brulerTexteTestStream(
@@ -87,6 +109,12 @@ export function TestBrulerTexteCard() {
           }
           if (ev.etape === "payload" && ev.propreUrl && ev.zones) {
             const pos = Number(ev.position);
+            const zones = zonesDepuisEvent(ev.zones);
+            aBurner.push({
+              position: pos,
+              propreUrl: ev.propreUrl,
+              zones,
+            });
             setPreviews((prev) => {
               const next = prev.filter((p) => p.position !== pos);
               next.push({
@@ -94,53 +122,68 @@ export function TestBrulerTexteCard() {
                 propreUrl: ev.propreUrl!,
                 brutUrl: ev.brutUrl ?? "",
                 texteTraduit: ev.texteTraduit ?? "",
-                statut: "encours",
-                detail: "burn Canvas…",
+                statut: "attente",
+                detail: "en file (taille unifiée)…",
               });
               return next.sort((a, b) => a.position - b.position);
             });
-            try {
-              const zones: ZoneBurn[] = (ev.zones ?? []).map((z) => ({
-                x: Number(z.x),
-                y: Number(z.y),
-                w: Number(z.w),
-                h: Number(z.h),
-                couleur: String(z.couleur ?? "#FFFFFF"),
-                ombre: Boolean(z.ombre ?? true),
-                nbLignes: z.nbLignes != null ? Number(z.nbLignes) : undefined,
-                texte: String(z.texte ?? ""),
-              }));
-              const dataUrl = await brulerTexteSurImage(ev.propreUrl, zones);
-              setPreviews((prev) =>
-                prev.map((p) =>
-                  p.position === pos
-                    ? {
-                        ...p,
-                        previewUrl: dataUrl,
-                        statut: "ok",
-                        detail: `${zones.length} bloc(s)`,
-                      }
-                    : p,
-                ),
-              );
-              push(`#${pos} burn OK`);
-            } catch (e) {
-              const msg = e instanceof Error ? e.message : String(e);
-              setPreviews((prev) =>
-                prev.map((p) =>
-                  p.position === pos
-                    ? { ...p, statut: "echec", detail: msg }
-                    : p,
-                ),
-              );
-              push(`#${pos} burn échec · ${msg}`);
-            }
           }
           if (ev.etape === "ready") {
             push(ev.detail ?? `ready · ${ev.statut}`);
           }
         },
       );
+
+      if (aBurner.length === 0) {
+        push("aucun slide à brûler");
+        return;
+      }
+
+      push(`calcul taille unifiée sur ${aBurner.length} slide(s)…`);
+      setPreviews((prev) =>
+        prev.map((p) => ({ ...p, statut: "encours", detail: "taille…" })),
+      );
+      const tailles = await calculerTaillesSlideshow(aBurner);
+      push(`taille corps=${tailles.corps}px · titre=${tailles.titre}px`);
+
+      for (const slide of aBurner) {
+        setPreviews((prev) =>
+          prev.map((p) =>
+            p.position === slide.position
+              ? { ...p, statut: "encours", detail: "burn Canvas…" }
+              : p,
+          ),
+        );
+        try {
+          const url = await brulerTexteSurImage(slide.propreUrl, slide.zones, {
+            tailleCorps: tailles.corps,
+            tailleTitre: tailles.titre,
+          });
+          setPreviews((prev) =>
+            prev.map((p) =>
+              p.position === slide.position
+                ? {
+                    ...p,
+                    previewUrl: url,
+                    statut: "ok",
+                    detail: `corps ${tailles.corps}px`,
+                  }
+                : p,
+            ),
+          );
+          push(`#${slide.position} burn OK`);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          setPreviews((prev) =>
+            prev.map((p) =>
+              p.position === slide.position
+                ? { ...p, statut: "echec", detail: msg }
+                : p,
+            ),
+          );
+          push(`#${slide.position} burn échec · ${msg}`);
+        }
+      }
     } catch (e) {
       setErreur(e instanceof Error ? e.message : String(e));
     } finally {
