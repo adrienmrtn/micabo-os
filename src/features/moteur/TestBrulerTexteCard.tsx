@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Type } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Card,
@@ -17,7 +18,9 @@ import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
 import {
   brulerTexteTestStream,
   listerContenus,
+  listerLabels,
   type BurnTexteEvent,
+  type ContenuListe,
 } from "@/features/moteur/api";
 import {
   assurerPoliceTikTok,
@@ -26,9 +29,12 @@ import {
   type SlideBurnInput,
   type ZoneBurn,
 } from "@/features/moteur/brulerTexteCanvas";
+import { cn } from "@/lib/utils";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
+type FiltreLabel = string | null | "__none__";
 
 type PreviewSlide = {
   position: number;
@@ -40,6 +46,37 @@ type PreviewSlide = {
   statut: "attente" | "encours" | "ok" | "saute" | "echec";
 };
 
+function Chip({
+  actif,
+  onClick,
+  children,
+  disabled,
+  style,
+}: {
+  actif: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  disabled?: boolean;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={style}
+      className={cn(
+        "rounded-md px-2.5 py-1 text-xs font-medium disabled:opacity-50",
+        actif
+          ? "bg-primary text-primary-foreground"
+          : "border hover:bg-muted",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 function zonesDepuisEvent(
   zones: NonNullable<BurnTexteEvent["zones"]>,
 ): ZoneBurn[] {
@@ -49,12 +86,23 @@ function zonesDepuisEvent(
     w: Number(z.w),
     h: Number(z.h),
     couleur: String(z.couleur ?? "#FFFFFF"),
-    // Contour seulement si explicitement true (pas de défaut true)
     ombre: z.ombre === true,
     nbLignes: z.nbLignes != null ? Number(z.nbLignes) : undefined,
     role: z.role === "titre" || z.role === "corps" ? z.role : undefined,
     texte: String(z.texte ?? ""),
   }));
+}
+
+function vignette(c: ContenuListe): string | null {
+  const slides = [...(c.structure_slides ?? [])].sort(
+    (a, b) => a.position - b.position,
+  );
+  for (const s of slides) {
+    if (s.media_id && c.mediaUrls?.[s.media_id]) {
+      return c.mediaUrls[s.media_id]!;
+    }
+  }
+  return null;
 }
 
 /**
@@ -66,20 +114,79 @@ export function TestBrulerTexteCard() {
   const { t } = useTranslation();
   const [langue, setLangue] = React.useState("en");
   const [contenuId, setContenuId] = React.useState("");
+  const [filtreLabel, setFiltreLabel] = React.useState<FiltreLabel>(null);
+  const [recherche, setRecherche] = React.useState("");
   const [enCours, setEnCours] = React.useState(false);
   const [logs, setLogs] = React.useState<string[]>([]);
   const [previews, setPreviews] = React.useState<PreviewSlide[]>([]);
   const [erreur, setErreur] = React.useState<string | null>(null);
 
-  const slideshows = useQuery({
-    queryKey: ["slideshows-bruler-test"],
-    queryFn: () => listerContenus({ statut: "valide", limit: 80 }),
-    staleTime: 30_000,
+  const labelsTous = useQuery({
+    queryKey: ["labels"],
+    queryFn: listerLabels,
+    staleTime: 60_000,
   });
+
+  const slideshows = useQuery({
+    queryKey: ["slideshows-bruler-test", filtreLabel],
+    queryFn: () =>
+      listerContenus({
+        statut: "valide",
+        limit: 200,
+        labelId:
+          filtreLabel && filtreLabel !== "__none__" ? filtreLabel : undefined,
+        sansLabel: filtreLabel === "__none__",
+      }),
+  });
+
+  const labelsDisponibles = React.useMemo(() => {
+    const fromListe = labelsTous.data ?? [];
+    if (fromListe.length > 0) {
+      return [...fromListe].sort((a, b) =>
+        a.nom.localeCompare(b.nom, undefined, { sensitivity: "base" }),
+      );
+    }
+    const map = new Map<string, { id: string; nom: string; couleur: string | null }>();
+    for (const c of slideshows.data ?? []) {
+      for (const l of c.labels ?? []) {
+        if (!map.has(l.id)) map.set(l.id, l);
+      }
+    }
+    return [...map.values()].sort((a, b) =>
+      a.nom.localeCompare(b.nom, undefined, { sensitivity: "base" }),
+    );
+  }, [labelsTous.data, slideshows.data]);
+
+  const slideshowsFiltres = React.useMemo(() => {
+    const q = recherche.trim().toLowerCase();
+    const list = slideshows.data ?? [];
+    if (!q) return list;
+    return list.filter((c) => {
+      const titre = (c.titre ?? "").toLowerCase();
+      const id = c.id.toLowerCase();
+      const labs = (c.labels ?? []).map((l) => l.nom.toLowerCase()).join(" ");
+      const src = (c.langue_source ?? "").toLowerCase();
+      return (
+        titre.includes(q) ||
+        id.includes(q) ||
+        labs.includes(q) ||
+        src.includes(q)
+      );
+    });
+  }, [slideshows.data, recherche]);
+
+  // Si le filtre change et que la sélection n'est plus dans la liste → reset.
+  React.useEffect(() => {
+    if (!contenuId) return;
+    const encore = (slideshows.data ?? []).some((c) => c.id === contenuId);
+    if (!encore) setContenuId("");
+  }, [slideshows.data, contenuId]);
 
   React.useEffect(() => {
     void assurerPoliceTikTok();
   }, []);
+
+  const selection = (slideshows.data ?? []).find((c) => c.id === contenuId);
 
   async function lancer() {
     if (!contenuId || enCours) return;
@@ -201,41 +308,145 @@ export function TestBrulerTexteCard() {
         <CardDescription>{t("tests.brulerDesc")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="brulerLangue">{t("tests.langue")}</Label>
-            <select
-              id="brulerLangue"
-              className={selectClass}
-              value={langue}
+        <div className="space-y-2">
+          <Label htmlFor="brulerLangue">{t("tests.langue")}</Label>
+          <select
+            id="brulerLangue"
+            className={selectClass}
+            value={langue}
+            disabled={enCours}
+            onChange={(e) => setLangue(e.target.value)}
+          >
+            {LANGUES_CIBLES.map((l) => (
+              <option key={l} value={l}>
+                {nomLangue(l)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t("tests.brulerFiltreLabel")}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <Chip
+              actif={filtreLabel === null}
               disabled={enCours}
-              onChange={(e) => setLangue(e.target.value)}
+              onClick={() => setFiltreLabel(null)}
             >
-              {LANGUES_CIBLES.map((l) => (
-                <option key={l} value={l}>
-                  {nomLangue(l)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="brulerSlide">{t("tests.brulerSlideshow")}</Label>
-            <select
-              id="brulerSlide"
-              className={selectClass}
-              value={contenuId}
-              disabled={enCours || slideshows.isLoading}
-              onChange={(e) => setContenuId(e.target.value)}
+              {t("tests.brulerLabelsTous")}
+            </Chip>
+            <Chip
+              actif={filtreLabel === "__none__"}
+              disabled={enCours}
+              onClick={() => setFiltreLabel("__none__")}
             >
-              <option value="">{t("tests.brulerChoisir")}</option>
-              {(slideshows.data ?? []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {(c.titre ?? c.id).slice(0, 70)}
-                  {c.langue_source ? ` · ${c.langue_source}` : ""}
-                </option>
-              ))}
-            </select>
+              {t("tests.brulerSansLabel")}
+            </Chip>
+            {labelsDisponibles.map((l) => (
+              <Chip
+                key={l.id}
+                actif={filtreLabel === l.id}
+                disabled={enCours}
+                onClick={() =>
+                  setFiltreLabel(filtreLabel === l.id ? null : l.id)
+                }
+                style={
+                  filtreLabel === l.id || !l.couleur
+                    ? undefined
+                    : { borderColor: l.couleur, color: l.couleur }
+                }
+              >
+                {l.nom}
+              </Chip>
+            ))}
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="brulerRecherche">{t("tests.brulerRecherche")}</Label>
+          <Input
+            id="brulerRecherche"
+            value={recherche}
+            disabled={enCours}
+            placeholder={t("tests.brulerRecherchePh")}
+            onChange={(e) => setRecherche(e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <Label>{t("tests.brulerSlideshow")}</Label>
+            <span className="text-[11px] text-muted-foreground">
+              {slideshows.isLoading
+                ? "…"
+                : t("tests.brulerNbResultats", {
+                    n: slideshowsFiltres.length,
+                  })}
+            </span>
+          </div>
+          <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border p-1">
+            {slideshows.isLoading && (
+              <p className="px-2 py-3 text-xs text-muted-foreground">
+                {t("tests.enCours")}
+              </p>
+            )}
+            {!slideshows.isLoading && slideshowsFiltres.length === 0 && (
+              <p className="px-2 py-3 text-xs text-muted-foreground">
+                {t("tests.brulerAucun")}
+              </p>
+            )}
+            {slideshowsFiltres.map((c) => {
+              const thumb = vignette(c);
+              const actif = contenuId === c.id;
+              const nbSlides = (c.structure_slides ?? []).length;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  disabled={enCours}
+                  onClick={() => setContenuId(c.id)}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors",
+                    actif
+                      ? "bg-primary/10 ring-1 ring-primary"
+                      : "hover:bg-muted/70",
+                  )}
+                >
+                  {thumb ? (
+                    <img
+                      src={thumb}
+                      alt=""
+                      className="size-10 shrink-0 rounded object-cover"
+                    />
+                  ) : (
+                    <div className="size-10 shrink-0 rounded bg-muted" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {(c.titre ?? c.id).slice(0, 80)}
+                    </p>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {nbSlides} slide{nbSlides > 1 ? "s" : ""}
+                      {c.langue_source ? ` · ${c.langue_source}` : ""}
+                      {(c.labels ?? []).length > 0
+                        ? ` · ${(c.labels ?? []).map((l) => l.nom).join(", ")}`
+                        : ""}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {selection && (
+            <p className="text-[11px] text-muted-foreground">
+              {t("tests.brulerSelection")}:{" "}
+              <span className="font-medium text-foreground">
+                {(selection.titre ?? selection.id).slice(0, 90)}
+              </span>
+            </p>
+          )}
         </div>
 
         <Button
