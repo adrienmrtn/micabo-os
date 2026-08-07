@@ -166,12 +166,13 @@ Deno.serve(async (request) => {
         // Fallback : une zone centrale avec le texte traduit (style blanc + ombre).
         zones = [{
           x: 0.08,
-          y: 0.35,
+          y: 0.38,
           w: 0.84,
-          h: 0.25,
+          h: 0.32,
           texte: texteTraduit,
           couleur: "#FFFFFF",
           ombre: true,
+          nbLignes: Math.max(3, texteTraduit.split(/\s+/).length > 20 ? 6 : 4),
         }];
         emit({
           etape: "analyse",
@@ -198,6 +199,7 @@ Deno.serve(async (request) => {
         h: z.h,
         couleur: z.couleur,
         ombre: z.ombre,
+        nbLignes: z.nbLignes,
         texte: lignes[i] ?? "",
         texteSource: z.texte,
       }));

@@ -2052,6 +2052,7 @@ export type BurnTexteEvent = {
     h: number;
     couleur?: string;
     ombre?: boolean;
+    nbLignes?: number;
     texte?: string;
     texteSource?: string;
   }>;

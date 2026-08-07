@@ -107,6 +107,7 @@ export function TestBrulerTexteCard() {
                 h: Number(z.h),
                 couleur: String(z.couleur ?? "#FFFFFF"),
                 ombre: Boolean(z.ombre ?? true),
+                nbLignes: z.nbLignes != null ? Number(z.nbLignes) : undefined,
                 texte: String(z.texte ?? ""),
               }));
               const dataUrl = await brulerTexteSurImage(ev.propreUrl, zones);

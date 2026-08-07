@@ -961,6 +961,8 @@ export interface ZoneTexteIncruste {
   couleur: string;
   /** true si ombre / stroke visible. */
   ombre: boolean;
+  /** Nombre de lignes visuelles du bloc sur le brut. */
+  nbLignes: number;
 }
 
 /**
@@ -971,18 +973,25 @@ export async function analyserTexteIncrusteBrut(
   imageUrl: string,
 ): Promise<ZoneTexteIncruste[]> {
   const image = await fetchImageAsInline(imageUrl);
-  const prompt = `Tu analyses une photo TikTok slideshow qui contient du TEXTE INCRUSTÉ.
+  const prompt = `Tu analyses une photo TikTok slideshow (style Classic) avec du TEXTE INCRUSTÉ brûlé.
 
-Pour CHAQUE bloc de texte distinct (regroupe les lignes d'un même paragraphe),
-renvoie :
-- x,y,w,h en FRACTIONS 0..1 (origine coin haut-gauche), rectangle SERRÉ autour du texte (marge ~2%)
-- texte : le texte EXACT lu dans ce bloc
-- couleur : couleur dominante des lettres en #RRGGBB (pas le fond)
-- ombre : true s'il y a un contour/ombre autour des lettres, sinon false
+Règles STRICTES :
+1. Un paragraphe = UN seul bloc (regroupe TOUTES les lignes du même texte). Ne découpe PAS une ligne = une zone.
+2. Box x,y,w,h en FRACTIONS 0..1 (origine haut-gauche) :
+   - largeur typique w = 0.78 à 0.90 (texte centré, marges latérales)
+   - hauteur = du haut de la 1ère ligne au bas de la dernière (+ ~3% marge)
+   - y = haut réel du bloc (souvent milieu / tiers bas de l'image)
+3. texte : transcription EXACTE, emojis inclus, minuscules telles quelles
+4. nbLignes : nombre de lignes VISUELLES exact (compte chaque retour à la ligne à l'écran)
+5. couleur : fill des lettres en #RRGGBB
+   - blanc pur → #FFFFFF
+   - rose/magenta TikTok → #FE2C55
+   - autre → la teinte réelle (pas le contour noir)
+6. ombre : true s'il y a un contour noir / ombre autour des lettres (presque toujours true en Classic)
 
-Ignore watermarks TikTok (@username, logo) et UI (boutons like).
-Réponds UNIQUEMENT par un tableau JSON, rien avant ni après :
-[{"x":0.1,"y":0.2,"w":0.8,"h":0.15,"texte":"Hello","couleur":"#FFFFFF","ombre":true}]
+Ignore watermarks TikTok (@username, logo) et UI.
+Réponds UNIQUEMENT par un tableau JSON :
+[{"x":0.08,"y":0.42,"w":0.84,"h":0.28,"texte":"va marcher 🪻\\nça améliore…","couleur":"#FE2C55","ombre":true,"nbLignes":7}]
 Réponds [] si aucun texte incrusté.`;
 
   for (let essai = 0; essai < 2; essai += 1) {
@@ -1013,9 +1022,21 @@ function parserZonesTexteIncruste(texte: string): ZoneTexteIncruste[] {
     if (!t) continue;
     let couleur = String(raw.couleur ?? raw.color ?? "#FFFFFF").trim();
     if (!/^#[0-9A-Fa-f]{6}$/.test(couleur)) couleur = "#FFFFFF";
-    const ombre = Boolean(raw.ombre ?? raw.shadow ?? true);
-    // Boxes plus serrées que detecterZonesTexte (pas de marge 3 % inpaint).
-    out.push({ ...z, texte: t, couleur, ombre });
+    const ombre = raw.ombre === false || raw.shadow === false ? false : true;
+    const nbRaw = Number(raw.nbLignes ?? raw.nb_lignes ?? raw.lines ?? 0);
+    const fromNewlines = t.split(/\n/).filter((l) => l.trim()).length;
+    const nbLignes = Number.isFinite(nbRaw) && nbRaw >= 1
+      ? Math.round(nbRaw)
+      : Math.max(1, fromNewlines);
+    // Élargit les boxes trop étroites (erreurs fréquentes du modèle).
+    let { x, y, w, h } = z;
+    if (w < 0.7) {
+      const mid = x + w / 2;
+      w = 0.84;
+      x = Math.max(0.04, Math.min(0.12, mid - w / 2));
+    }
+    if (h < 0.12) h = Math.min(0.4, Math.max(0.18, h * 1.8));
+    out.push({ x, y, w, h, texte: t, couleur, ombre, nbLignes });
   }
   // Haut → bas pour mapper les lignes traduites.
   out.sort((a, b) => a.y - b.y || a.x - b.x);
