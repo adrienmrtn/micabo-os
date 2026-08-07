@@ -337,6 +337,7 @@ export const en = {
       brulerNbResultats: "{{n}} slideshow(s)",
       brulerAucun: "No slideshow for this filter.",
       brulerSelection: "Selected",
+      brulerLogs: "Gemini / burn logs",
       brulerLancer: "Burn-in preview",
       brulerDebut: "Burn-in → {{langue}}…",
       brulerSlideN: "Slide {{n}}",

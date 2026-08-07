@@ -2037,6 +2037,19 @@ export async function nettoyerTest(
 }
 
 /** Événements NDJSON du test burn-in texte (bruler-texte-test). */
+export type BurnTexteZone = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  couleur?: string;
+  ombre?: boolean;
+  nbLignes?: number;
+  role?: "titre" | "corps";
+  texte?: string;
+  texteSource?: string;
+};
+
 export type BurnTexteEvent = {
   etape: string;
   statut?: "encours" | "ok" | "echec" | "saute";
@@ -2045,18 +2058,8 @@ export type BurnTexteEvent = {
   propreUrl?: string;
   brutUrl?: string;
   texteTraduit?: string;
-  zones?: Array<{
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    couleur?: string;
-    ombre?: boolean;
-    nbLignes?: number;
-    role?: "titre" | "corps";
-    texte?: string;
-    texteSource?: string;
-  }>;
+  /** Zones Gemini brutes (`etape: gemini`) ou normalisées (`analyse` / `payload`). */
+  zones?: BurnTexteZone[];
   slides?: number;
   sautes?: number;
   echecs?: number;

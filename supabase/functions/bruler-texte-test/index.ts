@@ -162,8 +162,10 @@ Deno.serve(async (request) => {
         continue;
       }
 
+      let fallback = false;
       if (zones.length === 0) {
         // Fallback : zone centrale (blanc, sans contour forcé).
+        fallback = true;
         zones = [{
           x: 0.08,
           y: 0.38,
@@ -175,22 +177,29 @@ Deno.serve(async (request) => {
           nbLignes: Math.max(3, texteTraduit.split(/\s+/).length > 20 ? 6 : 4),
           role: "corps",
         }];
-        emit({
-          etape: "analyse",
-          position: pos,
-          detail: "aucune zone détectée — fallback centre",
-          zones,
-          texteTraduit,
-        });
-      } else {
-        emit({
-          etape: "analyse",
-          position: pos,
-          zones,
-          texteTraduit,
-          detail: `${zones.length} bloc(s) · ${zones.map((z) => z.couleur + (z.ombre ? "+stroke" : "")).join(", ")}`,
-        });
       }
+
+      // Brut Gemini (avant fusion titre/corps) — pour logs debug UI.
+      emit({
+        etape: "gemini",
+        position: pos,
+        detail: fallback
+          ? "aucune zone détectée — fallback centre"
+          : `Gemini brut · ${zones.length} zone(s)`,
+        texteTraduit,
+        zones: zones.map((z) => ({
+          x: z.x,
+          y: z.y,
+          w: z.w,
+          h: z.h,
+          couleur: z.couleur,
+          ombre: z.ombre,
+          nbLignes: z.nbLignes,
+          role: z.role,
+          texte: z.texte,
+          texteSource: z.texte,
+        })),
+      });
 
       const zonesNorm = normaliserZonesTitreCorps(zones);
       const lignes = repartirTexteSurZones(texteTraduit, zonesNorm);
@@ -206,6 +215,23 @@ Deno.serve(async (request) => {
         texte: lignes[i] ?? "",
         texteSource: z.texte,
       }));
+
+      emit({
+        etape: "analyse",
+        position: pos,
+        detail:
+          `après normalisation · ${zonesBurn.length} zone(s)` +
+          (zones.length !== zonesBurn.length
+            ? ` (fusion ${zones.length}→${zonesBurn.length})`
+            : ""),
+        texteTraduit,
+        zones: zonesBurn.map((z) => ({
+          ...z,
+          // Pour le log : montre aussi le split traduit
+          texte: z.texte,
+          texteSource: z.texteSource,
+        })),
+      });
 
       emit({
         etape: "payload",

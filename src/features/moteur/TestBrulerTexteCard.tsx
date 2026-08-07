@@ -197,7 +197,32 @@ export function TestBrulerTexteCard() {
     setLogs([]);
     setPreviews([]);
     const push = (l: string) =>
-      setLogs((prev) => [...prev.slice(-60), l]);
+      setLogs((prev) => [...prev.slice(-200), l]);
+
+    const logZones = (
+      prefix: string,
+      pos: number | undefined,
+      zones: NonNullable<BurnTexteEvent["zones"]>,
+      mode: "ocr" | "traduit",
+    ) => {
+      push(`── #${pos ?? "—"} ${prefix} (${zones.length} zone(s)) ──`);
+      zones.forEach((z, i) => {
+        const role = z.role ?? "?";
+        const box = `x=${Number(z.x).toFixed(2)} y=${Number(z.y).toFixed(2)} w=${Number(z.w).toFixed(2)} h=${Number(z.h).toFixed(2)}`;
+        const style = `${z.couleur ?? "?"} ${z.ombre ? "stroke" : "flat"} · ${z.nbLignes ?? "?"}L · ${role}`;
+        push(`  [${i}] ${box} · ${style}`);
+        const ocr = (z.texteSource ?? (mode === "ocr" ? z.texte : "") ?? "")
+          .trim()
+          .replace(/\s+/g, " ");
+        const trad = mode === "traduit" ? (z.texte ?? "").trim().replace(/\s+/g, " ") : "";
+        if (ocr) {
+          push(`       OCR: ${ocr.slice(0, 160)}${ocr.length > 160 ? "…" : ""}`);
+        }
+        if (trad) {
+          push(`       → ${trad.slice(0, 160)}${trad.length > 160 ? "…" : ""}`);
+        }
+      });
+    };
 
     const aBurner: SlideBurnInput[] = [];
 
@@ -213,8 +238,19 @@ export function TestBrulerTexteCard() {
               );
             }
           }
-          if (ev.etape === "analyse" && ev.detail) {
-            push(`#${ev.position} analyse · ${ev.detail}`);
+          if (ev.etape === "gemini" && ev.zones) {
+            if (ev.detail) push(`#${ev.position} ${ev.detail}`);
+            logZones("GEMINI brut", ev.position, ev.zones, "ocr");
+            if (ev.texteTraduit) {
+              const tr = ev.texteTraduit.trim().replace(/\s+/g, " ");
+              push(
+                `  traduit: ${tr.slice(0, 180)}${tr.length > 180 ? "…" : ""}`,
+              );
+            }
+          }
+          if (ev.etape === "analyse" && ev.zones) {
+            if (ev.detail) push(`#${ev.position} ${ev.detail}`);
+            logZones("après fusion/split", ev.position, ev.zones, "traduit");
           }
           if (ev.etape === "payload" && ev.propreUrl && ev.zones) {
             const pos = Number(ev.position);
@@ -258,9 +294,15 @@ export function TestBrulerTexteCard() {
         let zones = slide.zones;
         if (slide.brutUrl) {
           try {
+            const avant = slide.zones.map(
+              (z) => `${z.couleur}${z.ombre ? "+s" : ""}`,
+            );
             zones = await affinerZonesDepuisBrut(slide.brutUrl, slide.zones);
+            const apres = zones.map(
+              (z) => `${z.couleur}${z.ombre ? "+s" : ""}`,
+            );
             push(
-              `#${slide.position} couleur ${zones.map((z) => z.couleur + (z.ombre ? "+stroke" : "")).join(", ")}`,
+              `#${slide.position} pixels brut: ${apres.join(", ")} (Gemini disait ${avant.join(", ")})`,
             );
           } catch (e) {
             push(
@@ -490,10 +532,26 @@ export function TestBrulerTexteCard() {
         {erreur && <p className="text-sm text-destructive">{erreur}</p>}
 
         {logs.length > 0 && (
-          <div className="max-h-40 space-y-0.5 overflow-y-auto rounded border bg-muted/30 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
-            {logs.map((l, i) => (
-              <div key={`${i}-${l.slice(0, 12)}`}>{l}</div>
-            ))}
+          <div className="space-y-1">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {t("tests.brulerLogs")}
+            </p>
+            <div className="max-h-80 space-y-0.5 overflow-y-auto rounded border bg-muted/30 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
+              {logs.map((l, i) => (
+                <div
+                  key={`${i}-${l.slice(0, 12)}`}
+                  className={
+                    l.startsWith("──")
+                      ? "pt-1 font-semibold text-foreground"
+                      : l.includes("OCR:")
+                        ? "text-foreground/80"
+                        : undefined
+                  }
+                >
+                  {l}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
