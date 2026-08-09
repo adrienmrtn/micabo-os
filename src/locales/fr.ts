@@ -1149,7 +1149,7 @@ export const fr = {
       frequence: "Fréquence",
       postsParJour: "Posts par jour (défaut global)",
       postsParJourZero:
-        "0 — baissé auto par minuit (pool trop mince). Remonte à 1–3 pour réactiver.",
+        "Était à 0 (legacy) — remis à 1. Le minuit ne peut plus descendre sous 1 post/jour.",
       semaine1: "Semaine de lancement",
       semaine1Actif: "Activer la règle",
       semaine1Jours: "Durée (jours)",

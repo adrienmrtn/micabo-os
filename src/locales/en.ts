@@ -1148,7 +1148,7 @@ export const en = {
       frequence: "Frequency",
       postsParJour: "Posts per day (global default)",
       postsParJourZero:
-        "0 — auto-lowered by midnight (thin pool). Set back to 1–3 to resume.",
+        "Was 0 (legacy) — reset to 1. Midnight can no longer go below 1 post/day.",
       semaine1: "Launch week",
       semaine1Actif: "Enable the rule",
       semaine1Jours: "Duration (days)",

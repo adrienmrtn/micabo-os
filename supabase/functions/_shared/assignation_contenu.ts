@@ -187,12 +187,9 @@ export async function assignerCompteJour(
   };
 
   const brut = Number(compte.posts_par_jour ?? reglages.postsParJour ?? 1);
-  // 0 autorisé (fallback pool mince) → skip ; sinon clamp 1–3 (défaut 1).
-  const quota = !Number.isFinite(brut)
-    ? 1
-    : brut <= 0
-      ? 0
-      : Math.min(3, Math.max(1, brut));
+  // Toujours 1–3 : un compte actif doit TOUJOURS viser au moins 1 post/jour.
+  // (L'ancien fallback « pool mince → 0 » est interdit.)
+  const quota = !Number.isFinite(brut) ? 1 : Math.min(3, Math.max(1, Math.round(brut)));
   const langue: string = compte.langue ?? "fr";
   const ugcAiVideo = Boolean(compte.ugc_ai_video);
   const ugcAi = Boolean(compte.ugc_ai) && !ugcAiVideo;
@@ -211,13 +208,13 @@ export async function assignerCompteJour(
     };
   }
 
-  if (quota <= 0) {
-    log(`Compte ${nomCompte} · quota=0 — skip`);
-    return {
-      ids: [],
-      raison:
-        "Quota 0 — pas d'assignation (pool trop mince précédemment ; remonte posts/jour).",
-    };
+  // Soigne les comptes restés à 0 après l'ancien fallback.
+  if (!estTest && Number.isFinite(brut) && brut <= 0) {
+    const { error: errHeal } = await supabase
+      .from("comptes")
+      .update({ posts_par_jour: 1 })
+      .eq("id", compte.id);
+    if (!errHeal) log(`Compte ${nomCompte} · quota 0→1 (plancher obligatoire)`);
   }
 
   log(`Compte ${nomCompte} · langue=${langue} · quota=${quota}${ugcAi ? " · UGC" : ""}${estTest ? " · test" : ""}`);
@@ -444,7 +441,7 @@ export async function assignerCompteJour(
     log(diag);
 
     // Fallback : baisser posts_par_jour au nombre réellement assigné aujourd'hui
-    // (0–quota) pour que le jour ne reste pas « incomplet » faute de pool.
+    // (plancher 1 — jamais 0 : on doit toujours retenter au moins 1 post).
     const totalAssignes = dejaLa + crees.length;
     const quotaBaisse = estRaisonPoolPourBaisseQuota(diag)
       ? await baisserQuotaSiBesoin(
@@ -497,7 +494,11 @@ function estRaisonPoolPourBaisseQuota(diag: string): boolean {
   );
 }
 
-/** Aligne posts_par_jour sur le nombre de posts réellement assignés ce jour. */
+/**
+ * Aligne posts_par_jour sur le nombre de posts réellement assignés ce jour.
+ * Plancher strict = 1 (jamais 0) : un jour sans post ne doit pas désactiver
+ * le compte pour les jours suivants.
+ */
 async function baisserQuotaSiBesoin(
   supabase: Supabase,
   compteId: string,
@@ -509,7 +510,12 @@ async function baisserQuotaSiBesoin(
   log: (detail: string) => void,
 ): Promise<QuotaBaisse | undefined> {
   if (estTest || forcer || totalAssignes >= quota) return undefined;
-  const apres = Math.min(3, Math.max(0, totalAssignes));
+  // 0 assigné → on ne touche pas au quota (reste ≥1 pour retenter demain).
+  if (totalAssignes <= 0) {
+    log(`Quota inchangé (${quota}) — 0 assigné aujourd'hui, plancher 1 conservé`);
+    return undefined;
+  }
+  const apres = Math.min(3, Math.max(1, totalAssignes));
   if (apres >= quota) return undefined;
   const { error: errQ } = await supabase
     .from("comptes")
@@ -519,7 +525,7 @@ async function baisserQuotaSiBesoin(
     log(`Quota non baissé : ${errQ.message}`);
     return undefined;
   }
-  log(`Quota baissé ${quota}→${apres} (pool trop mince)`);
+  log(`Quota baissé ${quota}→${apres} (pool trop mince, plancher 1)`);
   return { avant: quota, apres, raison: diag };
 }
 
@@ -865,8 +871,7 @@ export async function listerComptesSousQuota(
   const maintenant = Date.now();
   const comptes = (comptesBruts ?? []).filter((c) => {
     if (Boolean(c.ugc_ai_video)) return false;
-    const q = Number(c.posts_par_jour ?? 1);
-    if (!Number.isFinite(q) || q <= 0) return false;
+    // Quota 0 (legacy) = toujours à traiter (plancher 1).
     if (opts.ignorerWarmup) return true;
     const ends = c.warmup_ends_at as string | null | undefined;
     if (!ends) return false;
@@ -892,7 +897,8 @@ export async function listerComptesSousQuota(
   }
 
   return comptes.filter((c) => {
-    const q = Math.min(3, Math.max(0, Number(c.posts_par_jour ?? 1)));
+    const brut = Number(c.posts_par_jour ?? 1);
+    const q = !Number.isFinite(brut) ? 1 : Math.min(3, Math.max(1, Math.round(brut)));
     return (faits.get(c.id as string) ?? 0) < q;
   });
 }

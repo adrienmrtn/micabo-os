@@ -270,17 +270,24 @@ function UgcAiCompte({ compte }: { compte: CompteAvecDetails }) {
   );
 }
 
-/** Quota d'assignation du jour (1–3). 0 = auto-baissé par minuit (pool mince). */
+/** Quota d'assignation du jour (1–3). Plancher 1 — jamais 0. */
 export function PostsParJourCompte({ compte }: { compte: CompteAvecDetails }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const brut = Number(compte.posts_par_jour);
-  const valeur = Number.isFinite(brut) ? Math.min(3, Math.max(0, brut)) : 1;
+  const valeur = Number.isFinite(brut) ? Math.min(3, Math.max(1, Math.round(brut))) : 1;
+  const etaitZero = Number.isFinite(brut) && brut <= 0;
 
   const maj = useMutation({
     mutationFn: (n: number) => majCompte(compte.id, { posts_par_jour: n }),
     onSuccess: () => rafraichirComptes(queryClient),
   });
+
+  // Soigne à l'affichage les comptes restés à 0 (legacy).
+  React.useEffect(() => {
+    if (etaitZero && !maj.isPending) maj.mutate(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compte.id, etaitZero]);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -302,7 +309,7 @@ export function PostsParJourCompte({ compte }: { compte: CompteAvecDetails }) {
           </button>
         ))}
       </div>
-      {valeur === 0 && (
+      {etaitZero && (
         <span className="text-xs text-warning">
           {t("reglages.postsParJourZero")}
         </span>
