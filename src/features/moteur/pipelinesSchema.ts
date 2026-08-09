@@ -230,20 +230,21 @@ export const SCHEMA_ASSIGNATION: PipelineAction = {
       onFail: "saute cron (manuel OK avec forcer/manuel)",
     },
     {
-      id: "stats",
+      id: "rattrapage",
       rang: "①",
-      label: "Fetch stats passages publiés",
+      label: "Kick rattrapage-elo (async)",
       kind: "api",
-      api: "Apify scrapeStats + match publie_url",
-      detail: "Étape minuit « stats » (défaut avec assignation)",
-      onFail: "Compte ignoré pour le relevé ; assignation continue",
+      api: "rattrapage-elo → stats 4j + ELO langue/compte + snapshot vues",
+      detail:
+        "Fire-and-forget au cron minuit (évite timeout Edge). Contourne PAUSE_ELO_RUNTIME.",
+      onFail: "Assignation continue ; ELO/vues à relancer à la main",
     },
     {
       id: "scores",
       rang: "—",
       label: "MAJ ELO runtime (scores)",
       kind: "gate",
-      detail: "PAUSE_ELO_RUNTIME = true → no-op",
+      detail: "PAUSE_ELO_RUNTIME = true → no-op (le rattrapage ① fait l’ELO)",
       api: "majScoresDepuisPassages",
     },
     {

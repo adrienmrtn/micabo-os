@@ -1253,3 +1253,40 @@ export async function rattrapageElo(
     snapshot,
   };
 }
+
+/**
+ * Kick fire-and-forget du rattrapage ELO (stats + ELO langue/compte + snapshot vues).
+ * Évite le timeout Edge 150s du cron minuit (scrape synchrone de tous les comptes).
+ */
+export function kickRattrapageElo(
+  request: Request,
+  body: Record<string, unknown> = {},
+): void {
+  const url = Deno.env.get("SUPABASE_URL");
+  if (!url) return;
+  const secret = Deno.env.get("CRON_SECRET");
+  const auth = request.headers.get("Authorization");
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (secret) headers["x-cron-secret"] = secret;
+  else if (auth) headers.Authorization = auth;
+
+  const target = `${url}/functions/v1/rattrapage-elo`;
+  const edge = (globalThis as {
+    EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void };
+  }).EdgeRuntime;
+
+  const p = fetch(target, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jours: RATTRAPAGE_JOURS_DEFAUT,
+      ...body,
+    }),
+  }).catch((e) => {
+    console.error("[rattrapage-elo] kick failed", e);
+    return null;
+  });
+  if (edge?.waitUntil) edge.waitUntil(p);
+}

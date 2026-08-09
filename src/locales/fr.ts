@@ -450,6 +450,8 @@ export const fr = {
       pauseOff: "Auto actif",
       vnextInactifBanner:
         "Runtime v-next désactivé (Réglages) — le cron de minuit part bien, mais il saute l’assignation. Réactive « Activer le runtime v-next » pour que minuit travaille sans toi.",
+      eloCronInfo:
+        "Cron minuit : kick async du rattrapage ELO (vues + scores + snapshot Pilotage) puis assignation. L’ancien scrape synchrone « stats » timeoutait avant de figer les vues — d’où ELO/vues figés alors que l’assignation (4h) marchait encore. Pour rattraper tout de suite : bouton « Rattrapage ELO (4j) ».",
       rattrapageElo: "Rattrapage ELO (4j)",
       rattrapageEloAide:
         "Relève les vues des posts publiés (4 derniers jours), met à jour l’ELO langue (↑/↓) et l’ELO compte (≤10 posts).",

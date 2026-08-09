@@ -639,6 +639,10 @@ export function AdminMinuitPage() {
             </div>
           )}
 
+          <div className="rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
+            {t("minuit.eloCronInfo")}
+          </div>
+
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">{t("minuit.jour")}</label>

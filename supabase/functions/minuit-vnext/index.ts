@@ -5,7 +5,11 @@ import {
 } from "../_shared/assignation_contenu.ts";
 import { kickAssignationUgcVideo } from "../_shared/assignation_ugc_video.ts";
 import { scrapeStats } from "../_shared/apify.ts";
-import { rattrapageElo, snapshotVuesGlobales } from "../_shared/rattrapage_elo.ts";
+import {
+  kickRattrapageElo,
+  rattrapageElo,
+  snapshotVuesGlobales,
+} from "../_shared/rattrapage_elo.ts";
 import { majScoresDepuisPassages } from "../_shared/scoring.ts";
 import {
   kickUpscaleAssignes,
@@ -41,9 +45,10 @@ const POSTS_RELEVES = 30;
  *   - deck : traduction + Sophia à la demande (assurerDeckPourLangue)
  *   - crée passages statut=assigne (musique + hashtags)
  *
- *   {}  → stats + assignation + kick upscale (scores en pause) si moteur_vnext.actif
+ *   {}  → kick rattrapage-elo (async) + assignation + upscale + ugc
  *   { etapes?: ['stats'|'scores'|'assignation'|'upscale'|'variations'|'rattrapage'|'ugc_ai_video'], compteId?, date?, forcer? }
- *   etape `rattrapage` : stats 4j + ELO langue (deltas) + ELO compte (contourne la pause)
+ *   etape `rattrapage` : stats 4j + ELO langue/compte + snapshot vues (contourne PAUSE_ELO_RUNTIME)
+ *                        — kick async si tous comptes (évite timeout cron)
  *   etape `upscale` : SeedVR Fal sur photos assignées du jour sans upscale_le
  *                     (strip C2PA en fin dans le drain — pas de double strip)
  *   etape `ugc_ai_video` : EN DERNIER — kick drain assignation-ugc-video (NB→Kling→concat)
@@ -89,21 +94,45 @@ Deno.serve(async (request) => {
       }
     }
 
-    // scores retiré du défaut tant que PAUSE_ELO_RUNTIME est true.
-    // upscale : kick drain SeedVR après assignation (file traitée en arrière-plan).
+    // Défaut : rattrapage ELO (vues + scores) en kick async — plus de scrape
+    // synchrone « stats » qui faisait timeout Edge avant snapshot/assign.
+    // scores runtime reste en pause (PAUSE_ELO_RUNTIME) ; le rattrapage contourne.
     // ugc_ai_video : TOUJOURS en dernier (après slideshow + upscale).
     const etapes: string[] = Array.isArray(body?.etapes)
       ? body.etapes
-      : ["stats", "assignation", "upscale", "ugc_ai_video"];
+      : ["rattrapage", "assignation", "upscale", "ugc_ai_video"];
     const jour = body?.date ?? aujourdhuiParis();
     const compteId: string | null = body?.compteId ?? null;
 
     const out: Record<string, unknown> = { ok: true, jour };
 
-    if (etapes.includes("stats")) {
+    if (etapes.includes("rattrapage")) {
+      // Contourne PAUSE_ELO_RUNTIME — vues + ELO langue/compte + snapshot Pilotage.
+      if (compteId) {
+        // Compte isolé (manuel) : synchrone, résultat dans la réponse.
+        out.rattrapage = await rattrapageElo(supabase, {
+          compteId,
+          jours: typeof body?.jours === "number" ? body.jours : undefined,
+          forcer: Boolean(body?.forcerElo),
+          dryRun: Boolean(body?.dryRun),
+        });
+      } else {
+        // Tous comptes (cron minuit) : kick async pour ne pas bloquer l'assignation.
+        kickRattrapageElo(request, {
+          jours: typeof body?.jours === "number" ? body.jours : undefined,
+          forcer: Boolean(body?.forcerElo),
+          dryRun: Boolean(body?.dryRun),
+        });
+        out.rattrapage = {
+          ok: true,
+          kick: true,
+          detail:
+            "drain rattrapage-elo démarré (stats 4j + ELO langue/compte + snapshot vues)",
+        };
+      }
+    } else if (etapes.includes("stats")) {
+      // Chemin legacy / explicite (sans rattrapage).
       out.stats = await releverPassages(supabase, compteId);
-      // Figé les vues globales (Pilotage Δ j0−j1) après le scrape de minuit.
-      // Sur un run compte isolé, le rattrapage/snapshot dédié s'en charge.
       if (!compteId) {
         out.snapshotVues = await snapshotVuesGlobales(supabase);
       }
@@ -111,16 +140,6 @@ Deno.serve(async (request) => {
     if (etapes.includes("scores")) {
       // No-op si PAUSE_ELO_RUNTIME (voir _shared/scoring.ts).
       out.scores = await majScoresDepuisPassages(supabase, { compteId });
-    }
-    if (etapes.includes("rattrapage")) {
-      // Contourne PAUSE_ELO_RUNTIME — chemin volontaire de reprise ELO.
-      // Inclut déjà snapshotVuesGlobales sur run tous comptes.
-      out.rattrapage = await rattrapageElo(supabase, {
-        compteId,
-        jours: typeof body?.jours === "number" ? body.jours : undefined,
-        forcer: Boolean(body?.forcerElo),
-        dryRun: Boolean(body?.dryRun),
-      });
     }
     if (etapes.includes("assignation")) {
       // Un seul compte : await synchrone. Tous les comptes : drain auto-chaîné

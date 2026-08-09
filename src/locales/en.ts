@@ -450,6 +450,8 @@ export const en = {
       pauseOff: "Auto on",
       vnextInactifBanner:
         "v-next runtime is off (Settings) — the midnight cron fires, but assignment is skipped. Turn on “Enable v-next runtime” so midnight runs without you.",
+      eloCronInfo:
+        "Midnight cron: async kick of ELO catch-up (views + scores + Pilotage snapshot) then assignment. The old sync “stats” scrape timed out before freezing views — so ELO/views stayed flat while assignment (4am) still worked. To catch up now: use “ELO catch-up (4d)”.",
       rattrapageElo: "ELO catch-up (4d)",
       rattrapageEloAide:
         "Fetches views for published posts (last 4 days), updates language ELO (↑/↓) and account ELO (≤10 posts).",
