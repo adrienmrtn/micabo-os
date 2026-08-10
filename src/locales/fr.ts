@@ -1578,14 +1578,23 @@ export const fr = {
         "Timer lancé quand le créateur clique « Commencer le warmup » dans son calendrier (défaut 24 h).",
       fileTitre: "File des prochains comptes (label + UGC)",
       fileDesc:
-        "Ordre FIFO : la première entrée décide le label et si le compte est UGC. UGC → persona libre, nom + photo de face sans métadonnées. File vide → label classique le moins utilisé dans la langue. Ce classement prévaut toujours sur l’assignation auto.",
+        "À la création d’un poster : file de SA langue d’abord (prioritaire), sinon file générale, sinon label classique le moins utilisé dans la langue. FIFO : la 1ʳᵉ entrée décide le label et si le compte est UGC.",
+      fileChoisir: "File à éditer",
+      fileGenerale: "File générale",
+      fileGeneraleAide:
+        "Fallback pour toutes les langues dont la file dédiée est vide.",
+      fileLangueAide:
+        "Prioritaire pour les posters en {{langue}} — surpasse la file générale tant qu’elle n’est pas vide.",
+      filePrioritaire: "prioritaire",
+      fileLangueVide:
+        "File langue vide — le prochain poster de cette langue prendra la file générale (puis least-used si elle est vide aussi).",
       fileAutosave:
         "Enregistré immédiatement à chaque ajout / réordonnancement — pas besoin du bouton Enregistrer en bas.",
       fileSauvee: "file à jour",
       fileVideListe:
-        "File vide — le prochain compte recevra le label (non-UGC) le moins utilisé dans sa langue.",
+        "File générale vide — utilisée seulement si la file de la langue du poster est vide ; sinon least-used.",
       fileVide:
-        "La file de labels est vide : on assigne le label le moins utilisé pour la langue du créateur.",
+        "Les files langue + générale sont vides : on assigne le label le moins utilisé pour la langue du créateur.",
       aucunLabel:
         "Aucun label en base — crée-en au moins un (Bibliothèque / Labels) avant de créer un poster.",
       aucunLabelUgc:

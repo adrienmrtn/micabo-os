@@ -2344,24 +2344,46 @@ export async function sujetsDisponibles(): Promise<Array<{ id: string; titre: st
 
 // --- Réglages et prompts ----------------------------------------------------
 
-/** Lit `{ items }` ou legacy `{ label_ids }` → file normalisée. */
+function normaliserFileLabelItems(
+  raw: unknown,
+): Reglages["file_labels_comptes"]["items"] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((it) => {
+      const o = (it ?? {}) as { label_id?: string; ugc?: boolean };
+      return {
+        label_id: String(o.label_id ?? "").trim(),
+        ugc: Boolean(o.ugc),
+      };
+    })
+    .filter((it) => it.label_id);
+}
+
+/** Lit `{ items, par_langue }` ou legacy `{ label_ids }` → file normalisée. */
 export function normaliserFileLabels(raw: unknown): Reglages["file_labels_comptes"] {
   const v = (raw ?? {}) as {
     items?: Array<{ label_id?: string; ugc?: boolean }>;
     label_ids?: string[];
+    par_langue?: Record<string, unknown>;
   };
-  if (Array.isArray(v.items) && v.items.length > 0) {
-    return {
-      items: v.items
-        .map((it) => ({
-          label_id: String(it?.label_id ?? "").trim(),
-          ugc: Boolean(it?.ugc),
-        }))
-        .filter((it) => it.label_id),
-    };
+
+  let items = normaliserFileLabelItems(v.items);
+  if (items.length === 0) {
+    const ids = (v.label_ids ?? []).map((id) => String(id ?? "").trim()).filter(Boolean);
+    items = ids.map((label_id) => ({ label_id, ugc: false }));
   }
-  const ids = (v.label_ids ?? []).map((id) => String(id ?? "").trim()).filter(Boolean);
-  return { items: ids.map((label_id) => ({ label_id, ugc: false })) };
+
+  const par_langue: Record<string, Reglages["file_labels_comptes"]["items"]> = {};
+  if (v.par_langue && typeof v.par_langue === "object" && !Array.isArray(v.par_langue)) {
+    for (const [code, arr] of Object.entries(v.par_langue)) {
+      const lang = String(code ?? "").trim().toLowerCase();
+      if (!lang) continue;
+      const liste = normaliserFileLabelItems(arr);
+      if (liste.length > 0) par_langue[lang] = liste;
+    }
+  }
+
+  return { items, par_langue };
 }
 
 export async function lireReglages(): Promise<Reglages> {

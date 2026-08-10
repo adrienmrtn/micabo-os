@@ -17,6 +17,18 @@ interface FileLabelItem {
   ugc: boolean;
 }
 
+/** Entrée consommée depuis une file admin — à restaurer au même endroit si échec. */
+interface FileLabelQueued {
+  item: FileLabelItem;
+  /** `"general"` ou code langue (`fr`, `de`, …). */
+  queueKey: string;
+}
+
+interface FileLabelsValeur {
+  items: FileLabelItem[];
+  par_langue: Record<string, FileLabelItem[]>;
+}
+
 interface PersonaUgcLibre {
   id: string;
   nom: string;
@@ -34,10 +46,11 @@ interface PersonaUgcLibre {
  *   { action: "delete", userId }
  *
  * Création poster : compte créé immédiatement (warmup non démarré).
- * File FIFO `file_labels_comptes` : { items: [{ label_id, ugc }] }.
+ * File FIFO `file_labels_comptes` :
+ *   { items: [...], par_langue: { fr: [...], de: [...] } }
+ * Priorité : file de la langue du poster → file générale (`items`) → least-used.
  * UGC slideshow → persona libre, nom + avatar (profil 1:1 si dispo, sinon face)
  * sans métadonnées ; label forcé parmi ceux qui ont des slideshows ugc_compatible.
- * File vide → label classique le moins utilisé pour la LANGUE.
  * HM `hm_ugc_ai_video` → comptes ugc_ai_video, persona unique (pool partagé),
  * labels = labels HM (`hm_ugc_video_labels`) ; marque = checkmark `comptes.ugc_ai_video`.
  */
@@ -193,7 +206,7 @@ async function gererRequete(request: Request): Promise<Response> {
     // et que ce n'est PAS un créateur UGC AI VIDEO.
     // Sinon on ne consomme pas la file (prévaut toujours sur l'auto least-used).
     let fileItem: FileLabelItem | null = null;
-    let fileItemQueue: FileLabelItem | null = null;
+    let fileItemQueue: FileLabelQueued | null = null;
     let personaUgc: PersonaUgcLibre | null = null;
     let modeUgcAiVideo = false;
     if (roleVoulu === "poster" && langue) {
@@ -338,7 +351,7 @@ async function gererRequete(request: Request): Promise<Response> {
     }
 
     let fileItem: FileLabelItem | null = null;
-    let fileItemQueue: FileLabelItem | null = null;
+    let fileItemQueue: FileLabelQueued | null = null;
     let personaUgc: PersonaUgcLibre | null = null;
 
     if (modeUgcAiVideo) {
@@ -431,35 +444,78 @@ async function lireWarmupHeures(supabase: Supabase): Promise<number> {
   return Number.isFinite(h) && h > 0 ? Math.min(168, h) : 24;
 }
 
-function normaliserFileItems(valeur: unknown): FileLabelItem[] {
+function normaliserFileLabelItemList(raw: unknown): FileLabelItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((it) => {
+      const o = (it ?? {}) as { label_id?: string; ugc?: boolean };
+      return {
+        label_id: String(o.label_id ?? "").trim(),
+        ugc: Boolean(o.ugc),
+      };
+    })
+    .filter((it) => it.label_id);
+}
+
+/** Normalise `{ items, par_langue }` (+ legacy `label_ids`). */
+function normaliserFileLabelsValeur(valeur: unknown): FileLabelsValeur {
   const v = (valeur ?? {}) as {
     items?: Array<{ label_id?: string; ugc?: boolean }>;
     label_ids?: string[];
+    par_langue?: Record<string, unknown>;
   };
-  if (Array.isArray(v.items) && v.items.length > 0) {
-    return v.items
-      .map((it) => ({
-        label_id: String(it?.label_id ?? "").trim(),
-        ugc: Boolean(it?.ugc),
-      }))
-      .filter((it) => it.label_id);
+
+  let items = normaliserFileLabelItemList(v.items);
+  if (items.length === 0) {
+    items = (v.label_ids ?? [])
+      .map((id) => String(id ?? "").trim())
+      .filter(Boolean)
+      .map((label_id) => ({ label_id, ugc: false }));
   }
-  return (v.label_ids ?? [])
-    .map((id) => String(id ?? "").trim())
-    .filter(Boolean)
-    .map((label_id) => ({ label_id, ugc: false }));
+
+  const par_langue: Record<string, FileLabelItem[]> = {};
+  if (v.par_langue && typeof v.par_langue === "object" && !Array.isArray(v.par_langue)) {
+    for (const [code, arr] of Object.entries(v.par_langue)) {
+      const lang = String(code ?? "").trim().toLowerCase();
+      if (!lang) continue;
+      const liste = normaliserFileLabelItemList(arr);
+      if (liste.length > 0) par_langue[lang] = liste;
+    }
+  }
+
+  return { items, par_langue };
+}
+
+async function ecrireFileLabels(
+  supabase: Supabase,
+  file: FileLabelsValeur,
+): Promise<void> {
+  const par_langue: Record<string, FileLabelItem[]> = {};
+  for (const [code, liste] of Object.entries(file.par_langue)) {
+    if (liste.length > 0) par_langue[code] = liste;
+  }
+  await supabase.from("reglages").upsert(
+    {
+      cle: "file_labels_comptes",
+      valeur: { items: file.items, par_langue },
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "cle" },
+  );
 }
 
 /**
- * Tire la première entrée de la file (FIFO) et persiste le reste.
- * File vide → label classique le moins utilisé (ne consomme pas la file).
- * `fromQueue` : true si l'entrée vient du classement admin (à restaurer en échec).
+ * Tire la première entrée (FIFO) :
+ *   1) file de la langue (surpasse la générale)
+ *   2) sinon file générale
+ *   3) sinon label classique le moins utilisé (ne consomme pas les files)
  */
 async function popLabelFile(
   supabase: Supabase,
   langue: string,
 ): Promise<
-  | { ok: true; item: FileLabelItem; fromQueue: boolean }
+  | { ok: true; item: FileLabelItem; fromQueue: false }
+  | { ok: true; item: FileLabelItem; fromQueue: true; queueKey: string }
   | { ok: false; error: string }
 > {
   const { data } = await supabase
@@ -467,19 +523,28 @@ async function popLabelFile(
     .select("valeur")
     .eq("cle", "file_labels_comptes")
     .maybeSingle();
-  const items = normaliserFileItems(data?.valeur);
-  if (items.length > 0) {
-    const [first, ...rest] = items;
-    await supabase.from("reglages").upsert(
-      {
-        cle: "file_labels_comptes",
-        valeur: { items: rest },
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "cle" },
-    );
+  const file = normaliserFileLabelsValeur(data?.valeur);
+  const lang = String(langue ?? "").trim().toLowerCase();
+
+  const fileLangue = lang ? (file.par_langue[lang] ?? []) : [];
+  if (fileLangue.length > 0) {
+    const [first, ...rest] = fileLangue;
     if (!first) return { ok: false, error: "NO_LABELS" };
-    return { ok: true, item: first, fromQueue: true };
+    await ecrireFileLabels(supabase, {
+      items: file.items,
+      par_langue: { ...file.par_langue, [lang]: rest },
+    });
+    return { ok: true, item: first, fromQueue: true, queueKey: lang };
+  }
+
+  if (file.items.length > 0) {
+    const [first, ...rest] = file.items;
+    if (!first) return { ok: false, error: "NO_LABELS" };
+    await ecrireFileLabels(supabase, {
+      items: rest,
+      par_langue: file.par_langue,
+    });
+    return { ok: true, item: first, fromQueue: true, queueKey: "general" };
   }
 
   const labelId = await labelMoinsUtiliseParLangue(supabase, langue, { ugcOnly: false });
@@ -559,8 +624,8 @@ async function labelsPourCreateurUgcVideo(
 }
 
 /**
- * Consomme la file admin (prévaut toujours) + persona UGC si besoin.
- * `fileItemQueue` = entrée exacte à remettre en tête en cas d'échec auth/compte.
+ * Consomme la file admin (langue > générale) + persona UGC si besoin.
+ * `fileItemQueue` = entrée exacte à remettre dans LA MÊME file en cas d'échec.
  */
 async function preparerFileEtPersona(
   supabase: Supabase,
@@ -569,7 +634,7 @@ async function preparerFileEtPersona(
   | {
     ok: true;
     fileItem: FileLabelItem;
-    fileItemQueue: FileLabelItem | null;
+    fileItemQueue: FileLabelQueued | null;
     personaUgc: PersonaUgcLibre | null;
   }
   | { ok: false; error: string }
@@ -578,7 +643,9 @@ async function preparerFileEtPersona(
   if (!popped.ok) return { ok: false, error: popped.error };
 
   let fileItem = popped.item;
-  const fileItemQueue = popped.fromQueue ? { ...popped.item } : null;
+  const fileItemQueue: FileLabelQueued | null = popped.fromQueue
+    ? { item: { ...popped.item }, queueKey: popped.queueKey }
+    : null;
   let personaUgc: PersonaUgcLibre | null = null;
 
   if (fileItem.ugc) {
@@ -665,21 +732,32 @@ async function labelADesContenusUgc(supabase: Supabase, labelId: string): Promis
   return (data?.length ?? 0) > 0;
 }
 
-async function unshiftLabelFile(supabase: Supabase, item: FileLabelItem): Promise<void> {
+/** Remet une entrée en tête de la file d’où elle a été tirée (langue ou générale). */
+async function unshiftLabelFile(
+  supabase: Supabase,
+  queued: FileLabelQueued,
+): Promise<void> {
   const { data } = await supabase
     .from("reglages")
     .select("valeur")
     .eq("cle", "file_labels_comptes")
     .maybeSingle();
-  const items = normaliserFileItems(data?.valeur);
-  await supabase.from("reglages").upsert(
-    {
-      cle: "file_labels_comptes",
-      valeur: { items: [item, ...items] },
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "cle" },
-  );
+  const file = normaliserFileLabelsValeur(data?.valeur);
+  const key = String(queued.queueKey ?? "general").trim().toLowerCase() || "general";
+
+  if (key === "general") {
+    await ecrireFileLabels(supabase, {
+      items: [queued.item, ...file.items],
+      par_langue: file.par_langue,
+    });
+    return;
+  }
+
+  const liste = file.par_langue[key] ?? [];
+  await ecrireFileLabels(supabase, {
+    items: file.items,
+    par_langue: { ...file.par_langue, [key]: [queued.item, ...liste] },
+  });
 }
 
 async function personaUgcLibre(supabase: Supabase): Promise<PersonaUgcLibre | null> {
@@ -762,7 +840,7 @@ async function preparerCompte(
   postsParJour: number,
   personaUgc: PersonaUgcLibre | null,
   /** Entrée admin à restaurer si l'insert échoue (pas le fallback label). */
-  fileItemQueue: FileLabelItem | null = null,
+  fileItemQueue: FileLabelQueued | null = null,
   opts: { ugcAiVideo?: boolean } = {},
 ): Promise<{
   id: string;
@@ -782,7 +860,7 @@ async function preparerCompte(
   const labelId = ugcAiVideo
     ? (labelIdsVideo[0] ?? null)
     : (fileItem?.label_id ?? null);
-  const aRestaurer = ugcAiVideo ? null : (fileItemQueue ?? fileItem);
+  const aRestaurer = ugcAiVideo ? null : fileItemQueue;
 
   const { data: compte, error } = await supabase
     .from("comptes")
