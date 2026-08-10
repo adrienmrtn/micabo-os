@@ -2450,6 +2450,45 @@ export async function lireMinuitDernierRun(): Promise<{
   } | null) ?? null;
 }
 
+/** Progression du drain ELO cron / kick minuit. */
+export async function lireEloDernierRun(): Promise<{
+  at?: string;
+  drain?: boolean;
+  drainGen?: number;
+  offset?: number;
+  total?: number;
+  traitesCumules?: number;
+  restants?: number;
+  done?: boolean;
+  kick?: boolean;
+  source?: string;
+  jours?: number;
+  comptesLot?: string[];
+  erreurs?: Array<{ compteId: string; handle: string; erreur: string }>;
+} | null> {
+  const { data, error } = await supabase
+    .from("reglages")
+    .select("valeur")
+    .eq("cle", "elo_dernier_run")
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.valeur as {
+    at?: string;
+    drain?: boolean;
+    drainGen?: number;
+    offset?: number;
+    total?: number;
+    traitesCumules?: number;
+    restants?: number;
+    done?: boolean;
+    kick?: boolean;
+    source?: string;
+    jours?: number;
+    comptesLot?: string[];
+    erreurs?: Array<{ compteId: string; handle: string; erreur: string }>;
+  } | null) ?? null;
+}
+
 export async function lirePrompt(cle: string): Promise<string> {
   const { data } = await supabase
     .from("prompts")

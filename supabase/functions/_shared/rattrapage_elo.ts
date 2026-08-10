@@ -1254,16 +1254,109 @@ export async function rattrapageElo(
   };
 }
 
+/** Comptes / lot — scrape Apify ~10–20s chacun → rester sous timeout Edge 150s. */
+const DRAIN_BATCH_ELO = 3;
+const DRAIN_MAX_CHAIN_ELO = 80;
+
+/** Comptes actifs en process (warmup OK) avec @ TikTok, triés pour un curseur stable. */
+export async function listerComptesRattrapageElo(
+  supabase: Supabase,
+): Promise<Array<{ id: string; handle_tiktok: string }>> {
+  const { data, error } = await supabase
+    .from("comptes")
+    .select("id, handle_tiktok, warmup_started_at, warmup_ends_at")
+    .eq("is_active", true)
+    .not("handle_tiktok", "is", null)
+    .order("id", { ascending: true });
+  if (error) throw error;
+  return (data ?? [])
+    .filter((c) =>
+      compteEnProcessus({
+        warmup_started_at: c.warmup_started_at as string | null,
+        warmup_ends_at: c.warmup_ends_at as string | null,
+      }),
+    )
+    .map((c) => ({
+      id: c.id as string,
+      handle_tiktok: c.handle_tiktok as string,
+    }));
+}
+
 /**
- * Kick fire-and-forget du rattrapage ELO (stats + ELO langue/compte + snapshot vues).
- * Évite le timeout Edge 150s du cron minuit (scrape synchrone de tous les comptes).
+ * Un lot de comptes (stats + ELO langue/compte). En fin de file → snapshot vues.
+ * Auto-chaîné via `kickRattrapageElo({ drain: true, offset })`.
+ */
+export async function rattrapageEloDrainLot(
+  supabase: Supabase,
+  opts: {
+    offset?: number;
+    jours?: number;
+    forcer?: boolean;
+    dryRun?: boolean;
+  } = {},
+): Promise<{
+  traites: number;
+  restants: number;
+  nextOffset: number;
+  total: number;
+  comptes: string[];
+  erreurs: Array<{ compteId: string; handle: string; erreur: string }>;
+  snapshot?: Awaited<ReturnType<typeof snapshotVuesGlobales>>;
+}> {
+  const offset = Math.max(0, Math.floor(opts.offset ?? 0));
+  const tous = await listerComptesRattrapageElo(supabase);
+  const lot = tous.slice(offset, offset + DRAIN_BATCH_ELO);
+  const erreurs: Array<{ compteId: string; handle: string; erreur: string }> = [];
+
+  for (const c of lot) {
+    try {
+      await rattrapageElo(supabase, {
+        compteId: c.id,
+        jours: opts.jours,
+        forcer: opts.forcer,
+        dryRun: opts.dryRun,
+      });
+    } catch (e) {
+      erreurs.push({
+        compteId: c.id,
+        handle: c.handle_tiktok,
+        erreur: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  const nextOffset = offset + lot.length;
+  const restants = Math.max(0, tous.length - nextOffset);
+  let snapshot: Awaited<ReturnType<typeof snapshotVuesGlobales>> | undefined;
+  // Dernier lot : fige les vues Pilotage (somme des metrics fraîches).
+  if (restants === 0 && !opts.dryRun) {
+    snapshot = await snapshotVuesGlobales(supabase);
+  }
+
+  return {
+    traites: lot.length,
+    restants,
+    nextOffset,
+    total: tous.length,
+    comptes: lot.map((c) => c.handle_tiktok),
+    erreurs,
+    snapshot,
+  };
+}
+
+/**
+ * Kick fire-and-forget du drain rattrapage ELO (lots de 3 comptes + auto-chaîne).
+ * Le kick « tous comptes » synchrone timeoutait à 150s — d’où ELO/vues figés.
  */
 export function kickRattrapageElo(
   request: Request,
   body: Record<string, unknown> = {},
 ): void {
   const url = Deno.env.get("SUPABASE_URL");
-  if (!url) return;
+  if (!url) {
+    console.error("[rattrapage-elo] kick: SUPABASE_URL manquant");
+    return;
+  }
   const secret = Deno.env.get("CRON_SECRET");
   const auth = request.headers.get("Authorization");
   const headers: Record<string, string> = {
@@ -1271,22 +1364,48 @@ export function kickRattrapageElo(
   };
   if (secret) headers["x-cron-secret"] = secret;
   else if (auth) headers.Authorization = auth;
+  else {
+    console.error("[rattrapage-elo] kick: ni CRON_SECRET ni Authorization");
+    return;
+  }
 
   const target = `${url}/functions/v1/rattrapage-elo`;
   const edge = (globalThis as {
     EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void };
   }).EdgeRuntime;
 
+  const payload = {
+    jours: RATTRAPAGE_JOURS_DEFAUT,
+    drainGen: 0,
+    offset: 0,
+    ...body,
+    drain: true, // toujours en drain (lots) — le full sync timeout à 150s
+  };
+
+  console.log(
+    `[rattrapage-elo] kick drain gen=${Number(payload.drainGen) || 0} offset=${Number(payload.offset) || 0}`,
+  );
+
   const p = fetch(target, {
     method: "POST",
     headers,
-    body: JSON.stringify({
-      jours: RATTRAPAGE_JOURS_DEFAUT,
-      ...body,
-    }),
-  }).catch((e) => {
-    console.error("[rattrapage-elo] kick failed", e);
-    return null;
-  });
+    body: JSON.stringify(payload),
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        console.error(`[rattrapage-elo] kick HTTP ${res.status}`, t.slice(0, 200));
+      }
+    })
+    .catch((e) => {
+      console.error("[rattrapage-elo] kick failed", e);
+      return null;
+    });
   if (edge?.waitUntil) edge.waitUntil(p);
+  else {
+    // Sans waitUntil le fetch peut être coupé à la fin de la réponse parente.
+    console.warn("[rattrapage-elo] EdgeRuntime.waitUntil absent — kick best-effort");
+  }
 }
+
+export { DRAIN_BATCH_ELO, DRAIN_MAX_CHAIN_ELO };

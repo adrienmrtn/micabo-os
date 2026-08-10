@@ -117,17 +117,39 @@ Deno.serve(async (request) => {
           dryRun: Boolean(body?.dryRun),
         });
       } else {
-        // Tous comptes (cron minuit) : kick async pour ne pas bloquer l'assignation.
+        // Tous comptes (cron minuit) : drain par lots de 3 + auto-chaîne.
+        // Un seul appel synchrone timeoutait à 150s → ELO/vues figés.
+        const jours = typeof body?.jours === "number" ? body.jours : 4;
         kickRattrapageElo(request, {
-          jours: typeof body?.jours === "number" ? body.jours : undefined,
+          drain: true,
+          drainGen: 0,
+          offset: 0,
+          jours,
           forcer: Boolean(body?.forcerElo),
           dryRun: Boolean(body?.dryRun),
         });
+        await supabase.from("reglages").upsert(
+          {
+            cle: "elo_dernier_run",
+            valeur: {
+              at: new Date().toISOString(),
+              kick: true,
+              drain: true,
+              drainGen: 0,
+              offset: 0,
+              done: false,
+              jours,
+              source: body?.manuel || body?.forcer ? "manuel" : "cron",
+            },
+          },
+          { onConflict: "cle" },
+        );
         out.rattrapage = {
           ok: true,
           kick: true,
+          drain: true,
           detail:
-            "drain rattrapage-elo démarré (stats 4j + ELO langue/compte + snapshot vues)",
+            "drain rattrapage-elo démarré (lots de 3 comptes → ELO + snapshot vues en fin)",
         };
       }
     } else if (etapes.includes("stats")) {

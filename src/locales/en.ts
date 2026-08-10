@@ -451,7 +451,11 @@ export const en = {
       vnextInactifBanner:
         "v-next runtime is off (Settings) — the midnight cron fires, but assignment is skipped. Turn on “Enable v-next runtime” so midnight runs without you.",
       eloCronInfo:
-        "Midnight cron: async kick of ELO catch-up (views + scores + Pilotage snapshot) then assignment. The old sync “stats” scrape timed out before freezing views — so ELO/views stayed flat while assignment (4am) still worked. To catch up now: use “ELO catch-up (4d)”.",
+        "Midnight cron: ELO drain in batches of 3 accounts (stats + scores + Pilotage snapshot at the end), then assignment. A single all-accounts run timed out at 150s. To catch up now: “ELO catch-up (4d)”.",
+      eloDernierRunDone: "Last ELO drain: done {{at}} · {{n}} account(s).",
+      eloDernierRunProgress: "ELO drain running since {{at}} · {{i}}/{{n}} account(s)…",
+      eloDernierRunAucun:
+        "No ELO drain recorded — cron may not have kicked, or the Edge function isn’t redeployed.",
       rattrapageElo: "ELO catch-up (4d)",
       rattrapageEloAide:
         "Fetches views for published posts (last 4 days), updates language ELO (↑/↓) and account ELO (≤10 posts).",

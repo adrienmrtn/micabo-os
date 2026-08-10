@@ -23,6 +23,7 @@ import {
   lancerAssignationJour,
   lancerAssignationJourLive,
   lancerRattrapageEloLive,
+  lireEloDernierRun,
   lireMinuitDernierRun,
   lireReglages,
   suiviAssignation,
@@ -395,6 +396,13 @@ export function AdminMinuitPage() {
     queryKey: ["minuit-dernier-run"],
     queryFn: lireMinuitDernierRun,
   });
+  const eloRun = useQuery({
+    queryKey: ["elo-dernier-run"],
+    queryFn: lireEloDernierRun,
+    // Suit le drain cron tant qu’il n’est pas fini.
+    refetchInterval: (q) =>
+      q.state.data && q.state.data.done === false ? 8_000 : false,
+  });
   const autoEnPause = reglages.data?.assignation_auto.actif === false;
   const vnextInactif = reglages.data?.moteur_vnext.actif === false;
   const [detailIncompletsOuvert, setDetailIncompletsOuvert] = React.useState(false);
@@ -457,6 +465,7 @@ export function AdminMinuitPage() {
     void queryClient.invalidateQueries({ queryKey: ["stats-posts"] });
     void queryClient.invalidateQueries({ queryKey: ["stats-posts-viraux"] });
     void queryClient.invalidateQueries({ queryKey: ["pilotage-dashboard"] });
+    void queryClient.invalidateQueries({ queryKey: ["elo-dernier-run"] });
   }
 
   async function executerEloRefresh() {
@@ -639,8 +648,25 @@ export function AdminMinuitPage() {
             </div>
           )}
 
-          <div className="rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
-            {t("minuit.eloCronInfo")}
+          <div className="space-y-1.5 rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
+            <p>{t("minuit.eloCronInfo")}</p>
+            {eloRun.data?.at && (
+              <p className="font-medium text-foreground">
+                {eloRun.data.done
+                  ? t("minuit.eloDernierRunDone", {
+                      at: new Date(eloRun.data.at).toLocaleString(),
+                      n: eloRun.data.traitesCumules ?? eloRun.data.total ?? 0,
+                    })
+                  : t("minuit.eloDernierRunProgress", {
+                      at: new Date(eloRun.data.at).toLocaleString(),
+                      i: eloRun.data.traitesCumules ?? eloRun.data.offset ?? 0,
+                      n: eloRun.data.total ?? "?",
+                    })}
+              </p>
+            )}
+            {!eloRun.data?.at && !eloRun.isLoading && (
+              <p className="text-warning">{t("minuit.eloDernierRunAucun")}</p>
+            )}
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
