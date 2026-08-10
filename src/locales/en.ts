@@ -1581,14 +1581,23 @@ export const en = {
         "Timer starts when the creator clicks “Start warmup” in their calendar (default 24 h).",
       fileTitre: "Next accounts queue (label + UGC)",
       fileDesc:
-        "FIFO order: the first entry sets the label and whether the account is UGC. UGC → unused persona, name + face photo without metadata. Empty queue → classic least-used label in the language. This ranking always overrides auto label assignment.",
+        "On poster creation: that language’s queue first (priority), else the general queue, else the classic least-used label in the language. FIFO: the first entry sets the label and whether the account is UGC.",
+      fileChoisir: "Queue to edit",
+      fileGenerale: "General queue",
+      fileGeneraleAide:
+        "Fallback for every language whose dedicated queue is empty.",
+      fileLangueAide:
+        "Priority for posters in {{langue}} — overrides the general queue while it isn’t empty.",
+      filePrioritaire: "priority",
+      fileLangueVide:
+        "Language queue empty — the next poster in this language will take the general queue (then least-used if that is empty too).",
       fileAutosave:
         "Saved immediately on every add / reorder — no need for the bottom Save button.",
       fileSauvee: "queue up to date",
       fileVideListe:
-        "Empty queue — the next account will get the least-used (non-UGC) label in its language.",
+        "General queue empty — only used when the poster’s language queue is empty; otherwise least-used.",
       fileVide:
-        "The label queue is empty: we assign the least-used label for the creator’s language.",
+        "Language + general queues are empty: we assign the least-used label for the creator’s language.",
       aucunLabel:
         "No labels in the database — create at least one (Library / Labels) before creating a poster.",
       aucunLabelUgc:

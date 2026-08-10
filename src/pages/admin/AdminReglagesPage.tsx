@@ -13,6 +13,7 @@ import {
   listerLabelIdsAvecUgc,
   listerLabels,
 } from "@/features/moteur/api";
+import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
 import {
   SCHEMA_ASSIGNATION,
   SCHEMA_UPDATE_ELO,
@@ -20,8 +21,28 @@ import {
   type PipelineAction,
   type PipelineStep,
 } from "@/features/moteur/pipelinesSchema";
-import type { FileLabelCompteItem, Reglages } from "@/features/moteur/types";
+import type { FileLabelCompteItem, Reglages, ReglagesFileLabels } from "@/features/moteur/types";
 import { cn } from "@/lib/utils";
+
+/** `"general"` ou code langue. */
+type FileQueueKey = "general" | (typeof LANGUES_CIBLES)[number];
+
+function itemsDeLaFile(file: ReglagesFileLabels, key: FileQueueKey): FileLabelCompteItem[] {
+  if (key === "general") return file.items;
+  return file.par_langue[key] ?? [];
+}
+
+function avecItemsFile(
+  file: ReglagesFileLabels,
+  key: FileQueueKey,
+  items: FileLabelCompteItem[],
+): ReglagesFileLabels {
+  if (key === "general") return { ...file, items };
+  const par_langue = { ...file.par_langue };
+  if (items.length === 0) delete par_langue[key];
+  else par_langue[key] = items;
+  return { ...file, par_langue };
+}
 
 function ChampNombre({
   id,
@@ -203,6 +224,8 @@ export function AdminReglagesPage() {
   const [labelAjout, setLabelAjout] = React.useState("");
   const [ugcAjout, setUgcAjout] = React.useState(false);
   const [fileSauveAt, setFileSauveAt] = React.useState<number | null>(null);
+  const [fileQueueKey, setFileQueueKey] = React.useState<FileQueueKey>("general");
+
 
   const enregistrer = useMutation({
     mutationFn: async (r: Reglages) => {
@@ -241,7 +264,7 @@ export function AdminReglagesPage() {
 
   const maj = (patch: Partial<Reglages>) => setBrouillon({ ...reglages, ...patch });
   const majFile = (items: FileLabelCompteItem[]) => {
-    const file = { items };
+    const file = avecItemsFile(reglages.file_labels_comptes, fileQueueKey, items);
     setBrouillon({ ...reglages, file_labels_comptes: file });
     persisterFile.mutate(file);
   };
@@ -250,7 +273,7 @@ export function AdminReglagesPage() {
   const total =
     reglages.repartition.recycle + reglages.repartition.remanie + reglages.repartition.nouveau;
   const totalValide = total === 100;
-
+  const fileActive = itemsDeLaFile(reglages.file_labels_comptes, fileQueueKey);
   const cleaningSchema = schemaCleaning(reglages.nettoyage.provider_principal);
 
   return (
@@ -526,15 +549,55 @@ export function AdminReglagesPage() {
                   ? ` — ${t("warmup.fileSauvee")}`
                   : ""}
             </p>
+
+            <div className="space-y-1 sm:max-w-sm">
+              <Label htmlFor="fileQueueKey">{t("warmup.fileChoisir")}</Label>
+              <select
+                id="fileQueueKey"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+                value={fileQueueKey}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setFileQueueKey(
+                    v === "general" || (LANGUES_CIBLES as readonly string[]).includes(v)
+                      ? (v as FileQueueKey)
+                      : "general",
+                  );
+                }}
+              >
+                <option value="general">
+                  {t("warmup.fileGenerale")} ({reglages.file_labels_comptes.items.length})
+                </option>
+                {LANGUES_CIBLES.map((code) => {
+                  const n = (reglages.file_labels_comptes.par_langue[code] ?? []).length;
+                  return (
+                    <option key={code} value={code}>
+                      {nomLangue(code)} ({n})
+                      {n > 0 ? ` — ${t("warmup.filePrioritaire")}` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                {fileQueueKey === "general"
+                  ? t("warmup.fileGeneraleAide")
+                  : t("warmup.fileLangueAide", { langue: nomLangue(fileQueueKey) })}
+              </p>
+            </div>
+
             <ol className="space-y-1.5">
-              {reglages.file_labels_comptes.items.length === 0 && (
-                <li className="text-sm text-muted-foreground">{t("warmup.fileVideListe")}</li>
+              {fileActive.length === 0 && (
+                <li className="text-sm text-muted-foreground">
+                  {fileQueueKey === "general"
+                    ? t("warmup.fileVideListe")
+                    : t("warmup.fileLangueVide")}
+                </li>
               )}
-              {reglages.file_labels_comptes.items.map((item, i) => {
+              {fileActive.map((item, i) => {
                 const lab = (labels.data ?? []).find((l) => l.id === item.label_id);
                 return (
                   <li
-                    key={`${item.label_id}-${item.ugc}-${i}`}
+                    key={`${fileQueueKey}-${item.label_id}-${item.ugc}-${i}`}
                     className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-sm"
                   >
                     <span className="flex min-w-0 items-center gap-2 truncate">
@@ -553,7 +616,7 @@ export function AdminReglagesPage() {
                         variant="ghost"
                         disabled={i === 0 || persisterFile.isPending}
                         onClick={() => {
-                          const items = [...reglages.file_labels_comptes.items];
+                          const items = [...fileActive];
                           [items[i - 1], items[i]] = [items[i]!, items[i - 1]!];
                           majFile(items);
                         }}
@@ -564,12 +627,9 @@ export function AdminReglagesPage() {
                         type="button"
                         size="sm"
                         variant="ghost"
-                        disabled={
-                          i >= reglages.file_labels_comptes.items.length - 1 ||
-                          persisterFile.isPending
-                        }
+                        disabled={i >= fileActive.length - 1 || persisterFile.isPending}
                         onClick={() => {
-                          const items = [...reglages.file_labels_comptes.items];
+                          const items = [...fileActive];
                           [items[i], items[i + 1]] = [items[i + 1]!, items[i]!];
                           majFile(items);
                         }}
@@ -583,9 +643,7 @@ export function AdminReglagesPage() {
                         className="text-destructive"
                         disabled={persisterFile.isPending}
                         onClick={() => {
-                          majFile(
-                            reglages.file_labels_comptes.items.filter((_, j) => j !== i),
-                          );
+                          majFile(fileActive.filter((_, j) => j !== i));
                         }}
                       >
                         ×
@@ -641,10 +699,7 @@ export function AdminReglagesPage() {
                   (ugcAjout && !(labelsUgc.data ?? []).includes(labelAjout))
                 }
                 onClick={() => {
-                  majFile([
-                    ...reglages.file_labels_comptes.items,
-                    { label_id: labelAjout, ugc: ugcAjout },
-                  ]);
+                  majFile([...fileActive, { label_id: labelAjout, ugc: ugcAjout }]);
                   setLabelAjout("");
                   setUgcAjout(false);
                 }}

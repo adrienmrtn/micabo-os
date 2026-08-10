@@ -226,9 +226,16 @@ export interface FileLabelCompteItem {
   ugc: boolean;
 }
 
-/** File FIFO des labels assignés aux prochains comptes créés. */
+/**
+ * File FIFO des labels assignés aux prochains comptes créés.
+ * `par_langue[code]` surpasse `items` (file générale) pour cette langue ;
+ * si la file langue est vide → file générale ; si les deux sont vides → least-used.
+ */
 export interface ReglagesFileLabels {
+  /** File générale (fallback). */
   items: FileLabelCompteItem[];
+  /** Files prioritaires par code langue (`fr`, `de`, …). */
+  par_langue: Record<string, FileLabelCompteItem[]>;
 }
 
 export interface ReglagesWarmup {
