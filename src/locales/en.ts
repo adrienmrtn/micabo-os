@@ -461,6 +461,9 @@ export const en = {
       rattrapageElo: "ELO catch-up (4d)",
       rattrapageEloAide:
         "Fetches views for published posts (last 4 days), updates language ELO (↑/↓) and account ELO (≤10 posts).",
+      rattrapageElo2j: "ELO catch-up (2d)",
+      rattrapageElo2jAide:
+        "Same ELO catch-up, but only the last 2 days (faster).",
       rattrapageEloEnCours: "ELO catch-up…",
       rattrapageEloOk:
         "ELO OK — window {{debut}}→{{fin}}: {{releves}} stats, {{langues}} languages, {{comptes}} accounts.",

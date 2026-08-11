@@ -468,7 +468,7 @@ export function AdminMinuitPage() {
     void queryClient.invalidateQueries({ queryKey: ["elo-dernier-run"] });
   }
 
-  async function executerEloRefresh() {
+  async function executerEloRefresh(jours = 4) {
     setEloLive({
       logs: [],
       brief: null,
@@ -477,7 +477,7 @@ export function AdminMinuitPage() {
       done: false,
     });
     const data = await lancerRattrapageEloLive({
-      jours: 4,
+      jours,
       // Rejoue l'ELO langue sur les posts déjà scorés (vues du jour à jour).
       forcer: true,
       onProgress: (p) => {
@@ -558,7 +558,7 @@ export function AdminMinuitPage() {
 
   /** ELO seul (sans assignation) — invalide aussi Analytics. */
   const rattrapageElo = useMutation({
-    mutationFn: () => executerEloRefresh(),
+    mutationFn: (jours: number) => executerEloRefresh(jours),
     onError: (err) => {
       setEloLive((prev) => ({
         ...prev,
@@ -711,11 +711,23 @@ export function AdminMinuitPage() {
             </Button>
             <Button
               variant="secondary"
-              onClick={() => rattrapageElo.mutate()}
+              onClick={() => rattrapageElo.mutate(4)}
               disabled={rattrapageElo.isPending || relancer.isPending || reassignerIncomplets.isPending}
               title={t("minuit.rattrapageEloAide")}
             >
-              {rattrapageElo.isPending ? t("minuit.rattrapageEloEnCours") : t("minuit.rattrapageElo")}
+              {rattrapageElo.isPending && rattrapageElo.variables === 4
+                ? t("minuit.rattrapageEloEnCours")
+                : t("minuit.rattrapageElo")}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => rattrapageElo.mutate(2)}
+              disabled={rattrapageElo.isPending || relancer.isPending || reassignerIncomplets.isPending}
+              title={t("minuit.rattrapageElo2jAide")}
+            >
+              {rattrapageElo.isPending && rattrapageElo.variables === 2
+                ? t("minuit.rattrapageEloEnCours")
+                : t("minuit.rattrapageElo2j")}
             </Button>
             <Button
               variant="default"

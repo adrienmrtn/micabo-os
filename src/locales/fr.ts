@@ -461,6 +461,9 @@ export const fr = {
       rattrapageElo: "Rattrapage ELO (4j)",
       rattrapageEloAide:
         "Relève les vues des posts publiés (4 derniers jours), met à jour l’ELO langue (↑/↓) et l’ELO compte (≤10 posts).",
+      rattrapageElo2j: "Rattrapage ELO (2j)",
+      rattrapageElo2jAide:
+        "Même rattrapage ELO, mais sur les 2 derniers jours seulement (plus rapide).",
       rattrapageEloEnCours: "Rattrapage ELO…",
       rattrapageEloOk:
         "ELO OK — fenêtre {{debut}}→{{fin}} : {{releves}} stats, {{langues}} langues, {{comptes}} comptes.",
