@@ -451,11 +451,13 @@ export const fr = {
       vnextInactifBanner:
         "Runtime v-next désactivé (Réglages) — le cron de minuit part bien, mais il saute l’assignation. Réactive « Activer le runtime v-next » pour que minuit travaille sans toi.",
       eloCronInfo:
-        "Cron minuit : drain ELO par lots de 3 comptes (stats + scores + snapshot Pilotage en fin), puis assignation. Un run « tous comptes » d’un coup timeoutait à 150s. Pour rattraper tout de suite : « Rattrapage ELO (4j) ».",
+        "Cron minuit : enfile le drain ELO (1 compte / tick). Filet pg_cron chaque minute (`rattrapage-elo-drain`) — même si le kick Edge meurt, ça reprend jusqu’à done. Snapshot Pilotage en fin (+ tous les 10). Pour forcer maintenant : « Rattrapage ELO (4j) ».",
       eloDernierRunDone: "Dernier drain ELO : terminé {{at}} · {{n}} compte(s).",
       eloDernierRunProgress: "Drain ELO en cours depuis {{at}} · {{i}}/{{n}} compte(s)…",
+      eloDernierRunStale:
+        "Drain ELO bloqué (plus de {{min}} min sans progrès) — le cron minute devrait reprendre ; sinon lance « Rattrapage ELO (4j) » et vérifie le déploiement Edge.",
       eloDernierRunAucun:
-        "Aucun drain ELO enregistré — le cron n’a peut‑être pas kick, ou l’Edge n’est pas redéployée.",
+        "Aucun drain ELO enregistré — le cron n’a peut‑être pas kick, ou l’Edge / migration 0188 n’est pas déployée.",
       rattrapageElo: "Rattrapage ELO (4j)",
       rattrapageEloAide:
         "Relève les vues des posts publiés (4 derniers jours), met à jour l’ELO langue (↑/↓) et l’ELO compte (≤10 posts).",

@@ -374,9 +374,22 @@ export async function listerDiaporamas(handle: string): Promise<string[]> {
   return [...ids].map((id) => `https://www.tiktok.com/@${handle}/photo/${id}`);
 }
 
-/** Relève les performances d'un compte : tous les posts, photo ou non. */
+/**
+ * Relève les performances d'un compte : tous les posts, photo ou non.
+ * Pas de download d'images — on n'a besoin que des compteurs (vues/likes).
+ * (Avant : download slideshow → Apify trop lent → timeout Edge 150s sur le drain ELO.)
+ */
 export function scrapeStats(handle: string, resultsPerPage: number) {
-  return runActor({ profiles: [handle], resultsPerPage }, false);
+  return runActor(
+    {
+      profiles: [handle],
+      resultsPerPage,
+      shouldDownloadSlideshowImages: false,
+      shouldDownloadVideos: false,
+      shouldDownloadCovers: false,
+    },
+    false,
+  );
 }
 
 /** Scrape un seul post par son URL, pour tester le pipeline sur un TikTok précis. */
