@@ -124,9 +124,9 @@ export function schemaCleaning(
 /** Update ELO — rattrapage (chemin actif) + runtime (pause). */
 export const SCHEMA_UPDATE_ELO: PipelineAction = {
   id: "update_elo",
-  edge: "rattrapage-elo · minuit-vnext { etapes: ['rattrapage'] }",
+  edge: "rattrapage-elo · cron rattrapage-elo-drain (* * * * *) · minuit kick",
   description:
-    "Update ELO actif = rattrapage (contourne PAUSE_ELO_RUNTIME). Le chemin minuit « scores » est en pause.",
+    "Update ELO = drain 1 compte/tick (scrapeStats sans images) + filet pg_cron minute. Contourne PAUSE_ELO_RUNTIME. Snapshot Pilotage en fin (+ tous les 10).",
   steps: [
     {
       id: "gate_pause",
@@ -137,13 +137,23 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
       onFail: "Utiliser rattrapage (ci-dessous)",
     },
     {
+      id: "drain_cron",
+      rang: "⓪",
+      label: "Filet cron minute",
+      kind: "logic",
+      api: "pg_cron rattrapage-elo-drain → POST rattrapage-elo {}",
+      detail:
+        "Reprend elo_dernier_run tant que done≠true (heartbeat busy + lock 140s)",
+      onFail: "Alert Admin Minuit si stale >30 min",
+    },
+    {
       id: "scrape",
       rang: "①",
       label: "Scrape stats TikTok (profil)",
       kind: "api",
-      api: "Apify scrapeStats(handle, 30 posts)",
+      api: "Apify scrapeStats(handle) — sans download images",
       env: "APIFY_TOKEN (ou équivalent)",
-      detail: "Match passage.publie_url → id vidéo",
+      detail: "Match passage.publie_url → id vidéo · 1 compte / invoke Edge",
       onFail: "② scrapePost(url) puis ③ cohérence ±36h",
     },
     {
@@ -232,12 +242,12 @@ export const SCHEMA_ASSIGNATION: PipelineAction = {
     {
       id: "rattrapage",
       rang: "①",
-      label: "Kick rattrapage-elo (async)",
+      label: "Enqueue + kick drain ELO",
       kind: "api",
-      api: "rattrapage-elo → stats 4j + ELO langue/compte + snapshot vues",
+      api: "elo_dernier_run done=false → kick rattrapage-elo (1 compte)",
       detail:
-        "Fire-and-forget au cron minuit (évite timeout Edge). Contourne PAUSE_ELO_RUNTIME.",
-      onFail: "Assignation continue ; ELO/vues à relancer à la main",
+        "Minuit enfile le drain ; cron minute rattrapage-elo-drain reprend si le kick meurt. Contourne PAUSE_ELO_RUNTIME.",
+      onFail: "Cron minute reprend ; sinon Relancer / Rattrapage ELO (4j)",
     },
     {
       id: "scores",

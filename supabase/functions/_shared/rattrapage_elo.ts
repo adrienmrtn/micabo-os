@@ -1254,9 +1254,77 @@ export async function rattrapageElo(
   };
 }
 
-/** Comptes / lot — scrape Apify ~10–20s chacun → rester sous timeout Edge 150s. */
-const DRAIN_BATCH_ELO = 3;
-const DRAIN_MAX_CHAIN_ELO = 80;
+/**
+ * Comptes / lot Edge.
+ * 1 seul : scrape Apify + éventuels scrapePost doivent tenir sous idle 150s.
+ * Le cron `rattrapage-elo-drain` (* * * * *) reprend si la chaîne meurt.
+ */
+const DRAIN_BATCH_ELO = 1;
+/** Auto-kick waitUntil (filet = cron minute, pas cette limite). */
+const DRAIN_MAX_CHAIN_ELO = 200;
+/** Si busy=true et heartbeat plus vieux → considérer le worker mort, reprendre. */
+const DRAIN_BUSY_STALE_MS = 4 * 60_000;
+/** Évite deux workers sur le même offset (cron + kick) — juste sous idle Edge 150s. */
+const DRAIN_BUSY_LOCK_MS = 140_000;
+
+export type EloDernierRun = {
+  at?: string;
+  busy?: boolean;
+  drain?: boolean;
+  drainGen?: number;
+  offset?: number;
+  total?: number;
+  traitesCumules?: number;
+  restants?: number;
+  done?: boolean;
+  kick?: boolean;
+  source?: string;
+  jours?: number;
+  comptesLot?: string[];
+  erreurs?: Array<{ compteId: string; handle: string; erreur: string }>;
+  snapshot?: unknown;
+  idle?: boolean;
+  detail?: string;
+};
+
+export async function lireEloDernierRunReglage(
+  supabase: Supabase,
+): Promise<EloDernierRun | null> {
+  const { data } = await supabase
+    .from("reglages")
+    .select("valeur")
+    .eq("cle", "elo_dernier_run")
+    .maybeSingle();
+  return (data?.valeur as EloDernierRun | null) ?? null;
+}
+
+export async function ecrireEloDernierRun(
+  supabase: Supabase,
+  valeur: EloDernierRun,
+): Promise<void> {
+  await supabase.from("reglages").upsert(
+    {
+      cle: "elo_dernier_run",
+      valeur: { ...valeur, at: valeur.at ?? new Date().toISOString() },
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "cle" },
+  );
+}
+
+/** true si un autre worker semble encore vivant sur ce drain. */
+export function eloDrainEstVerrouille(run: EloDernierRun | null): boolean {
+  if (!run?.busy || !run.at) return false;
+  const age = Date.now() - new Date(run.at).getTime();
+  return Number.isFinite(age) && age >= 0 && age < DRAIN_BUSY_LOCK_MS;
+}
+
+/** true si busy coincé (timeout Edge sans clear) → on peut reprendre. */
+export function eloDrainBusyStale(run: EloDernierRun | null): boolean {
+  if (!run?.busy || !run.at) return false;
+  const age = Date.now() - new Date(run.at).getTime();
+  return Number.isFinite(age) && age >= DRAIN_BUSY_STALE_MS;
+}
 
 /** Comptes actifs en process (warmup OK) avec @ TikTok, triés pour un curseur stable. */
 export async function listerComptesRattrapageElo(
@@ -1284,7 +1352,7 @@ export async function listerComptesRattrapageElo(
 
 /**
  * Un lot de comptes (stats + ELO langue/compte). En fin de file → snapshot vues.
- * Auto-chaîné via `kickRattrapageElo({ drain: true, offset })`.
+ * Auto-chaîné via `kickRattrapageElo` + cron minute `rattrapage-elo-drain`.
  */
 export async function rattrapageEloDrainLot(
   supabase: Supabase,
@@ -1328,9 +1396,15 @@ export async function rattrapageEloDrainLot(
   const nextOffset = offset + lot.length;
   const restants = Math.max(0, tous.length - nextOffset);
   let snapshot: Awaited<ReturnType<typeof snapshotVuesGlobales>> | undefined;
-  // Dernier lot : fige les vues Pilotage (somme des metrics fraîches).
-  if (restants === 0 && !opts.dryRun) {
-    snapshot = await snapshotVuesGlobales(supabase);
+  // Snapshot Pilotage : fin de file, ou tous les 10 comptes (pas attendre la fin).
+  const doitSnapshot =
+    !opts.dryRun && (restants === 0 || (nextOffset > 0 && nextOffset % 10 === 0));
+  if (doitSnapshot) {
+    try {
+      snapshot = await snapshotVuesGlobales(supabase);
+    } catch (e) {
+      console.error("[rattrapage-elo] snapshotVuesGlobales", e);
+    }
   }
 
   return {
@@ -1345,8 +1419,8 @@ export async function rattrapageEloDrainLot(
 }
 
 /**
- * Kick fire-and-forget du drain rattrapage ELO (lots de 3 comptes + auto-chaîne).
- * Le kick « tous comptes » synchrone timeoutait à 150s — d’où ELO/vues figés.
+ * Kick fire-and-forget du drain rattrapage ELO (1 compte + auto-chaîne).
+ * Filet de secours : cron pg `rattrapage-elo-drain` chaque minute.
  */
 export function kickRattrapageElo(
   request: Request,

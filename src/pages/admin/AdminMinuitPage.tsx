@@ -664,6 +664,13 @@ export function AdminMinuitPage() {
                     })}
               </p>
             )}
+            {eloRun.data?.at &&
+              eloRun.data.done === false &&
+              Date.now() - new Date(eloRun.data.at).getTime() > 30 * 60_000 && (
+                <p className="font-medium text-destructive">
+                  {t("minuit.eloDernierRunStale", { min: 30 })}
+                </p>
+              )}
             {!eloRun.data?.at && !eloRun.isLoading && (
               <p className="text-warning">{t("minuit.eloDernierRunAucun")}</p>
             )}

@@ -2472,9 +2472,10 @@ export async function lireMinuitDernierRun(): Promise<{
   } | null) ?? null;
 }
 
-/** Progression du drain ELO cron / kick minuit. */
+/** Progression du drain ELO (kick minuit + cron minute `rattrapage-elo-drain`). */
 export async function lireEloDernierRun(): Promise<{
   at?: string;
+  busy?: boolean;
   drain?: boolean;
   drainGen?: number;
   offset?: number;
@@ -2485,6 +2486,7 @@ export async function lireEloDernierRun(): Promise<{
   kick?: boolean;
   source?: string;
   jours?: number;
+  detail?: string;
   comptesLot?: string[];
   erreurs?: Array<{ compteId: string; handle: string; erreur: string }>;
 } | null> {
@@ -2496,6 +2498,7 @@ export async function lireEloDernierRun(): Promise<{
   if (error) throw error;
   return (data?.valeur as {
     at?: string;
+    busy?: boolean;
     drain?: boolean;
     drainGen?: number;
     offset?: number;
@@ -2506,6 +2509,7 @@ export async function lireEloDernierRun(): Promise<{
     kick?: boolean;
     source?: string;
     jours?: number;
+    detail?: string;
     comptesLot?: string[];
     erreurs?: Array<{ compteId: string; handle: string; erreur: string }>;
   } | null) ?? null;

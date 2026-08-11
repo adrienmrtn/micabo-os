@@ -117,39 +117,46 @@ Deno.serve(async (request) => {
           dryRun: Boolean(body?.dryRun),
         });
       } else {
-        // Tous comptes (cron minuit) : drain par lots de 3 + auto-chaîne.
-        // Un seul appel synchrone timeoutait à 150s → ELO/vues figés.
+        // Tous comptes (cron minuit) : enqueue + kick 1 compte.
+        // Filet durable : pg_cron `rattrapage-elo-drain` (* * * * *) reprend
+        // tant que elo_dernier_run.done !== true (même si waitUntil meurt).
         const jours = typeof body?.jours === "number" ? body.jours : 4;
-        kickRattrapageElo(request, {
-          drain: true,
-          drainGen: 0,
-          offset: 0,
-          jours,
-          forcer: Boolean(body?.forcerElo),
-          dryRun: Boolean(body?.dryRun),
-        });
+        const source = body?.manuel || body?.forcer ? "manuel" : "cron";
         await supabase.from("reglages").upsert(
           {
             cle: "elo_dernier_run",
             valeur: {
               at: new Date().toISOString(),
               kick: true,
+              busy: false,
               drain: true,
               drainGen: 0,
               offset: 0,
               done: false,
               jours,
-              source: body?.manuel || body?.forcer ? "manuel" : "cron",
+              source,
+              detail: "enfilé par minuit — drain minute + kick",
             },
+            updated_at: new Date().toISOString(),
           },
           { onConflict: "cle" },
         );
+        kickRattrapageElo(request, {
+          drain: true,
+          restart: true,
+          drainGen: 0,
+          offset: 0,
+          jours,
+          forcer: Boolean(body?.forcerElo),
+          dryRun: Boolean(body?.dryRun),
+          source,
+        });
         out.rattrapage = {
           ok: true,
           kick: true,
           drain: true,
           detail:
-            "drain rattrapage-elo démarré (lots de 3 comptes → ELO + snapshot vues en fin)",
+            "drain ELO enfilé (1 compte/tick + cron minute rattrapage-elo-drain → snapshot Pilotage)",
         };
       }
     } else if (etapes.includes("stats")) {
