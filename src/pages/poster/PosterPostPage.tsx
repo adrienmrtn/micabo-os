@@ -403,11 +403,6 @@ export function PosterPostPage() {
     onSuccess: rafraichir,
   });
 
-  const valider = useMutation({
-    mutationFn: () => majPost(id!, { statut: "valide_par_poster" }),
-    onSuccess: rafraichir,
-  });
-
   const publier = useMutation({
     mutationFn: () => {
       const lien = lienPublie.trim();
@@ -544,6 +539,36 @@ export function PosterPostPage() {
       {!estAdmin && !publie && (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-center text-base font-bold text-destructive">
           {t("posts.rappelLien")}
+        </div>
+      )}
+
+      {/* Recharge en tête : les créateurs ne la trouvaient pas en bas de page. */}
+      {peutRecharger && (
+        <div className="rounded-xl border-2 border-amber-500/60 bg-amber-500/10 p-4 space-y-3">
+          <div className="space-y-1">
+            <p className="text-base font-semibold text-foreground">{t("posts.rechargerTitre")}</p>
+            <p className="text-sm text-muted-foreground">{t("posts.rechargerAide")}</p>
+          </div>
+          {rechargesRestantes > 0 ? (
+            <>
+              <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                {t("posts.rechargerRestants", { count: rechargesRestantes })}
+              </p>
+              <Button
+                size="lg"
+                className="w-full bg-amber-600 text-white hover:bg-amber-700"
+                disabled={Boolean(rechargeMsg)}
+                onClick={() => void rechargerEntierement()}
+              >
+                <RefreshCw className={rechargeMsg ? "animate-spin" : undefined} />
+                {rechargeMsg ?? t("posts.rechargerCta")}
+              </Button>
+            </>
+          ) : (
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              {t("posts.rechargerEpuise")}
+            </p>
+          )}
         </div>
       )}
 
@@ -750,37 +775,7 @@ export function PosterPostPage() {
         ))}
       </div>
 
-      {/* 5 — Recharge complète si slideshow buggé (créateur, max 2). */}
-      {peutRecharger && (
-        <Card>
-          <CardContent className="space-y-3 pt-5">
-            <p className="text-sm font-medium">{t("posts.rechargerTitre")}</p>
-            <p className="text-sm text-muted-foreground">{t("posts.rechargerAide")}</p>
-            {rechargesRestantes > 0 ? (
-              <>
-                <p className="text-xs text-muted-foreground">
-                  {t("posts.rechargerRestants", { count: rechargesRestantes })}
-                </p>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  disabled={Boolean(rechargeMsg)}
-                  onClick={() => void rechargerEntierement()}
-                >
-                  <RefreshCw className={rechargeMsg ? "animate-spin" : undefined} />
-                  {rechargeMsg ?? t("posts.rechargerTitre")}
-                </Button>
-              </>
-            ) : (
-              <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-                {t("posts.rechargerEpuise")}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 6 — Validation et publication, en dernier. */}
+      {/* 5 — Publication : coller le lien TikTok une fois posté. */}
       <Card>
         <CardContent className="space-y-3 pt-5">
           {publie ? (
@@ -791,17 +786,6 @@ export function PosterPostPage() {
             </p>
           ) : (
             <>
-              {donnees.statut !== "valide_par_poster" && (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  disabled={valider.isPending}
-                  onClick={() => valider.mutate()}
-                >
-                  {t("posts.valider")}
-                </Button>
-              )}
-
               <div className="space-y-2">
                 <Label htmlFor="lien">{t("posts.lienPublie")}</Label>
                 <Input

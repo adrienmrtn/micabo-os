@@ -208,7 +208,8 @@ Si la slide ne contient aucun texte incrusté, réponds exactement : (aucun text
 /**
  * Traduit tout le slideshow en une passe. Le modèle voit toutes les slides à la
  * fois, ce que le prompt de traduction exige pour fixer le genre et la persona
- * une bonne fois. Renvoie une traduction par position.
+ * une bonne fois. Renvoie une traduction par position + hashtags (légende TikTok)
+ * dans la langue cible.
  */
 const LANGUES: Record<string, string> = {
   fr: "français",
@@ -227,6 +228,25 @@ const LANGUES: Record<string, string> = {
   tr: "turc",
 };
 
+export type TraductionSlideshow = {
+  slides: Array<{ position: number; translated: string }>;
+  /** Légende TikTok : exactement 3 hashtags en langue cible, séparés par des espaces. */
+  hashtags: string;
+};
+
+/** Normalise la légende renvoyée par le modèle : max 3 hashtags, préfixe #. */
+export function normaliserHashtags(brut: string): string {
+  const tags = brut
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((t) => (t.startsWith("#") ? t : `#${t}`))
+    .map((t) => t.replace(/[^\p{L}\p{N}_#]/gu, ""))
+    .filter((t) => t.length > 1)
+    .slice(0, 3);
+  return tags.join(" ");
+}
+
 export async function translateSlideshow(input: {
   slides: Array<{ position: number; original: string }>;
   sourceTitle: string;
@@ -236,7 +256,7 @@ export async function translateSlideshow(input: {
   /** Demande une formulation différente : c'est ce qui distingue un post
    *  remanié d'une simple copie de son aîné. */
   variation?: boolean;
-}): Promise<Array<{ position: number; translated: string }>> {
+}): Promise<TraductionSlideshow> {
   const deck = input.slides
     .map((s) => `Slide ${s.position} : "${s.original || "(aucun texte)"}"`)
     .join("\n");
@@ -253,12 +273,21 @@ soit la langue dans laquelle les consignes ci-dessous sont rédigées.
 
 ${input.rules ?? DEFAULT_TRANSLATE_PROMPT}
 
-Titre de la vidéo source : ${input.sourceTitle || "(aucun)"}
+Titre / légende de la vidéo source (souvent des hashtags) : ${input.sourceTitle || "(aucun)"}
 
 Voici toutes les slides du slideshow, dans l'ordre (slide 1 = couverture) :
 ${deck}
 
-Traduis chaque slide en ${langue}. Une slide sans texte reste vide.${
+Traduis chaque slide en ${langue}. Une slide sans texte reste vide.
+
+Hashtags (légende TikTok à coller) :
+- Produis EXACTEMENT 3 hashtags en ${langue}, séparés par des espaces.
+- Ils doivent coller au sujet des slides (pas une liste générique).
+- Si la légende source contient des hashtags, adapte-les naturellement en
+  ${langue} (équivalents locaux, pas de calque mot-à-mot). Sinon invente-en
+  3 pertinents pour ce slideshow.
+- Style TikTok natif : un seul mot par tag, préfixe #, pas d'emoji, pas de
+  phrase. Exemple de forme : "#apprendre #culturegenerale #fyp"${
     input.variation
       ? `
 
@@ -271,20 +300,23 @@ relire le même texte.`
 
 Rappel : la sortie est en ${langue}.
 
-Réponds uniquement en JSON, sans bloc de code, un objet par slide :
-{"slides":[{"position":1,"translated":"..."}, ...]}`;
+Réponds uniquement en JSON, sans bloc de code :
+{"slides":[{"position":1,"translated":"..."}, ...],"hashtags":"#tag1 #tag2 #tag3"}`;
 
   const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }]);
   const raw = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
 
   try {
     const parsed = JSON.parse(raw);
-    return (parsed.slides ?? []).map((s: { position: number; translated: string }) => ({
-      position: Number(s.position),
-      translated: String(s.translated ?? ""),
-    }));
+    return {
+      slides: (parsed.slides ?? []).map((s: { position: number; translated: string }) => ({
+        position: Number(s.position),
+        translated: String(s.translated ?? ""),
+      })),
+      hashtags: normaliserHashtags(String(parsed.hashtags ?? "")),
+    };
   } catch {
-    return [];
+    return { slides: [], hashtags: "" };
   }
 }
 

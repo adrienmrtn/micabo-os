@@ -42,6 +42,7 @@ export async function chargerAssignationReglages(
   };
 }
 
+// Repli si la traduction n'a pas renvoyé de hashtags. Jeu localisé — aucun appel IA.
 const HASHTAGS: Record<string, string[]> = {
   fr: ["#apprendre", "#culturegenerale", "#developpementpersonnel", "#booktok", "#pourtoi", "#savoir", "#fyp"],
   en: ["#learning", "#selfimprovement", "#booktok", "#foryou", "#knowledge", "#fyp"],
@@ -350,8 +351,11 @@ export async function assignerCompteJour(
 
     // Traduction + Sophia à la demande (hors langue source) — pas à l'import.
     let slides: SlideLangue[];
+    let hashtagsDeck = "";
     try {
-      slides = await assurerDeckPourLangue(supabase, choisi.contenuId, langue);
+      const deck = await assurerDeckPourLangue(supabase, choisi.contenuId, langue);
+      slides = deck.slides;
+      hashtagsDeck = deck.hashtags;
     } catch (e) {
       log(`Deck échoué : ${e instanceof Error ? e.message : String(e)}`);
       continue;
@@ -361,7 +365,8 @@ export async function assignerCompteJour(
       continue;
     }
     log(`Deck prêt (${slides.length} slides) — matérialisation…`);
-    const hashtags = hashtagsPour(langue, `${compte.id}-${jour}-${crees.length}`);
+    // Hashtags issus de la traduction si dispo, sinon jeu localisé de repli.
+    const hashtags = hashtagsDeck || hashtagsPour(langue, `${compte.id}-${jour}-${crees.length}`);
 
     const { data: passage, error } = await supabase
       .from("passages")

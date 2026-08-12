@@ -198,7 +198,15 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
         langue: compte.langue,
         variation: post.type === "remanie",
       });
-      const parPosition = new Map(traductions.map((t) => [t.position, t.translated]));
+      const parPosition = new Map(traductions.slides.map((t) => [t.position, t.translated]));
+      // Hashtags traduits / adaptés dans la même passe que les slides.
+      if (traductions.hashtags) {
+        await supabase
+          .from("posts")
+          .update({ hashtags: traductions.hashtags })
+          .eq("id", post.id);
+        post.hashtags = traductions.hashtags;
+      }
 
       // RECYCLÉ (défaut) : on reproduit FIDÈLEMENT le TikTok de référence — ses
       // images NETTOYÉES (le media_id du sujet pointe vers la version propre) et
@@ -352,7 +360,7 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
             ? "Sophia placée en repli (texte par défaut, à personnaliser)"
             : null,
         statut: "assigne",
-        // Description = hashtags dans la langue du compte (à copier dans TikTok).
+        // Description = hashtags traduits avec le deck ; repli = jeu localisé.
         hashtags: post.hashtags ?? hashtagsPour(compte.langue, post.id),
       })
       .eq("id", post.id);
@@ -436,8 +444,8 @@ async function garantirVisuelsPropres(supabase: Supabase, compte: any, postId: s
  * intacts. Les slides sans numéro (accroche) sont ignorées. Déterministe : ça
  * corrige tout décalage laissé par la traduction ou le placement Sophia.
  */
-// Réserve de hashtags par langue (culture générale / self-improvement / booktok /
-// pour toi). Chaque post en tire ~7, variés d'un post à l'autre — aucun appel IA.
+// Repli si la traduction n'a pas renvoyé de hashtags (parse JSON raté, etc.).
+// Jeu localisé culture générale / booktok / pour toi — aucun appel IA.
 const HASHTAGS: Record<string, string[]> = {
   fr: ["#apprendre", "#culturegenerale", "#developpementpersonnel", "#booktok", "#pourtoi", "#savoir", "#apprendresurtiktok", "#culture", "#motivation", "#connaissances", "#fyp", "#anecdotes"],
   en: ["#learning", "#selfimprovement", "#booktok", "#foryou", "#knowledge", "#learnontiktok", "#growthmindset", "#facts", "#motivation", "#studytok", "#fyp", "#smart"],

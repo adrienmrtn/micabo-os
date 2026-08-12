@@ -1343,14 +1343,15 @@ export const en = {
       importLienDesc:
         "Paste a TikTok photo post link: we fetch it and turn it into a topic, ready to compose. Attach it to the reference account so its visuals join the right library.",
       rappelLien: "⚠️ Don't forget to copy the link of YOUR TikTok that you posted when you're done!",
-      rechargerTitre: "Load an entirely new post",
+      rechargerTitre: "Slideshow broken? Load a completely different post",
+      rechargerCta: "Replace with a new post",
       rechargerAide:
-        "Use this ONLY if the slideshow is broken: misaligned text, wrong placement, unreadable, or incoherent images. Not for changing topic or “trying something else” — you only get 2 attempts.",
+        "Text crooked, wrong place, unreadable, or weird photos? Tap below — we throw this slideshow away and give you another one for the same day. Not for “I don’t like the topic”. 2 tries max.",
       rechargerRestants_one: "You have {{count}} attempt left.",
       rechargerRestants_other: "You have {{count}} attempts left.",
       rechargerEpuise: "You’ve already reloaded this post twice. Contact your recruiter if the issue continues.",
       rechargerConfirm:
-        "Load an entirely NEW post for this slot? Only do this if the slideshow is truly broken (misaligned text, etc.). You’ll have {{restantes}} attempt(s) left after.",
+        "Replace this post with a completely NEW one? Only if the slideshow is truly broken. You’ll have {{restantes}} attempt(s) left after.",
       rechargerEnCours: "Finding a new post…",
       rechargerOk: "New post ready.",
       rechargerAucun:

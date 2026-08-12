@@ -265,12 +265,13 @@ export async function creerVariation(
     langue: candidat.langue,
     variation: true,
   });
-  const parPos = new Map(traductions.map((t) => [t.position, t.translated]));
+  const parPos = new Map(traductions.slides.map((t) => [t.position, t.translated]));
   let deck: SlideLangue[] = candidat.slides.map((s) => ({
     position: s.position,
     texte_overlay: parPos.get(s.position) ?? s.texte_overlay,
     position_sophia: false,
   }));
+  const hashtagsTraduits = traductions.hashtags;
 
   // Sophia sur le deck reformulé
   const { data: corrections } = await supabase
@@ -354,6 +355,7 @@ export async function creerVariation(
     contenu_id: nouveau.id,
     langue,
     slides: langue === candidat.langue ? deck : [],
+    hashtags: langue === candidat.langue ? (hashtagsTraduits || null) : null,
     score: langue === candidat.langue
       ? scoreVar
       : reglages.score_prior + 0.15 * (scoreVar - reglages.score_prior),

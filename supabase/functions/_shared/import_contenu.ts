@@ -1049,12 +1049,14 @@ async function placerSophiaSurDeck(
  * - Import ne stocke que l'OCR source (sans Sophia).
  * - Ici : si langue ≠ source → traduit depuis OCR source ; puis place Sophia.
  * - Une fois cuit, le deck langue est persisté (réutilisé aux passages suivants).
+ * - Hashtags : produits dans la même passe de traduction, stockés sur la ligne
+ *   contenu_langues pour les passages suivants.
  */
 export async function assurerDeckPourLangue(
   supabase: Supabase,
   contenuId: string,
   langue: string,
-): Promise<SlideLangue[]> {
+): Promise<{ slides: SlideLangue[]; hashtags: string }> {
   const { data: contenu } = await supabase
     .from("contenus")
     .select("id, titre, langue_source, compte_reference_id, structure_slides")
@@ -1064,18 +1066,19 @@ export async function assurerDeckPourLangue(
 
   const { data: cl } = await supabase
     .from("contenu_langues")
-    .select("id, langue, slides")
+    .select("id, langue, slides, hashtags")
     .eq("contenu_id", contenuId)
     .eq("langue", langue)
     .maybeSingle();
   if (!cl) throw new Error(`Langue ${langue} non éligible (pas de ligne ELO)`);
 
   let deck = [...((cl.slides ?? []) as SlideLangue[])];
+  let hashtags = ((cl as { hashtags?: string | null }).hashtags ?? "").trim();
   const pret =
     deck.length > 0 &&
     deck.some((s) => s.texte_overlay) &&
     deck.some((s) => s.position_sophia);
-  if (pret) return deck;
+  if (pret) return { slides: deck, hashtags };
 
   const langueSource = contenu.langue_source ?? "fr";
 
@@ -1112,13 +1115,17 @@ export async function assurerDeckPourLangue(
       langue,
       variation: false,
     });
-    const parPos = new Map(traductions.map((t) => [t.position, t.translated]));
+    const parPos = new Map(traductions.slides.map((t) => [t.position, t.translated]));
     deck = deckSource.map((s) => ({
       position: s.position,
       texte_overlay: parPos.get(s.position) ?? "",
       position_sophia: false,
     }));
-    await supabase.from("contenu_langues").update({ slides: deck }).eq("id", cl.id);
+    if (traductions.hashtags) hashtags = traductions.hashtags;
+    await supabase
+      .from("contenu_langues")
+      .update({ slides: deck, hashtags: hashtags || null })
+      .eq("id", cl.id);
   }
 
   if (!deck.some((s) => s.position_sophia)) {
@@ -1135,10 +1142,13 @@ export async function assurerDeckPourLangue(
 
   const { data: frais } = await supabase
     .from("contenu_langues")
-    .select("slides")
+    .select("slides, hashtags")
     .eq("id", cl.id)
     .single();
-  return (frais?.slides ?? deck) as SlideLangue[];
+  return {
+    slides: (frais?.slides ?? deck) as SlideLangue[],
+    hashtags: ((frais as { hashtags?: string | null } | null)?.hashtags ?? hashtags ?? "").trim(),
+  };
 }
 
 // deno-lint-ignore no-explicit-any

@@ -1344,14 +1344,15 @@ export const fr = {
       importLienDesc:
         "Colle le lien d'un post photo TikTok : on le récupère et on en fait un sujet, prêt à composer. Rattache-le au compte de référence pour que ses visuels rejoignent la bonne bibliothèque.",
       rappelLien: "⚠️ N'oublie pas de copier le lien de TON TikTok que tu as posté quand tu as fini !",
-      rechargerTitre: "Charger un nouveau post entièrement",
+      rechargerTitre: "Slideshow buggé ? Charge un post complètement différent",
+      rechargerCta: "Remplacer par un nouveau post",
       rechargerAide:
-        "À utiliser UNIQUEMENT si le slideshow est buggé : texte décalé, mal placé, illisible, ou images incohérentes. Ce n’est pas pour changer de sujet ou « tester autre chose » — tu as seulement 2 essais.",
+        "Texte de travers, mal placé, illisible, ou photos bizarres ? Appuie ci-dessous — on jette ce slideshow et on t’en donne un autre pour le même jour. Pas pour « j’aime pas le sujet ». 2 essais max.",
       rechargerRestants_one: "Il te reste {{count}} essai.",
       rechargerRestants_other: "Il te reste {{count}} essais.",
-      rechargerEpuise: "Tu as déjà utiliséchargé ce post 2 fois. Contacte ton recruteur si le problème continue.",
+      rechargerEpuise: "Tu as déjà rechargé ce post 2 fois. Contacte ton recruteur si le problème continue.",
       rechargerConfirm:
-        "Charger un NOUVEAU post entièrement pour ce créneau ? À faire seulement si le slideshow est vraiment buggé (texte décalé, etc.). Il te restera {{restantes}} essai(s) après.",
+        "Remplacer ce post par un NOUVEAU entièrement ? Seulement si le slideshow est vraiment buggé. Il te restera {{restantes}} essai(s) après.",
       rechargerEnCours: "Recherche d’un nouveau post…",
       rechargerOk: "Nouveau post prêt.",
       rechargerAucun:

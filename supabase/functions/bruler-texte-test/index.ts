@@ -553,16 +553,16 @@ async function chargerTextesTraduits(
     langue: args.langue,
     variation: false,
   });
-  if (traductions.length === 0) {
+  if (traductions.slides.length === 0) {
     throw new Error("Traduction vide");
   }
-  for (const t of traductions) {
+  for (const t of traductions.slides) {
     map.set(t.position, (t.translated ?? "").trim());
   }
   args.emit({
     etape: "deck",
     statut: "ok",
-    detail: `traduction OK · ${traductions.length} slide(s)`,
+    detail: `traduction OK · ${traductions.slides.length} slide(s)`,
   });
   return map;
 }

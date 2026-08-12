@@ -31,7 +31,7 @@ Deno.serve(async (request) => {
       langue,
     });
 
-    return json({ ok: true, traduction: out[0]?.translated ?? "" });
+    return json({ ok: true, traduction: out.slides[0]?.translated ?? "", hashtags: out.hashtags });
   } catch (error) {
     return json({ ok: false, error: messageErreur(error) }, 500);
   }
