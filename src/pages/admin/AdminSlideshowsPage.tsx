@@ -1,5 +1,10 @@
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { Check, ImageUp, RefreshCw, Sparkles, Trash2, X } from "lucide-react";
@@ -30,7 +35,6 @@ import {
   listerJobsReimportPhotosValides,
   listerMediasPourContenu,
   majMediaSlideContenu,
-  majVisagePremierPlan,
   marquerUgcParLabel,
   mediaIdsDepuisSlides,
   renettoyerSlideContenu,
@@ -51,12 +55,35 @@ import {
 } from "@/features/moteur/nettoyageEtapes";
 import { nomLangue } from "@/features/moteur/langues";
 import type { ContenuLangue, ContenuSlide, Media } from "@/features/moteur/types";
+import { ugcVisages } from "@/features/moteur/ugcVisages";
 import {
   AGENTS_REIMPORT_PHOTOS,
   AGENTS_VISION_UGC,
   executerEnLot,
 } from "@/lib/lot";
 import { cn } from "@/lib/utils";
+
+function slideshowDepuisListe(c: ContenuListe): SlideshowDetail {
+  return ugcVisages.appliquerOptimistic({
+    ...c,
+    langues: [],
+    passages: [],
+  });
+}
+
+function detailDepuisListe(qc: QueryClient, id: string): SlideshowDetail | undefined {
+  const entrees = qc.getQueriesData<ContenuListe[]>({ queryKey: ["slideshows"] });
+  for (const [, liste] of entrees) {
+    const found = liste?.find((c) => c.id === id);
+    if (found) return slideshowDepuisListe(found);
+  }
+}
+
+function seedSlideshowDetail(qc: QueryClient, id: string) {
+  if (qc.getQueryData(["slideshow", id])) return;
+  const seed = detailDepuisListe(qc, id);
+  if (seed) qc.setQueryData<SlideshowDetail>(["slideshow", id], seed);
+}
 
 function PassageLien({
   passageId,
@@ -231,7 +258,7 @@ function Chip({
   );
 }
 
-function DeckLangue({
+const DeckLangue = React.memo(function DeckLangue({
   contenu,
   langue,
   estSource,
@@ -242,9 +269,9 @@ function DeckLangue({
 }) {
   const { t } = useTranslation();
   const structure = [...(contenu.structure_slides ?? [])].sort((a, b) => a.position - b.position);
-  const aPassage = contenu.passages.some((p) => p.langue === langue.langue);
+  const aPassage = (contenu.passages ?? []).some((p) => p.langue === langue.langue);
   const aTexteLangue = (langue.slides ?? []).some((s) => s.texte_overlay?.trim());
-  const sourceCl = contenu.langues.find((l) => l.langue === contenu.langue_source);
+  const sourceCl = (contenu.langues ?? []).find((l) => l.langue === contenu.langue_source);
   // Pas encore de passage sur cette langue → on montre le texte OCR d'origine
   // (stocké à l'import, sans pub Sophia). Traduction + Sophia = à l'assignation.
   const montrerOriginel = !aPassage || (!estSource && !aTexteLangue);
@@ -277,7 +304,13 @@ function DeckLangue({
           return (
             <div key={s.position} className="overflow-hidden rounded border">
               {img ? (
-                <img src={img} alt="" className="aspect-[3/4] w-full object-cover" />
+                <img
+                  src={img}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="aspect-[3/4] w-full object-cover"
+                />
               ) : (
                 <div className="flex aspect-[3/4] items-center justify-center bg-muted text-[10px] text-muted-foreground">
                   #{s.position}
@@ -311,7 +344,7 @@ function DeckLangue({
       </div>
     </div>
   );
-}
+});
 
 function SelecteurMediaContenu({
   medias,
@@ -425,7 +458,11 @@ async function executerScanVisagesUgc(
   return { ok, echecs };
 }
 
-function VisuelsContenu({ contenu }: { contenu: SlideshowDetail }) {
+const VisuelsContenu = React.memo(function VisuelsContenu({
+  contenu,
+}: {
+  contenu: SlideshowDetail;
+}) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const structure = [...(contenu.structure_slides ?? [])].sort((a, b) => a.position - b.position);
@@ -433,12 +470,13 @@ function VisuelsContenu({ contenu }: { contenu: SlideshowDetail }) {
   const [etapesParPos, setEtapesParPos] = React.useState<Record<number, EvenementEtape[]>>({});
   const [enCours, setEnCours] = React.useState<Set<number>>(() => new Set());
   const [erreurs, setErreurs] = React.useState<Record<number, string>>({});
+  const [erreursVisage, setErreursVisage] = React.useState<Record<string, string>>({});
   const [visagesLocaux, setVisagesLocaux] = React.useState<Record<string, boolean | null>>(
-    () => contenu.mediaVisages ?? {},
+    () => ugcVisages.overlayVisages(contenu.mediaVisages),
   );
 
   React.useEffect(() => {
-    setVisagesLocaux(contenu.mediaVisages ?? {});
+    setVisagesLocaux(ugcVisages.overlayVisages(contenu.mediaVisages));
   }, [contenu.id, contenu.mediaVisages]);
 
   const { data: reglages } = useQuery({
@@ -509,45 +547,21 @@ function VisuelsContenu({ contenu }: { contenu: SlideshowDetail }) {
     },
   });
 
-  const majVisage = useMutation({
-    mutationFn: (input: { mediaId: string; valeur: boolean | null }) =>
-      majVisagePremierPlan(input.mediaId, input.valeur),
-    onMutate: (input) => {
-      const avant = visagesLocaux[input.mediaId] ?? null;
-      setVisagesLocaux((prev) => ({ ...prev, [input.mediaId]: input.valeur }));
-      queryClient.setQueryData<SlideshowDetail>(
-        ["slideshow", contenu.id],
-        (prev) =>
-          prev
-            ? {
-                ...prev,
-                mediaVisages: {
-                  ...(prev.mediaVisages ?? {}),
-                  [input.mediaId]: input.valeur,
-                },
-              }
-            : prev,
-      );
-      return { avant };
-    },
-    onError: (_e, input, ctx) => {
-      const rollback = ctx?.avant ?? null;
-      setVisagesLocaux((prev) => ({ ...prev, [input.mediaId]: rollback }));
-      queryClient.setQueryData<SlideshowDetail>(
-        ["slideshow", contenu.id],
-        (prev) =>
-          prev
-            ? {
-                ...prev,
-                mediaVisages: {
-                  ...(prev.mediaVisages ?? {}),
-                  [input.mediaId]: rollback,
-                },
-              }
-            : prev,
-      );
-    },
-  });
+  function cliquerVisage(mediaId: string, valeur: boolean | null) {
+    setVisagesLocaux((prev) => ({ ...prev, [mediaId]: valeur }));
+    setErreursVisage((prev) => {
+      if (!(mediaId in prev)) return prev;
+      const n = { ...prev };
+      delete n[mediaId];
+      return n;
+    });
+    void ugcVisages.persisterVisage(mediaId, valeur).catch((err) => {
+      setErreursVisage((prev) => ({
+        ...prev,
+        [mediaId]: err instanceof Error ? err.message : String(err),
+      }));
+    });
+  }
 
   if (structure.length === 0) return null;
 
@@ -577,6 +591,8 @@ function VisuelsContenu({ contenu }: { contenu: SlideshowDetail }) {
                   <img
                     src={img}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
                     className="h-28 w-20 shrink-0 rounded object-cover"
                   />
                 ) : (
@@ -637,10 +653,7 @@ function VisuelsContenu({ contenu }: { contenu: SlideshowDetail }) {
                         <button
                           key={String(val)}
                           type="button"
-                          disabled={majVisage.isPending}
-                          onClick={() =>
-                            majVisage.mutate({ mediaId: s.media_id!, valeur: val })
-                          }
+                          onClick={() => cliquerVisage(s.media_id!, val)}
                           className={cn(
                             "rounded border px-1.5 py-0.5 text-[10px] font-medium",
                             visage === val
@@ -657,6 +670,11 @@ function VisuelsContenu({ contenu }: { contenu: SlideshowDetail }) {
                       ))}
                     </div>
                   )}
+                  {s.media_id && erreursVisage[s.media_id] ? (
+                    <p className="text-[11px] text-destructive">
+                      {erreursVisage[s.media_id]}
+                    </p>
+                  ) : null}
                   {etapes && (slideEnCours || erreur) ? (
                     <NettoyageEtapes
                       etapes={etapes}
@@ -689,7 +707,7 @@ function VisuelsContenu({ contenu }: { contenu: SlideshowDetail }) {
       </div>
     </section>
   );
-}
+});
 
 function DetailSlideshow({
   id,
@@ -702,7 +720,13 @@ function DetailSlideshow({
   const queryClient = useQueryClient();
   const detail = useQuery({
     queryKey: ["slideshow", id],
-    queryFn: () => lireSlideshow(id),
+    queryFn: async () => {
+      const fresh = await lireSlideshow(id);
+      return fresh ? ugcVisages.appliquerOptimistic(fresh) : fresh;
+    },
+    initialData: () =>
+      queryClient.getQueryData<SlideshowDetail>(["slideshow", id]) ??
+      detailDepuisListe(queryClient, id),
   });
 
   const supprimer = useMutation({
@@ -744,12 +768,13 @@ function DetailSlideshow({
   }) {
     queryClient.setQueryData<SlideshowDetail>(["slideshow", id], (prev) => {
       if (!prev) return prev;
+      const visages = opts.mediaVisages
+        ? { ...(prev.mediaVisages ?? {}), ...opts.mediaVisages }
+        : prev.mediaVisages;
       return {
         ...prev,
         ugc_compatible: opts.ugc,
-        mediaVisages: opts.mediaVisages
-          ? { ...(prev.mediaVisages ?? {}), ...opts.mediaVisages }
-          : prev.mediaVisages,
+        mediaVisages: ugcVisages.overlayVisages(visages),
       };
     });
     queryClient.setQueriesData<ContenuListe[]>(
@@ -768,6 +793,7 @@ function DetailSlideshow({
       setUgcLogs([t("slideshows.ugcAucunMedia")]);
       return;
     }
+    ugcVisages.oublierOverrides(mediaIds);
     setUgcScan({ fait: 0, total: mediaIds.length });
     setUgcLogs([
       t("slideshows.ugcScanDebut", {
@@ -801,16 +827,25 @@ function DetailSlideshow({
     };
 
     setUgcBusy(true);
+    ugcVisages.poserUgcOptimistic(d.id, true);
+    ugcVisages.poserVisagesDefautNon(mediaIds);
+    const job = setContenuUgcCompatible(d.id, true, { mediaIds });
+    ugcVisages.poserBarriereInit(job);
     // UI immédiate — l'utilisateur peut déjà cliquer Oui/Non sur les slides.
-    patchUgcCache({ ugc: true, mediaVisages });
+    patchUgcCache({
+      ugc: true,
+      mediaVisages: ugcVisages.overlayVisages(mediaVisages),
+    });
     setUgcLogs([
       avecScan
         ? t("slideshows.ugcMarquePuisScan")
         : t("slideshows.ugcMarqueManuel"),
     ]);
     try {
-      await setContenuUgcCompatible(d.id, true, { mediaIds });
+      await job;
     } catch (e) {
+      ugcVisages.poserUgcOptimistic(d.id, snapshot.ugc);
+      ugcVisages.oublierOverrides(mediaIds);
       patchUgcCache({
         ugc: snapshot.ugc,
         mediaVisages: snapshot.mediaVisages,
@@ -831,10 +866,12 @@ function DetailSlideshow({
     if (!d || ugcScan || ugcBusy) return;
     const snapshot = d.ugc_compatible;
     setUgcBusy(true);
+    ugcVisages.poserUgcOptimistic(d.id, false);
     patchUgcCache({ ugc: false });
     try {
       await setContenuUgcCompatible(d.id, false);
     } catch (e) {
+      ugcVisages.poserUgcOptimistic(d.id, snapshot);
       patchUgcCache({ ugc: snapshot });
       setUgcLogs([
         `✗ ${e instanceof Error ? e.message : String(e)}`,
@@ -869,9 +906,14 @@ function DetailSlideshow({
       const ids = await marquerUgcParLabel(labelId, true);
       if (ids.includes(id)) {
         const mediaIds = mediaIdsDepuisSlides(d?.structure_slides);
+        ugcVisages.poserUgcOptimistic(id, true);
+        ugcVisages.poserVisagesDefautNon(mediaIds);
         const mediaVisages: Record<string, boolean | null> = {};
         for (const mid of mediaIds) mediaVisages[mid] = false;
-        patchUgcCache({ ugc: true, mediaVisages });
+        patchUgcCache({
+          ugc: true,
+          mediaVisages: ugcVisages.overlayVisages(mediaVisages),
+        });
       }
       queryClient.setQueriesData<ContenuListe[]>(
         { queryKey: ["slideshows"] },
@@ -938,12 +980,17 @@ function DetailSlideshow({
 
   React.useEffect(() => {
     if (!d) return;
-    const prefer =
-      d.langues.find((l) => l.langue === d.langue_source)?.langue ??
-      d.langues[0]?.langue ??
-      null;
-    setLangueSel(prefer);
-  }, [d?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    const langs = d.langues ?? [];
+    if (langs.length === 0) return;
+    setLangueSel((cur) => {
+      if (cur && langs.some((l) => l.langue === cur)) return cur;
+      return (
+        langs.find((l) => l.langue === d.langue_source)?.langue ??
+        langs[0]?.langue ??
+        null
+      );
+    });
+  }, [d, langues.length]);
 
   const langueActive = langues.find((l) => l.langue === langueSel) ?? langues[0];
 
@@ -963,7 +1010,7 @@ function DetailSlideshow({
           </Button>
         </div>
 
-        {detail.isPending && (
+        {detail.isPending && !d && (
           <p className="p-4 text-sm text-muted-foreground">{t("common.loading")}</p>
         )}
         {detail.isError && (
@@ -1156,6 +1203,7 @@ function DetailSlideshow({
                 </div>
               )}
             </section>
+            <VisuelsContenu contenu={d} />
             {reimportDetailLogs.length > 0 && (
               <div className="max-h-32 space-y-0.5 overflow-y-auto rounded border bg-muted/30 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
                 {reimportDetailLogs.map((l, i) => (
@@ -1181,7 +1229,9 @@ function DetailSlideshow({
               </div>
               <div className="rounded border p-2">
                 <p className="text-muted-foreground">{t("slideshows.passages")}</p>
-                <p className="text-lg font-semibold tabular-nums">{d.passages.length}</p>
+                <p className="text-lg font-semibold tabular-nums">
+                  {(d.passages ?? []).length}
+                </p>
               </div>
             </div>
 
@@ -1197,7 +1247,11 @@ function DetailSlideshow({
                 {t("slideshows.elo")}
               </h3>
               {langues.length === 0 ? (
-                <p className="text-xs text-muted-foreground">{t("slideshows.eloVide")}</p>
+                <p className="text-xs text-muted-foreground">
+                  {detail.isFetching
+                    ? t("common.loading")
+                    : t("slideshows.eloVide")}
+                </p>
               ) : (
                 <ul className="space-y-1.5">
                   {langues.map((l) => (
@@ -1225,14 +1279,16 @@ function DetailSlideshow({
               )}
             </section>
 
-            <VisuelsContenu contenu={d} />
-
             <section className="space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("slideshows.decks")}
               </h3>
               {langues.length === 0 ? (
-                <p className="text-xs text-muted-foreground">{t("slideshows.decksVide")}</p>
+                <p className="text-xs text-muted-foreground">
+                  {detail.isFetching
+                    ? t("common.loading")
+                    : t("slideshows.decksVide")}
+                </p>
               ) : (
                 <>
                   <div className="flex flex-wrap gap-1.5">
@@ -1283,6 +1339,8 @@ function DetailSlideshow({
                           key={s.position}
                           src={url}
                           alt=""
+                          loading="lazy"
+                          decoding="async"
                           className="aspect-[3/4] w-full rounded border object-cover"
                         />
                       ) : (
@@ -1302,11 +1360,15 @@ function DetailSlideshow({
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("slideshows.historique")}
               </h3>
-              {d.passages.length === 0 ? (
-                <p className="text-xs text-muted-foreground">{t("slideshows.pasDePassage")}</p>
+              {(d.passages ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {detail.isFetching
+                    ? t("common.loading")
+                    : t("slideshows.pasDePassage")}
+                </p>
               ) : (
                 <ul className="space-y-2">
-                  {d.passages.map((p) => (
+                  {(d.passages ?? []).map((p) => (
                     <li key={p.id} className="rounded border p-2 text-xs">
                       <div className="flex flex-wrap items-center justify-between gap-1">
                         <span className="font-medium">
@@ -1664,6 +1726,7 @@ export function AdminSlideshowsPage() {
                   key={c.id}
                   type="button"
                   onClick={() => {
+                    seedSlideshowDetail(queryClient, c.id);
                     setOuvert(c.id);
                     setSearchParams({ id: c.id }, { replace: true });
                   }}

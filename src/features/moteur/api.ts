@@ -23,6 +23,7 @@ import type {
   Passage,
 } from "./types";
 import { compteEnProcessus } from "./warmup";
+import { ugcVisages } from "./ugcVisages";
 
 export type { EloImportRapport };
 
@@ -4651,30 +4652,33 @@ export async function lireSlideshow(id: string): Promise<SlideshowDetail | null>
   if (error) throw error;
   if (!contenu) return null;
 
-  const [{ data: langues }, { data: passages }, { data: liens }, metas] = await Promise.all([
-    supabase
-      .from("contenu_langues")
-      .select("*")
-      .eq("contenu_id", id)
-      .order("score", { ascending: false }),
-    supabase
-      .from("passages")
-      .select("*, comptes(handle_tiktok, persona_nom, langue)")
-      .eq("contenu_id", id)
-      .order("date_publication_prevue", { ascending: false }),
-    supabase.from("contenu_labels").select("label_id, labels(*)").eq("contenu_id", id),
-    metasMediasPropres([contenu as Contenu]),
-  ]);
+  const refId = contenu.compte_reference_id as string | null;
+  const [{ data: langues }, { data: passages }, { data: liens }, metas, ref] =
+    await Promise.all([
+      supabase
+        .from("contenu_langues")
+        .select("*")
+        .eq("contenu_id", id)
+        .order("score", { ascending: false }),
+      supabase
+        .from("passages")
+        .select(
+          "id, contenu_id, compte_id, langue, date_publication_prevue, statut, publie_url, vues, likes, commentaires, partages, post_id, comptes(handle_tiktok, persona_nom, langue)",
+        )
+        .eq("contenu_id", id)
+        .order("date_publication_prevue", { ascending: false }),
+      supabase.from("contenu_labels").select("label_id, labels(*)").eq("contenu_id", id),
+      metasMediasPropres([contenu as Contenu]),
+      refId
+        ? supabase
+            .from("comptes_reference")
+            .select("handle_tiktok")
+            .eq("id", refId)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
 
-  let source: { handle_tiktok: string } | null = null;
-  if (contenu.compte_reference_id) {
-    const { data: ref } = await supabase
-      .from("comptes_reference")
-      .select("handle_tiktok")
-      .eq("id", contenu.compte_reference_id)
-      .maybeSingle();
-    source = ref;
-  }
+  const source: { handle_tiktok: string } | null = ref.data ?? null;
 
   const labels: Label[] = [];
   for (const l of liens ?? []) {
@@ -4695,7 +4699,7 @@ export async function lireSlideshow(id: string): Promise<SlideshowDetail | null>
       nb_passages: l.nb_passages,
     })),
     langues: (langues ?? []) as ContenuLangue[],
-    passages: (passages ?? []) as SlideshowDetail["passages"],
+    passages: (passages ?? []) as unknown as SlideshowDetail["passages"],
     source,
   };
 }
@@ -4717,7 +4721,10 @@ export function mediaIdsDepuisSlides(
 export async function initialiserVisagesUgcNon(
   mediaIds: string[],
 ): Promise<void> {
-  const ids = [...new Set(mediaIds.filter(Boolean))];
+  const ignorer = ugcVisages.idsClics();
+  const ids = [
+    ...new Set(mediaIds.filter((id) => Boolean(id) && !ignorer.has(id))),
+  ];
   if (ids.length === 0) return;
   // Chunk pour éviter les payloads `.in()` trop gros (bulk label).
   const CHUNK = 80;
