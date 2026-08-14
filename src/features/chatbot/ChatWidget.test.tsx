@@ -9,6 +9,13 @@ vi.mock("./api", () => ({
   poserQuestionChatbot: vi.fn(async () => "Poste depuis le calendrier."),
 }));
 
+vi.mock("@/features/auth/AuthContext", () => ({
+  useAuth: () => ({
+    profil: { langues: ["de"] },
+    role: "poster",
+  }),
+}));
+
 function renderWidget() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -34,10 +41,6 @@ describe("ChatWidget", () => {
     await waitFor(() => {
       expect(screen.getByText("Poste depuis le calendrier.")).toBeInTheDocument();
     });
-    expect(poserQuestionChatbot).toHaveBeenCalledWith(
-      "Comment je poste ?",
-      expect.stringMatching(/^(fr|en)$/),
-      [],
-    );
+    expect(poserQuestionChatbot).toHaveBeenCalledWith("Comment je poste ?", "de", []);
   });
 });

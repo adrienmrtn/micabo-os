@@ -4,10 +4,11 @@ import { useTranslation } from "react-i18next";
 import { MessageCircle, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/features/auth/AuthContext";
 import { cn } from "@/lib/utils";
 
 import { poserQuestionChatbot } from "./api";
-import { QUESTION_MAX, type TourChat } from "./prompt";
+import { QUESTION_MAX, langueDepuisProfil, salutationChat, type TourChat } from "./prompt";
 
 interface Message {
   id: string;
@@ -21,6 +22,8 @@ function nouveauId(): string {
 
 export function ChatWidget() {
   const { t, i18n } = useTranslation();
+  const { profil } = useAuth();
+  const langue = langueDepuisProfil(profil?.langues, i18n.resolvedLanguage ?? "fr");
   const [ouvert, setOuvert] = React.useState(false);
   const [texte, setTexte] = React.useState("");
   const [messages, setMessages] = React.useState<Message[]>([]);
@@ -38,8 +41,7 @@ export function ChatWidget() {
 
   const envoyer = useMutation({
     mutationFn: async ({ question, historique }: { question: string; historique: TourChat[] }) => {
-      const locale = i18n.resolvedLanguage === "en" ? "en" : "fr";
-      return poserQuestionChatbot(question, locale, historique);
+      return poserQuestionChatbot(question, langue, historique);
     },
     onSuccess: (reponse) => {
       setMessages((prev) => [...prev, { id: nouveauId(), role: "assistant", content: reponse }]);
@@ -88,7 +90,7 @@ export function ChatWidget() {
           </header>
 
           <div ref={listeRef} className="flex-1 space-y-2 overflow-y-auto px-3 py-3 scrollbar-slim">
-            <Bulle role="assistant">{t("chatbot.greeting")}</Bulle>
+            <Bulle role="assistant">{salutationChat(langue)}</Bulle>
             {messages.map((m) => (
               <Bulle key={m.id} role={m.role}>
                 {m.content}

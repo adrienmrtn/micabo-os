@@ -1,12 +1,13 @@
 import { supabase } from "@/lib/supabase/client";
 import type { Role } from "@/features/auth/AuthContext";
 
-import { QUESTION_MAX, type ChatLocale, type TourChat } from "./prompt";
+import { QUESTION_MAX, type AudienceSnippet, type ChatLocale, type TourChat } from "./prompt";
 
 export interface ChatbotContexte {
   id: string;
   titre: string;
   contenu: string;
+  audience: AudienceSnippet;
   created_at: string;
   updated_at: string;
 }
@@ -64,29 +65,38 @@ export async function poserQuestionChatbot(
 export async function listerChatbotContexte(): Promise<ChatbotContexte[]> {
   const { data, error } = await supabase
     .from("chatbot_contexte")
-    .select("id, titre, contenu, created_at, updated_at")
+    .select("id, titre, contenu, audience, created_at, updated_at")
     .order("updated_at", { ascending: false });
   if (error) throw error;
-  return (data ?? []) as ChatbotContexte[];
+  return (data ?? []).map((ligne) => ({
+    ...(ligne as ChatbotContexte),
+    audience: ((ligne as ChatbotContexte).audience ?? "all") as AudienceSnippet,
+  }));
 }
 
-export async function creerChatbotContexte(titre: string, contenu: string): Promise<void> {
+export async function creerChatbotContexte(
+  titre: string,
+  contenu: string,
+  audience: AudienceSnippet = "all",
+): Promise<void> {
   const { error } = await supabase.from("chatbot_contexte").insert({
     titre: titre.trim() || "Sans titre",
     contenu: contenu.trim(),
+    audience,
   });
   if (error) throw error;
 }
 
 export async function majChatbotContexte(
   id: string,
-  patch: { titre: string; contenu: string },
+  patch: { titre: string; contenu: string; audience: AudienceSnippet },
 ): Promise<void> {
   const { error } = await supabase
     .from("chatbot_contexte")
     .update({
       titre: patch.titre.trim() || "Sans titre",
       contenu: patch.contenu.trim(),
+      audience: patch.audience,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
