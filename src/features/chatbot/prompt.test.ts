@@ -41,6 +41,16 @@ describe("langueDepuisProfil", () => {
   });
 });
 
+describe("textes widget dans la langue du profil", () => {
+  it("salut et placeholder suivent le code langue", async () => {
+    const { placeholderChat, salutationChat } = await import("./prompt");
+    expect(salutationChat("de")).toMatch(/Stell deine Frage/);
+    expect(placeholderChat("de")).toBe("Deine Frage…");
+    expect(placeholderChat("es")).toBe("Tu pregunta…");
+    expect(placeholderChat("fr")).toBe("Ta question…");
+  });
+});
+
 describe("audiences", () => {
   it("sépare docs et snippets par rôle", () => {
     expect(audiencesPour("poster")).toEqual(["poster", "all"]);

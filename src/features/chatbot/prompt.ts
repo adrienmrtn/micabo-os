@@ -56,6 +56,40 @@ export const SALUTATION_CHAT: Record<string, string> = {
   tr: "Sorunu sor. Dokümanlara ve Sophia'da senin kapsamındaki duruma dayanıyorum.",
 };
 
+export const PLACEHOLDER_CHAT: Record<string, string> = {
+  fr: "Ta question…",
+  en: "Your question…",
+  de: "Deine Frage…",
+  it: "La tua domanda…",
+  es: "Tu pregunta…",
+  pt: "A tua pergunta…",
+  cs: "Tvoje otázka…",
+  nl: "Jouw vraag…",
+  el: "Η ερώτησή σου…",
+  hu: "A kérdésed…",
+  pl: "Twoje pytanie…",
+  ro: "Întrebarea ta…",
+  sv: "Din fråga…",
+  tr: "Sorun…",
+};
+
+export const ATTENTE_CHAT: Record<string, string> = {
+  fr: "Je cherche…",
+  en: "Looking…",
+  de: "Ich suche…",
+  it: "Cerco…",
+  es: "Busco…",
+  pt: "A procurar…",
+  cs: "Hledám…",
+  nl: "Ik zoek…",
+  el: "Ψάχνω…",
+  hu: "Keresek…",
+  pl: "Szukam…",
+  ro: "Caut…",
+  sv: "Söker…",
+  tr: "Bakıyorum…",
+};
+
 export interface DocumentContexte {
   titre: string;
   titre_en: string | null;
@@ -116,6 +150,14 @@ export function nomLangueChat(code: string): string {
 
 export function salutationChat(code: string): string {
   return SALUTATION_CHAT[code] ?? SALUTATION_CHAT.fr;
+}
+
+export function placeholderChat(code: string): string {
+  return PLACEHOLDER_CHAT[code] ?? PLACEHOLDER_CHAT.fr;
+}
+
+export function attenteChat(code: string): string {
+  return ATTENTE_CHAT[code] ?? ATTENTE_CHAT.fr;
 }
 
 export function audiencesDocuments(role: ChatRole): Array<DocumentContexte["audience"]> {

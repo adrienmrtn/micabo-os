@@ -32,8 +32,9 @@ describe("ChatWidget", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /aide|help/i }));
     expect(screen.getByLabelText(/assistant/i)).toBeInTheDocument();
+    expect(screen.getByText(/Stell deine Frage/)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText(/question/i), {
+    fireEvent.change(screen.getByPlaceholderText("Deine Frage…"), {
       target: { value: "Comment je poste ?" },
     });
     fireEvent.click(screen.getByRole("button", { name: /envoyer|send/i }));

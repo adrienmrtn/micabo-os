@@ -8,7 +8,14 @@ import { useAuth } from "@/features/auth/AuthContext";
 import { cn } from "@/lib/utils";
 
 import { poserQuestionChatbot } from "./api";
-import { QUESTION_MAX, langueDepuisProfil, salutationChat, type TourChat } from "./prompt";
+import {
+  QUESTION_MAX,
+  attenteChat,
+  langueDepuisProfil,
+  placeholderChat,
+  salutationChat,
+  type TourChat,
+} from "./prompt";
 
 interface Message {
   id: string;
@@ -98,7 +105,7 @@ export function ChatWidget() {
             ))}
             {envoyer.isPending && (
               <Bulle role="assistant">
-                <span className="text-muted-foreground">{t("chatbot.attente")}</span>
+                <span className="text-muted-foreground">{attenteChat(langue)}</span>
               </Bulle>
             )}
             {envoyer.isError && !envoyer.isPending && (
@@ -117,7 +124,7 @@ export function ChatWidget() {
                 onKeyDown={onKeyDown}
                 rows={2}
                 maxLength={QUESTION_MAX}
-                placeholder={t("chatbot.placeholder")}
+                placeholder={placeholderChat(langue)}
                 className="min-h-[2.5rem] flex-1 resize-none rounded-md border border-input bg-background px-2.5 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
               <Button
