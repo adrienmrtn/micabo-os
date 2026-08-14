@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/features/auth/AuthContext";
 import { signOut } from "@/features/auth/api";
 import { SUPPORTED_LANGUAGES } from "@/locales";
+import { ChatWidget } from "@/features/chatbot/ChatWidget";
 import { MobileDrawer, Sidebar, type NavGroup } from "./Sidebar";
 
 interface ProfilAffiche {
@@ -116,6 +117,7 @@ export function AppShell({
           <div className="mx-auto w-full max-w-6xl space-y-6">{children}</div>
         </main>
       </div>
+      <ChatWidget />
     </div>
   );
 }

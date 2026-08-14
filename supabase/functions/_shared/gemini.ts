@@ -135,6 +135,20 @@ async function callWithFallback(models: string[], parts: Part[]): Promise<Part[]
   throw new Error(failures.join(" | "));
 }
 
+/** Un tour de modèles, sans les 4 retries lents : pour le chatbot (réponse
+ *  interactive). Temperature basse : on colle au contexte admin, on n'invente pas. */
+export async function generateTextFast(prompt: string): Promise<string> {
+  const failures: string[] = [];
+  for (const model of TEXT_MODELS) {
+    try {
+      return textOf(await call(model, [{ text: prompt }], { temperature: 0.2 }));
+    } catch (error) {
+      failures.push(`${model}: ${messageErreur(error)}`);
+    }
+  }
+  throw new Error(failures.join(" | "));
+}
+
 export async function fetchImageAsInline(url: string): Promise<Part> {
   // Passe par le helper Apify : les visuels issus du key-value store exigent
   // le token, ceux déjà rapatriés dans notre Storage sont servis tels quels.

@@ -1,0 +1,43 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { describe, expect, it, vi } from "vitest";
+
+import "@/locales";
+import { ChatWidget } from "./ChatWidget";
+
+vi.mock("./api", () => ({
+  poserQuestionChatbot: vi.fn(async () => "Poste depuis le calendrier."),
+}));
+
+function renderWidget() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <ChatWidget />
+    </QueryClientProvider>,
+  );
+}
+
+describe("ChatWidget", () => {
+  it("ouvre le panneau et envoie une question", async () => {
+    const { poserQuestionChatbot } = await import("./api");
+    renderWidget();
+
+    fireEvent.click(screen.getByRole("button", { name: /aide|help/i }));
+    expect(screen.getByLabelText(/assistant/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/question/i), {
+      target: { value: "Comment je poste ?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /envoyer|send/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Poste depuis le calendrier.")).toBeInTheDocument();
+    });
+    expect(poserQuestionChatbot).toHaveBeenCalledWith(
+      "Comment je poste ?",
+      expect.stringMatching(/^(fr|en)$/),
+      [],
+    );
+  });
+});
