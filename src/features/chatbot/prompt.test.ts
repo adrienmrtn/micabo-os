@@ -4,7 +4,12 @@ import {
   CONTEXTE_MAX,
   assemblerContexte,
   audiencesPour,
+  audiencesSnippets,
+  formaterSnapshotAdmin,
+  formaterSnapshotHm,
+  formaterSnapshotPoster,
   htmlVersTexte,
+  langueDepuisProfil,
 } from "./prompt";
 
 describe("htmlVersTexte", () => {
@@ -21,11 +26,28 @@ describe("htmlVersTexte", () => {
   });
 });
 
-describe("audiencesPour", () => {
-  it("filtre les docs selon le rôle", () => {
+describe("langueDepuisProfil", () => {
+  it("prend la première langue cible du profil", () => {
+    expect(langueDepuisProfil(["de", "en"], "fr")).toBe("de");
+  });
+
+  it("retombe sur le repli UI si le profil est vide", () => {
+    expect(langueDepuisProfil([], "es")).toBe("es");
+    expect(langueDepuisProfil(null, "fr")).toBe("fr");
+  });
+
+  it("ignore un code inconnu", () => {
+    expect(langueDepuisProfil(["xx"], "it")).toBe("it");
+  });
+});
+
+describe("audiences", () => {
+  it("sépare docs et snippets par rôle", () => {
     expect(audiencesPour("poster")).toEqual(["poster", "all"]);
     expect(audiencesPour("hiring_manager")).toEqual(["manager", "all"]);
-    expect(audiencesPour("admin")).toEqual(["manager", "poster", "all"]);
+    expect(audiencesSnippets("admin")).toEqual(["admin", "all"]);
+    expect(audiencesSnippets("poster")).toEqual(["poster", "all"]);
+    expect(audiencesSnippets("hiring_manager")).toEqual(["hiring_manager", "all"]);
   });
 });
 
@@ -50,32 +72,82 @@ describe("assemblerContexte", () => {
   it("n'injecte pas le guide manager à un créateur", () => {
     const texte = assemblerContexte([], docs, "poster", "fr");
     expect(texte).toContain("Guide créateur");
-    expect(texte).toContain("Poste le carrousel");
     expect(texte).not.toContain("Guide manager");
   });
 
-  it("prend la version anglaise si demandée", () => {
-    const texte = assemblerContexte([], docs, "poster", "en");
+  it("n'injecte pas un snippet admin à un créateur", () => {
+    const texte = assemblerContexte(
+      [
+        { titre: "Chiffres", contenu: "42 posts hier", audience: "admin" },
+        { titre: "FAQ créateur", contenu: "Ouvre le calendrier", audience: "poster" },
+      ],
+      docs,
+      "poster",
+      "fr",
+    );
+    expect(texte).toContain("FAQ créateur");
+    expect(texte).not.toContain("42 posts");
+  });
+
+  it("prend la version anglaise pour une langue non-FR", () => {
+    const texte = assemblerContexte([], docs, "poster", "de");
     expect(texte).toContain("Creator guide");
     expect(texte).toContain("Post the carousel");
   });
 
-  it("ajoute les snippets admin en tête", () => {
-    const texte = assemblerContexte(
-      [{ titre: "Mot de passe", contenu: "Le mot de passe commun est dicté à l'oral." }],
-      docs,
-      "hiring_manager",
-      "fr",
-    );
-    expect(texte.startsWith("### Mot de passe")).toBe(true);
-    expect(texte).toContain("Guide manager");
-    expect(texte).not.toContain("Guide créateur");
-  });
-
   it("tronque un contexte trop long", () => {
     const gros = "x".repeat(CONTEXTE_MAX + 80);
-    const texte = assemblerContexte([{ titre: "Gros", contenu: gros }], [], "admin", "fr");
+    const texte = assemblerContexte([{ titre: "Gros", contenu: gros, audience: "all" }], [], "admin", "fr");
     expect(texte.length).toBeLessThan(gros.length);
     expect(texte.endsWith("[…contexte tronqué]")).toBe(true);
+  });
+});
+
+describe("snapshots métier", () => {
+  it("formate un snapshot admin avec les totaux", () => {
+    const texte = formaterSnapshotAdmin({
+      aujourdHui: "2026-08-14",
+      hier: "2026-08-13",
+      postsHier: { date: "2026-08-13", prevus: 40, publies: 31 },
+      postsAuj: { date: "2026-08-14", prevus: 38, publies: 12 },
+      postersActifs: 70,
+      postersTotal: 80,
+      hiringManagers: 5,
+      comptesActifs: 72,
+      parLangueHier: { fr: 10, de: 8 },
+    });
+    expect(texte).toContain("40 prévus, 31 publiés");
+    expect(texte).toContain("70 actifs / 80");
+    expect(texte).toContain("fr 10");
+  });
+
+  it("ne liste que les créateurs du HM", () => {
+    const texte = formaterSnapshotHm({
+      aujourdHui: "2026-08-14",
+      hier: "2026-08-13",
+      createurs: [{ nom: "Marie", langue: "de", handle: "marie", actifs: true }],
+      postsHier: { date: "2026-08-13", prevus: 2, publies: 2 },
+      postsAuj: { date: "2026-08-14", prevus: 2, publies: 0 },
+    });
+    expect(texte).toContain("Marie");
+    expect(texte).toContain("autres équipes");
+  });
+
+  it("borne le créateur à son calendrier", () => {
+    const texte = formaterSnapshotPoster({
+      aujourdHui: "2026-08-14",
+      demain: "2026-08-15",
+      nom: "Léa",
+      langue: "es",
+      handle: "lea",
+      persona: "Luna",
+      postsParJour: 1,
+      warmup: "termine",
+      postsAuj: { date: "2026-08-14", prevus: 1, publies: 0 },
+      postsDemain: { date: "2026-08-15", prevus: 1, publies: 0 },
+    });
+    expect(texte).toContain("Léa");
+    expect(texte).toContain("es");
+    expect(texte).toContain("TON calendrier");
   });
 });

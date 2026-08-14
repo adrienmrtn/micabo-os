@@ -24,7 +24,15 @@ import {
   type ChatbotContexte,
   type ChatbotQuestion,
 } from "@/features/chatbot/api";
+import type { AudienceSnippet } from "@/features/chatbot/prompt";
 import type { Role } from "@/features/auth/AuthContext";
+
+function labelAudience(aud: AudienceSnippet, t: (k: string) => string): string {
+  if (aud === "poster") return t("chatbot.rolePoster");
+  if (aud === "hiring_manager") return t("chatbot.roleHm");
+  if (aud === "admin") return t("chatbot.roleAdmin");
+  return t("chatbot.audienceTous");
+}
 
 function nomAuteur(q: ChatbotQuestion): string {
   const p = q.profiles;
@@ -37,18 +45,19 @@ function EditeurSnippet({
   onAnnuler,
   onSauve,
 }: {
-  initial?: { id?: string; titre: string; contenu: string };
+  initial?: { id?: string; titre: string; contenu: string; audience?: AudienceSnippet };
   onAnnuler?: () => void;
   onSauve: () => void;
 }) {
   const { t } = useTranslation();
   const [titre, setTitre] = React.useState(initial?.titre ?? "");
   const [contenu, setContenu] = React.useState(initial?.contenu ?? "");
+  const [audience, setAudience] = React.useState<AudienceSnippet>(initial?.audience ?? "all");
 
   const sauver = useMutation({
     mutationFn: async () => {
-      if (initial?.id) await majChatbotContexte(initial.id, { titre, contenu });
-      else await creerChatbotContexte(titre, contenu);
+      if (initial?.id) await majChatbotContexte(initial.id, { titre, contenu, audience });
+      else await creerChatbotContexte(titre, contenu, audience);
     },
     onSuccess: onSauve,
   });
@@ -60,6 +69,17 @@ function EditeurSnippet({
         onChange={(e) => setTitre(e.target.value)}
         placeholder={t("chatbot.titrePlaceholder")}
       />
+      <select
+        aria-label={t("chatbot.audience")}
+        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+        value={audience}
+        onChange={(e) => setAudience(e.target.value as AudienceSnippet)}
+      >
+        <option value="all">{t("chatbot.audienceTous")}</option>
+        <option value="admin">{t("chatbot.roleAdmin")}</option>
+        <option value="hiring_manager">{t("chatbot.roleHm")}</option>
+        <option value="poster">{t("chatbot.rolePoster")}</option>
+      </select>
       <Textarea
         value={contenu}
         onChange={(e) => setContenu(e.target.value)}
@@ -116,7 +136,10 @@ function LigneContexte({
   return (
     <div className="space-y-2 rounded-md border border-border/80 p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="text-sm font-medium">{snippet.titre}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-medium">{snippet.titre}</p>
+          <Badge variant="secondary">{labelAudience(snippet.audience ?? "all", t)}</Badge>
+        </div>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => setEdit(true)}>
             {t("common.edit")}
@@ -148,7 +171,11 @@ export function AdminChatbotPage() {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const [nouveau, setNouveau] = React.useState(false);
-  const [brouillon, setBrouillon] = React.useState<{ titre: string; contenu: string } | null>(null);
+  const [brouillon, setBrouillon] = React.useState<{
+    titre: string;
+    contenu: string;
+    audience: AudienceSnippet;
+  } | null>(null);
   const [filtre, setFiltre] = React.useState("");
   const formRef = React.useRef<HTMLDivElement>(null);
 
@@ -162,9 +189,12 @@ export function AdminChatbotPage() {
   };
 
   function ajouterDepuisQuestion(q: ChatbotQuestion) {
+    const audience: AudienceSnippet =
+      q.role === "poster" || q.role === "hiring_manager" || q.role === "admin" ? q.role : "all";
     setBrouillon({
       titre: q.question.slice(0, 80),
       contenu: `${t("chatbot.questionLabel")} : ${q.question}\n\n${t("chatbot.reponseLabel")} :\n`,
+      audience,
     });
     setNouveau(true);
     requestAnimationFrame(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
