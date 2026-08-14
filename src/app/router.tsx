@@ -11,6 +11,7 @@ import { HiringLayout } from "@/components/layout/HiringLayout";
 import { HiringCalendrierPage } from "@/pages/hiring/HiringCalendrierPage";
 import { HiringPosterPage } from "@/pages/hiring/HiringPosterPage";
 import { AdminDocumentsPage } from "@/pages/admin/AdminDocumentsPage";
+import { AdminChatbotPage } from "@/pages/admin/AdminChatbotPage";
 import { DocumentView } from "@/features/documents/DocumentView";
 import { AdminPilotagePage } from "@/pages/admin/AdminPilotagePage";
 import { AdminSourcesPage } from "@/pages/admin/AdminSourcesPage";
@@ -73,6 +74,7 @@ export function AppRouter() {
             <Route path="/admin/reglages" element={<AdminReglagesPage />} />
             <Route path="/admin/prompts" element={<AdminPromptsPage />} />
             <Route path="/admin/documents" element={<AdminDocumentsPage />} />
+            <Route path="/admin/assistant" element={<AdminChatbotPage />} />
             <Route path="/admin/ugc/personas" element={<AdminUgcPersonasPage />} />
             <Route path="/admin/ugc/slideshows" element={<AdminUgcSlideshowsPage />} />
             <Route path="/admin/ugc/videos" element={<AdminUgcVideosPage />} />
