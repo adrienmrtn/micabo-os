@@ -329,7 +329,7 @@ export const SCHEMA_ASSIGNATION: PipelineAction = {
       api: "assignation-ugc-video (kick drain streamé)",
       env: "FAL_KEY · GEMINI_API_KEY",
       detail:
-        "Comptes ugc_ai_video : reaction → frame10 clean → Nano Banana → Kling (durée = reaction, orientation=video) → concat utilisation EN PLUS → caption",
+        "Comptes ugc_ai_video : reaction → frame10 clean → Nano Banana → Kling Pro (durée = reaction, orientation=video) → concat utilisation EN PLUS → caption",
       onFail: "Post statut=echec ; les autres comptes continuent",
     },
   ],

@@ -3,7 +3,7 @@
  *   0) Choisir reaction (même label, pas de re-use sauf fallback) + utilisation
  *   1) Nettoyage frame10 (process classique Fal/Replicate text-removal + C2PA)
  *   2) Nano Banana edit : frame10 nettoyée + images persona → photo ref
- *   3) Kling motion-control (= clip transformé) :
+ *   3) Kling Pro motion-control (= clip transformé) :
  *        durée sortie = durée reaction (character_orientation=video, ≤30s)
  *   4) Concat : utilisation EN PLUS (durée totale = kling + utilisation)
  *   5) Caption traduite (langue créateur) — pas de « Sophia »
@@ -15,7 +15,7 @@ import { retirerContentCredentialsBytes } from "./c2pa.ts";
 import { editerNanoBananaPro } from "./fal_nano_banana.ts";
 import { klingMotionControl } from "./fal_kling_motion.ts";
 import { mergerVideosFal } from "./fal_merge_videos.ts";
-import { sonderDureeSec } from "./fal_normaliser_video.ts";
+import { formaterVideoMeta, sonderVideoMeta } from "./fal_normaliser_video.ts";
 import { falHebergerOctets } from "./fal_queue.ts";
 import { cleanImage, TEXT_MODELS } from "./gemini.ts";
 import { mapPool } from "./parallel.ts";
@@ -179,6 +179,44 @@ async function telechargerStorage(
   return { bytes, mime };
 }
 
+type ReactionChoisie = {
+  id: string;
+  label_id: string;
+  video_source_url: string;
+  video_source_path: string | null;
+  first_frame_reference_url: string;
+  video_text: string | null;
+  titre: string;
+};
+
+async function chargerReactionParId(
+  supabase: Supabase,
+  reactionId: string,
+  log: AssignationUgcVideoLog,
+): Promise<ReactionChoisie | null> {
+  const { data, error } = await supabase
+    .from("ugc_reactions")
+    .select(
+      "id, label_id, video_source_url, video_source_path, first_frame_reference_url, video_text, titre, statut",
+    )
+    .eq("id", reactionId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    log(`Reaction ${reactionId.slice(0, 8)} introuvable`);
+    return null;
+  }
+  if (data.statut !== "pret") {
+    log(`Reaction ${reactionId.slice(0, 8)} statut=${data.statut} — il faut pret`);
+    return null;
+  }
+  if (!data.video_source_url || !data.first_frame_reference_url || !data.label_id) {
+    log(`Reaction ${reactionId.slice(0, 8)} incomplète (vidéo / frame / label)`);
+    return null;
+  }
+  return data as ReactionChoisie;
+}
+
 async function choisirReaction(
   supabase: Supabase,
   compteId: string,
@@ -244,7 +282,18 @@ async function choisirUtilisation(
   supabase: Supabase,
   labelId: string,
   log: AssignationUgcVideoLog,
+  opts: { nImporteQuelLabel?: boolean } = {},
 ): Promise<{ id: string; video_url: string; titre: string } | null> {
+  const pick = (rows: Array<{ id: string; video_url: string | null; titre: string | null }>) => {
+    const pool = rows.filter((u) => u.video_url) as Array<{
+      id: string;
+      video_url: string;
+      titre: string;
+    }>;
+    if (pool.length === 0) return null;
+    return pool[Math.floor(Math.random() * pool.length)] ?? null;
+  };
+
   const { data, error } = await supabase
     .from("ugc_utilisations")
     .select("id, video_url, titre, label_id")
@@ -252,17 +301,29 @@ async function choisirUtilisation(
     .not("video_url", "is", null)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  const pool = (data ?? []).filter((u) => u.video_url) as Array<{
-    id: string;
-    video_url: string;
-    titre: string;
-  }>;
-  if (pool.length === 0) {
-    log(`Aucune utilisation pour label=${labelId.slice(0, 8)}`);
+  const match = pick(data ?? []);
+  if (match) {
+    log(`${(data ?? []).length} utilisation(s) pour ce label`);
+    return match;
+  }
+  log(`Aucune utilisation pour label=${labelId.slice(0, 8)}`);
+  if (!opts.nImporteQuelLabel) return null;
+
+  const { data: toutes, error: errToutes } = await supabase
+    .from("ugc_utilisations")
+    .select("id, video_url, titre, label_id")
+    .not("video_url", "is", null)
+    .order("created_at", { ascending: false });
+  if (errToutes) throw errToutes;
+  const fallback = pick(toutes ?? []);
+  if (!fallback) {
+    log("Aucune utilisation en base (tous labels)");
     return null;
   }
-  log(`${pool.length} utilisation(s) pour ce label`);
-  return pool[Math.floor(Math.random() * pool.length)] ?? null;
+  log(
+    `Fallback utilisation (test libre, autre label) · id=${fallback.id.slice(0, 8)} · « ${fallback.titre || "—"} »`,
+  );
+  return fallback;
 }
 
 async function chargerPersonaUrls(
@@ -308,6 +369,8 @@ export async function assignerUgcVideoSlot(
     test?: boolean;
     /** Stop après Nano Banana (étapes 0–2). Défaut = pipeline complet. */
     jusquA?: AssignationUgcVideoJusqua;
+    /** Force cette reaction (test libre) au lieu du matching labels. */
+    reactionId?: string;
     onLog?: AssignationUgcVideoLog;
   } = {},
 ): Promise<{ postId: string } | { erreur: string }> {
@@ -329,21 +392,33 @@ export async function assignerUgcVideoSlot(
   );
 
   if (!compte.ugc_persona_id) {
-    return { erreur: "Compte UGC AI VIDEO sans persona" };
+    return {
+      erreur:
+        "Compte sans persona UGC — impossible de face-swap. Assigne un persona (UGC slideshow ou UGC VIDEO).",
+    };
   }
 
   const labelIds = await labelsDuCompte(supabase, compte.id);
   log(`Labels compte (${labelIds.length}) : ${labelIds.map((x) => x.slice(0, 8)).join(", ") || "—"}`);
 
-  const reaction = await choisirReaction(supabase, compte.id, labelIds, log);
+  const reactionForcee = String(opts.reactionId ?? "").trim();
+  const reaction = reactionForcee
+    ? await chargerReactionParId(supabase, reactionForcee, log)
+    : await choisirReaction(supabase, compte.id, labelIds, log);
   if (!reaction) {
-    return { erreur: "Aucune reaction disponible (label ∩ pret)" };
+    return {
+      erreur: reactionForcee
+        ? "Reaction introuvable ou pas finalisée (pret + vidéo + frame)"
+        : "Aucune reaction disponible (label ∩ pret)",
+    };
   }
   log(
-    `Reaction choisie · id=${reaction.id.slice(0, 8)} · label=${reaction.label_id.slice(0, 8)} · « ${reaction.titre || "—"} »`,
+    `Reaction ${reactionForcee ? "forcée" : "choisie"} · id=${reaction.id.slice(0, 8)} · label=${reaction.label_id.slice(0, 8)} · « ${reaction.titre || "—"} »`,
   );
 
-  const utilisation = await choisirUtilisation(supabase, reaction.label_id, log);
+  const utilisation = await choisirUtilisation(supabase, reaction.label_id, log, {
+    nImporteQuelLabel: Boolean(reactionForcee),
+  });
   if (!utilisation) {
     return { erreur: "Aucune utilisation pour le label de la reaction" };
   }
@@ -492,13 +567,14 @@ export async function assignerUgcVideoSlot(
         `  Reaction rehost Fal · ${reactionBytes.bytes.length} octets → ${reactionVideoUrl.slice(-48)}`,
       );
     }
-    const dureeReactionSec = await sonderDureeSec(reactionVideoUrl, (p) => {
+    const metaReaction = await sonderVideoMeta(reactionVideoUrl, (p) => {
       if (p.detail) log(`  ${p.detail}`);
     });
+    const dureeReactionSec = metaReaction.durationSec;
     log(
-      `Étape 3/${etapeTotal} Kling (= clip transformé) · durée reaction=${
-        dureeReactionSec != null ? `${dureeReactionSec.toFixed(2)}s` : "?"
-      } · orientation=video (utilisation NON comptée ici)`,
+      `Étape 3/${etapeTotal} Kling Pro (= clip transformé) · reaction=${formaterVideoMeta(
+        metaReaction,
+      )} · orientation=video (utilisation NON comptée ici)`,
     );
     if (dureeReactionSec != null && dureeReactionSec < 3) {
       throw new Error(
@@ -518,31 +594,27 @@ export async function assignerUgcVideoSlot(
       /\.webm(\?|$)/i.test(reaction.video_source_url) ||
       (reactionBytes?.mime.includes("webm") ?? false);
 
-    const lancerKling = (qualite: "standard" | "pro") =>
-      klingMotionControl({
-        imageUrl,
-        videoUrl: reactionVideoUrl,
-        prompt: klingPrompt,
-        // "video" : durée sortie = durée référence (jusqu'à 30s).
-        characterOrientation: "video",
-        keepOriginalSound: true,
-        // WebM → re-encode ; MP4 déjà propre → ne PAS re-scaler
-        // (scale-video peut faire tronquer l'extraction de motion à ~3s).
-        normaliserVideo: sourceWebm,
-        qualite,
-        onProgress: (p) => {
-          if (p.phase === "poll") {
-            log(`  Kling Fal ${p.statut ?? "…"} (#${p.polls ?? 0})`);
-          } else if (p.detail) {
-            log(`  Kling ${p.detail}`);
-          }
-        },
-      });
-
-    let kling = await lancerKling("standard");
-    let klingUrlTmp = kling.url;
-    // Upload temporaire pour sonder la durée (URL Fal du résultat suffit).
-    let dureeKlingSec = await sonderDureeSec(klingUrlTmp);
+    const kling = await klingMotionControl({
+      imageUrl,
+      videoUrl: reactionVideoUrl,
+      prompt: klingPrompt,
+      characterOrientation: "video",
+      keepOriginalSound: true,
+      // WebM → re-encode ; MP4 déjà propre → ne PAS re-scaler
+      // (scale-video peut faire tronquer l'extraction de motion à ~3s).
+      normaliserVideo: sourceWebm,
+      qualite: "pro",
+      onProgress: (p) => {
+        if (p.phase === "poll") {
+          log(`  Kling Pro Fal ${p.statut ?? "…"} (#${p.polls ?? 0})`);
+        } else if (p.detail) {
+          log(`  Kling Pro ${p.detail}`);
+        }
+      },
+    });
+    const klingUrlTmp = kling.url;
+    const metaKling = await sonderVideoMeta(klingUrlTmp);
+    const dureeKlingSec = metaKling.durationSec;
     const ratioOk = (dK: number | null, dR: number | null) =>
       dK != null && dR != null && dK >= dR * 0.85;
 
@@ -551,21 +623,8 @@ export async function assignerUgcVideoSlot(
       dureeKlingSec != null &&
       !ratioOk(dureeKlingSec, dureeReactionSec)
     ) {
-      log(
-        `  ⚠ durée Kling ${dureeKlingSec.toFixed(2)}s ≪ reaction ${dureeReactionSec.toFixed(2)}s — retry Pro`,
-      );
-      kling = await lancerKling("pro");
-      klingUrlTmp = kling.url;
-      dureeKlingSec = await sonderDureeSec(klingUrlTmp);
-    }
-
-    if (
-      dureeReactionSec != null &&
-      dureeKlingSec != null &&
-      !ratioOk(dureeKlingSec, dureeReactionSec)
-    ) {
       throw new Error(
-        `Kling a tronqué la reaction : ${dureeKlingSec.toFixed(2)}s au lieu de ${dureeReactionSec.toFixed(2)}s (même après Pro). Relancer ou raccourcir/simplifier la reaction.`,
+        `Kling Pro a tronqué la reaction : ${dureeKlingSec.toFixed(2)}s au lieu de ${dureeReactionSec.toFixed(2)}s. Relancer ou raccourcir/simplifier la reaction.`,
       );
     }
 
@@ -585,9 +644,7 @@ export async function assignerUgcVideoSlot(
       })
       .eq("id", postId);
     log(
-      `  Kling OK · durée=${
-        dureeKlingSec != null ? `${dureeKlingSec.toFixed(2)}s` : "?"
-      } (= reaction) · ${kling.bytes.length} octets → ${klingPath}`,
+      `  Kling Pro OK · ${formaterVideoMeta(metaKling)} (= reaction) · ${kling.bytes.length} octets → ${klingPath}`,
     );
 
     // ── 4) Concat utilisation (EN PLUS, durée non rognée) ───────────
@@ -614,13 +671,12 @@ export async function assignerUgcVideoSlot(
         `  Utilisation rehost skip (${e instanceof Error ? e.message : String(e)}) — URL DB`,
       );
     }
-    const dureeUtilSec = await sonderDureeSec(utilisationUrl);
+    const metaUtil = await sonderVideoMeta(utilisationUrl);
+    const dureeUtilSec = metaUtil.durationSec;
     log(
-      `  Durées · kling=${
-        dureeKlingSec != null ? `${dureeKlingSec.toFixed(2)}s` : "?"
-      } + util=${
-        dureeUtilSec != null ? `${dureeUtilSec.toFixed(2)}s` : "?"
-      } → totale attendue=${
+      `  Concat 1080×1920 @ 30 fps · kling=${formaterVideoMeta(metaKling)} + util=${formaterVideoMeta(
+        metaUtil,
+      )} → totale attendue=${
         dureeKlingSec != null && dureeUtilSec != null
           ? `${(dureeKlingSec + dureeUtilSec).toFixed(2)}s`
           : "?"
@@ -651,11 +707,9 @@ export async function assignerUgcVideoSlot(
         updated_at: new Date().toISOString(),
       })
       .eq("id", postId);
-    const dureeFinaleSec = await sonderDureeSec(finaleUrl);
+    const metaFinale = await sonderVideoMeta(finaleUrl);
     log(
-      `  Concat OK · durée finale=${
-        dureeFinaleSec != null ? `${dureeFinaleSec.toFixed(2)}s` : "?"
-      } · ${merged.bytes.length} octets → ${finalePath}`,
+      `  Concat OK · ${formaterVideoMeta(metaFinale)} · ${merged.bytes.length} octets → ${finalePath}`,
     );
 
     // ── 5) Caption ──────────────────────────────────────────────────
@@ -731,6 +785,7 @@ export async function assignerCompteUgcVideo(
     forcer?: boolean;
     ignorerWarmup?: boolean;
     jusquA?: AssignationUgcVideoJusqua;
+    reactionId?: string;
     onLog?: AssignationUgcVideoLog;
   } = {},
 ): Promise<AssignationUgcVideoResultat> {
@@ -748,8 +803,9 @@ export async function assignerCompteUgcVideo(
   const quotaBrut = Number(compte.posts_par_jour ?? 1);
   const quota = Math.min(3, Math.max(1, Number.isFinite(quotaBrut) ? quotaBrut : 1));
   const deja = await slotsDuJour(supabase, compte.id, jour, estTest);
-  const manque = opts.forcer ? 1 : Math.max(0, quota - deja);
-  log(`Quota=${quota} · déjà=${deja} · à créer=${manque}`);
+  const forcerUn = Boolean(opts.forcer) || Boolean(opts.reactionId);
+  const manque = forcerUn ? 1 : Math.max(0, quota - deja);
+  log(`Quota=${quota} · déjà=${deja} · à créer=${manque}${forcerUn ? " · forcé" : ""}`);
   if (manque === 0) {
     return { compteId: compte.id, crees: 0, raison: "quota atteint" };
   }
@@ -761,6 +817,7 @@ export async function assignerCompteUgcVideo(
     const r = await assignerUgcVideoSlot(supabase, compte, jour, {
       test: estTest,
       jusquA: opts.jusquA,
+      reactionId: opts.reactionId,
       onLog: log,
     });
     if ("postId" in r) postIds.push(r.postId);
@@ -779,7 +836,8 @@ export async function assignerCompteUgcVideo(
   };
 }
 
-/** Tous les comptes ugc_ai_video actifs (ou un seul). */
+/** Tous les comptes ugc_ai_video actifs (ou un seul).
+ *  Test libre (`reactionId`) : n'importe quel compte, actif ou non. */
 export async function assignerTousComptesUgcVideo(
   supabase: Supabase,
   jour: string,
@@ -789,22 +847,25 @@ export async function assignerTousComptesUgcVideo(
     forcer?: boolean;
     ignorerWarmup?: boolean;
     jusquA?: AssignationUgcVideoJusqua;
+    reactionId?: string;
     onLog?: AssignationUgcVideoLog;
   } = {},
 ): Promise<AssignationUgcVideoResultat[]> {
+  const libre = Boolean(String(opts.reactionId ?? "").trim());
   let q = supabase
     .from("comptes")
     .select(
       "id, langue, ugc_persona_id, persona_nom, handle_tiktok, posts_par_jour, warmup_ends_at, ugc_ai_video, is_active",
-    )
-    .eq("is_active", true)
-    .eq("ugc_ai_video", true);
+    );
+  if (!libre) {
+    q = q.eq("is_active", true).eq("ugc_ai_video", true);
+  }
   if (compteId) q = q.eq("id", compteId);
   const { data, error } = await q;
   if (error) throw error;
   const comptes = data ?? [];
   opts.onLog?.(
-    `${comptes.length} compte(s) UGC AI VIDEO à traiter · jour=${jour}`,
+    `${comptes.length} compte(s) ${libre ? "libre(s)" : "UGC AI VIDEO"} à traiter · jour=${jour}`,
   );
 
   return await mapPool(comptes, LARGEUR, async (c) => {

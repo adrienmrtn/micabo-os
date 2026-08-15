@@ -272,6 +272,12 @@ const TESTS = [
     descKey: "simUgcVideoFace.subtitle",
     render: () => <SimulerUgcVideoAssignationCard mode="face_ref" />,
   },
+  {
+    value: "ugc-video-libre",
+    titreKey: "simUgcVideoLibre.title",
+    descKey: "simUgcVideoLibre.subtitle",
+    render: () => <SimulerUgcVideoAssignationCard mode="libre" />,
+  },
   { value: "tiktok", titreKey: "tests.tiktokTitre", descKey: "tests.tiktokDesc", render: () => <TesterUnTikTok /> },
   { value: "traduction", titreKey: "tests.tradTitre", descKey: "tests.tradDesc", render: () => <TestTraduction /> },
   {

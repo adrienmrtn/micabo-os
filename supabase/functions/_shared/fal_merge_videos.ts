@@ -1,6 +1,10 @@
 /**
  * Fal — ffmpeg merge-videos
  *   fal-ai/ffmpeg-api/merge-videos
+ *
+ * Sans `target_fps`, Fal prend le FPS le plus bas des inputs (Kling ~24 fps)
+ * et y ramène aussi l'utilisation (souvent 30). Sans résolution explicite,
+ * Fal prend le min(largeur, hauteur) → 720p si Kling Standard est 720p.
  */
 
 import {
@@ -11,6 +15,12 @@ import {
 } from "./fal_queue.ts";
 
 const MODEL = "fal-ai/ffmpeg-api/merge-videos";
+
+/** Sortie TikTok 9:16. */
+export const MERGE_UGC_WIDTH = 1080;
+export const MERGE_UGC_HEIGHT = 1920;
+/** Plancher TikTok ; Kling 24 fps est interpolé, l'utilisation reste fluide. */
+export const MERGE_UGC_FPS = 30;
 
 export async function mergerVideosFal(input: {
   videoUrls: string[];
@@ -27,8 +37,8 @@ export async function mergerVideosFal(input: {
     MODEL,
     {
       video_urls,
-      // 9:16 vertical — résolution type TikTok
-      resolution: { width: 720, height: 1280 },
+      target_fps: MERGE_UGC_FPS,
+      resolution: { width: MERGE_UGC_WIDTH, height: MERGE_UGC_HEIGHT },
     },
     input.onProgress,
   );

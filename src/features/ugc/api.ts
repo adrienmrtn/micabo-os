@@ -426,8 +426,9 @@ export async function finaliserUgcReaction(
     id: string;
     titre?: string;
     crop: VideoTrim;
-    videoPath: string;
-    videoUrl: string;
+    /** @deprecated trim navigateur — le serveur coupe `_tmp_full` via Fal. */
+    videoPath?: string;
+    videoUrl?: string;
     firstFramePath: string;
     firstFrameUrl: string;
     videoText?: string;
