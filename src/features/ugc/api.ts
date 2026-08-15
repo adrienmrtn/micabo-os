@@ -7,6 +7,7 @@ import type {
   UgcReaction,
   UgcUtilisation,
 } from "./types";
+import { champsFinalizeReaction } from "./champsFinalizeReaction";
 import type { VideoTrim } from "./videoCrop";
 
 export type { UgcAngle, UgcProfileRef, UgcReaction, UgcUtilisation };
@@ -426,6 +427,9 @@ export async function finaliserUgcReaction(
     id: string;
     titre?: string;
     crop: VideoTrim;
+    /** Source `_tmp_full` (l’edge coupe via Fal). Aussi envoyé pour compat. */
+    videoSourcePath?: string | null;
+    videoSourceUrl?: string | null;
     /** @deprecated trim navigateur — le serveur coupe `_tmp_full` via Fal. */
     videoPath?: string;
     videoUrl?: string;
@@ -439,7 +443,21 @@ export async function finaliserUgcReaction(
   onProgress?: (detail: string) => void,
 ): Promise<UgcReaction> {
   const r = await invokeReactionsStream(
-    { action: "finalize", ...input },
+    {
+      action: "finalize",
+      ...champsFinalizeReaction({
+        id: input.id,
+        titre: input.titre,
+        crop: input.crop,
+        videoSourcePath: input.videoSourcePath ?? input.videoPath,
+        videoSourceUrl: input.videoSourceUrl ?? input.videoUrl,
+        firstFramePath: input.firstFramePath,
+        firstFrameUrl: input.firstFrameUrl,
+        videoText: input.videoText,
+        dureeMs: input.dureeMs,
+        labelId: input.labelId,
+      }),
+    },
     onProgress,
   );
   const reaction = r.reaction as UgcReaction | undefined;

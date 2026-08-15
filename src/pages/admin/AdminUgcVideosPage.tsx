@@ -137,6 +137,8 @@ export function AdminUgcVideosPage() {
           id: draft.id,
           titre: titre.trim() || draft.titre,
           crop: tNorm,
+          videoSourcePath: draft.video_source_path,
+          videoSourceUrl: draft.video_source_url,
           firstFramePath: frameUp.path,
           firstFrameUrl: frameUp.url,
           dureeMs: Math.round((tNorm.endSec - tNorm.startSec) * 1000),

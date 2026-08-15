@@ -76,6 +76,27 @@ async function purgerDossierReaction(
   await supabase.storage.from(BUCKET).remove(aSupprimer);
 }
 
+function nombreFin(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+/** Crop start/end depuis le body (nombres, strings, snake_case). */
+function parseCropBody(
+  raw: unknown,
+): { startSec: number; endSec: number } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const startSec = nombreFin(o.startSec ?? o.start_sec);
+  const endSec = nombreFin(o.endSec ?? o.end_sec);
+  if (startSec == null || endSec == null || !(endSec > startSec)) return null;
+  return { startSec, endSec };
+}
+
 function estTrimPlein(startSec: number, endSec: number, dureeSec: number | null): boolean {
   if (dureeSec == null || !(dureeSec > 0.1)) return false;
   return startSec <= 0.05 && endSec >= dureeSec - 0.08;
@@ -410,20 +431,7 @@ Deno.serve(async (request) => {
       if (!firstFramePath || !firstFrameUrl) {
         return json({ error: "first_frame_reference requise" }, 400);
       }
-      const cropBody = body.crop && typeof body.crop === "object"
-        ? (body.crop as { startSec?: unknown; endSec?: unknown })
-        : null;
-      const cropStart =
-        typeof cropBody?.startSec === "number" ? cropBody.startSec : null;
-      const cropEnd =
-        typeof cropBody?.endSec === "number" ? cropBody.endSec : null;
-      const aCrop = cropStart != null && cropEnd != null && cropEnd > cropStart;
-      if (!aCrop && (!videoPathClient || !videoUrlClient)) {
-        return json(
-          { error: "crop (startSec/endSec) ou vidéo trimée requis" },
-          400,
-        );
-      }
+      let crop = parseCropBody(body.crop);
       const labelId = await assertLabelUgcAiVideo(supabase, body.labelId ?? body.label_id);
       if (labelId instanceof Response) return labelId;
 
@@ -437,6 +445,24 @@ Deno.serve(async (request) => {
       if (actuel.statut === "pret") {
         return json(
           { error: "Déjà finalisée — pas de re-trim. Supprime pour recommencer." },
+          400,
+        );
+      }
+
+      const sourcePathDb = String(actuel.video_source_path ?? "").trim();
+      const sourceUrlDb = String(actuel.video_source_url ?? "").trim();
+      const sourcePath = sourcePathDb || videoPathClient;
+      const sourceUrl = sourceUrlDb || videoUrlClient;
+      const dureeSourceSec =
+        typeof actuel.duree_ms === "number" && actuel.duree_ms > 0
+          ? actuel.duree_ms / 1000
+          : null;
+      if (!crop && dureeSourceSec) {
+        crop = { startSec: 0, endSec: dureeSourceSec };
+      }
+      if (!crop && !sourceUrl) {
+        return json(
+          { error: "crop (startSec/endSec) ou vidéo source requis" },
           400,
         );
       }
@@ -460,16 +486,9 @@ Deno.serve(async (request) => {
         // Fallback : vidéo déjà recodée par le client (ancien MediaRecorder).
         let finalVideoPath = `ugc/reactions/${id}/video.mp4`;
         let finalVideoUrl = "";
-        const sourcePath = String(actuel.video_source_path ?? "").trim();
-        const sourceUrl = String(actuel.video_source_url ?? "").trim();
-        const dureeSourceSec =
-          typeof actuel.duree_ms === "number" && actuel.duree_ms > 0
-            ? actuel.duree_ms / 1000
-            : null;
 
-        if (aCrop && sourceUrl) {
-          const startSec = cropStart as number;
-          const endSec = cropEnd as number;
+        if (crop && sourceUrl) {
+          const { startSec, endSec } = crop;
           if (estTrimPlein(startSec, endSec, dureeSourceSec) && sourcePath) {
             emit?.({
               etape: "trim",
@@ -580,14 +599,8 @@ Deno.serve(async (request) => {
         let dureeMs: number | null = null;
         if (typeof body.dureeMs === "number" && Number.isFinite(body.dureeMs)) {
           dureeMs = Math.round(body.dureeMs);
-        } else if (
-          body.crop &&
-          typeof body.crop.startSec === "number" &&
-          typeof body.crop.endSec === "number"
-        ) {
-          dureeMs = Math.round(
-            Math.max(0, body.crop.endSec - body.crop.startSec) * 1000,
-          );
+        } else if (crop) {
+          dureeMs = Math.round(Math.max(0, crop.endSec - crop.startSec) * 1000);
         }
 
         const patch: Record<string, unknown> = {
