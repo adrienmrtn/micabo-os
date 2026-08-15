@@ -17,6 +17,16 @@ export function normaliserTrim(t: VideoTrim, dureeSec: number): VideoTrim {
   return { startSec: start, endSec: end };
 }
 
+/** Seuils identiques à `estTrimPlein` dans ugc-reactions (copie MP4 sans Fal). */
+export function estTrimPlein(
+  startSec: number,
+  endSec: number,
+  dureeSec: number | null,
+): boolean {
+  if (dureeSec == null || !(dureeSec > 0.1)) return false;
+  return startSec <= 0.05 && endSec >= dureeSec - 0.08;
+}
+
 /** Compat lecture anciens crops spatiaux / nouveaux trims. */
 export function trimDepuisCrop(
   crop: unknown,
@@ -59,6 +69,10 @@ function seek(video: HTMLVideoElement, t: number): Promise<void> {
 /**
  * 10ᵉ frame du segment gardé (relative au trim, pas à la source entière).
  */
+export function extraireOffsetFrame(frameIndex = 10, fpsApprox = 30): number {
+  return (frameIndex - 1) / fpsApprox;
+}
+
 export async function extraireFrameTrim(
   videoUrl: string,
   trim: VideoTrim,
@@ -68,7 +82,7 @@ export async function extraireFrameTrim(
   const video = await chargerVideo(videoUrl);
   const duree = video.duration || 1;
   const tNorm = normaliserTrim(trim, duree);
-  const offset = (frameIndex - 1) / fpsApprox;
+  const offset = extraireOffsetFrame(frameIndex, fpsApprox);
   const at = Math.min(tNorm.startSec + offset, tNorm.endSec - 0.02);
   await seek(video, Math.max(tNorm.startSec, at));
 
@@ -108,6 +122,8 @@ function choisirMimeRecorder(): string {
 
 /**
  * Recode uniquement le segment [startSec, endSec] (durée), dimensions inchangées.
+ * Dernier recours navigateur — le finalize UGC coupe `_tmp_full` via Fal
+ * (stream copy) pour ne pas détruire le FPS TikTok.
  */
 export async function trimmerVideo(
   videoUrl: string,

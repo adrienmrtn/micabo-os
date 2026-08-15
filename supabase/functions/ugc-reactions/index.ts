@@ -3,17 +3,16 @@
  *   { action: "import_tiktok", url, stream? }
  *     → vidéo entière en TEMP `_tmp_full.mp4` (pour le trim UI seulement)
  *   { action: "finalize", … }
- *     → storage final = UNIQUEMENT :
- *         1) vidéo croppée (trim)
- *         2) first_frame_reference (10ᵉ frame)
- *         + video_text (OCR) en DB
- *       Tout le reste du dossier (dont `_tmp_full`) est purgé.
+ *     → trim Fal lossless du `_tmp_full` (crop start/end) + first_frame
+ *       (+ video_text OCR). Tout le reste du dossier (dont `_tmp_full`) est purgé.
+ *     Fallback : vidéo déjà trimée uploadée par le client (ancien MediaRecorder).
  *   { action: "ocr_frame", imageUrl, stream? }
  *   { action: "list" | "delete" | "list_utilisations" | "register_utilisation" | "delete_utilisation" }
  */
 
 import { downloadMedia, scrapeVideoPost } from "../_shared/apify.ts";
 import { normaliserVideoMp4PourKling } from "../_shared/fal_normaliser_video.ts";
+import { trimmerVideoFal } from "../_shared/fal_trim_video.ts";
 import { ocrFrame } from "../_shared/gemini.ts";
 import { reponseNdjson, veutStream } from "../_shared/nettoyage_etapes.ts";
 import {
@@ -71,6 +70,31 @@ async function purgerDossierReaction(
     .filter((p) => !keep.has(p));
   if (aSupprimer.length === 0) return;
   await supabase.storage.from(BUCKET).remove(aSupprimer);
+}
+
+function estTrimPlein(startSec: number, endSec: number, dureeSec: number | null): boolean {
+  if (dureeSec == null || !(dureeSec > 0.1)) return false;
+  return startSec <= 0.05 && endSec >= dureeSec - 0.08;
+}
+
+async function copierOuReuploader(
+  supabase: Supabase,
+  from: string,
+  to: string,
+): Promise<string> {
+  const { error } = await supabase.storage.from(BUCKET).copy(from, to);
+  if (!error) {
+    const pub = supabase.storage.from(BUCKET).getPublicUrl(to).data.publicUrl;
+    return `${pub}?v=${Date.now()}`;
+  }
+  const { data, error: dlErr } = await supabase.storage.from(BUCKET).download(from);
+  if (dlErr || !data) {
+    throw new Error(
+      `Copy storage: ${error.message}${dlErr ? ` · download: ${dlErr.message}` : ""}`,
+    );
+  }
+  const bytes = new Uint8Array(await data.arrayBuffer());
+  return uploader(supabase, to, bytes, "video/mp4");
 }
 
 function normaliserLienTikTok(raw: string): string {
@@ -355,15 +379,26 @@ Deno.serve(async (request) => {
     if (action === "finalize") {
       const id = String(body.id ?? "").trim();
       if (!id) return json({ error: "id requis" }, 400);
-      const videoPath = String(body.videoPath ?? "").trim();
-      const videoUrl = String(body.videoUrl ?? "").trim();
+      const videoPathClient = String(body.videoPath ?? "").trim();
+      const videoUrlClient = String(body.videoUrl ?? "").trim();
       const firstFramePath = String(body.firstFramePath ?? "").trim();
       const firstFrameUrl = String(body.firstFrameUrl ?? "").trim();
-      if (!videoPath || !videoUrl) {
-        return json({ error: "vidéo trimée requise (videoPath / videoUrl)" }, 400);
-      }
       if (!firstFramePath || !firstFrameUrl) {
         return json({ error: "first_frame_reference requise" }, 400);
+      }
+      const cropBody = body.crop && typeof body.crop === "object"
+        ? (body.crop as { startSec?: unknown; endSec?: unknown })
+        : null;
+      const cropStart =
+        typeof cropBody?.startSec === "number" ? cropBody.startSec : null;
+      const cropEnd =
+        typeof cropBody?.endSec === "number" ? cropBody.endSec : null;
+      const aCrop = cropStart != null && cropEnd != null && cropEnd > cropStart;
+      if (!aCrop && (!videoPathClient || !videoUrlClient)) {
+        return json(
+          { error: "crop (startSec/endSec) ou vidéo trimée requis" },
+          400,
+        );
       }
       const labelId = await assertLabelUgcAiVideo(supabase, body.labelId ?? body.label_id);
       if (labelId instanceof Response) return labelId;
@@ -397,41 +432,117 @@ Deno.serve(async (request) => {
           videoText = await ocrFrame(firstFrameUrl);
         }
 
-        // WebM MediaRecorder → MP4 H.264 (Kling refuse le webm navigateur).
-        let finalVideoPath = videoPath;
-        let finalVideoUrl = videoUrl;
-        const estWebm = /\.webm(\?|$)/i.test(videoPath) || /\.webm(\?|$)/i.test(videoUrl);
-        if (estWebm) {
-          emit?.({
-            etape: "transcode",
-            statut: "en_cours",
-            detail: "WebM → MP4 H.264 (Fal) pour Kling…",
-          });
-          const mp4 = await normaliserVideoMp4PourKling(videoUrl, (p) => {
-            if (p.detail) {
-              emit?.({
-                etape: "transcode",
-                statut: "en_cours",
-                detail: p.detail,
-              });
+        // Trim Fal de l'original `_tmp_full` (conserve FPS/bitrate).
+        // Fallback : vidéo déjà recodée par le client (ancien MediaRecorder).
+        let finalVideoPath = `ugc/reactions/${id}/video.mp4`;
+        let finalVideoUrl = "";
+        const sourcePath = String(actuel.video_source_path ?? "").trim();
+        const sourceUrl = String(actuel.video_source_url ?? "").trim();
+        const dureeSourceSec =
+          typeof actuel.duree_ms === "number" && actuel.duree_ms > 0
+            ? actuel.duree_ms / 1000
+            : null;
+
+        if (aCrop && sourceUrl) {
+          const startSec = cropStart as number;
+          const endSec = cropEnd as number;
+          if (estTrimPlein(startSec, endSec, dureeSourceSec) && sourcePath) {
+            emit?.({
+              etape: "trim",
+              statut: "en_cours",
+              detail: "Trim plein — copie MP4 source (sans recodage)…",
+            });
+            if (sourcePath !== finalVideoPath) {
+              finalVideoUrl = await copierOuReuploader(
+                supabase,
+                sourcePath,
+                finalVideoPath,
+              );
+            } else {
+              const pub = supabase.storage
+                .from(BUCKET)
+                .getPublicUrl(finalVideoPath).data.publicUrl;
+              finalVideoUrl = `${pub}?v=${Date.now()}`;
             }
-          });
-          finalVideoPath = `ugc/reactions/${id}/video.mp4`;
-          finalVideoUrl = await uploader(
-            supabase,
-            finalVideoPath,
-            mp4.bytes,
-            "video/mp4",
-          );
-          // Supprime l'ancien webm si chemin différent.
-          if (videoPath !== finalVideoPath) {
-            await supprimerStorage(supabase, videoPath);
+            emit?.({
+              etape: "trim",
+              statut: "ok",
+              detail: "MP4 source copié tel quel",
+            });
+          } else {
+            emit?.({
+              etape: "trim",
+              statut: "en_cours",
+              detail: `Trim Fal lossless ${startSec.toFixed(1)}s → ${endSec.toFixed(1)}s…`,
+            });
+            const trimmed = await trimmerVideoFal({
+              videoUrl: sourceUrl,
+              startSec,
+              endSec,
+              onProgress: (p) => {
+                if (p.detail) {
+                  emit?.({
+                    etape: "trim",
+                    statut: "en_cours",
+                    detail: p.detail,
+                  });
+                }
+              },
+            });
+            finalVideoUrl = await uploader(
+              supabase,
+              finalVideoPath,
+              trimmed.bytes,
+              "video/mp4",
+            );
+            emit?.({
+              etape: "trim",
+              statut: "ok",
+              detail: `MP4 trimé · ${trimmed.bytes.length} octets`,
+            });
           }
-          emit?.({
-            etape: "transcode",
-            statut: "ok",
-            detail: `MP4 OK · ${mp4.bytes.length} octets`,
-          });
+        } else {
+          // Ancien flux : le client a déjà uploadé un trim (souvent WebM).
+          finalVideoPath = videoPathClient;
+          finalVideoUrl = videoUrlClient;
+          const estWebm =
+            /\.webm(\?|$)/i.test(videoPathClient) ||
+            /\.webm(\?|$)/i.test(videoUrlClient);
+          if (estWebm) {
+            emit?.({
+              etape: "transcode",
+              statut: "en_cours",
+              detail: "WebM → MP4 H.264 (Fal) pour Kling…",
+            });
+            const mp4 = await normaliserVideoMp4PourKling(videoUrlClient, (p) => {
+              if (p.detail) {
+                emit?.({
+                  etape: "transcode",
+                  statut: "en_cours",
+                  detail: p.detail,
+                });
+              }
+            });
+            finalVideoPath = `ugc/reactions/${id}/video.mp4`;
+            finalVideoUrl = await uploader(
+              supabase,
+              finalVideoPath,
+              mp4.bytes,
+              "video/mp4",
+            );
+            if (videoPathClient !== finalVideoPath) {
+              await supprimerStorage(supabase, videoPathClient);
+            }
+            emit?.({
+              etape: "transcode",
+              statut: "ok",
+              detail: `MP4 OK · ${mp4.bytes.length} octets`,
+            });
+          }
+        }
+
+        if (!finalVideoUrl) {
+          throw new Error("Trim reaction : pas d'URL vidéo finale");
         }
 
         emit?.({

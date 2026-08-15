@@ -15,7 +15,7 @@ import { retirerContentCredentialsBytes } from "./c2pa.ts";
 import { editerNanoBananaPro } from "./fal_nano_banana.ts";
 import { klingMotionControl } from "./fal_kling_motion.ts";
 import { mergerVideosFal } from "./fal_merge_videos.ts";
-import { sonderDureeSec } from "./fal_normaliser_video.ts";
+import { formaterVideoMeta, sonderVideoMeta } from "./fal_normaliser_video.ts";
 import { falHebergerOctets } from "./fal_queue.ts";
 import { cleanImage, TEXT_MODELS } from "./gemini.ts";
 import { mapPool } from "./parallel.ts";
@@ -492,13 +492,14 @@ export async function assignerUgcVideoSlot(
         `  Reaction rehost Fal · ${reactionBytes.bytes.length} octets → ${reactionVideoUrl.slice(-48)}`,
       );
     }
-    const dureeReactionSec = await sonderDureeSec(reactionVideoUrl, (p) => {
+    const metaReaction = await sonderVideoMeta(reactionVideoUrl, (p) => {
       if (p.detail) log(`  ${p.detail}`);
     });
+    const dureeReactionSec = metaReaction.durationSec;
     log(
-      `Étape 3/${etapeTotal} Kling (= clip transformé) · durée reaction=${
-        dureeReactionSec != null ? `${dureeReactionSec.toFixed(2)}s` : "?"
-      } · orientation=video (utilisation NON comptée ici)`,
+      `Étape 3/${etapeTotal} Kling (= clip transformé) · reaction=${formaterVideoMeta(
+        metaReaction,
+      )} · orientation=video (utilisation NON comptée ici)`,
     );
     if (dureeReactionSec != null && dureeReactionSec < 3) {
       throw new Error(
@@ -541,8 +542,8 @@ export async function assignerUgcVideoSlot(
 
     let kling = await lancerKling("standard");
     let klingUrlTmp = kling.url;
-    // Upload temporaire pour sonder la durée (URL Fal du résultat suffit).
-    let dureeKlingSec = await sonderDureeSec(klingUrlTmp);
+    let metaKling = await sonderVideoMeta(klingUrlTmp);
+    let dureeKlingSec = metaKling.durationSec;
     const ratioOk = (dK: number | null, dR: number | null) =>
       dK != null && dR != null && dK >= dR * 0.85;
 
@@ -552,11 +553,14 @@ export async function assignerUgcVideoSlot(
       !ratioOk(dureeKlingSec, dureeReactionSec)
     ) {
       log(
-        `  ⚠ durée Kling ${dureeKlingSec.toFixed(2)}s ≪ reaction ${dureeReactionSec.toFixed(2)}s — retry Pro`,
+        `  ⚠ durée Kling ${formaterVideoMeta(metaKling)} ≪ reaction ${formaterVideoMeta(
+          metaReaction,
+        )} — retry Pro`,
       );
       kling = await lancerKling("pro");
       klingUrlTmp = kling.url;
-      dureeKlingSec = await sonderDureeSec(klingUrlTmp);
+      metaKling = await sonderVideoMeta(klingUrlTmp);
+      dureeKlingSec = metaKling.durationSec;
     }
 
     if (
@@ -585,9 +589,7 @@ export async function assignerUgcVideoSlot(
       })
       .eq("id", postId);
     log(
-      `  Kling OK · durée=${
-        dureeKlingSec != null ? `${dureeKlingSec.toFixed(2)}s` : "?"
-      } (= reaction) · ${kling.bytes.length} octets → ${klingPath}`,
+      `  Kling OK · ${formaterVideoMeta(metaKling)} (= reaction) · ${kling.bytes.length} octets → ${klingPath}`,
     );
 
     // ── 4) Concat utilisation (EN PLUS, durée non rognée) ───────────
@@ -614,13 +616,12 @@ export async function assignerUgcVideoSlot(
         `  Utilisation rehost skip (${e instanceof Error ? e.message : String(e)}) — URL DB`,
       );
     }
-    const dureeUtilSec = await sonderDureeSec(utilisationUrl);
+    const metaUtil = await sonderVideoMeta(utilisationUrl);
+    const dureeUtilSec = metaUtil.durationSec;
     log(
-      `  Durées · kling=${
-        dureeKlingSec != null ? `${dureeKlingSec.toFixed(2)}s` : "?"
-      } + util=${
-        dureeUtilSec != null ? `${dureeUtilSec.toFixed(2)}s` : "?"
-      } → totale attendue=${
+      `  Concat 1080×1920 @ 30 fps · kling=${formaterVideoMeta(metaKling)} + util=${formaterVideoMeta(
+        metaUtil,
+      )} → totale attendue=${
         dureeKlingSec != null && dureeUtilSec != null
           ? `${(dureeKlingSec + dureeUtilSec).toFixed(2)}s`
           : "?"
@@ -651,11 +652,9 @@ export async function assignerUgcVideoSlot(
         updated_at: new Date().toISOString(),
       })
       .eq("id", postId);
-    const dureeFinaleSec = await sonderDureeSec(finaleUrl);
+    const metaFinale = await sonderVideoMeta(finaleUrl);
     log(
-      `  Concat OK · durée finale=${
-        dureeFinaleSec != null ? `${dureeFinaleSec.toFixed(2)}s` : "?"
-      } · ${merged.bytes.length} octets → ${finalePath}`,
+      `  Concat OK · ${formaterVideoMeta(metaFinale)} · ${merged.bytes.length} octets → ${finalePath}`,
     );
 
     // ── 5) Caption ──────────────────────────────────────────────────

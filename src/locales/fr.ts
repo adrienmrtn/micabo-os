@@ -185,15 +185,15 @@ export const fr = {
         labelAide: "Obligatoire pour enregistrer — labels du pool UGC AI VIDEO (Pilotage).",
         labelRequis: "Choisis un label UGC AI VIDEO.",
         cropAide:
-          "Coupe le début et la fin. La vidéo entière n’est que temporaire — elle est purgée à la validation.",
+          "Coupe le début et la fin. Le trim est fait côté serveur (copie FPS/qualité TikTok) — la vidéo entière n’est que temporaire.",
         resetCrop: "Toute la durée",
         validerEnregistrer: "Valider trim + enregistrer",
         trimRemplaceAide:
           "Stocké après validation : (1) vidéo croppée (2) image 10ᵉ frame (3) video_text OCR. Rien d’autre — pas de re-trim.",
         dejaFinalisee: "Cette reaction est déjà finalisée — pas de re-trim.",
-        cropEnCours: "Encodage du trim…",
+        cropEnCours: "Trim serveur (sans recodage navigateur)…",
         frameEnCours: "Extraction 10ᵉ frame (first_frame_reference)…",
-        uploadEnCours: "Upload crop + frame…",
+        uploadEnCours: "Upload 10ᵉ frame…",
         ocrEnCours: "OCR frame → video_text…",
         videoCroppee: "Vidéo croppée",
         trimDebut: "Début",

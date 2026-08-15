@@ -23,7 +23,6 @@ import {
 import {
   extraireFrameTrim,
   normaliserTrim,
-  trimmerVideo,
   trimPlein,
   type VideoTrim,
 } from "@/features/ugc/videoCrop";
@@ -119,22 +118,12 @@ export function AdminUgcVideosPage() {
       }
       if (!labelReaction) throw new Error(t("ugc.videos.labelRequis"));
       const tNorm = normaliserTrim(trim, dureeSec);
-      setProgress(t("ugc.videos.cropEnCours"));
-      const cropped = await trimmerVideo(draft.video_source_url, tNorm, setProgress);
-
       setProgress(t("ugc.videos.frameEnCours"));
       const frameBlob = await extraireFrameTrim(draft.video_source_url, tNorm, 10);
 
-      // Persisté : video croppée + first_frame uniquement (_tmp_full purgé côté edge).
-      const videoPath = `ugc/reactions/${draft.id}/video.${cropped.ext}`;
       const framePath = `ugc/reactions/${draft.id}/first_frame_reference.jpg`;
 
       setProgress(t("ugc.videos.uploadEnCours"));
-      const videoUp = await uploadUgcReactionFichier(
-        videoPath,
-        cropped.blob,
-        cropped.mime,
-      );
       const frameUp = await uploadUgcReactionFichier(
         framePath,
         frameBlob,
@@ -142,14 +131,12 @@ export function AdminUgcVideosPage() {
       );
       setPreviewFrame(frameUp.url);
 
-      setProgress(t("ugc.videos.ocrEnCours"));
+      setProgress(t("ugc.videos.cropEnCours"));
       const reaction = await finaliserUgcReaction(
         {
           id: draft.id,
           titre: titre.trim() || draft.titre,
           crop: tNorm,
-          videoPath: videoUp.path,
-          videoUrl: videoUp.url,
           firstFramePath: frameUp.path,
           firstFrameUrl: frameUp.url,
           dureeMs: Math.round((tNorm.endSec - tNorm.startSec) * 1000),
