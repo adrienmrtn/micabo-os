@@ -32,8 +32,37 @@ export function estCheminTmpFull(path: string | null | undefined): boolean {
   return /_tmp_full\.mp4$/i.test(String(path ?? "").trim());
 }
 
-export function cheminVideoCroppee(reactionId: string): string {
-  return `ugc/reactions/${reactionId}/video.mp4`;
+export function cheminVideoCroppee(reactionId: string, ext = "mp4"): string {
+  return `ugc/reactions/${reactionId}/video.${ext}`;
+}
+
+/** Args ffmpeg.wasm : recode H.264 (jamais `-c copy` — sinon écran noir hors keyframe). */
+export function argsFfmpegTrimH264(
+  startSec: number,
+  endSec: number,
+  withAudio: boolean,
+): string[] {
+  const duree = Math.max(0.05, endSec - startSec);
+  return [
+    "-ss",
+    startSec.toFixed(3),
+    "-i",
+    "in.mp4",
+    "-t",
+    duree.toFixed(3),
+    "-c:v",
+    "libx264",
+    "-preset",
+    "ultrafast",
+    "-crf",
+    "18",
+    "-pix_fmt",
+    "yuv420p",
+    ...(withAudio ? (["-c:a", "aac", "-ac", "2", "-b:a", "128k"] as const) : (["-an"] as const)),
+    "-movflags",
+    "+faststart",
+    "out.mp4",
+  ];
 }
 
 /** Compat lecture anciens crops spatiaux / nouveaux trims. */
@@ -130,10 +159,78 @@ function choisirMimeRecorder(): string {
 }
 
 /**
- * Recode uniquement le segment [startSec, endSec] (durée), dimensions inchangées.
- * Dernier recours navigateur — le finalize UGC coupe `_tmp_full` via Fal
- * (stream copy) pour ne pas détruire le FPS TikTok.
+ * Recode le segment en jouant la vidéo (captureStream, pas canvas).
+ * Fallback si ffmpeg.wasm échoue.
  */
+export async function trimmerVideoPlayback(
+  videoUrl: string,
+  trim: VideoTrim,
+  onProgress?: (detail: string) => void,
+): Promise<{ blob: Blob; mime: string; ext: string }> {
+  const video = await chargerVideo(videoUrl);
+  const duree = video.duration || 1;
+  const tNorm = normaliserTrim(trim, duree);
+  const capture = (
+    video as HTMLVideoElement & { captureStream?: () => MediaStream }
+  ).captureStream;
+  if (typeof capture !== "function") {
+    video.removeAttribute("src");
+    video.load();
+    return trimmerVideo(videoUrl, tNorm, onProgress);
+  }
+
+  const stream = capture.call(video);
+  if (stream.getVideoTracks().length === 0) {
+    for (const t of stream.getTracks()) t.stop();
+    video.removeAttribute("src");
+    video.load();
+    return trimmerVideo(videoUrl, tNorm, onProgress);
+  }
+
+  const mime = choisirMimeRecorder();
+  const ext = mime.includes("mp4") ? "mp4" : "webm";
+  const recorder = new MediaRecorder(stream, {
+    mimeType: mime,
+    videoBitsPerSecond: 8_000_000,
+  });
+  const chunks: BlobPart[] = [];
+  recorder.ondataavailable = (e) => {
+    if (e.data.size > 0) chunks.push(e.data);
+  };
+  const done = new Promise<Blob>((resolve, reject) => {
+    recorder.onstop = () => resolve(new Blob(chunks, { type: mime }));
+    recorder.onerror = () => reject(new Error("MediaRecorder erreur"));
+  });
+
+  onProgress?.(
+    `Enregistrement ${tNorm.startSec.toFixed(1)}s → ${tNorm.endSec.toFixed(1)}s…`,
+  );
+  await seek(video, tNorm.startSec);
+  recorder.start(200);
+  await video.play();
+  await new Promise<void>((resolve) => {
+    const tick = () => {
+      if (video.ended || video.currentTime >= tNorm.endSec) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+  video.pause();
+  if (recorder.state !== "inactive") recorder.stop();
+  const blob = await done;
+  for (const track of stream.getTracks()) track.stop();
+  video.removeAttribute("src");
+  video.load();
+  if (blob.size < 1000) throw new Error("Trim playback : fichier trop petit");
+  onProgress?.(
+    `Trim prêt (${(tNorm.endSec - tNorm.startSec).toFixed(1)}s · ${Math.round(blob.size / 1024)} Ko)`,
+  );
+  return { blob, mime, ext };
+}
+
 export async function trimmerVideo(
   videoUrl: string,
   trim: VideoTrim,
@@ -268,63 +365,64 @@ function octetsVersBlob(data: Uint8Array | string, mime: string): Blob {
 }
 
 /**
- * Coupe le MP4 par copie de flux (même codec / FPS que TikTok).
- * À envoyer comme `videoPath` — l’edge prod ignore encore le crop et
- * enregistre `videoPath` tel quel.
+ * Coupe le MP4 en recodant H.264 (écran noir avec `-c copy` hors keyframe).
+ * Fallback : captureStream de la lecture.
  */
 export async function trimmerVideoLossless(
   videoUrl: string,
   trim: VideoTrim,
   dureeSec: number,
   onProgress?: (detail: string) => void,
-): Promise<{ blob: Blob; mime: string; ext: "mp4" }> {
+): Promise<{ blob: Blob; mime: string; ext: string }> {
   const tNorm = normaliserTrim(trim, dureeSec);
-  const { fetchFile } = await import("@ffmpeg/util");
-  const ffmpeg = await chargerFfmpeg(onProgress);
-  onProgress?.(
-    `Trim lossless ${tNorm.startSec.toFixed(1)}s → ${tNorm.endSec.toFixed(1)}s…`,
-  );
-  const input = await fetchFile(videoUrl);
-  await ffmpeg.writeFile("in.mp4", input);
   try {
-    const code = await ffmpeg.exec([
-      "-i",
-      "in.mp4",
-      "-ss",
-      tNorm.startSec.toFixed(3),
-      "-to",
-      tNorm.endSec.toFixed(3),
-      "-c",
-      "copy",
-      "-avoid_negative_ts",
-      "make_zero",
-      "-movflags",
-      "+faststart",
-      "out.mp4",
-    ]);
-    if (typeof code === "number" && code !== 0) {
-      throw new Error(`ffmpeg copy trim code=${code}`);
-    }
-    const data = await ffmpeg.readFile("out.mp4");
-    const blob = octetsVersBlob(data, "video/mp4");
-    if (blob.size < 1000) {
-      throw new Error("Trim lossless : fichier trop petit");
-    }
+    const { fetchFile } = await import("@ffmpeg/util");
+    const ffmpeg = await chargerFfmpeg(onProgress);
     onProgress?.(
-      `Trim prêt (${(tNorm.endSec - tNorm.startSec).toFixed(1)}s · ${Math.round(blob.size / 1024)} Ko)`,
+      `Trim H.264 ${tNorm.startSec.toFixed(1)}s → ${tNorm.endSec.toFixed(1)}s…`,
     );
-    return { blob, mime: "video/mp4", ext: "mp4" };
-  } finally {
+    const input = await fetchFile(videoUrl);
+    await ffmpeg.writeFile("in.mp4", input);
     try {
-      await ffmpeg.deleteFile("in.mp4");
-    } catch {
-      // ignore
+      const lancer = async (withAudio: boolean) => {
+        const code = await ffmpeg.exec(
+          argsFfmpegTrimH264(tNorm.startSec, tNorm.endSec, withAudio),
+        );
+        if (typeof code === "number" && code !== 0) {
+          throw new Error(`ffmpeg trim code=${code}`);
+        }
+      };
+      try {
+        await lancer(true);
+      } catch {
+        await lancer(false);
+      }
+      const data = await ffmpeg.readFile("out.mp4");
+      const blob = octetsVersBlob(data, "video/mp4");
+      if (blob.size < 1000) {
+        throw new Error("Trim H.264 : fichier trop petit");
+      }
+      onProgress?.(
+        `Trim prêt (${(tNorm.endSec - tNorm.startSec).toFixed(1)}s · ${Math.round(blob.size / 1024)} Ko)`,
+      );
+      return { blob, mime: "video/mp4", ext: "mp4" };
+    } finally {
+      try {
+        await ffmpeg.deleteFile("in.mp4");
+      } catch {
+        // ignore
+      }
+      try {
+        await ffmpeg.deleteFile("out.mp4");
+      } catch {
+        // ignore
+      }
     }
-    try {
-      await ffmpeg.deleteFile("out.mp4");
-    } catch {
-      // ignore
-    }
+  } catch (e) {
+    onProgress?.(
+      `ffmpeg indisponible (${e instanceof Error ? e.message : "erreur"}) — fallback lecture…`,
+    );
+    return trimmerVideoPlayback(videoUrl, tNorm, onProgress);
   }
 }
 
