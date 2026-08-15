@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { estCheminTmpFull, extraireOffsetFrame, normaliserTrim, trimPlein, estTrimPlein } from "./videoCrop";
+import {
+  argsFfmpegTrimH264,
+  estCheminTmpFull,
+  extraireOffsetFrame,
+  normaliserTrim,
+  trimPlein,
+  estTrimPlein,
+} from "./videoCrop";
 
 describe("videoCrop trim", () => {
   it("trimPlein couvre toute la durée", () => {
@@ -36,5 +43,23 @@ describe("videoCrop trim", () => {
 describe("offset 10e frame", () => {
   it("frame 10 à 30 fps = 0.3 s", () => {
     expect(extraireOffsetFrame(10, 30)).toBeCloseTo(0.3);
+  });
+});
+
+describe("argsFfmpegTrimH264", () => {
+  it("recode H.264, jamais stream copy", () => {
+    const args = argsFfmpegTrimH264(1.2, 6.5, true);
+    expect(args).toContain("libx264");
+    expect(args).not.toContain("copy");
+    expect(args).toContain("-ss");
+    expect(args).toContain("1.200");
+    expect(args).toContain("-t");
+    expect(args).toContain("5.300");
+    expect(args).toContain("aac");
+  });
+
+  it("peut couper sans audio", () => {
+    expect(argsFfmpegTrimH264(0, 3, false)).toContain("-an");
+    expect(argsFfmpegTrimH264(0, 3, false)).not.toContain("aac");
   });
 });

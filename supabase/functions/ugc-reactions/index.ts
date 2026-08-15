@@ -491,9 +491,43 @@ Deno.serve(async (request) => {
           !/_tmp_full\.mp4$/i.test(videoPathClient);
 
         if (clientDejaCroppe) {
-          // Front a déjà coupé (copie MP4) — l’edge prod ignore le crop.
+          // Front a déjà coupé (H.264 ou fallback webm).
           finalVideoPath = videoPathClient;
           finalVideoUrl = videoUrlClient;
+          const estWebm =
+            /\.webm(\?|$)/i.test(videoPathClient) ||
+            /\.webm(\?|$)/i.test(videoUrlClient);
+          if (estWebm) {
+            emit?.({
+              etape: "transcode",
+              statut: "en_cours",
+              detail: "WebM → MP4 H.264 (Fal) pour Kling…",
+            });
+            const mp4 = await normaliserVideoMp4PourKling(videoUrlClient, (p) => {
+              if (p.detail) {
+                emit?.({
+                  etape: "transcode",
+                  statut: "en_cours",
+                  detail: p.detail,
+                });
+              }
+            });
+            finalVideoPath = `ugc/reactions/${id}/video.mp4`;
+            finalVideoUrl = await uploader(
+              supabase,
+              finalVideoPath,
+              mp4.bytes,
+              "video/mp4",
+            );
+            if (videoPathClient !== finalVideoPath) {
+              await supprimerStorage(supabase, videoPathClient);
+            }
+            emit?.({
+              etape: "transcode",
+              statut: "ok",
+              detail: `MP4 OK · ${mp4.bytes.length} octets`,
+            });
+          }
         } else if (crop && sourceUrl) {
           const { startSec, endSec } = crop;
           if (estTrimPlein(startSec, endSec, dureeSourceSec) && sourcePath) {

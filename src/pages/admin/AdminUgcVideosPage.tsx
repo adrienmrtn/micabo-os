@@ -144,7 +144,7 @@ export function AdminUgcVideosPage() {
           dureeSec,
           setProgress,
         );
-        const dest = cheminVideoCroppee(draft.id);
+        const dest = cheminVideoCroppee(draft.id, cropped.ext);
         const videoUp = await uploadUgcReactionFichier(
           dest,
           cropped.blob,
