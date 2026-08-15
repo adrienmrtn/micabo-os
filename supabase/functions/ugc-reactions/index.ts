@@ -486,8 +486,15 @@ Deno.serve(async (request) => {
         // Fallback : vidéo déjà recodée par le client (ancien MediaRecorder).
         let finalVideoPath = `ugc/reactions/${id}/video.mp4`;
         let finalVideoUrl = "";
+        const clientDejaCroppe =
+          Boolean(videoPathClient && videoUrlClient) &&
+          !/_tmp_full\.mp4$/i.test(videoPathClient);
 
-        if (crop && sourceUrl) {
+        if (clientDejaCroppe) {
+          // Front a déjà coupé (copie MP4) — l’edge prod ignore le crop.
+          finalVideoPath = videoPathClient;
+          finalVideoUrl = videoUrlClient;
+        } else if (crop && sourceUrl) {
           const { startSec, endSec } = crop;
           if (estTrimPlein(startSec, endSec, dureeSourceSec) && sourcePath) {
             emit?.({

@@ -185,13 +185,13 @@ export const en = {
         labelAide: "Required to save — UGC AI VIDEO pool labels (Pilotage).",
         labelRequis: "Pick a UGC AI VIDEO label.",
         cropAide:
-          "Cut start and end. Trim runs server-side (keeps TikTok FPS/quality) — the full video is temporary only.",
+          "Cut start and end. The cut is an MP4 stream-copy (same FPS/quality as TikTok). The full video is temporary only.",
         resetCrop: "Full duration",
         validerEnregistrer: "Confirm trim + save",
         trimRemplaceAide:
           "Stored after confirm: (1) cropped video (2) 10th frame image (3) video_text OCR. Nothing else — no re-trim.",
         dejaFinalisee: "This reaction is already finalized — no re-trim.",
-        cropEnCours: "Server-side trim (no browser re-encode)…",
+        cropEnCours: "Cutting the video (MP4 copy, no re-encode)…",
         frameEnCours: "Extracting 10th frame (first_frame_reference)…",
         uploadEnCours: "Uploading 10th frame…",
         ocrEnCours: "OCR frame → video_text…",

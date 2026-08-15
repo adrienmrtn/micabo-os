@@ -27,6 +27,15 @@ export function estTrimPlein(
   return startSec <= 0.05 && endSec >= dureeSec - 0.08;
 }
 
+/** Source temporaire import — pas encore cropée. */
+export function estCheminTmpFull(path: string | null | undefined): boolean {
+  return /_tmp_full\.mp4$/i.test(String(path ?? "").trim());
+}
+
+export function cheminVideoCroppee(reactionId: string): string {
+  return `ugc/reactions/${reactionId}/video.mp4`;
+}
+
 /** Compat lecture anciens crops spatiaux / nouveaux trims. */
 export function trimDepuisCrop(
   crop: unknown,
@@ -217,6 +226,106 @@ export async function trimmerVideo(
     `Trim prêt (${(tNorm.endSec - tNorm.startSec).toFixed(1)}s · ${Math.round(blob.size / 1024)} Ko)`,
   );
   return { blob, mime, ext };
+}
+
+type FfmpegInstance = {
+  loaded: boolean;
+  load: (opts: { coreURL: string; wasmURL: string }) => Promise<boolean>;
+  writeFile: (name: string, data: Uint8Array) => Promise<boolean>;
+  exec: (args: string[]) => Promise<number>;
+  readFile: (name: string) => Promise<Uint8Array | string>;
+  deleteFile: (name: string) => Promise<boolean>;
+};
+
+let ffmpegSingleton: FfmpegInstance | null = null;
+
+async function chargerFfmpeg(
+  onProgress?: (detail: string) => void,
+): Promise<FfmpegInstance> {
+  if (ffmpegSingleton?.loaded) return ffmpegSingleton;
+  onProgress?.("Chargement du coupeur (une fois, ~30 Mo)…");
+  const [{ FFmpeg }, { toBlobURL }] = await Promise.all([
+    import("@ffmpeg/ffmpeg"),
+    import("@ffmpeg/util"),
+  ]);
+  const ffmpeg = new FFmpeg() as unknown as FfmpegInstance;
+  const base = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
+  await ffmpeg.load({
+    coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
+    wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
+  });
+  ffmpegSingleton = ffmpeg;
+  return ffmpeg;
+}
+
+function octetsVersBlob(data: Uint8Array | string, mime: string): Blob {
+  if (typeof data === "string") {
+    return new Blob([data], { type: mime });
+  }
+  const copy = new Uint8Array(data.byteLength);
+  copy.set(data);
+  return new Blob([copy], { type: mime });
+}
+
+/**
+ * Coupe le MP4 par copie de flux (même codec / FPS que TikTok).
+ * À envoyer comme `videoPath` — l’edge prod ignore encore le crop et
+ * enregistre `videoPath` tel quel.
+ */
+export async function trimmerVideoLossless(
+  videoUrl: string,
+  trim: VideoTrim,
+  dureeSec: number,
+  onProgress?: (detail: string) => void,
+): Promise<{ blob: Blob; mime: string; ext: "mp4" }> {
+  const tNorm = normaliserTrim(trim, dureeSec);
+  const { fetchFile } = await import("@ffmpeg/util");
+  const ffmpeg = await chargerFfmpeg(onProgress);
+  onProgress?.(
+    `Trim lossless ${tNorm.startSec.toFixed(1)}s → ${tNorm.endSec.toFixed(1)}s…`,
+  );
+  const input = await fetchFile(videoUrl);
+  await ffmpeg.writeFile("in.mp4", input);
+  try {
+    const code = await ffmpeg.exec([
+      "-i",
+      "in.mp4",
+      "-ss",
+      tNorm.startSec.toFixed(3),
+      "-to",
+      tNorm.endSec.toFixed(3),
+      "-c",
+      "copy",
+      "-avoid_negative_ts",
+      "make_zero",
+      "-movflags",
+      "+faststart",
+      "out.mp4",
+    ]);
+    if (typeof code === "number" && code !== 0) {
+      throw new Error(`ffmpeg copy trim code=${code}`);
+    }
+    const data = await ffmpeg.readFile("out.mp4");
+    const blob = octetsVersBlob(data, "video/mp4");
+    if (blob.size < 1000) {
+      throw new Error("Trim lossless : fichier trop petit");
+    }
+    onProgress?.(
+      `Trim prêt (${(tNorm.endSec - tNorm.startSec).toFixed(1)}s · ${Math.round(blob.size / 1024)} Ko)`,
+    );
+    return { blob, mime: "video/mp4", ext: "mp4" };
+  } finally {
+    try {
+      await ffmpeg.deleteFile("in.mp4");
+    } catch {
+      // ignore
+    }
+    try {
+      await ffmpeg.deleteFile("out.mp4");
+    } catch {
+      // ignore
+    }
+  }
 }
 
 /** @deprecated alias — trim durée */
