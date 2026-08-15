@@ -291,6 +291,38 @@ export const en = {
       aucun: "Nothing created — check labels / pret reactions / utilisations / persona.",
       annuleOk: "Rollback OK — {{posts}} test video(s) deleted.",
     },
+    simUgcVideoLibre: {
+      title: "Free UGC VIDEO test (creator + reaction)",
+      subtitle:
+        "Pick any creator (active or not, UGC VIDEO or not, assigned or not) and a finalized reaction, then run the full face-swap: frame10 → Nano Banana → Kling Pro → concat utilisation → caption.",
+      date: "Assignment date",
+      compte: "Creator (all accounts)",
+      reaction: "Reaction video",
+      filtreCompte: "Filter a creator (name, handle, inactive…)",
+      filtreReaction: "Filter a reaction (title, label…)",
+      comptesCount: "{{n}} / {{total}} account(s)",
+      reactionsCount: "{{n}} pret reaction(s) (video + frame + label)",
+      actif: "active",
+      inactif: "inactive",
+      flagVideo: "UGC VIDEO",
+      flagSlideshow: "UGC slideshow",
+      flagPasUgc: "not UGC",
+      sansPersona: "no persona",
+      personaRequis:
+        "This account has no UGC persona — Nano Banana cannot run. Assign a persona first.",
+      lancer: "Run face-swap",
+      enCours: "UGC VIDEO pipeline…",
+      annuler: "Cancel test",
+      annulerEnCours: "Cancelling…",
+      annulerConfirm:
+        "Delete this creator’s test videos for this date (storage + DB)?",
+      aide: "Test post only (hidden from calendars). Ignores active / UGC VIDEO / daily quota. Persona required. Utilisation matches the reaction label, or any utilisation if none exists.",
+      logs: "Exact logs",
+      logsAttente: "Connecting to stream…",
+      ok: "{{crees}} test video(s) created.",
+      aucun: "No video — check pret reaction / utilisation / persona.",
+      annuleOk: "Rollback OK — {{posts}} test video(s) deleted.",
+    },
     tests: {
       title: "Tests",
       subtitle:

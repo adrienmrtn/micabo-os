@@ -254,6 +254,19 @@ export async function listerComptes(): Promise<CompteAvecDetails[]> {
   return data as CompteAvecDetails[];
 }
 
+/**
+ * Tous les comptes (actifs ou non, UGC VIDEO ou non) — uniquement pour le
+ * test admin « UGC VIDEO libre ». Ne pas réutiliser dans l’éditeur / calendriers.
+ */
+export async function listerTousComptesPourTest(): Promise<CompteAvecDetails[]> {
+  const { data, error } = await supabase
+    .from("comptes")
+    .select("*, profiles(prenom, nom, upwork_url), comptes_reference(handle_tiktok)")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data as CompteAvecDetails[];
+}
+
 export async function creerCompte(input: {
   posterId: string;
   compteReferenceId: string | null;
@@ -3531,6 +3544,7 @@ export interface UgcVideoPostTest {
   statut: string;
   caption: string | null;
   video_finale_url: string | null;
+  video_kling_url: string | null;
   image_ref_url: string | null;
   frame_clean_url: string | null;
   pipeline_erreur: string | null;
@@ -3543,7 +3557,7 @@ export async function lancerAssignationUgcVideoTest(
   date: string,
   compteId: string,
   onLog?: (ligne: AssignationTestLog) => void,
-  opts: { jusquA?: "face_ref" | "complet" } = {},
+  opts: { jusquA?: "face_ref" | "complet"; reactionId?: string } = {},
 ): Promise<{
   ok: boolean;
   jour: string;
@@ -3580,6 +3594,9 @@ export async function lancerAssignationUgcVideoTest(
       stream: true,
       ignorerWarmup: true,
       jusquA: opts.jusquA === "face_ref" ? "face_ref" : "complet",
+      ...(opts.reactionId
+        ? { reactionId: opts.reactionId, forcer: true }
+        : {}),
     }),
   });
 
@@ -3665,7 +3682,7 @@ export async function listerUgcVideoPostsTest(
   const { data, error } = await supabase
     .from("ugc_video_posts")
     .select(
-      "id, statut, caption, video_finale_url, image_ref_url, frame_clean_url, pipeline_erreur, reaction_id, utilisation_id",
+      "id, statut, caption, video_finale_url, video_kling_url, image_ref_url, frame_clean_url, pipeline_erreur, reaction_id, utilisation_id",
     )
     .eq("compte_id", compteId)
     .eq("date_publication_prevue", date)

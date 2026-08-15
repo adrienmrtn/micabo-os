@@ -291,6 +291,38 @@ export const fr = {
       aucun: "Rien créé — labels / reactions pret / utilisations / persona à vérifier.",
       annuleOk: "Rollback OK — {{posts}} vidéo(s) test supprimée(s).",
     },
+    simUgcVideoLibre: {
+      title: "Test UGC VIDEO libre (créateur + réaction)",
+      subtitle:
+        "Choisis n’importe quel créateur (actif ou non, UGC VIDEO ou non, assigné ou non) et une réaction finalisée, puis lance le face-swap complet : frame10 → Nano Banana → Kling Pro → concat utilisation → caption.",
+      date: "Date d'assignation",
+      compte: "Créateur (tous les comptes)",
+      reaction: "Vidéo réaction",
+      filtreCompte: "Filtrer un créateur (nom, handle, inactif…)",
+      filtreReaction: "Filtrer une réaction (titre, label…)",
+      comptesCount: "{{n}} / {{total}} compte(s)",
+      reactionsCount: "{{n}} réaction(s) pret (vidéo + frame + label)",
+      actif: "actif",
+      inactif: "inactif",
+      flagVideo: "UGC VIDEO",
+      flagSlideshow: "UGC slideshow",
+      flagPasUgc: "pas UGC",
+      sansPersona: "sans persona",
+      personaRequis:
+        "Ce compte n’a pas de persona UGC — Nano Banana ne peut pas tourner. Assigne un persona avant de lancer.",
+      lancer: "Lancer le face-swap",
+      enCours: "Pipeline UGC VIDEO…",
+      annuler: "Annuler le test",
+      annulerEnCours: "Annulation…",
+      annulerConfirm:
+        "Supprimer les vidéos test de ce créateur pour cette date (storage + DB) ?",
+      aide: "Post de test uniquement (invisible sur les calendriers). Ignore actif / UGC VIDEO / quota du jour. Persona requis. L’utilisation est celle du label de la réaction, ou n’importe laquelle s’il n’y en a pas.",
+      logs: "Logs exacts",
+      logsAttente: "Connexion au stream…",
+      ok: "{{crees}} vidéo(s) test créée(s).",
+      aucun: "Aucune vidéo — reaction pret / utilisation / persona à vérifier.",
+      annuleOk: "Rollback OK — {{posts}} vidéo(s) test supprimée(s).",
+    },
     tests: {
       title: "Tests",
       subtitle:
