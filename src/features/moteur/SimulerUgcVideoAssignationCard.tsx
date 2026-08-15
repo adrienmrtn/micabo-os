@@ -123,7 +123,8 @@ export function SimulerUgcVideoAssignationCard({ mode = "complet" }: Props) {
         },
         {
           jusquA: mode === "face_ref" ? "face_ref" : "complet",
-          ...(libre && reactionId ? { reactionId } : {}),
+          ...(reactionId ? { reactionId } : {}),
+          libre,
         },
       );
     },
