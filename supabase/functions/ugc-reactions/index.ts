@@ -11,7 +11,11 @@
  */
 
 import { downloadMedia, scrapeVideoPost } from "../_shared/apify.ts";
-import { normaliserVideoMp4PourKling } from "../_shared/fal_normaliser_video.ts";
+import {
+  formaterVideoMeta,
+  normaliserVideoMp4PourKling,
+  sonderVideoMeta,
+} from "../_shared/fal_normaliser_video.ts";
 import { trimmerVideoFal } from "../_shared/fal_trim_video.ts";
 import { ocrFrame } from "../_shared/gemini.ts";
 import { reponseNdjson, veutStream } from "../_shared/nettoyage_etapes.ts";
@@ -284,6 +288,16 @@ Deno.serve(async (request) => {
             detail: "Téléchargement fichier vidéo…",
           });
           const bytes = await downloadMedia(scraped.videoUrl);
+          const dimApify =
+            scraped.largeur && scraped.hauteur
+              ? `${scraped.largeur}×${scraped.hauteur}`
+              : "?";
+          const defApify = scraped.definition ? ` · ${scraped.definition}` : "";
+          emit?.({
+            etape: "download",
+            statut: "ok",
+            detail: `Octets bruts (pas de recodage) · ${bytes.length} octets · Apify ${dimApify}${defApify}`,
+          });
           // TEMP — purgé au finalize ; seuls crop + frame + video_text restent.
           const path = `ugc/reactions/${id}/_tmp_full.mp4`;
           emit?.({
@@ -297,6 +311,16 @@ Deno.serve(async (request) => {
             bytes,
             "video/mp4",
           );
+          try {
+            const metaStocke = await sonderVideoMeta(videoSourceUrl);
+            emit?.({
+              etape: "upload",
+              statut: "ok",
+              detail: `Stocké tel quel · ${formaterVideoMeta(metaStocke)}`,
+            });
+          } catch {
+            // sondage Fal optionnel
+          }
 
           const titre =
             scraped.text.trim().slice(0, 80) ||

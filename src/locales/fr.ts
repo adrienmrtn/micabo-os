@@ -256,7 +256,7 @@ export const fr = {
     simUgcVideo: {
       title: "Test assignation UGC AI VIDEO",
       subtitle:
-        "Pipeline complet pour UN créateur UGC AI VIDEO : reaction → nettoyage frame10 → Nano Banana → Kling (durée = reaction) → concat utilisation EN PLUS → caption. Logs exacts en stream.",
+        "Pipeline complet pour UN créateur UGC AI VIDEO : reaction → nettoyage frame10 → Nano Banana → Kling Pro (durée = reaction) → concat utilisation EN PLUS → caption. Logs exacts en stream.",
       date: "Date d'assignation",
       compte: "Créateur UGC AI VIDEO",
       lancer: "Lancer le test",
@@ -1243,7 +1243,7 @@ export const fr = {
       ugcVideoFaceDesc:
         "Figure 1 = frame 10 (pose), Figures 2+ = persona. Identité corps entier (pas head-swap). Sortie forcée 9:16.",
       ugcVideoKlingPromptTitle: "Prompt — Kling motion-control (positif)",
-      ugcVideoKlingPromptDesc: "Prompt optionnel envoyé à Kling v2.6 standard motion-control.",
+      ugcVideoKlingPromptDesc: "Prompt optionnel envoyé à Kling v2.6 Pro motion-control.",
       ugcVideoKlingNegTitle: "Prompt — Kling negative_prompt",
       ugcVideoKlingNegDesc: "Negative prompt Kling (identité, morphing, studio look…).",
       ugcVideoCaptionTitle: "Prompt — Caption UGC AI VIDEO",

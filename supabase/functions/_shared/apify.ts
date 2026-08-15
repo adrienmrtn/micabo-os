@@ -24,6 +24,8 @@ export interface ScrapedVideo {
   dureeMs: number | null;
   largeur: number | null;
   hauteur: number | null;
+  /** Qualité TikTok déclarée par Apify (`videoMeta.definition`), ex. 540p / 720p. */
+  definition: string | null;
   stats: { vues: number; likes: number; commentaires: number; partages: number };
 }
 
@@ -60,6 +62,8 @@ interface ApifyItem {
     duration?: number;
     width?: number;
     height?: number;
+    /** Qualité TikTok déclarée (souvent « 540p » = stream play, pas un recodage chez nous). */
+    definition?: string;
   };
   covers?: string[];
   musicMeta?: MusicMeta;
@@ -136,12 +140,19 @@ export async function downloadImage(url: string): Promise<Uint8Array> {
   return downloadMedia(url);
 }
 
-function pickVideoUrl(item: ApifyItem): string | null {
-  const media = item.mediaUrls ?? [];
-  const mp4 = media.find((u) => /\.mp4(\?|$)/i.test(u));
-  if (mp4) return mp4;
-  const anyMedia = media.find((u) => typeof u === "string" && u.length > 0);
-  if (anyMedia) return anyMedia;
+/**
+ * Fichier vidéo à rapatrier. `mediaUrls` = octets déjà stockés par Apify
+ * (add-on shouldDownloadVideos) — on ne recode pas. Fallback `downloadAddr`
+ * TikTok si le KV est vide. Pas de transcode ici.
+ * Seuils / ordre identiques à `src/features/ugc/pickTikTokVideoUrl.ts`.
+ */
+export function pickVideoUrl(item: ApifyItem): string | null {
+  const media = (item.mediaUrls ?? []).filter(
+    (u): u is string => typeof u === "string" && u.length > 0,
+  );
+  const mp4s = media.filter((u) => /\.mp4(\?|$)/i.test(u));
+  if (mp4s.length > 0) return mp4s[mp4s.length - 1]!;
+  if (media.length > 0) return media[media.length - 1]!;
   return item.videoMeta?.downloadAddr?.trim() || null;
 }
 
@@ -449,6 +460,7 @@ export async function scrapeVideoPost(url: string): Promise<ScrapedVideo> {
     dureeMs: typeof dureeSec === "number" ? Math.round(dureeSec * 1000) : null,
     largeur: item.videoMeta?.width ?? null,
     hauteur: item.videoMeta?.height ?? null,
+    definition: item.videoMeta?.definition?.trim() || null,
     stats: {
       vues: item.playCount ?? 0,
       likes: item.diggCount ?? 0,

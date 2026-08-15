@@ -1,7 +1,7 @@
 /**
  * Fal — Kling Video Motion Control
- *   fal-ai/kling-video/v2.6/standard/motion-control (défaut)
- *   fal-ai/kling-video/v2.6/pro/motion-control (retry qualité / durée)
+ *   fal-ai/kling-video/v2.6/pro/motion-control (défaut, qualité production)
+ *   fal-ai/kling-video/v2.6/standard/motion-control (secours explicite)
  *
  * image_url + video_url → vidéo où le perso de l'image reprend le motion.
  * Pas de param `duration` : la sortie doit suivre la durée de la vidéo
@@ -34,7 +34,7 @@ export async function klingMotionControl(input: {
   keepOriginalSound?: boolean;
   /** Si true : re-encode MP4. Défaut false — n'activer que pour WebM. */
   normaliserVideo?: boolean;
-  /** standard (défaut) ou pro (meilleure tenue de durée / qualité). */
+  /** standard ou pro (défaut pro — qualité production). */
   qualite?: "standard" | "pro";
   onProgress?: FalQueueProgress;
 }): Promise<{ url: string; bytes: Uint8Array; mime: string }> {
@@ -68,7 +68,7 @@ export async function klingMotionControl(input: {
   const prompt = String(input.prompt ?? "").trim();
   if (prompt) body.prompt = prompt;
 
-  const model = input.qualite === "pro" ? MODEL_PRO : MODEL_STANDARD;
+  const model = input.qualite === "standard" ? MODEL_STANDARD : MODEL_PRO;
   const queued = await falQueueSubmit(model, body, input.onProgress);
   const data = await falQueueAwaitJson(model, queued, input.onProgress, 600_000);
   const payload = (data?.data ?? data) as {

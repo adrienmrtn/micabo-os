@@ -3,7 +3,7 @@
  *   0) Choisir reaction (même label, pas de re-use sauf fallback) + utilisation
  *   1) Nettoyage frame10 (process classique Fal/Replicate text-removal + C2PA)
  *   2) Nano Banana edit : frame10 nettoyée + images persona → photo ref
- *   3) Kling motion-control (= clip transformé) :
+ *   3) Kling Pro motion-control (= clip transformé) :
  *        durée sortie = durée reaction (character_orientation=video, ≤30s)
  *   4) Concat : utilisation EN PLUS (durée totale = kling + utilisation)
  *   5) Caption traduite (langue créateur) — pas de « Sophia »
@@ -497,7 +497,7 @@ export async function assignerUgcVideoSlot(
     });
     const dureeReactionSec = metaReaction.durationSec;
     log(
-      `Étape 3/${etapeTotal} Kling (= clip transformé) · reaction=${formaterVideoMeta(
+      `Étape 3/${etapeTotal} Kling Pro (= clip transformé) · reaction=${formaterVideoMeta(
         metaReaction,
       )} · orientation=video (utilisation NON comptée ici)`,
     );
@@ -519,31 +519,27 @@ export async function assignerUgcVideoSlot(
       /\.webm(\?|$)/i.test(reaction.video_source_url) ||
       (reactionBytes?.mime.includes("webm") ?? false);
 
-    const lancerKling = (qualite: "standard" | "pro") =>
-      klingMotionControl({
-        imageUrl,
-        videoUrl: reactionVideoUrl,
-        prompt: klingPrompt,
-        // "video" : durée sortie = durée référence (jusqu'à 30s).
-        characterOrientation: "video",
-        keepOriginalSound: true,
-        // WebM → re-encode ; MP4 déjà propre → ne PAS re-scaler
-        // (scale-video peut faire tronquer l'extraction de motion à ~3s).
-        normaliserVideo: sourceWebm,
-        qualite,
-        onProgress: (p) => {
-          if (p.phase === "poll") {
-            log(`  Kling Fal ${p.statut ?? "…"} (#${p.polls ?? 0})`);
-          } else if (p.detail) {
-            log(`  Kling ${p.detail}`);
-          }
-        },
-      });
-
-    let kling = await lancerKling("standard");
-    let klingUrlTmp = kling.url;
-    let metaKling = await sonderVideoMeta(klingUrlTmp);
-    let dureeKlingSec = metaKling.durationSec;
+    const kling = await klingMotionControl({
+      imageUrl,
+      videoUrl: reactionVideoUrl,
+      prompt: klingPrompt,
+      characterOrientation: "video",
+      keepOriginalSound: true,
+      // WebM → re-encode ; MP4 déjà propre → ne PAS re-scaler
+      // (scale-video peut faire tronquer l'extraction de motion à ~3s).
+      normaliserVideo: sourceWebm,
+      qualite: "pro",
+      onProgress: (p) => {
+        if (p.phase === "poll") {
+          log(`  Kling Pro Fal ${p.statut ?? "…"} (#${p.polls ?? 0})`);
+        } else if (p.detail) {
+          log(`  Kling Pro ${p.detail}`);
+        }
+      },
+    });
+    const klingUrlTmp = kling.url;
+    const metaKling = await sonderVideoMeta(klingUrlTmp);
+    const dureeKlingSec = metaKling.durationSec;
     const ratioOk = (dK: number | null, dR: number | null) =>
       dK != null && dR != null && dK >= dR * 0.85;
 
@@ -552,24 +548,8 @@ export async function assignerUgcVideoSlot(
       dureeKlingSec != null &&
       !ratioOk(dureeKlingSec, dureeReactionSec)
     ) {
-      log(
-        `  ⚠ durée Kling ${formaterVideoMeta(metaKling)} ≪ reaction ${formaterVideoMeta(
-          metaReaction,
-        )} — retry Pro`,
-      );
-      kling = await lancerKling("pro");
-      klingUrlTmp = kling.url;
-      metaKling = await sonderVideoMeta(klingUrlTmp);
-      dureeKlingSec = metaKling.durationSec;
-    }
-
-    if (
-      dureeReactionSec != null &&
-      dureeKlingSec != null &&
-      !ratioOk(dureeKlingSec, dureeReactionSec)
-    ) {
       throw new Error(
-        `Kling a tronqué la reaction : ${dureeKlingSec.toFixed(2)}s au lieu de ${dureeReactionSec.toFixed(2)}s (même après Pro). Relancer ou raccourcir/simplifier la reaction.`,
+        `Kling Pro a tronqué la reaction : ${dureeKlingSec.toFixed(2)}s au lieu de ${dureeReactionSec.toFixed(2)}s. Relancer ou raccourcir/simplifier la reaction.`,
       );
     }
 
@@ -589,7 +569,7 @@ export async function assignerUgcVideoSlot(
       })
       .eq("id", postId);
     log(
-      `  Kling OK · ${formaterVideoMeta(metaKling)} (= reaction) · ${kling.bytes.length} octets → ${klingPath}`,
+      `  Kling Pro OK · ${formaterVideoMeta(metaKling)} (= reaction) · ${kling.bytes.length} octets → ${klingPath}`,
     );
 
     // ── 4) Concat utilisation (EN PLUS, durée non rognée) ───────────
