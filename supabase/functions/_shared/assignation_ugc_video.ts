@@ -179,6 +179,44 @@ async function telechargerStorage(
   return { bytes, mime };
 }
 
+type ReactionChoisie = {
+  id: string;
+  label_id: string;
+  video_source_url: string;
+  video_source_path: string | null;
+  first_frame_reference_url: string;
+  video_text: string | null;
+  titre: string;
+};
+
+async function chargerReactionParId(
+  supabase: Supabase,
+  reactionId: string,
+  log: AssignationUgcVideoLog,
+): Promise<ReactionChoisie | null> {
+  const { data, error } = await supabase
+    .from("ugc_reactions")
+    .select(
+      "id, label_id, video_source_url, video_source_path, first_frame_reference_url, video_text, titre, statut",
+    )
+    .eq("id", reactionId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    log(`Reaction ${reactionId.slice(0, 8)} introuvable`);
+    return null;
+  }
+  if (data.statut !== "pret") {
+    log(`Reaction ${reactionId.slice(0, 8)} statut=${data.statut} — il faut pret`);
+    return null;
+  }
+  if (!data.video_source_url || !data.first_frame_reference_url || !data.label_id) {
+    log(`Reaction ${reactionId.slice(0, 8)} incomplète (vidéo / frame / label)`);
+    return null;
+  }
+  return data as ReactionChoisie;
+}
+
 async function choisirReaction(
   supabase: Supabase,
   compteId: string,
@@ -244,7 +282,18 @@ async function choisirUtilisation(
   supabase: Supabase,
   labelId: string,
   log: AssignationUgcVideoLog,
+  opts: { nImporteQuelLabel?: boolean } = {},
 ): Promise<{ id: string; video_url: string; titre: string } | null> {
+  const pick = (rows: Array<{ id: string; video_url: string | null; titre: string | null }>) => {
+    const pool = rows.filter((u) => u.video_url) as Array<{
+      id: string;
+      video_url: string;
+      titre: string;
+    }>;
+    if (pool.length === 0) return null;
+    return pool[Math.floor(Math.random() * pool.length)] ?? null;
+  };
+
   const { data, error } = await supabase
     .from("ugc_utilisations")
     .select("id, video_url, titre, label_id")
@@ -252,17 +301,29 @@ async function choisirUtilisation(
     .not("video_url", "is", null)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  const pool = (data ?? []).filter((u) => u.video_url) as Array<{
-    id: string;
-    video_url: string;
-    titre: string;
-  }>;
-  if (pool.length === 0) {
-    log(`Aucune utilisation pour label=${labelId.slice(0, 8)}`);
+  const match = pick(data ?? []);
+  if (match) {
+    log(`${(data ?? []).length} utilisation(s) pour ce label`);
+    return match;
+  }
+  log(`Aucune utilisation pour label=${labelId.slice(0, 8)}`);
+  if (!opts.nImporteQuelLabel) return null;
+
+  const { data: toutes, error: errToutes } = await supabase
+    .from("ugc_utilisations")
+    .select("id, video_url, titre, label_id")
+    .not("video_url", "is", null)
+    .order("created_at", { ascending: false });
+  if (errToutes) throw errToutes;
+  const fallback = pick(toutes ?? []);
+  if (!fallback) {
+    log("Aucune utilisation en base (tous labels)");
     return null;
   }
-  log(`${pool.length} utilisation(s) pour ce label`);
-  return pool[Math.floor(Math.random() * pool.length)] ?? null;
+  log(
+    `Fallback utilisation (test libre, autre label) · id=${fallback.id.slice(0, 8)} · « ${fallback.titre || "—"} »`,
+  );
+  return fallback;
 }
 
 async function chargerPersonaUrls(
@@ -308,6 +369,8 @@ export async function assignerUgcVideoSlot(
     test?: boolean;
     /** Stop après Nano Banana (étapes 0–2). Défaut = pipeline complet. */
     jusquA?: AssignationUgcVideoJusqua;
+    /** Force cette reaction (test libre) au lieu du matching labels. */
+    reactionId?: string;
     onLog?: AssignationUgcVideoLog;
   } = {},
 ): Promise<{ postId: string } | { erreur: string }> {
@@ -329,21 +392,33 @@ export async function assignerUgcVideoSlot(
   );
 
   if (!compte.ugc_persona_id) {
-    return { erreur: "Compte UGC AI VIDEO sans persona" };
+    return {
+      erreur:
+        "Compte sans persona UGC — impossible de face-swap. Assigne un persona (UGC slideshow ou UGC VIDEO).",
+    };
   }
 
   const labelIds = await labelsDuCompte(supabase, compte.id);
   log(`Labels compte (${labelIds.length}) : ${labelIds.map((x) => x.slice(0, 8)).join(", ") || "—"}`);
 
-  const reaction = await choisirReaction(supabase, compte.id, labelIds, log);
+  const reactionForcee = String(opts.reactionId ?? "").trim();
+  const reaction = reactionForcee
+    ? await chargerReactionParId(supabase, reactionForcee, log)
+    : await choisirReaction(supabase, compte.id, labelIds, log);
   if (!reaction) {
-    return { erreur: "Aucune reaction disponible (label ∩ pret)" };
+    return {
+      erreur: reactionForcee
+        ? "Reaction introuvable ou pas finalisée (pret + vidéo + frame)"
+        : "Aucune reaction disponible (label ∩ pret)",
+    };
   }
   log(
-    `Reaction choisie · id=${reaction.id.slice(0, 8)} · label=${reaction.label_id.slice(0, 8)} · « ${reaction.titre || "—"} »`,
+    `Reaction ${reactionForcee ? "forcée" : "choisie"} · id=${reaction.id.slice(0, 8)} · label=${reaction.label_id.slice(0, 8)} · « ${reaction.titre || "—"} »`,
   );
 
-  const utilisation = await choisirUtilisation(supabase, reaction.label_id, log);
+  const utilisation = await choisirUtilisation(supabase, reaction.label_id, log, {
+    nImporteQuelLabel: Boolean(reactionForcee),
+  });
   if (!utilisation) {
     return { erreur: "Aucune utilisation pour le label de la reaction" };
   }
@@ -710,6 +785,7 @@ export async function assignerCompteUgcVideo(
     forcer?: boolean;
     ignorerWarmup?: boolean;
     jusquA?: AssignationUgcVideoJusqua;
+    reactionId?: string;
     onLog?: AssignationUgcVideoLog;
   } = {},
 ): Promise<AssignationUgcVideoResultat> {
@@ -727,8 +803,9 @@ export async function assignerCompteUgcVideo(
   const quotaBrut = Number(compte.posts_par_jour ?? 1);
   const quota = Math.min(3, Math.max(1, Number.isFinite(quotaBrut) ? quotaBrut : 1));
   const deja = await slotsDuJour(supabase, compte.id, jour, estTest);
-  const manque = opts.forcer ? 1 : Math.max(0, quota - deja);
-  log(`Quota=${quota} · déjà=${deja} · à créer=${manque}`);
+  const forcerUn = Boolean(opts.forcer) || Boolean(opts.reactionId);
+  const manque = forcerUn ? 1 : Math.max(0, quota - deja);
+  log(`Quota=${quota} · déjà=${deja} · à créer=${manque}${forcerUn ? " · forcé" : ""}`);
   if (manque === 0) {
     return { compteId: compte.id, crees: 0, raison: "quota atteint" };
   }
@@ -740,6 +817,7 @@ export async function assignerCompteUgcVideo(
     const r = await assignerUgcVideoSlot(supabase, compte, jour, {
       test: estTest,
       jusquA: opts.jusquA,
+      reactionId: opts.reactionId,
       onLog: log,
     });
     if ("postId" in r) postIds.push(r.postId);
@@ -758,7 +836,8 @@ export async function assignerCompteUgcVideo(
   };
 }
 
-/** Tous les comptes ugc_ai_video actifs (ou un seul). */
+/** Tous les comptes ugc_ai_video actifs (ou un seul).
+ *  Test libre (`reactionId`) : n'importe quel compte, actif ou non. */
 export async function assignerTousComptesUgcVideo(
   supabase: Supabase,
   jour: string,
@@ -768,22 +847,25 @@ export async function assignerTousComptesUgcVideo(
     forcer?: boolean;
     ignorerWarmup?: boolean;
     jusquA?: AssignationUgcVideoJusqua;
+    reactionId?: string;
     onLog?: AssignationUgcVideoLog;
   } = {},
 ): Promise<AssignationUgcVideoResultat[]> {
+  const libre = Boolean(String(opts.reactionId ?? "").trim());
   let q = supabase
     .from("comptes")
     .select(
       "id, langue, ugc_persona_id, persona_nom, handle_tiktok, posts_par_jour, warmup_ends_at, ugc_ai_video, is_active",
-    )
-    .eq("is_active", true)
-    .eq("ugc_ai_video", true);
+    );
+  if (!libre) {
+    q = q.eq("is_active", true).eq("ugc_ai_video", true);
+  }
   if (compteId) q = q.eq("id", compteId);
   const { data, error } = await q;
   if (error) throw error;
   const comptes = data ?? [];
   opts.onLog?.(
-    `${comptes.length} compte(s) UGC AI VIDEO à traiter · jour=${jour}`,
+    `${comptes.length} compte(s) ${libre ? "libre(s)" : "UGC AI VIDEO"} à traiter · jour=${jour}`,
   );
 
   return await mapPool(comptes, LARGEUR, async (c) => {

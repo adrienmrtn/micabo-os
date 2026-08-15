@@ -1,8 +1,9 @@
 /**
  * Assignation UGC AI VIDEO (reaction → NB → Kling → concat → caption).
  *
- *   {} | { date, compteId?, manuel?, test?, stream?, forcer?, jusquA? }
+ *   {} | { date, compteId?, manuel?, test?, stream?, forcer?, jusquA?, reactionId? }
  *   jusquA: "face_ref" | "complet" (défaut) — "face_ref" = jusqu'à Nano Banana (0–2)
+ *   reactionId : test libre — force cette reaction ; le compte peut être inactif / non UGC VIDEO
  *   { action: "annuler_test", compteId, date }
  *
  * Stream NDJSON recommandé (Kling / merge > 150s idle).
@@ -47,6 +48,7 @@ Deno.serve(async (request) => {
   const manuel = Boolean(body?.manuel);
   const jusquA =
     body?.jusquA === "face_ref" ? ("face_ref" as const) : ("complet" as const);
+  const reactionId = String(body?.reactionId ?? "").trim() || null;
   const action = typeof body?.action === "string" ? body.action : null;
   const stream = test || veutStream(request, body);
 
@@ -59,6 +61,9 @@ Deno.serve(async (request) => {
 
     if (test && !compteId) {
       return json({ error: "compteId requis pour un test" }, 400);
+    }
+    if (reactionId && !test) {
+      return json({ error: "reactionId n’est autorisé qu’en test" }, 400);
     }
 
     if (!manuel && !test) {
@@ -79,9 +84,10 @@ Deno.serve(async (request) => {
 
     const opts = {
       test,
-      forcer,
+      forcer: forcer || Boolean(reactionId),
       jusquA,
       ignorerWarmup: test || Boolean(body?.ignorerWarmup),
+      ...(reactionId ? { reactionId } : {}),
     };
 
     if (stream) {
@@ -103,7 +109,7 @@ Deno.serve(async (request) => {
             test
               ? `Assignation UGC AI VIDEO TEST · ${jour} · compte ${String(compteId).slice(0, 8)}${
                   jusquA === "face_ref" ? " · jusqu'à face_ref (0–2)" : ""
-                }`
+                }${reactionId ? ` · reaction ${reactionId.slice(0, 8)}` : ""}`
               : `Assignation UGC AI VIDEO · ${jour}${compteId ? ` · ${String(compteId).slice(0, 8)}` : " · tous"}`,
           );
           const resultats = await assignerTousComptesUgcVideo(
