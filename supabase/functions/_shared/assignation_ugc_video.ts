@@ -837,7 +837,7 @@ export async function assignerCompteUgcVideo(
 }
 
 /** Tous les comptes ugc_ai_video actifs (ou un seul).
- *  Test libre (`reactionId`) : n'importe quel compte, actif ou non. */
+ *  Test (un compte, ou `reactionId` / `libre`) : n'importe quel compte. */
 export async function assignerTousComptesUgcVideo(
   supabase: Supabase,
   jour: string,
@@ -848,10 +848,14 @@ export async function assignerTousComptesUgcVideo(
     ignorerWarmup?: boolean;
     jusquA?: AssignationUgcVideoJusqua;
     reactionId?: string;
+    libre?: boolean;
     onLog?: AssignationUgcVideoLog;
   } = {},
 ): Promise<AssignationUgcVideoResultat[]> {
-  const libre = Boolean(String(opts.reactionId ?? "").trim());
+  const libre =
+    Boolean(opts.libre) ||
+    Boolean(String(opts.reactionId ?? "").trim()) ||
+    (Boolean(opts.test) && Boolean(compteId));
   let q = supabase
     .from("comptes")
     .select(
@@ -864,6 +868,24 @@ export async function assignerTousComptesUgcVideo(
   const { data, error } = await q;
   if (error) throw error;
   const comptes = data ?? [];
+  if (compteId && comptes.length === 0) {
+    opts.onLog?.(
+      `Compte ${compteId.slice(0, 8)} introuvable — pas en base (id faux ?)`,
+    );
+    return [
+      {
+        compteId,
+        crees: 0,
+        erreur: "Compte introuvable",
+        raison: "Compte introuvable",
+      },
+    ];
+  }
+  for (const c of comptes) {
+    opts.onLog?.(
+      `Compte ${String(c.id).slice(0, 8)} · ${c.persona_nom || c.handle_tiktok || "—"} · actif=${c.is_active ? "oui" : "non"} · ugc_video=${c.ugc_ai_video ? "oui" : "non"} · persona=${c.ugc_persona_id ? "oui" : "non"}`,
+    );
+  }
   opts.onLog?.(
     `${comptes.length} compte(s) ${libre ? "libre(s)" : "UGC AI VIDEO"} à traiter · jour=${jour}`,
   );

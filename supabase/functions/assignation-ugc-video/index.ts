@@ -49,6 +49,7 @@ Deno.serve(async (request) => {
   const jusquA =
     body?.jusquA === "face_ref" ? ("face_ref" as const) : ("complet" as const);
   const reactionId = String(body?.reactionId ?? "").trim() || null;
+  const libre = Boolean(body?.libre) || Boolean(reactionId);
   const action = typeof body?.action === "string" ? body.action : null;
   const stream = test || veutStream(request, body);
 
@@ -84,9 +85,10 @@ Deno.serve(async (request) => {
 
     const opts = {
       test,
-      forcer: forcer || Boolean(reactionId),
+      forcer: forcer || Boolean(reactionId) || libre,
       jusquA,
       ignorerWarmup: test || Boolean(body?.ignorerWarmup),
+      libre: libre || (test && Boolean(compteId)),
       ...(reactionId ? { reactionId } : {}),
     };
 
@@ -109,7 +111,9 @@ Deno.serve(async (request) => {
             test
               ? `Assignation UGC AI VIDEO TEST · ${jour} · compte ${String(compteId).slice(0, 8)}${
                   jusquA === "face_ref" ? " · jusqu'à face_ref (0–2)" : ""
-                }${reactionId ? ` · reaction ${reactionId.slice(0, 8)}` : ""}`
+                }${reactionId ? ` · reaction ${reactionId.slice(0, 8)}` : ""}${
+                  libre && !reactionId ? " · libre" : ""
+                }`
               : `Assignation UGC AI VIDEO · ${jour}${compteId ? ` · ${String(compteId).slice(0, 8)}` : " · tous"}`,
           );
           const resultats = await assignerTousComptesUgcVideo(

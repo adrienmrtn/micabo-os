@@ -24,6 +24,7 @@ import type {
 } from "./types";
 import { compteEnProcessus } from "./warmup";
 import { ugcVisages } from "./ugcVisages";
+import { corpsAssignationUgcVideoTest } from "./corpsAssignationUgcVideoTest";
 
 export type { EloImportRapport };
 
@@ -3557,7 +3558,7 @@ export async function lancerAssignationUgcVideoTest(
   date: string,
   compteId: string,
   onLog?: (ligne: AssignationTestLog) => void,
-  opts: { jusquA?: "face_ref" | "complet"; reactionId?: string } = {},
+  opts: { jusquA?: "face_ref" | "complet"; reactionId?: string; libre?: boolean } = {},
 ): Promise<{
   ok: boolean;
   jour: string;
@@ -3586,18 +3587,15 @@ export async function lancerAssignationUgcVideoTest(
       "Content-Type": "application/json",
       Accept: "application/x-ndjson",
     },
-    body: JSON.stringify({
-      date,
-      compteId,
-      manuel: true,
-      test: true,
-      stream: true,
-      ignorerWarmup: true,
-      jusquA: opts.jusquA === "face_ref" ? "face_ref" : "complet",
-      ...(opts.reactionId
-        ? { reactionId: opts.reactionId, forcer: true }
-        : {}),
-    }),
+    body: JSON.stringify(
+      corpsAssignationUgcVideoTest({
+        date,
+        compteId,
+        jusquA: opts.jusquA,
+        reactionId: opts.reactionId,
+        libre: opts.libre,
+      }),
+    ),
   });
 
   if (!res.ok || !res.body) {
