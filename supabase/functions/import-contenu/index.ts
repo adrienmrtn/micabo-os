@@ -16,7 +16,7 @@ import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared
 /**
  * Import pré-calculé v-next — orchestration serveur :
  *
- *   { enqueueCompte: true, compteReferenceId } → liste + file import_file
+ *   { enqueueCompte: true, compteReferenceId, nouveauxSeulement? } → liste + file import_file
  *   { enqueueUrls: true, urls, compteReferenceId?, labelIds?, batchId? }
  *   { postUrl, ... } → enqueue 1 URL (ou scrape immédiat si scrapeNow)
  *   { worker: true } → claim 1 file OU 1 contenu, traite, rechaîne si file non vide
@@ -56,7 +56,9 @@ Deno.serve(async (request) => {
     // Enfile toutes les URLs d'un compte (listing rapide, pas de scrape lourd).
     if (body?.enqueueCompte && body?.compteReferenceId) {
       const compteId = String(body.compteReferenceId);
-      const listed = await listerUrlsCompteReference(supabase, compteId);
+      const listed = await listerUrlsCompteReference(supabase, compteId, {
+        nouveauxSeulement: Boolean(body.nouveauxSeulement),
+      });
       // Langue explicite, sinon celle du compte source.
       let langue: string | null =
         typeof body.langue === "string" ? body.langue : null;
@@ -82,6 +84,7 @@ Deno.serve(async (request) => {
         handle: listed.handle,
         total: listed.total,
         connus: listed.connus,
+        nouveaux: listed.nouveaux,
         source: listed.source,
         batchId: r.batchId,
         enqueued: r.enqueued,
@@ -155,6 +158,7 @@ Deno.serve(async (request) => {
         urls: r.urls,
         total: r.total,
         connus: r.connus,
+        nouveaux: r.nouveaux,
         source: r.source,
       });
     }

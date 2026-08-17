@@ -212,33 +212,52 @@ export function demarrerImportCompte(opts: {
   langue: string;
   /** Ignoré — la largeur est côté serveur (workers). */
   largeur?: number;
+  /** Uniquement les TikToks publiés depuis le dernier import (pas les anciens). */
+  nouveauxSeulement?: boolean;
 }): string {
-  const jobId = newJob(`@${opts.handle.replace(/^@/, "")}`);
+  const prefixe = opts.nouveauxSeulement ? "MAJ @" : "@";
+  const jobId = newJob(`${prefixe}${opts.handle.replace(/^@/, "")}`);
   void (async () => {
     try {
       log(
         jobId,
         "info",
-        `Listing + enqueue (langue=${opts.langue}) — fermeture OK…`,
+        opts.nouveauxSeulement
+          ? `Update — nouveaux TikToks seulement (langue=${opts.langue})…`
+          : `Listing + enqueue (langue=${opts.langue}) — fermeture OK…`,
         `@${opts.handle.replace(/^@/, "")}`,
       );
       const r = await enqueueImportCompte(
         opts.compteReferenceId,
         undefined,
         opts.langue,
+        { nouveauxSeulement: opts.nouveauxSeulement },
       );
       const cur = jobs.find((j) => j.id === jobId);
       if (cur) upsertJob({ ...cur, batchId: r.batchId });
-      log(
-        jobId,
-        "ok",
-        `File créée — ${r.enqueued} URLs enqueued` +
-          (r.skipped ? ` (${r.skipped} déjà en file)` : "") +
-          (r.connus ? ` · ${r.connus} déjà connus (re-pipeline)` : ""),
-        `batch=${r.batchId} · total profil=${r.total} · source=${r.source} · langue=${opts.langue}`,
-      );
-      if (r.enqueued === 0 && r.skipped === 0 && r.total === 0) {
-        log(jobId, "warn", "Aucun slideshow à importer");
+      if (opts.nouveauxSeulement) {
+        log(
+          jobId,
+          r.enqueued > 0 ? "ok" : "warn",
+          r.enqueued > 0
+            ? `File créée — ${r.enqueued} nouveau(x) TikTok(s)`
+            : "Aucun nouveau TikTok depuis le dernier import",
+          `ignorés déjà importés=${r.connus} · total profil=${r.total} · source=${r.source} · langue=${opts.langue}`,
+        );
+      } else {
+        log(
+          jobId,
+          "ok",
+          `File créée — ${r.enqueued} URLs enqueued` +
+            (r.skipped ? ` (${r.skipped} déjà en file)` : "") +
+            (r.connus ? ` · ${r.connus} déjà connus (re-pipeline)` : ""),
+          `batch=${r.batchId} · total profil=${r.total} · source=${r.source} · langue=${opts.langue}`,
+        );
+      }
+      if (r.enqueued === 0) {
+        if (!opts.nouveauxSeulement && r.skipped === 0 && r.total === 0) {
+          log(jobId, "warn", "Aucun slideshow à importer");
+        }
         fin(jobId, "ok");
         return;
       }

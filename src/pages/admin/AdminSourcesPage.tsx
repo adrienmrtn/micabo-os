@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { RefreshCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -167,6 +168,47 @@ function BoutonExtraire({
         }}
       >
         {t("sources.extraire")}
+      </Button>
+      {resultat && <span className="text-xs text-muted-foreground">{resultat}</span>}
+    </div>
+  );
+}
+
+/** Nouveaux TikToks depuis le dernier import — pas les anciens déjà en stock. */
+function BoutonUpdateSource({
+  sourceId,
+  handle,
+  langue,
+  dejaImportee,
+}: {
+  sourceId: string;
+  handle: string;
+  langue: string;
+  dejaImportee: boolean;
+}) {
+  const { t } = useTranslation();
+  const [resultat, setResultat] = React.useState<string | null>(null);
+
+  if (!dejaImportee) return null;
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        size="sm"
+        title={t("sources.updateAide")}
+        disabled={!langue}
+        onClick={() => {
+          demarrerImportCompte({
+            compteReferenceId: sourceId,
+            handle,
+            langue,
+            nouveauxSeulement: true,
+          });
+          setResultat(t("sources.updateLance"));
+        }}
+      >
+        <RefreshCw className="size-3.5" />
+        {t("sources.update")}
       </Button>
       {resultat && <span className="text-xs text-muted-foreground">{resultat}</span>}
     </div>
@@ -378,6 +420,12 @@ function LigneSource({
         </div>
 
         <div className="flex items-start gap-2">
+          <BoutonUpdateSource
+            sourceId={source.id}
+            handle={source.handle_tiktok}
+            langue={source.langue}
+            dejaImportee={Boolean(source.dernier_scrape_at)}
+          />
           <BoutonExtraire
             sourceId={source.id}
             handle={source.handle_tiktok}
@@ -710,6 +758,42 @@ function FormAjoutSource({ niches }: { niches: NicheLabel[] }) {
   );
 }
 
+function BarreUpdateSources({ sources }: { sources: CompteReference[] }) {
+  const { t } = useTranslation();
+  const [message, setMessage] = React.useState<string | null>(null);
+  const aJour = sources.filter((s) => s.is_active && s.dernier_scrape_at && s.langue);
+
+  const lancer = () => {
+    if (aJour.length === 0) {
+      setMessage(t("sources.updateToutesVide"));
+      return;
+    }
+    for (const s of aJour) {
+      demarrerImportCompte({
+        compteReferenceId: s.id,
+        handle: s.handle_tiktok,
+        langue: s.langue,
+        nouveauxSeulement: true,
+      });
+    }
+    setMessage(t("sources.updateToutesLance", { count: aJour.length }));
+  };
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+      <div className="min-w-0 space-y-1">
+        <p className="text-sm font-medium">{t("sources.updateToutes")}</p>
+        <p className="text-xs text-muted-foreground">{t("sources.updateToutesAide")}</p>
+        {message && <p className="text-xs text-muted-foreground">{message}</p>}
+      </div>
+      <Button disabled={aJour.length === 0} onClick={lancer}>
+        <RefreshCw className="size-3.5" />
+        {t("sources.updateToutesGo", { count: aJour.length })}
+      </Button>
+    </div>
+  );
+}
+
 export function AdminSourcesPage() {
   const { t } = useTranslation();
   const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
@@ -732,6 +816,7 @@ export function AdminSourcesPage() {
       </CardHeader>
       <CardContent className="space-y-6">
         <FormAjoutSource niches={niches.data ?? []} />
+        <BarreUpdateSources sources={toutes} />
         <ImportJobsPanel />
         <ImportHistoriquePanel />
 

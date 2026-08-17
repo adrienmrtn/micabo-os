@@ -672,6 +672,16 @@ export const en = {
       extraire: "Extract",
       extraireAide:
         "Lists slideshows, then runs 1 scrape + pipeline agent per TikTok in parallel (relevance, ELO, cleaning, translation). Full logs. Without blocking the page — several accounts can also run in parallel.",
+      update: "Update",
+      updateAide:
+        "Import only TikToks posted since this account's last import — not the ones already in stock.",
+      updateLance: "Update started — new TikToks only (see logs).",
+      updateToutes: "Update sources",
+      updateToutesAide:
+        "For each already-imported account: fetch TikToks posted since the last import. Older ones are skipped.",
+      updateToutesGo: "Update ({{count}})",
+      updateToutesLance: "Update started on {{count}} source(s) — new TikToks only.",
+      updateToutesVide: "No already-imported source to update (run Extract first).",
       importLien: "Import a TikTok",
       importLienAide:
         "Paste a single TikTok slideshow link. It goes through the v-next pipeline (ELO → cleaning → translations) in the background, attached to this source and its labels.",

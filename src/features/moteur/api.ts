@@ -2614,23 +2614,26 @@ export const listerSlideshowsCompte = (compteReferenceId: string) =>
     urls: string[];
     total: number;
     connus: number;
+    nouveaux: number;
     source: "page" | "apify" | "mixte";
   }>("import-contenu", {
     compteReferenceId,
     lister: true,
   });
 
-/** Enfile toutes les URLs d'un compte + kick workers serveur. */
+/** Enfile les URLs d'un compte + kick workers serveur. */
 export const enqueueImportCompte = (
   compteReferenceId: string,
   labelIds?: string[],
   langue?: string | null,
+  opts?: { nouveauxSeulement?: boolean },
 ) =>
   invoke<{
     ok: boolean;
     handle: string;
     total: number;
     connus: number;
+    nouveaux: number;
     source: string;
     batchId: string;
     enqueued: number;
@@ -2641,6 +2644,7 @@ export const enqueueImportCompte = (
     compteReferenceId,
     labelIds: labelIds ?? [],
     langue: langue ?? null,
+    nouveauxSeulement: opts?.nouveauxSeulement ?? false,
   });
 
 /** Enfile une liste d'URLs pour scrape+pipeline serveur. */
