@@ -17,6 +17,13 @@ import {
   EmptyState,
 } from "@/components/ui/card";
 import { useAuth } from "@/features/auth/AuthContext";
+import { CompteursPhases, ListeCreateursSuivi } from "@/features/hiring/SuiviCreateurs";
+import {
+  additionnerCompteurs,
+  createursDuManager,
+  hmsDuDm,
+  resumeHm,
+} from "@/features/hiring/suiviEquipe";
 import { LabelPicker } from "@/features/moteur/LabelPicker";
 import { nomLangue } from "@/features/moteur/langues";
 import {
@@ -118,9 +125,10 @@ export function HiringRecruteursPage() {
     return <Navigate to="/embauche" replace />;
   }
 
-  const hms = (posters.data ?? []).filter(
-    (p) => p.role === "hiring_manager" && p.manager_id === user?.id,
-  );
+  const tous = posters.data ?? [];
+  const hms = user?.id ? hmsDuDm(tous, user.id) : [];
+  const resumes = hms.map((hm) => resumeHm(hm, tous));
+  const totaux = additionnerCompteurs(resumes.map((r) => r.compteurs));
 
   return (
     <div className="space-y-6">
@@ -237,7 +245,12 @@ export function HiringRecruteursPage() {
         <CardContent className="space-y-3">
           {posters.isPending && <p className="text-sm text-muted-foreground">{t("common.loading")}</p>}
           {!posters.isPending && hms.length === 0 && <EmptyState title={t("hiring.aucunHm")} />}
-          {hms.map((hm) => (
+          {!posters.isPending && hms.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {t("hiring.equipeTotaux", { hms: hms.length })} · <CompteursPhases compteurs={totaux} />
+            </p>
+          )}
+          {resumes.map(({ hm, compteurs }) => (
             <div key={hm.id} className="space-y-2 rounded-md border p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-semibold">{nomAffiche(hm)}</span>
@@ -246,6 +259,8 @@ export function HiringRecruteursPage() {
                 <span className="text-xs text-muted-foreground">{hm.email}</span>
               </div>
               <LanguesHm recruteur={hm} />
+              <CompteursPhases compteurs={compteurs} />
+              <ListeCreateursSuivi createurs={createursDuManager(tous, hm.id)} />
             </div>
           ))}
         </CardContent>

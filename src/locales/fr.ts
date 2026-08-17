@@ -868,6 +868,12 @@ export const fr = {
       creerRecruteurDesc:
         "Saisis son nom et les langues qu’il gère : il pourra embaucher des créateurs dans chacune.",
       recruteurs: "Recruteurs",
+      dmDe: "DM · {{nom}}",
+      directingManager: "Directing manager",
+      hmsDuDm: "Hiring managers rattachés",
+      hmSansDm: "HM sans directing manager",
+      equipeDmResume:
+        "{{hms}} HM · {{total}} créateur(s) · {{pasCree}} pas créé · {{warmup}} warmup · {{actif}} actif",
       sansRecruteur: "Sans recruteur",
       langueRecruteur: "Langue",
       languesRecruteur: "Langues gérées",
@@ -928,8 +934,16 @@ export const fr = {
       creerHm: "Créer un hiring manager",
       creerHmDesc:
         "Même connexion et même mot de passe initial qu’un HM. Tu paramètres ses langues (et le mode UGC VIDEO si besoin).",
+      suiviHm: "Hiring managers",
+      suiviHmDesc: "Suivi recrutement de tes HM : créateurs, warmup, liens TikTok.",
       mesHm: "Tes hiring managers",
-      mesHmDesc: "Ceux que tu as créés — tu peux encore ajuster leurs langues.",
+      mesHmDesc:
+        "Créateurs rattachés à chaque HM, phase (compte pas créé / warmup / actif) et lien TikTok.",
+      equipeTotaux: "{{hms}} HM",
+      compteursResume:
+        "{{total}} créateur(s) · {{pasCree}} pas créé · {{warmup}} warmup · {{actif}} actif",
+      aucunCreateurHm: "Aucun créateur rattaché.",
+      pasDeTiktok: "Pas de TikTok",
       aucunHm: "Aucun hiring manager pour l’instant.",
       docsOnboarding: "Documents d’onboarding",
       docsOnboardingDesc:

@@ -33,9 +33,9 @@ export function HiringLayout() {
               ? [
                   {
                     to: "/manager/recruteurs",
-                    label: t("hiring.creerHm"),
+                    label: t("hiring.suiviHm"),
                     icon: Users,
-                    description: t("hiring.creerHmDesc"),
+                    description: t("hiring.suiviHmDesc"),
                   },
                   {
                     to: "/manager/documents",

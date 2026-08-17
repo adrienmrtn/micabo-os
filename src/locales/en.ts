@@ -865,6 +865,12 @@ export const en = {
       creerRecruteurDesc:
         "Enter their name and the languages they manage — they can hire creators in each one.",
       recruteurs: "Recruiters",
+      dmDe: "DM · {{nom}}",
+      directingManager: "Directing manager",
+      hmsDuDm: "Assigned hiring managers",
+      hmSansDm: "HMs without a directing manager",
+      equipeDmResume:
+        "{{hms}} HM · {{total}} creator(s) · {{pasCree}} not created · {{warmup}} warmup · {{actif}} active",
       sansRecruteur: "No recruiter",
       langueRecruteur: "Language",
       languesRecruteur: "Managed languages",
@@ -925,8 +931,16 @@ export const en = {
       creerHm: "Create a hiring manager",
       creerHmDesc:
         "Same login and same initial password as an HM. You set their languages (and UGC VIDEO mode if needed).",
+      suiviHm: "Hiring managers",
+      suiviHmDesc: "Track your HMs' recruiting: creators, warmup, TikTok links.",
       mesHm: "Your hiring managers",
-      mesHmDesc: "The ones you created — you can still adjust their languages.",
+      mesHmDesc:
+        "Creators on each HM, phase (account not created / warmup / active) and TikTok link.",
+      equipeTotaux: "{{hms}} HM",
+      compteursResume:
+        "{{total}} creator(s) · {{pasCree}} not created · {{warmup}} warmup · {{actif}} active",
+      aucunCreateurHm: "No creator assigned.",
+      pasDeTiktok: "No TikTok",
       aucunHm: "No hiring manager yet.",
       docsOnboarding: "Onboarding documents",
       docsOnboardingDesc:

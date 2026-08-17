@@ -16,6 +16,8 @@ import {
   EmptyState,
 } from "@/components/ui/card";
 import { badgeManager, estRoleManager, useAuth } from "@/features/auth/AuthContext";
+import { CompteursPhases, ListeCreateursSuivi } from "@/features/hiring/SuiviCreateurs";
+import { equipesParDm, hmsDuDm, hmsSansDm, nomProfil, resumeHm } from "@/features/hiring/suiviEquipe";
 import { CompteEditor, PostsParJourCompte } from "@/features/moteur/CompteEditor";
 import {
   assurerComptePoster,
@@ -876,7 +878,6 @@ export function AdminPostersPage() {
   );
 
   const tous = posters.data ?? [];
-  const recruteurs = tous.filter((p) => estRoleManager(p.role));
   const creators = trierCreateurs(tous.filter((p) => p.role === "poster").filter(matchCreateur));
   const admins = tous.filter((p) => p.role === "admin");
   const tousCreateurs = tous.filter((p) => p.role === "poster");
@@ -926,6 +927,9 @@ export function AdminPostersPage() {
           </div>
           <DrapeauxLangues codes={langues} />
         </div>
+        {poster.role === "hiring_manager" && poster.manager_nom && (
+          <p className="text-[11px] text-violet-700">{t("posters.dmDe", { nom: poster.manager_nom })}</p>
+        )}
         <LangueRecruteurDropdown recruteur={poster} />
       </article>
     );
@@ -999,9 +1003,9 @@ export function AdminPostersPage() {
     count: number,
     membres: PosterProfil[],
     type: "recruteur" | "createur",
-    opts?: { badge?: string; sousTitre?: string },
+    opts?: { badge?: string; sousTitre?: string; cle?: string },
   ) => (
-    <section key={titre} className="space-y-3">
+    <section key={opts?.cle ?? titre} className="space-y-3">
       <div className="flex flex-wrap items-baseline gap-2 border-b pb-1.5">
         <h2 className="text-sm font-semibold">{titre}</h2>
         <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
@@ -1034,16 +1038,50 @@ export function AdminPostersPage() {
       );
     }
 
+    const equipes = equipesParDm(tous);
+    const orphelins = hmsSansDm(tous);
+
     return (
       <div className="space-y-8">
-        {recruteurs.length > 0 &&
-          section(t("posters.recruteurs"), recruteurs.length, recruteurs, "recruteur", {
-            badge: t("hiring.badge"),
-          })}
-        {recruteurs.map((rec) => {
-          const membres = parManager.get(rec.id) ?? [];
+        {equipes.map((eq) => {
+          const membresEquipe = [eq.dm, ...eq.hms.map((h) => h.hm)];
+          return (
+            <div key={eq.dm.id} className="space-y-6">
+              {section(nomAffiche(eq.dm), eq.hms.length, membresEquipe, "recruteur", {
+                cle: `dm-${eq.dm.id}`,
+                badge: t("hiring.badgeDm"),
+                sousTitre: t("posters.equipeDmResume", {
+                  hms: eq.hms.length,
+                  total: eq.compteurs.total,
+                  pasCree: eq.compteurs.pasCree,
+                  warmup: eq.compteurs.warmup,
+                  actif: eq.compteurs.actif,
+                }),
+              })}
+              {eq.hms.map((h) => {
+                const membres = parManager.get(h.hm.id) ?? [];
+                if (membres.length === 0) return null;
+                return section(nomAffiche(h.hm), membres.length, membres, "createur", {
+                  cle: `hm-creators-${h.hm.id}`,
+                  sousTitre: t("posters.createursDuRecruteur"),
+                });
+              })}
+            </div>
+          );
+        })}
+        {orphelins.length > 0 &&
+          section(
+            t("posters.hmSansDm"),
+            orphelins.length,
+            orphelins.map((h) => h.hm),
+            "recruteur",
+            { cle: "hm-sans-dm", badge: t("hiring.badgeHm") },
+          )}
+        {orphelins.map((h) => {
+          const membres = parManager.get(h.hm.id) ?? [];
           if (membres.length === 0) return null;
-          return section(nomAffiche(rec), membres.length, membres, "createur", {
+          return section(nomAffiche(h.hm), membres.length, membres, "createur", {
+            cle: `orphan-creators-${h.hm.id}`,
             sousTitre: t("posters.createursDuRecruteur"),
           });
         })}
@@ -1069,6 +1107,11 @@ export function AdminPostersPage() {
     fiche && estRoleManager(fiche.role)
       ? tousCreateurs.filter((c) => c.manager_id === fiche.id)
       : [];
+  const ficheHms = fiche?.role === "directing_manager" ? hmsDuDm(tous, fiche.id) : [];
+  const ficheDm =
+    fiche?.role === "hiring_manager" && fiche.manager_id
+      ? tous.find((p) => p.id === fiche.manager_id && p.role === "directing_manager")
+      : undefined;
   const ficheEloMoyen =
     fiche && estRoleManager(fiche.role) ? eloMoyenRecruteur(fiche.id) : null;
   const soiMeme = fiche?.id === user?.id;
@@ -1144,33 +1187,91 @@ export function AdminPostersPage() {
 
               {fiche.hm_ugc_ai_video && <HmUgcVideoLabelsEditeur profileId={fiche.id} />}
 
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {t("posters.createursDuRecruteur")}
-                </Label>
-                {ficheCreateurs.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">{t("posters.aucunCreateur")}</p>
-                ) : (
-                  <ul className="space-y-1 text-sm">
-                    {ficheCreateurs.map((c) => (
-                      <li key={c.id} className="flex items-center justify-between gap-2">
-                        <button
-                          type="button"
-                          className="underline underline-offset-2"
-                          onClick={() => ouvrirFiche(c.id)}
-                        >
-                          {nomAffiche(c)}
-                        </button>
-                        {c.score != null && (
-                          <span className="text-xs text-muted-foreground">
-                            {t("posters.eloCompte", { score: Number(c.score).toFixed(1) })}
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              {fiche.role === "hiring_manager" && (
+                <p className="text-sm">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {t("posters.directingManager")}
+                  </span>
+                  <span className="mt-0.5 block">
+                    {ficheDm ? (
+                      <button
+                        type="button"
+                        className="underline underline-offset-2"
+                        onClick={() => ouvrirFiche(ficheDm.id)}
+                      >
+                        {nomAffiche(ficheDm)}
+                      </button>
+                    ) : (
+                      <span className="text-muted-foreground">{t("posters.hmSansDm")}</span>
+                    )}
+                  </span>
+                </p>
+              )}
+
+              {fiche.role === "directing_manager" && (
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {t("posters.hmsDuDm")}
+                  </Label>
+                  {ficheHms.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">{t("hiring.aucunHm")}</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {ficheHms.map((hm) => {
+                        const resume = resumeHm(hm, tous);
+                        return (
+                          <li key={hm.id} className="space-y-1 rounded-md border p-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                className="text-sm font-medium underline underline-offset-2"
+                                onClick={() => ouvrirFiche(hm.id)}
+                              >
+                                {nomProfil(hm)}
+                              </button>
+                              <Badge variant="outline">{t("hiring.badgeHm")}</Badge>
+                              <CompteursPhases compteurs={resume.compteurs} />
+                            </div>
+                            <ListeCreateursSuivi
+                              createurs={tousCreateurs.filter((c) => c.manager_id === hm.id)}
+                            />
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {fiche.role === "hiring_manager" && (
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {t("posters.createursDuRecruteur")}
+                  </Label>
+                  {ficheCreateurs.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">{t("posters.aucunCreateur")}</p>
+                  ) : (
+                    <ul className="space-y-1 text-sm">
+                      {ficheCreateurs.map((c) => (
+                        <li key={c.id} className="flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            className="underline underline-offset-2"
+                            onClick={() => ouvrirFiche(c.id)}
+                          >
+                            {nomAffiche(c)}
+                          </button>
+                          {c.score != null && (
+                            <span className="text-xs text-muted-foreground">
+                              {t("posters.eloCompte", { score: Number(c.score).toFixed(1) })}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
 
               {!soiMeme && (
                 <div className="flex flex-wrap gap-2 border-t pt-3">
