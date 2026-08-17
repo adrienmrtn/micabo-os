@@ -2,8 +2,10 @@ import * as React from "react";
 import type { Session, User } from "@supabase/supabase-js";
 
 import { supabase } from "@/lib/supabase/client";
+import type { Role } from "./roles";
 
-export type Role = "admin" | "poster" | "hiring_manager";
+export type { Role };
+export { badgeManager, estRoleManager } from "./roles";
 
 export interface Profil {
   id: string;
@@ -35,6 +37,7 @@ async function chargerRole(userId: string): Promise<Role | null> {
   const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
   const roles = (data ?? []).map((r) => r.role as Role);
   if (roles.includes("admin")) return "admin";
+  if (roles.includes("directing_manager")) return "directing_manager";
   if (roles.includes("hiring_manager")) return "hiring_manager";
   if (roles.includes("poster")) return "poster";
   return null;

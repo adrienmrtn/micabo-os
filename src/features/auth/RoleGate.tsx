@@ -6,6 +6,7 @@ const ACCUEIL: Record<Role, string> = {
   admin: "/admin",
   poster: "/calendrier",
   hiring_manager: "/embauche",
+  directing_manager: "/embauche",
 };
 
 export function RoleGate({ allow }: { allow: Role[] }) {

@@ -1,4 +1,5 @@
 import { generateTextFast } from "../_shared/gemini.ts";
+import { estRoleManager } from "../_shared/roles.ts";
 import {
   assertRole,
   aujourdhuiParis,
@@ -10,7 +11,7 @@ import {
 const QUESTION_MAX = 1_500;
 const CONTEXTE_MAX = 24_000;
 
-type Role = "admin" | "poster" | "hiring_manager";
+type Role = "admin" | "poster" | "hiring_manager" | "directing_manager";
 
 const LANGUES_CHAT = [
   "fr",
@@ -105,13 +106,13 @@ function jourParis(offset = 0): string {
 
 function audiencesDocs(role: Role): Array<DocumentLigne["audience"]> {
   if (role === "poster") return ["poster", "all"];
-  if (role === "hiring_manager") return ["manager", "all"];
+  if (estRoleManager(role)) return ["manager", "all"];
   return ["manager", "poster", "all"];
 }
 
 function audiencesSnippets(role: Role): Array<Snippet["audience"]> {
   if (role === "poster") return ["poster", "all"];
-  if (role === "hiring_manager") return ["hiring_manager", "all"];
+  if (estRoleManager(role)) return ["hiring_manager", "all"];
   return ["admin", "all"];
 }
 
@@ -153,8 +154,8 @@ function cadreRole(role: Role): string {
     return `Périmètre CRÉATEUR: calendrier, posts assignés, identité TikTok, guides créateur.
 Interdit: totaux plateforme, autres créateurs, comptes sources, outils admin, données HM.`;
   }
-  if (role === "hiring_manager") {
-    return `Périmètre HIRING MANAGER: tes créateurs (ceux que tu as recrutés), leur calendrier, guides manager.
+  if (estRoleManager(role)) {
+    return `Périmètre MANAGER${role === "directing_manager" ? " (DM)" : ""}: tes créateurs (ceux que tu as recrutés), leur calendrier, guides manager.
 Interdit: autres équipes, comptes sources, pilotage moteur, chiffres globaux plateforme.`;
   }
   return `Périmètre ADMIN: toute la plateforme (posts, créateurs, HM, comptes, docs).
@@ -204,7 +205,7 @@ async function snapshotAdmin(
   const posterIds = new Set(
     (roles.data ?? []).filter((r) => r.role === "poster").map((r) => r.user_id),
   );
-  const hm = (roles.data ?? []).filter((r) => r.role === "hiring_manager").length;
+  const hm = (roles.data ?? []).filter((r) => estRoleManager(r.role)).length;
   const { data: profils } = posterIds.size
     ? await db.from("profiles").select("id, is_active").in("id", [...posterIds])
     : { data: [] as Array<{ id: string; is_active: boolean }> };
@@ -365,7 +366,13 @@ function construirePrompt(input: {
   historique: Tour[];
 }): string {
   const roleLabel =
-    input.role === "poster" ? "créateur (poster)" : input.role === "hiring_manager" ? "hiring manager" : "admin";
+    input.role === "poster"
+      ? "créateur (poster)"
+      : input.role === "directing_manager"
+        ? "directing manager"
+        : input.role === "hiring_manager"
+          ? "hiring manager"
+          : "admin";
   const langue = NOM_LANGUE[input.locale] ?? input.locale;
 
   const historique = input.historique
@@ -398,7 +405,12 @@ ${input.question}`;
 }
 
 Deno.serve(async (request) => {
-  const acces = await assertRole(request, ["admin", "poster", "hiring_manager"]);
+  const acces = await assertRole(request, [
+    "admin",
+    "poster",
+    "hiring_manager",
+    "directing_manager",
+  ]);
   if (acces instanceof Response) return acces;
 
   try {
@@ -435,7 +447,7 @@ Deno.serve(async (request) => {
 
     if (role === "admin") {
       live = await snapshotAdmin(db, auj, hier);
-    } else if (role === "hiring_manager") {
+    } else if (estRoleManager(role)) {
       live = await snapshotHm(db, acces.userId, auj, hier);
     } else {
       const snap = await snapshotPoster(db, acces.userId, auj, demain);

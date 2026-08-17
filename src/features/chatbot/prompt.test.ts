@@ -55,9 +55,11 @@ describe("audiences", () => {
   it("sépare docs et snippets par rôle", () => {
     expect(audiencesPour("poster")).toEqual(["poster", "all"]);
     expect(audiencesPour("hiring_manager")).toEqual(["manager", "all"]);
+    expect(audiencesPour("directing_manager")).toEqual(["manager", "all"]);
     expect(audiencesSnippets("admin")).toEqual(["admin", "all"]);
     expect(audiencesSnippets("poster")).toEqual(["poster", "all"]);
     expect(audiencesSnippets("hiring_manager")).toEqual(["hiring_manager", "all"]);
+    expect(audiencesSnippets("directing_manager")).toEqual(["hiring_manager", "all"]);
   });
 });
 

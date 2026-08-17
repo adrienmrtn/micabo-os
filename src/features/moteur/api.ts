@@ -657,7 +657,7 @@ export async function definirRole(
   const { error } = await supabase.from("user_roles").insert({ user_id: userId, role });
   if (error) throw error;
 
-  if (role === "hiring_manager") {
+  if (role === "hiring_manager" || role === "directing_manager") {
     const ensemble = [
       ...new Set(
         (langues?.filter(Boolean) ?? (nationalite ? [nationalite] : [])).map((l) =>
@@ -1349,7 +1349,7 @@ export async function chargerPilotageDashboard(): Promise<PilotageDashboard> {
 
   // Recruteurs = hiring_manager ; moyenne ELO des créateurs rattachés (manager_id).
   const recruteursIds = [...roleParUser.entries()]
-    .filter(([, role]) => role === "hiring_manager")
+    .filter(([, role]) => role === "hiring_manager" || role === "directing_manager")
     .map(([id]) => id);
 
   const recruteurs = recruteursIds

@@ -15,7 +15,7 @@ import {
   CardTitle,
   EmptyState,
 } from "@/components/ui/card";
-import { useAuth } from "@/features/auth/AuthContext";
+import { badgeManager, estRoleManager, useAuth } from "@/features/auth/AuthContext";
 import { CompteEditor, PostsParJourCompte } from "@/features/moteur/CompteEditor";
 import {
   assurerComptePoster,
@@ -517,7 +517,7 @@ export function AdminPostersPage() {
   const changerRole = useMutation({
     mutationFn: (input: {
       id: string;
-      role: "poster" | "hiring_manager";
+      role: "poster" | "hiring_manager" | "directing_manager";
       nationalite?: string;
       langues?: string[];
     }) => definirRole(input.id, input.role, input.nationalite, input.langues),
@@ -876,7 +876,7 @@ export function AdminPostersPage() {
   );
 
   const tous = posters.data ?? [];
-  const recruteurs = tous.filter((p) => p.role === "hiring_manager");
+  const recruteurs = tous.filter((p) => estRoleManager(p.role));
   const creators = trierCreateurs(tous.filter((p) => p.role === "poster").filter(matchCreateur));
   const admins = tous.filter((p) => p.role === "admin");
   const tousCreateurs = tous.filter((p) => p.role === "poster");
@@ -918,6 +918,9 @@ export function AdminPostersPage() {
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="text-sm font-semibold tracking-tight">{nomAffiche(poster)}</span>
+            {badgeManager(poster.role) && (
+              <Badge variant="outline">{badgeManager(poster.role)}</Badge>
+            )}
             {poster.hm_ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
             {!poster.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
           </div>
@@ -1063,11 +1066,11 @@ export function AdminPostersPage() {
   const ficheLabs =
     ficheCompte && labelsComptes.data ? (labelsComptes.data.get(ficheCompte.id) ?? []) : [];
   const ficheCreateurs =
-    fiche?.role === "hiring_manager"
+    fiche && estRoleManager(fiche.role)
       ? tousCreateurs.filter((c) => c.manager_id === fiche.id)
       : [];
   const ficheEloMoyen =
-    fiche?.role === "hiring_manager" ? eloMoyenRecruteur(fiche.id) : null;
+    fiche && estRoleManager(fiche.role) ? eloMoyenRecruteur(fiche.id) : null;
   const soiMeme = fiche?.id === user?.id;
 
   return (
@@ -1117,9 +1120,12 @@ export function AdminPostersPage() {
         <ModalFiche titre={nomAffiche(fiche)} onClose={() => setFicheId(null)}>
           <p className="text-sm text-muted-foreground">{fiche.email}</p>
 
-          {fiche.role === "hiring_manager" && (
+          {estRoleManager(fiche.role) && (
             <>
               <div className="flex flex-wrap items-center gap-2">
+                {badgeManager(fiche.role) && (
+                  <Badge variant="outline">{badgeManager(fiche.role)}</Badge>
+                )}
                 {fiche.hm_ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
                 {!fiche.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
                 {ficheEloMoyen != null && (
@@ -1168,6 +1174,39 @@ export function AdminPostersPage() {
 
               {!soiMeme && (
                 <div className="flex flex-wrap gap-2 border-t pt-3">
+                  {fiche.role === "hiring_manager" && (
+                    <Button
+                      size="sm"
+                      disabled={changerRole.isPending}
+                      onClick={() =>
+                        changerRole.mutate({
+                          id: fiche.id,
+                          role: "directing_manager",
+                          langues: fiche.langues,
+                          nationalite: fiche.nationalite ?? fiche.langues?.[0],
+                        })
+                      }
+                    >
+                      {t("hiring.promoteDm")}
+                    </Button>
+                  )}
+                  {fiche.role === "directing_manager" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={changerRole.isPending}
+                      onClick={() =>
+                        changerRole.mutate({
+                          id: fiche.id,
+                          role: "hiring_manager",
+                          langues: fiche.langues,
+                          nationalite: fiche.nationalite ?? fiche.langues?.[0],
+                        })
+                      }
+                    >
+                      {t("hiring.repasserHm")}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"

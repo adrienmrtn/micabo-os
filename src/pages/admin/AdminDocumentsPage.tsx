@@ -154,21 +154,35 @@ function EditeurDocument({ doc }: { doc: DocumentEditable }) {
   );
 }
 
-export function AdminDocumentsPage() {
+export function AdminDocumentsPage({
+  audiences,
+  masquerEnTete,
+}: {
+  /** Si posé : n’affiche que ces audiences (ex. DM = manager / all). */
+  audiences?: Array<"manager" | "poster" | "all">;
+  masquerEnTete?: boolean;
+} = {}) {
   const { t } = useTranslation();
   const docs = useQuery({ queryKey: ["documents"], queryFn: listerDocuments });
+  const liste = (docs.data ?? []).filter((d) =>
+    audiences ? audiences.includes(d.audience) : true,
+  );
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("documents.title")}</CardTitle>
-          <CardDescription>{t("documents.subtitle")}</CardDescription>
-        </CardHeader>
-      </Card>
+      {!masquerEnTete && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("documents.title")}</CardTitle>
+            <CardDescription>{t("documents.subtitle")}</CardDescription>
+          </CardHeader>
+        </Card>
+      )}
 
       {docs.isPending && <p className="text-sm text-muted-foreground">{t("common.loading")}</p>}
-      {docs.data?.map((doc) => <EditeurDocument key={doc.id} doc={doc} />)}
+      {liste.map((doc) => (
+        <EditeurDocument key={doc.id} doc={doc} />
+      ))}
     </div>
   );
 }

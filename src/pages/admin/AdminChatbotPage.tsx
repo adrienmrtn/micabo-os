@@ -163,6 +163,7 @@ function LigneContexte({
 
 function badgeRole(role: Role, t: (k: string) => string): string {
   if (role === "poster") return t("chatbot.rolePoster");
+  if (role === "directing_manager") return t("chatbot.roleDm");
   if (role === "hiring_manager") return t("chatbot.roleHm");
   return t("chatbot.roleAdmin");
 }
@@ -190,7 +191,11 @@ export function AdminChatbotPage() {
 
   function ajouterDepuisQuestion(q: ChatbotQuestion) {
     const audience: AudienceSnippet =
-      q.role === "poster" || q.role === "hiring_manager" || q.role === "admin" ? q.role : "all";
+      q.role === "poster" || q.role === "hiring_manager" || q.role === "directing_manager" || q.role === "admin"
+        ? q.role === "directing_manager"
+          ? "hiring_manager"
+          : q.role
+        : "all";
     setBrouillon({
       titre: q.question.slice(0, 80),
       contenu: `${t("chatbot.questionLabel")} : ${q.question}\n\n${t("chatbot.reponseLabel")} :\n`,

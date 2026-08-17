@@ -904,9 +904,22 @@ export const fr = {
       apercuVide: "Ce post n'a pas encore de contenu (en cours de fabrication).",
       confirmSuppr: "Supprimer définitivement {{nom}} ?",
       badge: "Recruteur",
+      badgeHm: "HM",
+      badgeDm: "DM",
       promote: "Faire recruteur",
+      promoteDm: "Passer Directing manager",
+      repasserHm: "Repasser hiring manager",
       revoke: "Repasser poster",
       valider: "Valider",
+      creerHm: "Créer un hiring manager",
+      creerHmDesc:
+        "Même connexion et même mot de passe initial qu’un HM. Tu paramètres ses langues (et le mode UGC VIDEO si besoin).",
+      mesHm: "Tes hiring managers",
+      mesHmDesc: "Ceux que tu as créés — tu peux encore ajuster leurs langues.",
+      aucunHm: "Aucun hiring manager pour l’instant.",
+      docsOnboarding: "Documents d’onboarding",
+      docsOnboardingDesc:
+        "Modifie les guides manager et le document d’onboarding. Ça ne touche pas le côté créatif.",
     },
     bibliotheque: {
       title: "Bibliothèque de médias",
@@ -1620,6 +1633,7 @@ export const fr = {
       reponseLabel: "Réponse",
       rolePoster: "Créateur",
       roleHm: "Manager",
+      roleDm: "Directing manager",
       roleAdmin: "Admin",
     },
     calendrier: {

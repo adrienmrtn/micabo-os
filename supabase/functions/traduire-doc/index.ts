@@ -10,7 +10,7 @@ import { assertRole, json, messageErreur } from "../_shared/supabase.ts";
  *   { titre, contenu }  → { ok, titre_en, contenu_en }
  */
 Deno.serve(async (request) => {
-  const acces = await assertRole(request, ["admin"]);
+  const acces = await assertRole(request, ["admin", "directing_manager"]);
   if (acces instanceof Response) return acces;
 
   try {

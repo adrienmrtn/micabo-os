@@ -4,7 +4,9 @@ import { LoginPage } from "@/features/auth/LoginPage";
 import { ProtectedRoute } from "@/features/auth/ProtectedRoute";
 import { PublicOnlyRoute } from "@/features/auth/PublicOnlyRoute";
 import { RoleGate } from "@/features/auth/RoleGate";
-import { useAuth } from "@/features/auth/AuthContext";
+import { estRoleManager, useAuth } from "@/features/auth/AuthContext";
+import { HiringDocumentsPage } from "@/pages/hiring/HiringDocumentsPage";
+import { HiringRecruteursPage } from "@/pages/hiring/HiringRecruteursPage";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 import { PosterLayout } from "@/components/layout/PosterLayout";
 import { HiringLayout } from "@/components/layout/HiringLayout";
@@ -37,7 +39,7 @@ import { NotFoundPage } from "@/pages/NotFoundPage";
 function Accueil() {
   const { role } = useAuth();
   if (role === "admin") return <Navigate to="/admin" replace />;
-  if (role === "hiring_manager") return <Navigate to="/embauche" replace />;
+  if (estRoleManager(role)) return <Navigate to="/embauche" replace />;
   if (role === "poster") return <Navigate to="/calendrier" replace />;
   return <Navigate to="/login" replace />;
 }
@@ -89,10 +91,12 @@ export function AppRouter() {
           </Route>
         </Route>
 
-        <Route element={<RoleGate allow={["hiring_manager"]} />}>
+        <Route element={<RoleGate allow={["hiring_manager", "directing_manager"]} />}>
           <Route element={<HiringLayout />}>
             <Route path="/embauche" element={<HiringPosterPage />} />
             <Route path="/manager/calendrier" element={<HiringCalendrierPage />} />
+            <Route path="/manager/recruteurs" element={<HiringRecruteursPage />} />
+            <Route path="/manager/documents" element={<HiringDocumentsPage />} />
             <Route path="/manager/guide" element={<DocumentView cle="guide_manager" />} />
             <Route path="/manager/onboarding" element={<DocumentView cle="onboarding" />} />
             <Route path="/manager/faq" element={<DocumentView cle="faq_manager" />} />

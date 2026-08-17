@@ -1,15 +1,19 @@
 import { Outlet } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { BookOpen, CalendarDays, HelpCircle, Rocket, UserPlus } from "lucide-react";
+import { BookOpen, CalendarDays, FilePenLine, HelpCircle, Rocket, UserPlus, Users } from "lucide-react";
 
+import { useAuth } from "@/features/auth/AuthContext";
 import { AppShell } from "./AppShell";
 
-/** Coquille du hiring manager : créer des posters + ses guides et FAQ. */
+/** Coquille HM / DM : créer des posters + guides. Le DM a 2 entrées en plus. */
 export function HiringLayout() {
   const { t } = useTranslation();
+  const { role } = useAuth();
+  const estDm = role === "directing_manager";
+
   return (
     <AppShell
-      navLabel={t("nav.hiring")}
+      navLabel={estDm ? t("hiring.badgeDm") : t("hiring.badgeHm")}
       groups={[
         {
           items: [
@@ -25,6 +29,22 @@ export function HiringLayout() {
               icon: CalendarDays,
               description: t("hiring.calendrierSous"),
             },
+            ...(estDm
+              ? [
+                  {
+                    to: "/manager/recruteurs",
+                    label: t("hiring.creerHm"),
+                    icon: Users,
+                    description: t("hiring.creerHmDesc"),
+                  },
+                  {
+                    to: "/manager/documents",
+                    label: t("hiring.docsOnboarding"),
+                    icon: FilePenLine,
+                    description: t("hiring.docsOnboardingDesc"),
+                  },
+                ]
+              : []),
           ],
         },
         {

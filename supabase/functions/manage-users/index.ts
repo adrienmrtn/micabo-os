@@ -1,5 +1,6 @@
 import { retirerContentCredentialsBytes } from "../_shared/c2pa.ts";
 import { appliquerIdentiteInstantanee } from "../_shared/persona.ts";
+import { estRoleManager } from "../_shared/roles.ts";
 import {
   assertRole,
   corsHeaders,
@@ -162,7 +163,11 @@ async function gererRequete(request: Request): Promise<Response> {
     });
   }
 
-  const acces = await assertRole(request, ["admin", "hiring_manager"]);
+  const acces = await assertRole(request, [
+    "admin",
+    "hiring_manager",
+    "directing_manager",
+  ]);
   if (acces instanceof Response) return acces;
 
   if (body.action === "create") {
@@ -175,14 +180,16 @@ async function gererRequete(request: Request): Promise<Response> {
         .map((l) => String(l ?? "").trim().toLowerCase())
         .filter(Boolean)
       : [];
+    const peutCreerHm =
+      acces.role === "admin" || acces.role === "directing_manager";
     const roleVoulu =
-      body.role === "hiring_manager" && acces.role === "admin" ? "hiring_manager" : "poster";
+      body.role === "hiring_manager" && peutCreerHm ? "hiring_manager" : "poster";
 
     if (!prenom || password.length < 8) {
       return json({ error: "Prénom requis et mot de passe d'au moins 8 caractères" }, 400);
     }
 
-    if (roleVoulu === "poster" && acces.role === "hiring_manager" && acces.userId !== "cron") {
+    if (roleVoulu === "poster" && estRoleManager(acces.role) && acces.userId !== "cron") {
       const { data: hm } = await supabase
         .from("profiles")
         .select("langues")
@@ -256,18 +263,23 @@ async function gererRequete(request: Request): Promise<Response> {
         const ensemble = [
           ...new Set(languesRecues.length > 0 ? languesRecues : (langue ? [langue] : [])),
         ];
-        const hmVideo = Boolean(body.ugc_ai_video) && acces.role === "admin";
+        const hmVideo =
+          Boolean(body.ugc_ai_video) &&
+          (acces.role === "admin" || acces.role === "directing_manager");
         const patchHm: Record<string, unknown> = { hm_ugc_ai_video: hmVideo };
         if (ensemble.length > 0) {
           patchHm.nationalite = ensemble[0];
           patchHm.langues = ensemble;
+        }
+        if (acces.role === "directing_manager" && acces.userId !== "cron") {
+          patchHm.manager_id = acces.userId;
         }
         await supabase.from("profiles").update(patchHm).eq("id", data.user.id);
         if (hmVideo) {
           const labelIds = normaliserIds(body.ugc_ai_video_label_ids);
           await remplacerHmUgcVideoLabels(supabase, data.user.id, labelIds);
         }
-      } else if (acces.role === "hiring_manager" && acces.userId !== "cron") {
+      } else if (estRoleManager(acces.role) && acces.userId !== "cron") {
         await supabase
           .from("profiles")
           .update({ manager_id: acces.userId })
@@ -310,7 +322,7 @@ async function gererRequete(request: Request): Promise<Response> {
     if (!userId || !langue) {
       return json({ error: "userId et langue requis" }, 400);
     }
-    if (acces.role === "hiring_manager" && acces.userId !== "cron") {
+    if (estRoleManager(acces.role) && acces.userId !== "cron") {
       const { data: cible } = await supabase
         .from("profiles")
         .select("manager_id")
@@ -332,7 +344,7 @@ async function gererRequete(request: Request): Promise<Response> {
 
     // Créateur sous HM UGC AI VIDEO → marque + labels HM (pas de file admin).
     let modeUgcAiVideo = false;
-    if (acces.role === "hiring_manager" && acces.userId !== "cron") {
+    if (estRoleManager(acces.role) && acces.userId !== "cron") {
       modeUgcAiVideo = await estHmUgcAiVideo(supabase, acces);
     } else if (acces.role === "admin") {
       const { data: cible } = await supabase
@@ -557,7 +569,7 @@ async function estHmUgcAiVideo(
   supabase: Supabase,
   acces: { role: string; userId: string },
 ): Promise<boolean> {
-  if (acces.role !== "hiring_manager" || acces.userId === "cron") return false;
+  if (!estRoleManager(acces.role) || acces.userId === "cron") return false;
   const { data } = await supabase
     .from("profiles")
     .select("hm_ugc_ai_video")
