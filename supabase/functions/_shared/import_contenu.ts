@@ -18,6 +18,12 @@ import {
   mediaPropreMemeLabel,
 } from "./media_labels.ts";
 import { patchSlideMediaId, trouverPropreExistant } from "./slide_media.ts";
+import {
+  estNouveauDepuisImport,
+  idPostTiktok,
+  maxIdTiktok,
+  normaliserCreateTime,
+} from "./import_nouveaux.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
 
 export type Supabase = ReturnType<typeof serviceClient>;
@@ -81,7 +87,7 @@ function sophiaParDefaut(langue: string): string {
   return par[langue] ?? par.en;
 }
 
-const idDe = (url: string) => url.match(/\/(?:photo|video)\/(\d+)/)?.[1] ?? url;
+const idDe = (url: string) => idPostTiktok(url);
 
 async function lireScoring(supabase: Supabase) {
   const { data } = await supabase.from("reglages").select("valeur").eq("cle", "scoring").maybeSingle();
@@ -534,16 +540,18 @@ export async function importerLien(
 export async function listerUrlsCompteReference(
   supabase: Supabase,
   compteReferenceId: string,
+  opts: { nouveauxSeulement?: boolean } = {},
 ): Promise<{
   handle: string;
   urls: string[];
   total: number;
   connus: number;
+  nouveaux: number;
   source: "page" | "apify" | "mixte";
 }> {
   const { data: ref } = await supabase
     .from("comptes_reference")
-    .select("id, handle_tiktok")
+    .select("id, handle_tiktok, dernier_scrape_at")
     .eq("id", compteReferenceId)
     .single();
   if (!ref) throw new Error("Compte de référence introuvable");
@@ -551,11 +559,16 @@ export async function listerUrlsCompteReference(
   const handle = String(ref.handle_tiktok).replace(/^@/, "");
   const { data: connusContenu } = await supabase
     .from("contenus")
-    .select("source_url")
+    .select("source_url, compte_reference_id")
     .not("source_url", "is", null);
   const deja = new Set((connusContenu ?? []).map((s) => idDe(s.source_url ?? "")));
+  const idsCetteSource = (connusContenu ?? [])
+    .filter((s) => s.compte_reference_id === compteReferenceId)
+    .map((s) => idDe(s.source_url ?? ""));
+  const maxIdConnu = maxIdTiktok(idsCetteSource);
 
   const vues = new Map<string, number>();
+  const createTimeParId = new Map<string, number>();
   let source: "page" | "apify" | "mixte" = "page";
   const urlsSet = new Set<string>();
 
@@ -580,7 +593,10 @@ export async function listerUrlsCompteReference(
           urlsSet.has(p.webVideoUrl);
         if (!estPhoto) continue;
         urlsSet.add(p.webVideoUrl);
-        vues.set(idDe(p.webVideoUrl), p.stats?.vues ?? 0);
+        const pid = idDe(p.webVideoUrl);
+        vues.set(pid, p.stats?.vues ?? 0);
+        const ct = normaliserCreateTime(p.createTime);
+        if (ct) createTimeParId.set(pid, ct);
       }
     }
   } catch {
@@ -588,11 +604,26 @@ export async function listerUrlsCompteReference(
   }
 
   // Tous les slideshows (inédits + déjà connus) : les connus seront réouverts
-  // sur le même contenu (re-pipeline, historique Passages conservé).
+  // sur le même contenu (re-pipeline, historique Passages conservé) — sauf
+  // `nouveauxSeulement` (update : uniquement depuis le dernier import).
   const toutes = [...urlsSet].sort(
     (a, b) => (vues.get(idDe(b)) ?? 0) - (vues.get(idDe(a)) ?? 0),
   );
   const connus = toutes.filter((u) => deja.has(idDe(u))).length;
+  const dernierImportAt = ref.dernier_scrape_at
+    ? new Date(String(ref.dernier_scrape_at))
+    : null;
+  const urls = opts.nouveauxSeulement
+    ? toutes.filter((u) =>
+        estNouveauDepuisImport({
+          url: u,
+          createTime: createTimeParId.get(idDe(u)) ?? null,
+          connusIds: deja,
+          dernierImportAt,
+          maxIdConnu,
+        }),
+      )
+    : toutes;
 
   await supabase
     .from("comptes_reference")
@@ -601,9 +632,10 @@ export async function listerUrlsCompteReference(
 
   return {
     handle,
-    urls: toutes,
+    urls,
     total: toutes.length,
     connus,
+    nouveaux: urls.filter((u) => !deja.has(idDe(u))).length,
     source,
   };
 }
