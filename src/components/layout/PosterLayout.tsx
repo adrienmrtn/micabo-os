@@ -1,6 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { BookOpen, CalendarDays, HelpCircle } from "lucide-react";
+import { BookOpen, CalendarDays, Gift, HelpCircle } from "lucide-react";
 
 import { ReviewPopup } from "@/features/reviews/ReviewPopup";
 import { OnboardingPopup } from "@/features/onboarding/OnboardingPopup";
@@ -12,7 +12,12 @@ export function PosterLayout() {
     <AppShell
       navLabel={t("nav.poster")}
       groups={[
-        { items: [{ to: "/calendrier", label: t("nav.calendrier"), icon: CalendarDays }] },
+        {
+          items: [
+            { to: "/calendrier", label: t("nav.calendrier"), icon: CalendarDays },
+            { to: "/createur/parrainage", label: t("nav.referral"), icon: Gift },
+          ],
+        },
         {
           title: t("documents.rubrique"),
           items: [

@@ -23,6 +23,7 @@ import { AdminReglagesPage } from "@/pages/admin/AdminReglagesPage";
 import { AdminPromptsPage } from "@/pages/admin/AdminPromptsPage";
 import { AdminAnalyticsPage } from "@/pages/admin/AdminAnalyticsPage";
 import { AdminReviewsPage } from "@/pages/admin/AdminReviewsPage";
+import { AdminReferralsPage } from "@/pages/admin/AdminReferralsPage";
 import { AdminCalendrierPage } from "@/pages/admin/AdminCalendrierPage";
 import { AdminCreateurPage } from "@/pages/admin/AdminCreateurPage";
 import { AdminMinuitPage } from "@/pages/admin/AdminMinuitPage";
@@ -33,6 +34,7 @@ import { AdminUgcPersonasPage } from "@/pages/admin/AdminUgcPersonasPage";
 import { AdminUgcSlideshowsPage } from "@/pages/admin/AdminUgcSlideshowsPage";
 import { AdminUgcVideosPage } from "@/pages/admin/AdminUgcVideosPage";
 import { PosterCalendrierPage } from "@/pages/poster/PosterCalendrierPage";
+import { PosterReferralPage } from "@/pages/poster/PosterReferralPage";
 import { PosterPostPage } from "@/pages/poster/PosterPostPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 
@@ -70,6 +72,7 @@ export function AppRouter() {
             <Route path="/admin/reproduisibles" element={<Navigate to="/admin/slideshows" replace />} />
             <Route path="/admin/posters" element={<AdminPostersPage />} />
             <Route path="/admin/reviews" element={<AdminReviewsPage />} />
+            <Route path="/admin/parrainages" element={<AdminReferralsPage />} />
             <Route path="/admin/bibliotheque" element={<AdminBibliothequePage />} />
             <Route path="/admin/tests" element={<AdminTestsPage />} />
             <Route path="/admin/test-nettoyage" element={<Navigate to="/admin/tests" replace />} />
@@ -86,6 +89,7 @@ export function AppRouter() {
         <Route element={<RoleGate allow={["poster"]} />}>
           <Route element={<PosterLayout />}>
             <Route path="/calendrier" element={<PosterCalendrierPage />} />
+            <Route path="/createur/parrainage" element={<PosterReferralPage />} />
             <Route path="/createur/guide" element={<DocumentView cle="guide_poster" />} />
             <Route path="/createur/faq" element={<DocumentView cle="faq_poster" />} />
           </Route>

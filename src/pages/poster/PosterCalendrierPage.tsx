@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Copy,
   Download,
+  Gift,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -321,6 +322,22 @@ export function PosterCalendrierPage() {
       </div>
 
       <IdentiteTikTok />
+
+      <Link
+        to="/createur/parrainage"
+        className="block rounded-lg border border-primary/30 bg-primary/5 p-4 transition-colors hover:bg-primary/10"
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Gift className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1 space-y-1">
+            <p className="text-sm font-semibold">{t("referral.dashTitre")}</p>
+            <p className="text-sm text-muted-foreground">{t("referral.dashCorps")}</p>
+            <p className="text-xs font-medium text-primary">{t("referral.dashLien")}</p>
+          </div>
+        </div>
+      </Link>
 
       <section className="space-y-4">
         <h2 className="text-lg font-semibold tracking-tight">{t("calendrier.aujourdhui")}</h2>
