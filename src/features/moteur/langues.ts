@@ -65,3 +65,12 @@ export function nomLangue(code: string): string {
 export function drapeauLangue(code: string): string {
   return DRAPEAU_LANGUE[code] ?? code.toUpperCase();
 }
+
+/** Pays physiques de l'OS = un pays par langue cible (en → Royaume-Uni). */
+export const PAYS_OS = LANGUES_CIBLES;
+
+export type CodePaysOs = (typeof PAYS_OS)[number];
+
+export function estPaysOs(code: string): code is CodePaysOs {
+  return (PAYS_OS as readonly string[]).includes(code);
+}
