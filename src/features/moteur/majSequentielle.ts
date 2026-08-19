@@ -14,13 +14,25 @@ export interface MesureFile {
   file: number;
   /** Pipelines en attente ou en cours (`contenus`). */
   pipeline: number;
+  /**
+   * Travail achevé (scrapes terminés + pipelines terminés), monotone.
+   *
+   * Indispensable : un scrape qui finit retire une ligne d'`import_file` et
+   * crée un `contenus` en attente. Le reste-à-faire est donc CONSTANT pendant
+   * toute la phase de scrape — le 19/08 il est resté pile à 239 alors que le
+   * serveur abattait jusqu'à 43 scrapes/minute, et la séquence s'est crue
+   * bloquée. C'est ce compteur-là qui prouve que ça avance.
+   */
+  faits: number;
 }
 
 export const restantFile = (m: MesureFile): number => m.file + m.pipeline;
 
 export interface EtatAttente {
-  /** Plus petit total observé : sert à repérer une file qui ne descend plus. */
+  /** Plus petit reste observé : une baisse est un progrès. */
   minRestant: number | null;
+  /** Plus grand achevé observé : une hausse est un progrès aussi. */
+  maxFaits: number | null;
   dernierProgresA: number;
 }
 
@@ -31,13 +43,13 @@ export type VerdictAttente =
   | { type: "bloquee"; restant: number; depuisMs: number };
 
 export function attenteInitiale(maintenant: number): EtatAttente {
-  return { minRestant: null, dernierProgresA: maintenant };
+  return { minRestant: null, maxFaits: null, dernierProgresA: maintenant };
 }
 
 /**
  * Un pas d'attente. On ne fixe pas de durée maximale : un gros compte met
- * légitimement 20 min à se drainer. Le garde-fou porte sur la progression —
- * tant que le total descend on patiente, dès qu'il stagne on coupe.
+ * légitimement des dizaines de minutes à se drainer. Le garde-fou porte sur la
+ * progression — le reste qui baisse OU l'achevé qui monte.
  */
 export function avancerAttente(
   etat: EtatAttente,
@@ -48,13 +60,19 @@ export function avancerAttente(
   const restant = restantFile(mesure);
   if (restant === 0) {
     return {
-      etat: { minRestant: 0, dernierProgresA: maintenant },
+      etat: { minRestant: 0, maxFaits: mesure.faits, dernierProgresA: maintenant },
       verdict: { type: "vide" },
     };
   }
-  const progresse = etat.minRestant === null || restant < etat.minRestant;
+  const baisse = etat.minRestant === null || restant < etat.minRestant;
+  const acheve = etat.maxFaits === null || mesure.faits > etat.maxFaits;
+  const progresse = baisse || acheve;
   const suivant: EtatAttente = progresse
-    ? { minRestant: restant, dernierProgresA: maintenant }
+    ? {
+        minRestant: Math.min(restant, etat.minRestant ?? restant),
+        maxFaits: Math.max(mesure.faits, etat.maxFaits ?? mesure.faits),
+        dernierProgresA: maintenant,
+      }
     : etat;
   const depuisMs = maintenant - suivant.dernierProgresA;
   if (depuisMs >= stallMs) {
@@ -68,8 +86,11 @@ export function delaiSondage(restant: number): number {
   return restant <= 20 ? 10_000 : 20_000;
 }
 
-/** 10 min sans baisse = drain mort. Un gros compte met plus longtemps, mais il descend. */
-export const STAGNATION_MS = 10 * 60_000;
+/**
+ * 20 min sans le moindre travail achevé = drain mort. Large exprès : le lease
+ * d'un pas de pipeline est de 8 min, il faut en tolérer deux d'affilée.
+ */
+export const STAGNATION_MS = 20 * 60_000;
 
 export interface MajCompte {
   id: string;
@@ -98,6 +119,7 @@ export interface MajSourcesRun {
   phase: "attente" | "import" | null;
   restant: number;
   minRestant: number | null;
+  maxFaits: number | null;
   dernierProgresAt: number | null;
   journal: MajJournalLigne[];
 }
@@ -125,6 +147,7 @@ export function deciderTick(
   const attente = avancerAttente(
     {
       minRestant: run.minRestant,
+      maxFaits: run.maxFaits,
       dernierProgresA: run.dernierProgresAt ?? maintenant,
     },
     mesure,

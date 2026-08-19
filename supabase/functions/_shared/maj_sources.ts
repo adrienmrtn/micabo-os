@@ -16,6 +16,7 @@ import {
   type MajCompte,
   type MajJournalLigne,
   type MajSourcesRun,
+  type MesureFile,
 } from "./maj_sequentielle.ts";
 
 export const CLE_MAJ_SOURCES = "maj_sources_run";
@@ -66,8 +67,13 @@ export async function ecrireMajSourcesRun(
   if (error) throw error;
 }
 
-async function mesurerFile(supabase: Supabase): Promise<{ file: number; pipeline: number }> {
-  const [scrapes, pipelines] = await Promise.all([
+/**
+ * Reste-à-faire ET travail achevé. Les deux sont nécessaires : un scrape qui
+ * finit déplace une unité d'`import_file` vers `contenus`, donc le reste seul
+ * paraît figé pendant toute la phase de scrape.
+ */
+async function mesurerFile(supabase: Supabase): Promise<MesureFile> {
+  const [scrapes, pipelines, scrapesFinis, pipelinesFinis] = await Promise.all([
     supabase
       .from("import_file")
       .select("id", { count: "exact", head: true })
@@ -76,10 +82,24 @@ async function mesurerFile(supabase: Supabase): Promise<{ file: number; pipeline
       .from("contenus")
       .select("id", { count: "exact", head: true })
       .in("import_statut", ["pending", "running"]),
+    supabase
+      .from("import_file")
+      .select("id", { count: "exact", head: true })
+      .in("statut", ["done", "failed", "skipped"]),
+    supabase
+      .from("contenus")
+      .select("id", { count: "exact", head: true })
+      .in("import_statut", ["done", "failed"]),
   ]);
   if (scrapes.error) throw scrapes.error;
   if (pipelines.error) throw pipelines.error;
-  return { file: scrapes.count ?? 0, pipeline: pipelines.count ?? 0 };
+  if (scrapesFinis.error) throw scrapesFinis.error;
+  if (pipelinesFinis.error) throw pipelinesFinis.error;
+  return {
+    file: scrapes.count ?? 0,
+    pipeline: pipelines.count ?? 0,
+    faits: (scrapesFinis.count ?? 0) + (pipelinesFinis.count ?? 0),
+  };
 }
 
 type Claim =
@@ -95,8 +115,10 @@ async function claimTick(supabase: Supabase): Promise<Claim> {
   return data as Claim;
 }
 
+/** Écrit l'état et libère le lease : le prochain tick peut reprendre la main. */
 async function relacherLease(supabase: Supabase, run: MajSourcesRun): Promise<void> {
-  const { leaseUntil: _ignore, ...reste } = run as MajSourcesRun & { leaseUntil?: string };
+  const reste = { ...(run as MajSourcesRun & { leaseUntil?: string }) };
+  delete reste.leaseUntil;
   await ecrireMajSourcesRun(supabase, reste);
 }
 
@@ -183,6 +205,7 @@ export async function tickMajSources(
         phase: "attente",
         restant: decision.restant,
         minRestant: decision.etat.minRestant,
+        maxFaits: decision.etat.maxFaits,
         dernierProgresAt: decision.etat.dernierProgresA,
       };
       await relacherLease(supabase, run);
@@ -197,7 +220,9 @@ export async function tickMajSources(
         phase: "import",
         handle: compte.handle,
         restant: 0,
-        minRestant: 0,
+        // Nouveau compte : la fenêtre de stagnation repart de zéro.
+        minRestant: null,
+        maxFaits: null,
         dernierProgresAt: Date.now(),
       },
       "info",
@@ -228,7 +253,8 @@ export async function tickMajSources(
           faits: index + 1,
           phase: r.enqueued > 0 ? "attente" : "import",
           restant: r.enqueued,
-          minRestant: r.enqueued > 0 ? r.enqueued : 0,
+          minRestant: null,
+          maxFaits: null,
           dernierProgresAt: Date.now(),
         },
         r.enqueued > 0 ? "ok" : "info",
