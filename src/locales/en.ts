@@ -676,13 +676,13 @@ export const en = {
         "Lists slideshows, then runs 1 scrape + pipeline agent per TikTok in parallel (relevance, ELO, cleaning, translation). Full logs. Without blocking the page — several accounts can also run in parallel.",
       update: "Update",
       updateAide:
-        "Import only TikToks posted since this account's last import — not the ones already in stock.",
-      updateLance: "Update started — new TikToks only (see logs).",
+        "Catches up on everything missing for this account: new TikToks, but also those an earlier import left behind. Anything already in stock is not re-imported.",
+      updateLance: "Update started — catching up on missing slideshows (see logs).",
       updateToutes: "Update sources",
       updateToutesAide:
-        "For each already-imported account: fetch TikToks posted since the last import. Older ones are skipped.",
+        "For each already-imported account: queue the profile's slideshows that are missing from stock. Accounts go 2 at a time so the server stays healthy.",
       updateToutesGo: "Update ({{count}})",
-      updateToutesLance: "Update started on {{count}} source(s) — new TikToks only.",
+      updateToutesLance: "Update started on {{count}} source(s) — missing slideshows are queued.",
       updateToutesVide: "No already-imported source to update (run Extract first).",
       importLien: "Import a TikTok",
       importLienAide:

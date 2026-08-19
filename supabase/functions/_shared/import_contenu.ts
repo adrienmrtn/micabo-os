@@ -2,6 +2,7 @@ import {
   downloadImage,
   listerDiaporamas,
   listerPostsProfil,
+  normaliserHandleTiktok,
   scrapePost,
   type ScrapedPost,
 } from "./apify.ts";
@@ -33,6 +34,7 @@ import {
   idPostTiktok,
   maxIdTiktok,
   normaliserCreateTime,
+  urlsManquantes,
 } from "./import_nouveaux.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
 
@@ -58,8 +60,16 @@ export const LANGUES_CIBLES = [
 const SLIDES_PAR_PASSAGE = 2;
 /** 1 slide / passage nettoyage : Fal≤90s + store doit tenir sous le mur Edge ~150s. */
 const SLIDES_NETTOYAGE_PAR_PASSAGE = 1;
-/** Apify `resultsPerPage` — on vise tout le profil (plafond acteur). */
-const SCRAPE_TOUS = 100;
+/**
+ * Apify `resultsPerPage` pour le listing d'un profil. À 100, un compte qui a
+ * publié 150 slideshows n'en révélait que la première tranche : le reste était
+ * introuvable, y compris via « Mettre à jour ». Surchargeable sans redéploiement
+ * par `IMPORT_LISTING_MAX`.
+ */
+const SCRAPE_TOUS = Number(Deno.env.get("IMPORT_LISTING_MAX") ?? "") || 600;
+
+/** PostgREST s'arrête à ~1000 lignes sans `range` — il faut paginer explicitement. */
+const PAGE_POSTGREST = 1000;
 
 export interface SlideBrut {
   position: number;
@@ -546,18 +556,65 @@ export async function importerLien(
  * Liste les URLs de diaporamas à importer pour un compte (sans scraper les
  * visuels). Le client lance ensuite 1 agent scrapePost par URL en parallèle.
  */
+/**
+ * Ids TikTok déjà en stock. Paginé : sans `range`, PostgREST s'arrête à ~1000
+ * lignes et on ré-enfile alors des slideshows déjà importés.
+ */
+async function idsTiktokConnus(
+  supabase: Supabase,
+  compteReferenceId: string,
+): Promise<{ tous: Set<string>; deCetteSource: string[] }> {
+  const tous = new Set<string>();
+  const deCetteSource: string[] = [];
+  for (let from = 0; ; from += PAGE_POSTGREST) {
+    const { data, error } = await supabase
+      .from("contenus")
+      .select("source_url, compte_reference_id")
+      .not("source_url", "is", null)
+      .range(from, from + PAGE_POSTGREST - 1);
+    if (error) throw error;
+    const lot = data ?? [];
+    for (const row of lot) {
+      const id = idDe(row.source_url ?? "");
+      tous.add(id);
+      if (row.compte_reference_id === compteReferenceId) deCetteSource.push(id);
+    }
+    if (lot.length < PAGE_POSTGREST) break;
+  }
+  return { tous, deCetteSource };
+}
+
+export interface ListingCompte {
+  handle: string;
+  /** URLs à enfiler, déjà ordonnées par vues décroissantes. */
+  urls: string[];
+  /** Slideshows découverts sur le profil. */
+  total: number;
+  /** Parmi eux, ceux déjà en stock. */
+  connus: number;
+  /** Découverts mais jamais importés — ce que « Mettre à jour » rattrape. */
+  manquants: number;
+  /** Sous-ensemble des manquants publié depuis le dernier import (indicatif). */
+  nouveaux: number;
+  source: "page" | "apify" | "mixte" | "aucune";
+  /** Pourquoi la découverte a donné ça — remonté tel quel dans les logs UI. */
+  diagnostic: string[];
+}
+
+/**
+ * Découvre les slideshows d'un compte source.
+ *
+ * `nouveauxSeulement` (bouton « Mettre à jour ») enfile **tout ce qui manque**,
+ * pas seulement ce qui est postérieur au dernier scrape : un premier import
+ * tronqué (plafond de listing, handle invalide, Apify en carafe) laissait sinon
+ * des dizaines de slideshows inatteignables à vie, l'update répondant « aucun
+ * nouveau » alors que le stock était incomplet.
+ */
 export async function listerUrlsCompteReference(
   supabase: Supabase,
   compteReferenceId: string,
-  opts: { nouveauxSeulement?: boolean } = {},
-): Promise<{
-  handle: string;
-  urls: string[];
-  total: number;
-  connus: number;
-  nouveaux: number;
-  source: "page" | "apify" | "mixte";
-}> {
+  opts: { nouveauxSeulement?: boolean; marquerScrape?: boolean } = {},
+): Promise<ListingCompte> {
   const { data: ref } = await supabase
     .from("comptes_reference")
     .select("id, handle_tiktok, dernier_scrape_at")
@@ -565,87 +622,104 @@ export async function listerUrlsCompteReference(
     .single();
   if (!ref) throw new Error("Compte de référence introuvable");
 
-  const handle = String(ref.handle_tiktok).replace(/^@/, "");
-  const { data: connusContenu } = await supabase
-    .from("contenus")
-    .select("source_url, compte_reference_id")
-    .not("source_url", "is", null);
-  const deja = new Set((connusContenu ?? []).map((s) => idDe(s.source_url ?? "")));
-  const idsCetteSource = (connusContenu ?? [])
-    .filter((s) => s.compte_reference_id === compteReferenceId)
-    .map((s) => idDe(s.source_url ?? ""));
-  const maxIdConnu = maxIdTiktok(idsCetteSource);
+  // Le champ contient parfois l'URL du profil collée telle quelle : sans
+  // normalisation, la page publique était interrogée sur une URL absurde et
+  // seule la première tranche Apify remontait.
+  const handle = normaliserHandleTiktok(String(ref.handle_tiktok ?? ""));
+  if (!handle) throw new Error(`Handle TikTok illisible : « ${ref.handle_tiktok} »`);
+
+  const { tous: deja, deCetteSource } = await idsTiktokConnus(supabase, compteReferenceId);
+  const maxIdConnu = maxIdTiktok(deCetteSource);
 
   const vues = new Map<string, number>();
   const createTimeParId = new Map<string, number>();
-  let source: "page" | "apify" | "mixte" = "page";
   const urlsSet = new Set<string>();
+  const diagnostic: string[] = [];
+  let viaPage = 0;
+  let viaApify = 0;
 
   // 1) Page publique TikTok (gratuit, rapide) — IDs photo uniquement.
   try {
-    for (const u of await listerDiaporamas(handle)) urlsSet.add(u);
-  } catch {
-    // on retombe sur Apify ci-dessous
+    const depuisPage = await listerDiaporamas(handle);
+    for (const u of depuisPage) urlsSet.add(u);
+    viaPage = depuisPage.length;
+    diagnostic.push(`page TikTok: ${viaPage} slideshow(s)`);
+  } catch (error) {
+    diagnostic.push(`page TikTok indisponible: ${messageErreur(error)}`);
   }
 
   // 2) Apify profil sans télécharger les images — complète / ordonne par vues.
   //    Chaque slideshow sera re-scrapé individuellement ensuite (1 agent / post).
   try {
     const posts = await listerPostsProfil(handle, SCRAPE_TOUS);
-    if (posts.length > 0) {
-      source = urlsSet.size > 0 ? "mixte" : "apify";
-      for (const p of posts) {
-        if (!p.webVideoUrl) continue;
-        const estPhoto =
-          p.imageUrls.length > 0 ||
-          /\/photo\//.test(p.webVideoUrl) ||
-          urlsSet.has(p.webVideoUrl);
-        if (!estPhoto) continue;
-        urlsSet.add(p.webVideoUrl);
-        const pid = idDe(p.webVideoUrl);
-        vues.set(pid, p.stats?.vues ?? 0);
-        const ct = normaliserCreateTime(p.createTime);
-        if (ct) createTimeParId.set(pid, ct);
-      }
+    for (const p of posts) {
+      if (!p.webVideoUrl) continue;
+      const estPhoto =
+        p.imageUrls.length > 0 ||
+        /\/photo\//.test(p.webVideoUrl) ||
+        urlsSet.has(p.webVideoUrl);
+      if (!estPhoto) continue;
+      urlsSet.add(p.webVideoUrl);
+      viaApify += 1;
+      const pid = idDe(p.webVideoUrl);
+      vues.set(pid, p.stats?.vues ?? 0);
+      const ct = normaliserCreateTime(p.createTime);
+      if (ct) createTimeParId.set(pid, ct);
     }
-  } catch {
-    // Si Apify cale, on garde la liste page seule.
+    diagnostic.push(
+      `Apify: ${viaApify} slideshow(s) sur ${posts.length} post(s) (plafond ${SCRAPE_TOUS})`,
+    );
+    if (posts.length >= SCRAPE_TOUS) {
+      diagnostic.push(
+        `plafond de listing atteint — relance pour aller plus loin ou monte IMPORT_LISTING_MAX`,
+      );
+    }
+  } catch (error) {
+    diagnostic.push(`Apify indisponible: ${messageErreur(error)}`);
   }
+
+  const source: ListingCompte["source"] =
+    viaPage > 0 && viaApify > 0 ? "mixte" : viaApify > 0 ? "apify" : viaPage > 0 ? "page" : "aucune";
 
   // Tous les slideshows (inédits + déjà connus) : les connus seront réouverts
   // sur le même contenu (re-pipeline, historique Passages conservé) — sauf
-  // `nouveauxSeulement` (update : uniquement depuis le dernier import).
+  // `nouveauxSeulement`, qui ne reprend que ce qui manque.
   const toutes = [...urlsSet].sort(
     (a, b) => (vues.get(idDe(b)) ?? 0) - (vues.get(idDe(a)) ?? 0),
   );
-  const connus = toutes.filter((u) => deja.has(idDe(u))).length;
+  const manquantes = urlsManquantes(toutes, deja);
   const dernierImportAt = ref.dernier_scrape_at
     ? new Date(String(ref.dernier_scrape_at))
     : null;
-  const urls = opts.nouveauxSeulement
-    ? toutes.filter((u) =>
-        estNouveauDepuisImport({
-          url: u,
-          createTime: createTimeParId.get(idDe(u)) ?? null,
-          connusIds: deja,
-          dernierImportAt,
-          maxIdConnu,
-        }),
-      )
-    : toutes;
+  const nouveaux = manquantes.filter((u) =>
+    estNouveauDepuisImport({
+      url: u,
+      createTime: createTimeParId.get(idDe(u)) ?? null,
+      connusIds: deja,
+      dernierImportAt,
+      maxIdConnu,
+    }),
+  ).length;
+  const urls = opts.nouveauxSeulement ? manquantes : toutes;
 
-  await supabase
-    .from("comptes_reference")
-    .update({ dernier_scrape_at: new Date().toISOString() })
-    .eq("id", compteReferenceId);
+  // Ne dater le scrape que s'il a réellement vu le profil : sinon un listing
+  // en échec marquait le compte « à jour » et gelait les updates suivants.
+  if (opts.marquerScrape && toutes.length > 0) {
+    await supabase
+      .from("comptes_reference")
+      .update({ dernier_scrape_at: new Date().toISOString() })
+      .eq("id", compteReferenceId);
+  }
 
   return {
     handle,
     urls,
     total: toutes.length,
-    connus,
-    nouveaux: urls.filter((u) => !deja.has(idDe(u))).length,
+    connus: toutes.length - manquantes.length,
+    manquants: manquantes.length,
+    nouveaux,
     source,
+    diagnostic,
   };
 }
 
@@ -657,7 +731,9 @@ export async function importerCompteReference(
   supabase: Supabase,
   compteReferenceId: string,
 ): Promise<{ crees: number; ids: string[]; scrapes: number }> {
-  const listed = await listerUrlsCompteReference(supabase, compteReferenceId);
+  const listed = await listerUrlsCompteReference(supabase, compteReferenceId, {
+    marquerScrape: true,
+  });
   const ids: string[] = [];
   let crees = 0;
   for (const url of listed.urls) {
@@ -1540,7 +1616,15 @@ export interface ImportFileRow {
   contenu_id: string | null;
   erreur: string | null;
   tentatives: number;
+  created_at?: string | null;
 }
+
+/** Une URL scrapable est celle d'un post précis, pas celle d'un profil. */
+export function estUrlDePost(url: string): boolean {
+  return /\/(?:photo|video)\/\d+/.test(url);
+}
+
+const LOT_ENQUEUE = 100;
 
 /** Enfile des URLs pour scrape+pipeline serveur (idempotent sur pending/running). */
 export async function enqueueImportUrls(
@@ -1553,31 +1637,62 @@ export async function enqueueImportUrls(
     /** Langue d'origine — stockée sur chaque ligne import_file. */
     langue?: string | null;
   },
-): Promise<{ batchId: string; enqueued: number; skipped: number }> {
+): Promise<{ batchId: string; enqueued: number; skipped: number; invalides: string[] }> {
   const batchId = opts.batchId ?? crypto.randomUUID();
   const langue = normaliserLangue(opts.langue ?? null);
   let enqueued = 0;
   let skipped = 0;
+  const invalides: string[] = [];
+
+  // Une URL de profil enfilée comme un post consomme un run Apify, échoue,
+  // et brûle ses tentatives jusqu'à mourir en file. Autant la refuser ici.
+  const aEnfiler: string[] = [];
   for (const url of opts.urls) {
-    const { error } = await supabase.from("import_file").insert({
-      post_url: url,
-      compte_reference_id: opts.compteReferenceId,
-      label_ids: opts.labelIds ?? [],
-      batch_id: batchId,
-      langue,
-      statut: "pending",
-    });
-    if (error) {
-      // Unique pending/running sur post_url → déjà en file
-      skipped += 1;
+    if (estUrlDePost(url)) aEnfiler.push(url);
+    else invalides.push(url);
+  }
+
+  const ligne = (url: string) => ({
+    post_url: url,
+    compte_reference_id: opts.compteReferenceId,
+    label_ids: opts.labelIds ?? [],
+    batch_id: batchId,
+    langue,
+    statut: "pending",
+  });
+
+  // Par paquets : 230 insertions unitaires approchaient le mur Edge de 150 s.
+  // L'index unique est partiel, donc pas d'`on conflict` possible — en cas de
+  // doublon dans un paquet, on retombe ligne à ligne pour ne perdre que lui.
+  for (let i = 0; i < aEnfiler.length; i += LOT_ENQUEUE) {
+    const lot = aEnfiler.slice(i, i + LOT_ENQUEUE);
+    const { error } = await supabase.from("import_file").insert(lot.map(ligne));
+    if (!error) {
+      enqueued += lot.length;
       continue;
     }
-    enqueued += 1;
+    for (const url of lot) {
+      const { error: unitaire } = await supabase.from("import_file").insert(ligne(url));
+      if (unitaire) skipped += 1;
+      else enqueued += 1;
+    }
   }
-  return { batchId, enqueued, skipped };
+
+  return { batchId, enqueued, skipped, invalides };
 }
 
-/** Claim d'une ligne import_file libre. */
+export const MAX_TENTATIVES_IMPORT = 5;
+
+/** Statuts qu'un worker peut reprendre — `running` compris si le bail a expiré. */
+export const STATUTS_REPRENABLES = ["pending", "failed", "running"] as const;
+
+/**
+ * Claim d'une ligne import_file libre.
+ *
+ * `running` est repris quand le bail a expiré : un worker tué en plein scrape
+ * (timeout Edge, redéploiement) laissait sinon sa ligne bloquée à vie — et,
+ * l'index unique couvrant `running`, la ré-enfiler était impossible.
+ */
 export async function claimImportFile(
   supabase: Supabase,
 ): Promise<ImportFileRow | null> {
@@ -1586,8 +1701,8 @@ export async function claimImportFile(
   const { data: candidats } = await supabase
     .from("import_file")
     .select("id")
-    .in("statut", ["pending", "failed"])
-    .lt("tentatives", 5)
+    .in("statut", STATUTS_REPRENABLES)
+    .lt("tentatives", MAX_TENTATIVES_IMPORT)
     .or(libre)
     .order("created_at")
     .limit(8);
@@ -1611,11 +1726,26 @@ export async function claimImportFile(
   return null;
 }
 
+/**
+ * Panne de capacité côté fournisseur, pas défaut du post : budget Apify saturé,
+ * quota, ou erreur serveur. Ça se retente — ça ne se compte pas comme un échec.
+ */
+export function estErreurCapacite(message: string): boolean {
+  return (
+    /memory-limit-exceeded|rate.?limit|too many requests|quota/i.test(message) ||
+    /Apify (?:402|429|5\d\d)\b/.test(message)
+  );
+}
+
+/** Fenêtre au-delà de laquelle une ligne qui ne fait que se reporter est abandonnée. */
+const REPORT_MAX_MS = 12 * 3600_000;
+const REPORT_MS = 3 * 60_000;
+
 /** Scrape une URL en file → crée/réouvre le contenu (pipeline ensuite via claimContenu). */
 export async function traiterImportFile(
   supabase: Supabase,
   row: ImportFileRow,
-): Promise<{ ok: boolean; contenuId?: string; erreur?: string }> {
+): Promise<{ ok: boolean; contenuId?: string; erreur?: string; reporte?: boolean }> {
   try {
     const cree = await importerLien(
       supabase,
@@ -1637,6 +1767,25 @@ export async function traiterImportFile(
     return { ok: true, contenuId: cree.id };
   } catch (error) {
     const msg = messageErreur(error);
+    const depuis = row.created_at ? Date.now() - new Date(row.created_at).getTime() : 0;
+
+    // Un pic de charge sur Apify renvoie 402 « memory limit » sur des posts
+    // parfaitement valides. En comptant ça comme un échec, cinq rafales
+    // suffisaient à condamner définitivement le slideshow.
+    if (estErreurCapacite(msg) && depuis < REPORT_MAX_MS) {
+      const report = new Date(Date.now() + REPORT_MS + Math.random() * REPORT_MS);
+      await supabase
+        .from("import_file")
+        .update({
+          statut: "pending",
+          erreur: `Report (capacité fournisseur) — ${msg}`,
+          lease_until: report.toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id);
+      return { ok: false, erreur: msg, reporte: true };
+    }
+
     await supabase
       .from("import_file")
       .update({

@@ -22,6 +22,22 @@ export function maxIdTiktok(ids: Iterable<string>): bigint | null {
 /** Marge (2 h) : un post publié pendant le scrape précédent ne doit pas être loupé. */
 export const MARGE_UPDATE_SEC = 2 * 3600;
 
+/** Une URL scrapable est celle d'un post précis, pas celle d'un profil. */
+export function estUrlDePost(url: string): boolean {
+  return /\/(?:photo|video)\/\d+/.test(url);
+}
+
+/**
+ * Panne de capacité côté fournisseur, pas défaut du post : budget Apify saturé,
+ * quota, ou erreur serveur. Ça se retente — ça ne se compte pas comme un échec.
+ */
+export function estErreurCapacite(message: string): boolean {
+  return (
+    /memory-limit-exceeded|rate.?limit|too many requests|quota/i.test(message) ||
+    /Apify (?:402|429|5\d\d)\b/.test(message)
+  );
+}
+
 export type CandidatImportNouveau = {
   url: string;
   createTime?: number | null;
@@ -56,6 +72,20 @@ export function estNouveauDepuisImport(opts: {
   }
 
   return false;
+}
+
+/**
+ * Ce que « Mettre à jour » doit enfiler : tout slideshow exposé par le profil
+ * et absent du stock.
+ *
+ * Le filtre par date ne sert plus qu'à l'affichage. Il décidait auparavant de
+ * l'enfilage, si bien qu'un premier import tronqué (plafond de listing, handle
+ * invalide) était définitivement figé : les manquants étant antérieurs au
+ * dernier scrape, l'update répondait « aucun nouveau TikTok » pendant que des
+ * dizaines de slideshows restaient introuvables.
+ */
+export function urlsManquantes(urlsProfil: string[], connusIds: Set<string>): string[] {
+  return urlsProfil.filter((url) => !connusIds.has(idPostTiktok(url)));
 }
 
 export function filtrerNouveauxDepuisImport(

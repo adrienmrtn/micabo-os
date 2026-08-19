@@ -7,8 +7,10 @@ import {
   importerCompteReference,
   importerLien,
   listerUrlsCompteReference,
+  MAX_TENTATIVES_IMPORT,
   prochainContenu,
   statsImportBatch,
+  STATUTS_REPRENABLES,
   traiterImportFile,
 } from "../_shared/import_contenu.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
@@ -58,6 +60,7 @@ Deno.serve(async (request) => {
       const compteId = String(body.compteReferenceId);
       const listed = await listerUrlsCompteReference(supabase, compteId, {
         nouveauxSeulement: Boolean(body.nouveauxSeulement),
+        marquerScrape: true,
       });
       // Langue explicite, sinon celle du compte source.
       let langue: string | null =
@@ -78,17 +81,20 @@ Deno.serve(async (request) => {
         langue,
       });
       // Kick immédiat de workers (ne dépend pas du cron pour démarrer).
-      kickWorkers(request, 10);
+      kickWorkers(request, AMORCE_WORKERS);
       return json({
         ok: true,
         handle: listed.handle,
         total: listed.total,
         connus: listed.connus,
+        manquants: listed.manquants,
         nouveaux: listed.nouveaux,
         source: listed.source,
+        diagnostic: listed.diagnostic,
         batchId: r.batchId,
         enqueued: r.enqueued,
         skipped: r.skipped,
+        invalides: r.invalides.length,
         langue,
       });
     }
@@ -101,7 +107,7 @@ Deno.serve(async (request) => {
         batchId: body.batchId ? String(body.batchId) : null,
         langue: typeof body.langue === "string" ? body.langue : null,
       });
-      kickWorkers(request, Math.min(10, Math.max(2, r.enqueued)));
+      kickWorkers(request, Math.min(AMORCE_WORKERS, Math.max(1, r.enqueued)));
       return json({ ok: true, ...r });
     }
 
@@ -109,8 +115,10 @@ Deno.serve(async (request) => {
     if (body?.worker) {
       const result = await runWorker(supabase);
       if (result.more) {
-        // Auto-chaîne (survit à la fermeture du navigateur).
-        kickWorkers(request, 2);
+        // Le worker se remplace, il ne se duplique pas : à 2 la file se
+        // dédoublait à chaque pas et saturait les Edge Functions (tout le reste
+        // se mettait alors à répondre « Failed to send a request »).
+        kickWorkers(request, 1);
       }
       return json({ ok: true, ...result });
     }
@@ -146,6 +154,16 @@ Deno.serve(async (request) => {
         labelIds: Array.isArray(body.labelIds) ? body.labelIds : [],
         langue,
       });
+      if (r.invalides.length > 0) {
+        return json(
+          {
+            ok: false,
+            error:
+              "Ce lien ne pointe pas vers un slideshow : colle l'URL d'un post (…/photo/… ou …/video/…), pas celle d'un profil.",
+          },
+          400,
+        );
+      }
       kickWorkers(request, 2);
       return json({ ok: true, batchId: r.batchId, enqueued: r.enqueued, skipped: r.skipped });
     }
@@ -158,8 +176,10 @@ Deno.serve(async (request) => {
         urls: r.urls,
         total: r.total,
         connus: r.connus,
+        manquants: r.manquants,
         nouveaux: r.nouveaux,
         source: r.source,
+        diagnostic: r.diagnostic,
       });
     }
 
@@ -214,7 +234,12 @@ async function runWorker(
     const r = await traiterImportFile(supabase, file);
     const more = await hasMoreWork(supabase);
     if (!r.ok) {
-      return { action: "scrape_failed", more, fileId: file.id, error: r.erreur };
+      return {
+        action: r.reporte ? "scrape_reporte" : "scrape_failed",
+        more,
+        fileId: file.id,
+        error: r.erreur,
+      };
     }
     return {
       action: "scrape",
@@ -261,11 +286,14 @@ async function hasMoreWork(
 ): Promise<boolean> {
   const now = new Date().toISOString();
   const [{ count: files }, { count: contenus }] = await Promise.all([
+    // Même filtre que le claim, bail compris : sinon un worker se rechaîne
+    // indéfiniment sur des lignes reportées qu'il ne peut pas prendre.
     supabase
       .from("import_file")
       .select("id", { count: "exact", head: true })
-      .in("statut", ["pending", "failed"])
-      .lt("tentatives", 5),
+      .in("statut", STATUTS_REPRENABLES)
+      .lt("tentatives", MAX_TENTATIVES_IMPORT)
+      .or(`lease_until.is.null,lease_until.lt."${now}"`),
     supabase
       .from("contenus")
       .select("id", { count: "exact", head: true })
@@ -274,6 +302,13 @@ async function hasMoreWork(
   ]);
   return (files ?? 0) + (contenus ?? 0) > 0;
 }
+
+/**
+ * Workers amorcés à l'enfilage. La largeur vient surtout du cron (12/min) : en
+ * amorcer trop ici, multiplié par le nombre de comptes mis à jour d'un coup,
+ * dépasse la concurrence Edge et fait échouer les appels des autres pages.
+ */
+const AMORCE_WORKERS = 3;
 
 /** Déclenche N workers en parallèle — fire-and-forget (pas d'attente). */
 function kickWorkers(request: Request, n: number): void {

@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   MARGE_UPDATE_SEC,
+  estErreurCapacite,
   estNouveauDepuisImport,
+  estUrlDePost,
   filtrerNouveauxDepuisImport,
   idPostTiktok,
   maxIdTiktok,
   normaliserCreateTime,
+  urlsManquantes,
 } from "./importNouveaux";
 
 const ANCIEN = "https://www.tiktok.com/@src/photo/7000000000000000000";
@@ -106,6 +109,64 @@ describe("estNouveauDepuisImport", () => {
         maxIdConnu: maxIdTiktok(connus),
       }),
     ).toBe(false);
+  });
+});
+
+describe("estUrlDePost", () => {
+  it("accepte un post photo ou vidéo", () => {
+    expect(estUrlDePost(ANCIEN)).toBe(true);
+    expect(estUrlDePost(RECENT)).toBe(true);
+  });
+
+  it("refuse une URL de profil", () => {
+    // Enfilée comme un post, elle consommait un run Apify puis mourait en file.
+    expect(estUrlDePost("https://www.tiktok.com/@katsreset")).toBe(false);
+    expect(estUrlDePost("https://www.tiktok.com/@relatableoutof10?sophia_listing=abc")).toBe(
+      false,
+    );
+  });
+});
+
+describe("estErreurCapacite", () => {
+  it("reconnaît une saturation du fournisseur", () => {
+    expect(
+      estErreurCapacite(
+        'Apify 402: {"error":{"type":"actor-memory-limit-exceeded","message":"By launching this job you will exceed the memory limit of 65536MB"}}',
+      ),
+    ).toBe(true);
+    expect(estErreurCapacite("Apify 429: too many requests")).toBe(true);
+    expect(estErreurCapacite("Apify 503: bad gateway")).toBe(true);
+  });
+
+  it("laisse un vrai échec de post compter comme un échec", () => {
+    expect(estErreurCapacite('Apify 400: {"error":{"type":"run-failed"}}')).toBe(false);
+    expect(estErreurCapacite("Aucune slide exploitable")).toBe(false);
+  });
+});
+
+describe("urlsManquantes", () => {
+  it("ne garde que ce qui n’est pas déjà en stock", () => {
+    expect(urlsManquantes([ANCIEN, MILIEU, RECENT], new Set(["7500000000000000000"]))).toEqual([
+      ANCIEN,
+      RECENT,
+    ]);
+  });
+
+  it("rattrape un stock incomplet même quand tout est plus vieux que le dernier scrape", () => {
+    // Le cas qui répondait « aucun nouveau TikTok » : 40 slideshows importés,
+    // le reste du profil plus ancien que le dernier scrape, donc inatteignable.
+    const profil = Array.from(
+      { length: 150 },
+      (_, i) => `https://www.tiktok.com/@src/photo/${7000000000000000000n + BigInt(i)}`,
+    );
+    const enStock = new Set(profil.slice(0, 40).map((u) => idPostTiktok(u)));
+
+    expect(urlsManquantes(profil, enStock)).toHaveLength(110);
+  });
+
+  it("ne propose rien quand le stock couvre tout le profil", () => {
+    const profil = [ANCIEN, MILIEU];
+    expect(urlsManquantes(profil, new Set(profil.map(idPostTiktok)))).toEqual([]);
   });
 });
 
