@@ -26,8 +26,11 @@ import type { LigneJournalOubli } from "./oubliSource";
 import { compteEnProcessus } from "./warmup";
 import { ugcVisages } from "./ugcVisages";
 import { corpsAssignationUgcVideoTest } from "./corpsAssignationUgcVideoTest";
+import { handleTiktokDepuisSaisie } from "./oubliSource";
 import {
   aggregerStatsSlideshowsParCompte,
+  PAGE_STATS_CONTENUS,
+  type LigneStatSlideshow,
   type StatsCompteSlideshows,
 } from "./statsSlideshowsCompte";
 
@@ -193,7 +196,7 @@ export async function creerSource(input: {
   const { data, error } = await supabase
     .from("comptes_reference")
     .insert({
-      handle_tiktok: input.handle.trim().replace(/^@/, ""),
+      handle_tiktok: handleTiktokDepuisSaisie(input.handle),
       niche: input.niche.trim() || null,
       langue: input.langue,
       parent_id: input.parent_id ?? null,
@@ -4574,17 +4577,27 @@ async function metasMediasPropres(
 
 export type { StatsCompteSlideshows };
 
+/** Page les lignes : le max PostgREST (~1000) tronquait les stats (10/10 au lieu de 45/45). */
+async function listerLignesStatsContenus(): Promise<LigneStatSlideshow[]> {
+  const page = PAGE_STATS_CONTENUS;
+  const lignes: LigneStatSlideshow[] = [];
+  for (let from = 0; ; from += page) {
+    const { data, error } = await supabase
+      .from("contenus")
+      .select("compte_reference_id, statut")
+      .range(from, from + page - 1);
+    if (error) throw error;
+    const lot = (data ?? []) as LigneStatSlideshow[];
+    lignes.push(...lot);
+    if (lot.length < page) break;
+  }
+  return lignes;
+}
+
 /** Compteurs d'import par compte source (tous les slideshows, pas le top N de la grille). */
 export async function statsSlideshowsParSource(): Promise<StatsCompteSlideshows[]> {
-  const [{ data: lignes, error: errLignes }, sources] = await Promise.all([
-    supabase.from("contenus").select("compte_reference_id, statut").limit(8000),
-    listerSources(),
-  ]);
-  if (errLignes) throw errLignes;
-  return aggregerStatsSlideshowsParCompte(
-    (lignes ?? []) as Array<{ compte_reference_id: string | null; statut: string }>,
-    sources,
-  );
+  const [lignes, sources] = await Promise.all([listerLignesStatsContenus(), listerSources()]);
+  return aggregerStatsSlideshowsParCompte(lignes, sources);
 }
 
 export async function listerContenus(opts?: {

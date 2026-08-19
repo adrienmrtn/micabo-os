@@ -5,6 +5,7 @@ import {
   cumulerCompteurs,
   decouperEnLots,
   handleDeLUrl,
+  handleTiktokDepuisSaisie,
   idPostTiktokStrict,
   normaliserHandle,
   prefixeStorageScrape,
@@ -28,6 +29,12 @@ describe("handleDeLUrl", () => {
     expect(handleDeLUrl("https://tiktok.com/@Sophia.Studio/video/7123?x=1")).toBe(
       "sophia.studio",
     );
+  });
+
+  it("extrait le handle d’une saisie URL ou @handle", () => {
+    expect(handleTiktokDepuisSaisie("https://www.tiktok.com/@katsreset")).toBe("katsreset");
+    expect(handleTiktokDepuisSaisie("@katsreset")).toBe("katsreset");
+    expect(handleTiktokDepuisSaisie("katsreset")).toBe("katsreset");
   });
 
   it("renvoie null hors TikTok", () => {

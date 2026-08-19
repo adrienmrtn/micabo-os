@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { aggregerStatsSlideshowsParCompte } from "./statsSlideshowsCompte";
+import {
+  aggregerStatsSlideshowsParCompte,
+  PAGE_STATS_CONTENUS,
+} from "./statsSlideshowsCompte";
 
 const sources = [
   { id: "a", handle_tiktok: "@Sophia" },
@@ -70,5 +73,17 @@ describe("aggregerStatsSlideshowsParCompte", () => {
       sources,
     );
     expect(stats[0]?.handle).toBe("inconnu");
+  });
+
+  it("compte les 45 gardés d’un batch (pas un plafond silencieux)", () => {
+    const lignes = Array.from({ length: 45 }, () => ({
+      compte_reference_id: "k",
+      statut: "valide",
+    }));
+    const stats = aggregerStatsSlideshowsParCompte(lignes, [
+      { id: "k", handle_tiktok: "katsreset" },
+    ]);
+    expect(stats[0]).toMatchObject({ importes: 45, gardes: 45, rejetes: 0, encours: 0 });
+    expect(PAGE_STATS_CONTENUS).toBe(1000);
   });
 });
