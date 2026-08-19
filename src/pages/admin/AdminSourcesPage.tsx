@@ -29,6 +29,7 @@ import {
   setLabelsSource,
   stockParSource,
   supprimerSource,
+  type LigneJournalOubli,
 } from "@/features/moteur/api";
 import { demarrerImportCompte, demarrerImportLien } from "@/features/moteur/importJobs";
 import { ImportHistoriquePanel } from "@/features/moteur/ImportHistoriquePanel";
@@ -319,6 +320,55 @@ function ImportLienSource({
   );
 }
 
+function niveauJournalClass(niveau: LigneJournalOubli["niveau"]): string {
+  if (niveau === "ok") return "text-emerald-700 dark:text-emerald-400";
+  if (niveau === "warn") return "text-amber-700 dark:text-amber-400";
+  if (niveau === "error") return "text-destructive";
+  return "text-muted-foreground";
+}
+
+/** Journal scrollable — même lecture que les jobs d'import, pour ne pas se perdre. */
+function JournalOubli({
+  lignes,
+  vide,
+}: {
+  lignes: LigneJournalOubli[];
+  vide: string;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!ref.current) return;
+    ref.current.scrollTop = ref.current.scrollHeight;
+  }, [lignes.length]);
+
+  return (
+    <div
+      ref={ref}
+      className="max-h-56 space-y-1 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 font-mono text-[11px] leading-relaxed"
+    >
+      {lignes.length === 0 && <p className="text-muted-foreground">{vide}</p>}
+      {lignes.map((l, i) => (
+        <div key={`${l.at}-${i}`} className={cn("break-words", niveauJournalClass(l.niveau))}>
+          <span className="opacity-60">
+            {new Date(l.at).toLocaleTimeString(undefined, {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            })}
+          </span>{" "}
+          <span className="font-sans font-medium">{l.message}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type BilanOubli = {
+  handle: string;
+  message: string;
+  journal: LigneJournalOubli[];
+};
+
 /**
  * Repart de zéro sur ce compte : efface tout ce qu'il a produit, puis le retire
  * de la liste. Sans ça, un ré-import retombe sur les verrous d'unicité
@@ -330,12 +380,13 @@ function OublierSource({
   onFini,
 }: {
   source: CompteReference;
-  onFini: (message: string) => void;
+  onFini: (bilan: BilanOubli) => void;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [ouvert, setOuvert] = React.useState(false);
   const [progres, setProgres] = React.useState<string | null>(null);
+  const [journal, setJournal] = React.useState<LigneJournalOubli[]>([]);
 
   const apercu = useQuery({
     queryKey: ["oubli-apercu", source.id],
@@ -346,22 +397,26 @@ function OublierSource({
 
   const oublier = useMutation({
     mutationFn: () =>
-      oublierSource(source.id, (fait, restant) =>
-        setProgres(
-          t("sources.oublierProgres", { contenus: fait.contenus, restant }),
-        ),
-      ),
-    onSuccess: async (fait) => {
-      setOuvert(false);
-      setProgres(null);
-      onFini(
-        t("sources.oublierFait", {
+      oublierSource(source.id, (fait, restant, lignes) => {
+        setJournal(lignes);
+        if (restant >= 0) {
+          setProgres(
+            t("sources.oublierProgres", { contenus: fait.contenus, restant }),
+          );
+        }
+      }),
+    onSuccess: async (r) => {
+      setJournal(r.journal);
+      onFini({
+        handle: source.handle_tiktok,
+        journal: r.journal,
+        message: t("sources.oublierFait", {
           handle: source.handle_tiktok,
-          contenus: fait.contenus,
-          medias: fait.medias,
-          fichiers: fait.fichiers,
+          contenus: r.fait.contenus,
+          medias: r.fait.medias,
+          fichiers: r.fait.fichiers,
         }),
-      );
+      });
       for (const key of [
         ["sources"],
         ["stock-sources"],
@@ -430,6 +485,12 @@ function OublierSource({
 
       <p className="text-[11px] text-muted-foreground">{t("sources.oublierIrreversible")}</p>
       {progres && <p className="text-[11px] text-muted-foreground">{progres}</p>}
+      {(oublier.isPending || journal.length > 0) && (
+        <div className="space-y-1">
+          <p className="text-[11px] font-medium">{t("sources.oublierJournal")}</p>
+          <JournalOubli lignes={journal} vide={t("sources.oublierJournalVide")} />
+        </div>
+      )}
       {oublier.isError && (
         <p className="text-[11px] text-destructive">{(oublier.error as Error).message}</p>
       )}
@@ -439,7 +500,11 @@ function OublierSource({
           size="sm"
           variant="destructive"
           disabled={oublier.isPending || apercu.isPending}
-          onClick={() => oublier.mutate()}
+          onClick={() => {
+            setJournal([]);
+            setProgres(null);
+            oublier.mutate();
+          }}
         >
           {oublier.isPending ? t("sources.oublierEnCours") : t("sources.oublierGo")}
         </Button>
@@ -450,6 +515,7 @@ function OublierSource({
           onClick={() => {
             setOuvert(false);
             setProgres(null);
+            setJournal([]);
           }}
         >
           {t("common.cancel")}
@@ -468,7 +534,7 @@ function LigneSource({
 }: {
   source: CompteReference;
   estConjoint?: boolean;
-  onOubli: (message: string) => void;
+  onOubli: (bilan: BilanOubli) => void;
 }) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
@@ -623,7 +689,7 @@ function GroupeSource({
   conjoints: CompteReference[];
   stock: number;
   niches: NicheLabel[];
-  onOubli: (message: string) => void;
+  onOubli: (bilan: BilanOubli) => void;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -943,7 +1009,7 @@ function BarreUpdateSources({ sources }: { sources: CompteReference[] }) {
 
 export function AdminSourcesPage() {
   const { t } = useTranslation();
-  const [messageOubli, setMessageOubli] = React.useState<string | null>(null);
+  const [bilanOubli, setBilanOubli] = React.useState<BilanOubli | null>(null);
   const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
   const stock = useQuery({ queryKey: ["stock-sources"], queryFn: stockParSource });
   const niches = useQuery({ queryKey: ["labels"], queryFn: listerLabels });
@@ -968,12 +1034,23 @@ export function AdminSourcesPage() {
         <ImportJobsPanel />
         <ImportHistoriquePanel />
 
-        {messageOubli && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-3">
-            <p className="text-sm text-emerald-700 dark:text-emerald-400">{messageOubli}</p>
-            <Button size="sm" variant="ghost" onClick={() => setMessageOubli(null)}>
-              {t("common.close")}
-            </Button>
+        {bilanOubli && (
+          <div className="space-y-2 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0 space-y-1">
+                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                  {bilanOubli.message}
+                </p>
+                <p className="text-[11px] text-muted-foreground">{t("sources.oublierJournal")}</p>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => setBilanOubli(null)}>
+                {t("common.close")}
+              </Button>
+            </div>
+            <JournalOubli
+              lignes={bilanOubli.journal}
+              vide={t("sources.oublierJournalVide")}
+            />
           </div>
         )}
 
@@ -992,7 +1069,7 @@ export function AdminSourcesPage() {
               conjoints={conjointsDe(p.id)}
               stock={stockGroupe(p)}
               niches={niches.data ?? []}
-              onOubli={setMessageOubli}
+              onOubli={setBilanOubli}
             />
           ))}
         </div>

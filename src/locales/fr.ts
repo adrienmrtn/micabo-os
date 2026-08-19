@@ -727,6 +727,8 @@ export const fr = {
       oublierGo: "Tout supprimer",
       oublierEnCours: "Suppression…",
       oublierProgres: "{{contenus}} slideshow(s) supprimé(s) · {{restant}} restant(s)…",
+      oublierJournal: "Journal de suppression",
+      oublierJournalVide: "En attente du premier lot…",
       oublierFait:
         "@{{handle}} oublié — {{contenus}} slideshow(s), {{medias}} image(s) et {{fichiers}} fichier(s) effacés. Tu peux le réimporter de zéro.",
     },

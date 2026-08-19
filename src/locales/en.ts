@@ -725,6 +725,8 @@ export const en = {
       oublierGo: "Delete everything",
       oublierEnCours: "Deleting…",
       oublierProgres: "{{contenus}} slideshow(s) deleted · {{restant}} left…",
+      oublierJournal: "Deletion log",
+      oublierJournalVide: "Waiting for the first batch…",
       oublierFait:
         "@{{handle}} forgotten — {{contenus}} slideshow(s), {{medias}} image(s) and {{fichiers}} file(s) erased. You can re-import it from scratch.",
     },

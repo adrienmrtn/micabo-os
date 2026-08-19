@@ -10,6 +10,7 @@ import {
   prefixeStorageScrape,
   prefixeStorageSujet,
   prefixesStorageContenu,
+  resumeCompteurs,
   urlDuHandle,
 } from "./oubliSource";
 
@@ -83,6 +84,15 @@ describe("chemins storage", () => {
   it("extrait l’id du post sans jamais retomber sur l’URL entière", () => {
     expect(idPostTiktokStrict("https://www.tiktok.com/@s/photo/7123")).toBe("7123");
     expect(idPostTiktokStrict("https://www.tiktok.com/@s")).toBeNull();
+  });
+});
+
+describe("resumeCompteurs", () => {
+  it("écrit une ligne lisible, dans l’ordre, et ignore les zéros", () => {
+    expect(resumeCompteurs({ contenus: 12, medias: 40, fichiers: 41, posts: 0 })).toBe(
+      "12 slideshow(s) · 40 image(s) · 41 fichier(s)",
+    );
+    expect(resumeCompteurs(compteursVides())).toBe("rien");
   });
 });
 
