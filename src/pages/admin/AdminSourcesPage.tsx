@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,11 +19,13 @@ import {
 } from "@/components/ui/card";
 import { LabelEditor } from "@/features/moteur/LabelPicker";
 import {
+  apercuOubliSource,
   creerSource,
   labelsDeLaSource,
   listerLabels,
   listerSources,
   majSource,
+  oublierSource,
   setLabelsSource,
   stockParSource,
   supprimerSource,
@@ -317,14 +319,156 @@ function ImportLienSource({
   );
 }
 
+/**
+ * Repart de zéro sur ce compte : efface tout ce qu'il a produit, puis le retire
+ * de la liste. Sans ça, un ré-import retombe sur les verrous d'unicité
+ * (`handle_tiktok`, `contenus.source_url`) et rouvre les anciens slideshows au
+ * lieu d'en créer de neufs.
+ */
+function OublierSource({
+  source,
+  onFini,
+}: {
+  source: CompteReference;
+  onFini: (message: string) => void;
+}) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [ouvert, setOuvert] = React.useState(false);
+  const [progres, setProgres] = React.useState<string | null>(null);
+
+  const apercu = useQuery({
+    queryKey: ["oubli-apercu", source.id],
+    queryFn: () => apercuOubliSource(source.id),
+    enabled: ouvert,
+    gcTime: 0,
+  });
+
+  const oublier = useMutation({
+    mutationFn: () =>
+      oublierSource(source.id, (fait, restant) =>
+        setProgres(
+          t("sources.oublierProgres", { contenus: fait.contenus, restant }),
+        ),
+      ),
+    onSuccess: async (fait) => {
+      setOuvert(false);
+      setProgres(null);
+      onFini(
+        t("sources.oublierFait", {
+          handle: source.handle_tiktok,
+          contenus: fait.contenus,
+          medias: fait.medias,
+          fichiers: fait.fichiers,
+        }),
+      );
+      for (const key of [
+        ["sources"],
+        ["stock-sources"],
+        ["slideshows"],
+        ["contenus"],
+        ["historique-imports"],
+        ["medias"],
+      ]) {
+        await queryClient.invalidateQueries({ queryKey: key });
+      }
+    },
+  });
+
+  if (!ouvert) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+        title={t("sources.oublierAide")}
+        onClick={() => setOuvert(true)}
+      >
+        <Trash2 className="size-3.5" />
+        {t("sources.oublier")}
+      </Button>
+    );
+  }
+
+  const a = apercu.data?.apercu;
+
+  return (
+    <div className="space-y-2 rounded-md border border-destructive/50 bg-destructive/5 p-2.5">
+      <p className="text-xs font-medium text-destructive">
+        {t("sources.oublierTitre", { handle: source.handle_tiktok })}
+      </p>
+
+      {apercu.isPending && (
+        <p className="text-[11px] text-muted-foreground">{t("common.loading")}</p>
+      )}
+      {apercu.isError && (
+        <p className="text-[11px] text-destructive">{(apercu.error as Error).message}</p>
+      )}
+      {a && (
+        <ul className="space-y-0.5 text-[11px] text-muted-foreground">
+          <li>
+            {t("sources.oublierDetail", {
+              contenus: a.contenus,
+              medias: a.medias,
+              posts: a.posts,
+              sujets: a.sujets,
+              importFile: a.importFile,
+            })}
+          </li>
+          {a.postersLies > 0 && (
+            <li className="text-warning">
+              {t("sources.oublierPosters", { count: a.postersLies })}
+            </li>
+          )}
+          {a.conjoints > 0 && (
+            <li className="text-warning">
+              {t("sources.oublierConjoints", { count: a.conjoints })}
+            </li>
+          )}
+        </ul>
+      )}
+
+      <p className="text-[11px] text-muted-foreground">{t("sources.oublierIrreversible")}</p>
+      {progres && <p className="text-[11px] text-muted-foreground">{progres}</p>}
+      {oublier.isError && (
+        <p className="text-[11px] text-destructive">{(oublier.error as Error).message}</p>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant="destructive"
+          disabled={oublier.isPending || apercu.isPending}
+          onClick={() => oublier.mutate()}
+        >
+          {oublier.isPending ? t("sources.oublierEnCours") : t("sources.oublierGo")}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={oublier.isPending}
+          onClick={() => {
+            setOuvert(false);
+            setProgres(null);
+          }}
+        >
+          {t("common.cancel")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** Une ligne source (principal OU conjoint). Le conjoint est compact : pas de
  *  toggle genre (hérité du principal) ni de prompt de voix. */
 function LigneSource({
   source,
   estConjoint = false,
+  onOubli,
 }: {
   source: CompteReference;
   estConjoint?: boolean;
+  onOubli: (message: string) => void;
 }) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
@@ -448,6 +592,7 @@ function LigneSource({
       </div>
 
       <ImportLienSource sourceId={source.id} langueSource={source.langue} />
+      <OublierSource source={source} onFini={onOubli} />
 
       <div className="border-t pt-3">
         <LabelEditor
@@ -472,11 +617,13 @@ function GroupeSource({
   conjoints,
   stock,
   niches,
+  onOubli,
 }: {
   primary: CompteReference;
   conjoints: CompteReference[];
   stock: number;
   niches: NicheLabel[];
+  onOubli: (message: string) => void;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -524,12 +671,12 @@ function GroupeSource({
         )}
       </div>
 
-      <LigneSource source={primary} />
+      <LigneSource source={primary} onOubli={onOubli} />
 
       {conjoints.length > 0 && (
         <div className="space-y-3 border-l-2 border-muted pl-3">
           {conjoints.map((c) => (
-            <LigneSource key={c.id} source={c} estConjoint />
+            <LigneSource key={c.id} source={c} estConjoint onOubli={onOubli} />
           ))}
         </div>
       )}
@@ -796,6 +943,7 @@ function BarreUpdateSources({ sources }: { sources: CompteReference[] }) {
 
 export function AdminSourcesPage() {
   const { t } = useTranslation();
+  const [messageOubli, setMessageOubli] = React.useState<string | null>(null);
   const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
   const stock = useQuery({ queryKey: ["stock-sources"], queryFn: stockParSource });
   const niches = useQuery({ queryKey: ["labels"], queryFn: listerLabels });
@@ -820,6 +968,15 @@ export function AdminSourcesPage() {
         <ImportJobsPanel />
         <ImportHistoriquePanel />
 
+        {messageOubli && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-3">
+            <p className="text-sm text-emerald-700 dark:text-emerald-400">{messageOubli}</p>
+            <Button size="sm" variant="ghost" onClick={() => setMessageOubli(null)}>
+              {t("common.close")}
+            </Button>
+          </div>
+        )}
+
         <div className="space-y-3">
           {sources.isPending && (
             <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
@@ -835,6 +992,7 @@ export function AdminSourcesPage() {
               conjoints={conjointsDe(p.id)}
               stock={stockGroupe(p)}
               niches={niches.data ?? []}
+              onOubli={setMessageOubli}
             />
           ))}
         </div>

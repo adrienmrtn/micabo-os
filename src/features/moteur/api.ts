@@ -229,6 +229,86 @@ export async function supprimerSource(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export interface OubliSourceApercu {
+  compteReferenceId: string;
+  handle: string;
+  contenus: number;
+  medias: number;
+  posts: number;
+  sujets: number;
+  importFile: number;
+  /** Comptes de publication rattachés : ils perdront le lien vers cette source. */
+  postersLies: number;
+  /** Comptes conjoints : conservés, mais détachés du principal. */
+  conjoints: number;
+}
+
+export interface OubliSourceCompteurs {
+  contenus: number;
+  medias: number;
+  fichiers: number;
+  posts: number;
+  sujets: number;
+  importFile: number;
+}
+
+/** Ce qu'« oublier » cette source détruirait — sans rien toucher. */
+export function apercuOubliSource(compteReferenceId: string) {
+  return invoke<{ ok: boolean; apercu: OubliSourceApercu }>("oublier-source", {
+    compteReferenceId,
+    apercu: true,
+  });
+}
+
+/** Une passe d'oubli côté Edge (lot borné par le mur des 150 s). */
+function oublierSourcePasse(compteReferenceId: string) {
+  return invoke<{
+    ok: boolean;
+    handle: string;
+    termine: boolean;
+    restant: number;
+    supprimes: OubliSourceCompteurs;
+  }>("oublier-source", { compteReferenceId });
+}
+
+/** Passes maximum : garde-fou contre une boucle infinie si l'Edge ne progresse plus. */
+const OUBLI_PASSES_MAX = 200;
+
+/**
+ * Oublie une source de bout en bout : slideshows, images, posts, sujets legacy,
+ * file d'import, fichiers du bucket, puis le compte lui-même. L'Edge travaille
+ * par lots, on enchaîne les passes jusqu'à ce que tout soit effacé.
+ */
+export async function oublierSource(
+  compteReferenceId: string,
+  onProgres?: (fait: OubliSourceCompteurs, restant: number) => void,
+): Promise<OubliSourceCompteurs> {
+  let total: OubliSourceCompteurs = {
+    contenus: 0,
+    medias: 0,
+    fichiers: 0,
+    posts: 0,
+    sujets: 0,
+    importFile: 0,
+  };
+
+  for (let passe = 0; passe < OUBLI_PASSES_MAX; passe += 1) {
+    const r = await oublierSourcePasse(compteReferenceId);
+    total = {
+      contenus: total.contenus + r.supprimes.contenus,
+      medias: total.medias + r.supprimes.medias,
+      fichiers: total.fichiers + r.supprimes.fichiers,
+      posts: total.posts + r.supprimes.posts,
+      sujets: total.sujets + r.supprimes.sujets,
+      importFile: total.importFile + r.supprimes.importFile,
+    };
+    onProgres?.(total, r.restant);
+    if (r.termine) return total;
+  }
+
+  throw new Error("Oubli interrompu : trop de passages sans fin (relance pour finir).");
+}
+
 // --- Sujets -----------------------------------------------------------------
 
 export async function listerSujets(): Promise<Sujet[]> {

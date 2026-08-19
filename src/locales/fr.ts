@@ -708,6 +708,27 @@ export const fr = {
       epuise: "Épuisé — ajoute un compte conjoint (source similaire) pour continuer.",
       confirmDelete:
         "Supprimer ce compte source TikTok ? Les slideshows et images déjà importés sont conservés (rien n'est effacé).",
+      oublier: "Oublier ce compte",
+      oublierAide:
+        "Efface TOUT ce que ce compte a produit (slideshows, images, posts assignés, file d'import) et le retire de la liste — pour pouvoir le réimporter de zéro, sans doublon.",
+      oublierTitre: "Oublier @{{handle}} et tout effacer ?",
+      oublierDetail:
+        "À supprimer : {{contenus}} slideshow(s), {{medias}} image(s) + leurs fichiers, {{posts}} post(s) assigné(s), {{sujets}} sujet(s) legacy, {{importFile}} ligne(s) de file d'import.",
+      oublierPosters_one:
+        "{{count}} compte de publication est rattaché à cette source : il perdra le lien et n'aura plus de matière.",
+      oublierPosters_other:
+        "{{count}} comptes de publication sont rattachés à cette source : ils perdront le lien et n'auront plus de matière.",
+      oublierConjoints_one:
+        "{{count}} compte conjoint sera détaché (conservé, avec ses propres slideshows).",
+      oublierConjoints_other:
+        "{{count}} comptes conjoints seront détachés (conservés, avec leurs propres slideshows).",
+      oublierIrreversible:
+        "Irréversible. Le compte disparaît de la liste ; tu pourras le réajouter et le réimporter comme un compte neuf.",
+      oublierGo: "Tout supprimer",
+      oublierEnCours: "Suppression…",
+      oublierProgres: "{{contenus}} slideshow(s) supprimé(s) · {{restant}} restant(s)…",
+      oublierFait:
+        "@{{handle}} oublié — {{contenus}} slideshow(s), {{medias}} image(s) et {{fichiers}} fichier(s) effacés. Tu peux le réimporter de zéro.",
     },
     sujets: {
       title: "Sujets",
