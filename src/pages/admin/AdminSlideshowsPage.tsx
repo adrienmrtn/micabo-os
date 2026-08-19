@@ -31,6 +31,8 @@ import {
   lireSlideshow,
   listerContenus,
   listerLabels,
+  listerSources,
+  statsSlideshowsParSource,
   jobsReimportDepuisSlides,
   listerJobsReimportPhotosValides,
   listerMediasPourContenu,
@@ -183,9 +185,11 @@ function vignette(c: ContenuListe): string | null {
   return first?.raw_url ?? first?.reference_url ?? null;
 }
 
-type TriSlideshow = "recent" | "elo" | "posts";
+type TriSlideshow = "recent" | "elo" | "posts" | "compte";
 /** null = tous ; "__none__" = sans label ; sinon id label */
 type FiltreLabel = string | null;
+/** null = tous ; "__none__" = source oubliée ; sinon id compte_reference */
+type FiltreCompte = string | null;
 type FiltreUgc = "tous" | "oui" | "non";
 
 function eloMax(c: ContenuListe): number {
@@ -211,7 +215,19 @@ function filtreSlideshows(
   });
 }
 
-function trierSlideshows(liste: ContenuListe[], tri: TriSlideshow): ContenuListe[] {
+function handleDuContenu(
+  c: ContenuListe,
+  handleParId: Map<string, string>,
+): string {
+  if (!c.compte_reference_id) return "";
+  return handleParId.get(c.compte_reference_id) ?? "";
+}
+
+function trierSlideshows(
+  liste: ContenuListe[],
+  tri: TriSlideshow,
+  handleParId: Map<string, string>,
+): ContenuListe[] {
   const arr = [...liste];
   const parDate = (a: ContenuListe, b: ContenuListe) =>
     b.created_at.localeCompare(a.created_at);
@@ -225,6 +241,16 @@ function trierSlideshows(liste: ContenuListe[], tri: TriSlideshow): ContenuListe
       return arr.sort((a, b) => {
         const diff = (b.nb_posts ?? 0) - (a.nb_posts ?? 0);
         return diff !== 0 ? diff : parDate(a, b);
+      });
+    case "compte":
+      return arr.sort((a, b) => {
+        const ha = handleDuContenu(a, handleParId);
+        const hb = handleDuContenu(b, handleParId);
+        const cmp = ha.localeCompare(hb, undefined, { sensitivity: "base" });
+        if (cmp !== 0) return cmp;
+        if (!a.compte_reference_id && b.compte_reference_id) return 1;
+        if (a.compte_reference_id && !b.compte_reference_id) return -1;
+        return parDate(a, b);
       });
     default:
       return arr.sort(parDate);
@@ -1450,6 +1476,7 @@ export function AdminSlideshowsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [filtre, setFiltre] = React.useState<"tous" | "valide" | "rejete">("tous");
   const [filtreLabel, setFiltreLabel] = React.useState<FiltreLabel>(null);
+  const [filtreCompte, setFiltreCompte] = React.useState<FiltreCompte>(null);
   const [filtreUgc, setFiltreUgc] = React.useState<FiltreUgc>("tous");
   const [tri, setTri] = React.useState<TriSlideshow>("recent");
   const [ouvert, setOuvert] = React.useState<string | null>(
@@ -1467,15 +1494,30 @@ export function AdminSlideshowsPage() {
   }, [searchParams]);
 
   const contenus = useQuery({
-    queryKey: ["slideshows", filtre, filtreLabel],
+    queryKey: ["slideshows", filtre, filtreLabel, filtreCompte],
     queryFn: () =>
       listerContenus({
         statut: filtre === "tous" ? undefined : filtre,
-        limit: 200,
+        limit: filtreCompte ? 500 : 200,
         labelId:
           filtreLabel && filtreLabel !== "__none__" ? filtreLabel : undefined,
         sansLabel: filtreLabel === "__none__",
+        compteReferenceId:
+          filtreCompte && filtreCompte !== "__none__" ? filtreCompte : undefined,
+        sansCompte: filtreCompte === "__none__",
       }),
+  });
+
+  const sources = useQuery({
+    queryKey: ["sources"],
+    queryFn: listerSources,
+    staleTime: 60_000,
+  });
+
+  const statsComptes = useQuery({
+    queryKey: ["slideshows", "stats-comptes"],
+    queryFn: statsSlideshowsParSource,
+    staleTime: 30_000,
   });
 
   const labelsTous = useQuery({
@@ -1503,14 +1545,54 @@ export function AdminSlideshowsPage() {
     );
   }, [labelsTous.data, contenus.data]);
 
+  const handleParId = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of sources.data ?? []) {
+      m.set(s.id, s.handle_tiktok.replace(/^@+/, ""));
+    }
+    return m;
+  }, [sources.data]);
+
   const contenusTries = React.useMemo(() => {
-    // Label déjà filtré côté serveur ; UGC reste client.
+    // Label / compte déjà filtrés côté serveur ; UGC reste client.
     const filtres = filtreSlideshows(contenus.data ?? [], {
       labelId: null,
       ugc: filtreUgc,
     });
-    return trierSlideshows(filtres, tri);
-  }, [contenus.data, filtreUgc, tri]);
+    return trierSlideshows(filtres, tri, handleParId);
+  }, [contenus.data, filtreUgc, tri, handleParId]);
+
+  const statsActives = statsComptes.data ?? [];
+  const statsFiltre = statsActives.find((s) =>
+    filtreCompte === "__none__"
+      ? s.compteReferenceId === null
+      : s.compteReferenceId === filtreCompte,
+  );
+
+  const groupesCompte = React.useMemo(() => {
+    if (tri !== "compte" || filtreCompte) return null;
+    const groupes: Array<{
+      key: string;
+      handle: string;
+      items: ContenuListe[];
+    }> = [];
+    const index = new Map<string, number>();
+    for (const c of contenusTries) {
+      const key = c.compte_reference_id ?? "__none__";
+      const i = index.get(key);
+      if (i === undefined) {
+        index.set(key, groupes.length);
+        groupes.push({
+          key,
+          handle: handleDuContenu(c, handleParId),
+          items: [c],
+        });
+      } else {
+        groupes[i].items.push(c);
+      }
+    }
+    return groupes;
+  }, [tri, filtreCompte, contenusTries, handleParId]);
 
   function fermerDetail() {
     setOuvert(null);
@@ -1621,6 +1703,69 @@ export function AdminSlideshowsPage() {
 
             <div className="space-y-1.5">
               <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("slideshows.filtreCompte")}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <Chip
+                  actif={filtreCompte === null}
+                  onClick={() => setFiltreCompte(null)}
+                >
+                  {t("slideshows.filtreComptesTous")}
+                </Chip>
+                {statsActives.map((s) => {
+                  const cle = s.compteReferenceId ?? "__none__";
+                  const label = s.compteReferenceId
+                    ? `@${s.handle}`
+                    : t("slideshows.sansCompte");
+                  return (
+                    <Chip
+                      key={cle}
+                      actif={filtreCompte === cle}
+                      onClick={() =>
+                        setFiltreCompte(filtreCompte === cle ? null : cle)
+                      }
+                    >
+                      <span className="flex flex-col items-start gap-0.5 text-left leading-tight">
+                        <span>{label}</span>
+                        <span className="font-normal opacity-80">
+                          {t("slideshows.compteChip", {
+                            gardes: s.gardes,
+                            importes: s.importes,
+                          })}
+                          {s.rejetes > 0 || s.encours > 0
+                            ? ` · ${t("slideshows.compteChipSuite", {
+                                rejetes: s.rejetes,
+                                encours: s.encours,
+                              })}`
+                            : ""}
+                        </span>
+                      </span>
+                    </Chip>
+                  );
+                })}
+              </div>
+              {statsFiltre && (
+                <p className="text-[11px] text-muted-foreground">
+                  {statsFiltre.compteReferenceId
+                    ? t("slideshows.compteResume", {
+                        handle: statsFiltre.handle,
+                        importes: statsFiltre.importes,
+                        gardes: statsFiltre.gardes,
+                        rejetes: statsFiltre.rejetes,
+                        encours: statsFiltre.encours,
+                      })
+                    : `${t("slideshows.sansCompte")} — ${t("slideshows.compteStats", {
+                        importes: statsFiltre.importes,
+                        gardes: statsFiltre.gardes,
+                        rejetes: statsFiltre.rejetes,
+                        encours: statsFiltre.encours,
+                      })}`}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 {t("slideshows.filtreLabel")}
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -1684,7 +1829,7 @@ export function AdminSlideshowsPage() {
                   {t("slideshows.triLabel")}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {(["recent", "elo", "posts"] as const).map((k) => (
+                  {(["recent", "elo", "posts", "compte"] as const).map((k) => (
                     <Chip key={k} actif={tri === k} onClick={() => setTri(k)}>
                       {t(`slideshows.tri.${k}`)}
                     </Chip>
@@ -1706,7 +1851,10 @@ export function AdminSlideshowsPage() {
           {!contenus.isPending && contenusTries.length === 0 && (
             <EmptyState
               title={
-                filtreLabel || filtreUgc !== "tous" || filtre !== "tous"
+                filtreLabel ||
+                  filtreCompte ||
+                  filtreUgc !== "tous" ||
+                  filtre !== "tous"
                   ? t("slideshows.emptyFiltre")
                   : t("slideshows.empty")
               }
@@ -1714,7 +1862,42 @@ export function AdminSlideshowsPage() {
           )}
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {contenusTries.map((c) => {
+            {(groupesCompte ?? [{ key: "flat", handle: "", items: contenusTries }]).flatMap(
+              (groupe) => {
+                const header =
+                  groupesCompte &&
+                  (() => {
+                    const st = statsActives.find((s) =>
+                      groupe.key === "__none__"
+                        ? s.compteReferenceId === null
+                        : s.compteReferenceId === groupe.key,
+                    );
+                    return (
+                      <div
+                        key={`h-${groupe.key}`}
+                        className="col-span-2 flex flex-wrap items-baseline justify-between gap-2 border-b pb-1 sm:col-span-3 lg:col-span-4"
+                      >
+                        <p className="text-sm font-medium">
+                          {groupe.handle
+                            ? `@${groupe.handle}`
+                            : t("slideshows.sansCompte")}
+                        </p>
+                        {st && (
+                          <p className="text-[11px] text-muted-foreground">
+                            {t("slideshows.compteStats", {
+                              importes: st.importes,
+                              gardes: st.gardes,
+                              rejetes: st.rejetes,
+                              encours: st.encours,
+                            })}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })();
+                return [
+                  ...(header ? [header] : []),
+                  ...groupe.items.map((c) => {
               const img = vignette(c);
               const labels = (c.labels ?? [])
                 .slice()
@@ -1746,6 +1929,15 @@ export function AdminSlideshowsPage() {
                     <p className="line-clamp-2 text-xs font-medium">
                       {c.titre || t("contenus.sansTitre")}
                     </p>
+                    {handleDuContenu(c, handleParId) ? (
+                      <p className="text-[10px] text-muted-foreground">
+                        @{handleDuContenu(c, handleParId)}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground">
+                        {t("slideshows.sansCompte")}
+                      </p>
+                    )}
                     <div className="flex flex-wrap gap-1">
                       {labels.length === 0 ? (
                         <span className="text-[10px] text-muted-foreground">
@@ -1820,7 +2012,10 @@ export function AdminSlideshowsPage() {
                   </div>
                 </button>
               );
-            })}
+                  }),
+                ];
+              },
+            )}
           </div>
         </CardContent>
       </Card>

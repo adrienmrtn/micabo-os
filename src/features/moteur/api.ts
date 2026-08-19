@@ -26,6 +26,10 @@ import type { LigneJournalOubli } from "./oubliSource";
 import { compteEnProcessus } from "./warmup";
 import { ugcVisages } from "./ugcVisages";
 import { corpsAssignationUgcVideoTest } from "./corpsAssignationUgcVideoTest";
+import {
+  aggregerStatsSlideshowsParCompte,
+  type StatsCompteSlideshows,
+} from "./statsSlideshowsCompte";
 
 export type { EloImportRapport };
 
@@ -4568,6 +4572,21 @@ async function metasMediasPropres(
   return { urls, visages };
 }
 
+export type { StatsCompteSlideshows };
+
+/** Compteurs d'import par compte source (tous les slideshows, pas le top N de la grille). */
+export async function statsSlideshowsParSource(): Promise<StatsCompteSlideshows[]> {
+  const [{ data: lignes, error: errLignes }, sources] = await Promise.all([
+    supabase.from("contenus").select("compte_reference_id, statut").limit(8000),
+    listerSources(),
+  ]);
+  if (errLignes) throw errLignes;
+  return aggregerStatsSlideshowsParCompte(
+    (lignes ?? []) as Array<{ compte_reference_id: string | null; statut: string }>,
+    sources,
+  );
+}
+
 export async function listerContenus(opts?: {
   statut?: string;
   limit?: number;
@@ -4575,6 +4594,10 @@ export async function listerContenus(opts?: {
   labelId?: string | null;
   /** Contenu sans aucun label. */
   sansLabel?: boolean;
+  /** Filtre serveur par compte source importé. */
+  compteReferenceId?: string | null;
+  /** Slideshows dont la source a déjà été oubliée (FK nulle). */
+  sansCompte?: boolean;
 }): Promise<ContenuListe[]> {
   const limit = opts?.limit ?? 80;
   let idsFiltres: string[] | null = null;
@@ -4589,8 +4612,15 @@ export async function listerContenus(opts?: {
     if (idsFiltres.length === 0) return [];
   } else if (opts?.sansLabel) {
     // Contenu dont l'id n'apparaît dans aucune ligne contenu_labels.
+    let qTous = supabase
+      .from("contenus")
+      .select("id")
+      .order("created_at", { ascending: false })
+      .limit(2000);
+    if (opts.compteReferenceId) qTous = qTous.eq("compte_reference_id", opts.compteReferenceId);
+    if (opts.sansCompte) qTous = qTous.is("compte_reference_id", null);
     const [{ data: tous }, { data: avecLabel }] = await Promise.all([
-      supabase.from("contenus").select("id").order("created_at", { ascending: false }).limit(2000),
+      qTous,
       supabase.from("contenu_labels").select("contenu_id"),
     ]);
     const pris = new Set((avecLabel ?? []).map((r) => r.contenu_id as string));
@@ -4607,6 +4637,8 @@ export async function listerContenus(opts?: {
     .order("created_at", { ascending: false })
     .limit(limit);
   if (opts?.statut) q = q.eq("statut", opts.statut);
+  if (opts?.compteReferenceId) q = q.eq("compte_reference_id", opts.compteReferenceId);
+  if (opts?.sansCompte) q = q.is("compte_reference_id", null);
   if (idsFiltres) {
     // Chunk .in() pour rester sous la limite URL PostgREST.
     const chunk = 80;
@@ -4619,6 +4651,8 @@ export async function listerContenus(opts?: {
         .in("id", slice)
         .order("created_at", { ascending: false });
       if (opts?.statut) qChunk = qChunk.eq("statut", opts.statut);
+      if (opts?.compteReferenceId) qChunk = qChunk.eq("compte_reference_id", opts.compteReferenceId);
+      if (opts?.sansCompte) qChunk = qChunk.is("compte_reference_id", null);
       const { data, error } = await qChunk;
       if (error) throw error;
       contenus.push(...((data ?? []) as Contenu[]));
