@@ -22,6 +22,22 @@ export function maxIdTiktok(ids: Iterable<string>): bigint | null {
 /** Marge (2 h) : un post publié pendant le scrape précédent ne doit pas être loupé. */
 export const MARGE_UPDATE_SEC = 2 * 3600;
 
+/** Une URL scrapable est celle d'un post précis, pas celle d'un profil. */
+export function estUrlDePost(url: string): boolean {
+  return /\/(?:photo|video)\/\d+/.test(url);
+}
+
+/**
+ * Panne de capacité côté fournisseur, pas défaut du post : budget Apify saturé,
+ * quota, ou erreur serveur. Ça se retente — ça ne se compte pas comme un échec.
+ */
+export function estErreurCapacite(message: string): boolean {
+  return (
+    /memory-limit-exceeded|rate.?limit|too many requests|quota/i.test(message) ||
+    /Apify (?:402|429|5\d\d)\b/.test(message)
+  );
+}
+
 export type CandidatImportNouveau = {
   url: string;
   createTime?: number | null;

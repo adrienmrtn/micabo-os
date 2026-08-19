@@ -7,8 +7,10 @@ import {
   importerCompteReference,
   importerLien,
   listerUrlsCompteReference,
+  MAX_TENTATIVES_IMPORT,
   prochainContenu,
   statsImportBatch,
+  STATUTS_REPRENABLES,
   traiterImportFile,
 } from "../_shared/import_contenu.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
@@ -92,6 +94,7 @@ Deno.serve(async (request) => {
         batchId: r.batchId,
         enqueued: r.enqueued,
         skipped: r.skipped,
+        invalides: r.invalides.length,
         langue,
       });
     }
@@ -151,6 +154,16 @@ Deno.serve(async (request) => {
         labelIds: Array.isArray(body.labelIds) ? body.labelIds : [],
         langue,
       });
+      if (r.invalides.length > 0) {
+        return json(
+          {
+            ok: false,
+            error:
+              "Ce lien ne pointe pas vers un slideshow : colle l'URL d'un post (…/photo/… ou …/video/…), pas celle d'un profil.",
+          },
+          400,
+        );
+      }
       kickWorkers(request, 2);
       return json({ ok: true, batchId: r.batchId, enqueued: r.enqueued, skipped: r.skipped });
     }
@@ -221,7 +234,12 @@ async function runWorker(
     const r = await traiterImportFile(supabase, file);
     const more = await hasMoreWork(supabase);
     if (!r.ok) {
-      return { action: "scrape_failed", more, fileId: file.id, error: r.erreur };
+      return {
+        action: r.reporte ? "scrape_reporte" : "scrape_failed",
+        more,
+        fileId: file.id,
+        error: r.erreur,
+      };
     }
     return {
       action: "scrape",
@@ -268,11 +286,14 @@ async function hasMoreWork(
 ): Promise<boolean> {
   const now = new Date().toISOString();
   const [{ count: files }, { count: contenus }] = await Promise.all([
+    // Même filtre que le claim, bail compris : sinon un worker se rechaîne
+    // indéfiniment sur des lignes reportées qu'il ne peut pas prendre.
     supabase
       .from("import_file")
       .select("id", { count: "exact", head: true })
-      .in("statut", ["pending", "failed"])
-      .lt("tentatives", 5),
+      .in("statut", STATUTS_REPRENABLES)
+      .lt("tentatives", MAX_TENTATIVES_IMPORT)
+      .or(`lease_until.is.null,lease_until.lt."${now}"`),
     supabase
       .from("contenus")
       .select("id", { count: "exact", head: true })

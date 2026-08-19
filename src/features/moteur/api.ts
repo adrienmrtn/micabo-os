@@ -2756,6 +2756,8 @@ export const enqueueImportCompte = (
     batchId: string;
     enqueued: number;
     skipped: number;
+    /** URLs écartées car elles ne pointaient pas vers un post précis. */
+    invalides?: number;
     langue?: string | null;
   }>("import-contenu", {
     enqueueCompte: true,
@@ -2779,6 +2781,8 @@ export const enqueueImportUrls = (opts: {
     batchId: string;
     enqueued: number;
     skipped: number;
+    /** URLs écartées car elles ne pointaient pas vers un post précis. */
+    invalides?: string[];
   }>("import-contenu", {
     enqueueUrls: true,
     urls: opts.urls,

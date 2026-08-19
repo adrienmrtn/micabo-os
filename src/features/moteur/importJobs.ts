@@ -259,11 +259,21 @@ export function demarrerImportLien(opts: {
       });
       const cur = jobs.find((j) => j.id === jobId);
       if (cur) upsertJob({ ...cur, batchId: r.batchId });
+      if (r.invalides?.length) {
+        log(
+          jobId,
+          "error",
+          "Lien refusé — ce n'est pas l'URL d'un slideshow",
+          `Colle l'URL d'un post (…/photo/… ou …/video/…), pas celle d'un profil.\n${r.invalides.join("\n")}`,
+        );
+        fin(jobId, "echec");
+        return;
+      }
       log(
         jobId,
         "ok",
-        `Enfilé — batch ${r.batchId.slice(0, 8)}… · workers kickés`,
-        `enqueued=${r.enqueued} skipped=${r.skipped} · langue=${opts.langue}`,
+        `Enfilé — batch ${r.batchId.slice(0, 8)}…`,
+        `enfilées=${r.enqueued} · déjà en file=${r.skipped} · langue=${opts.langue}`,
       );
       startPolling(jobId, r.batchId);
     } catch (e) {
@@ -318,6 +328,7 @@ export function demarrerImportCompte(opts: {
         `profil=${r.total} slideshow(s) · déjà en stock=${r.connus} · manquants=${r.manquants}`,
         `dont publiés depuis le dernier import=${r.nouveaux}`,
         `batch=${r.batchId} · source=${r.source} · langue=${opts.langue}`,
+        ...(r.invalides ? [`écartées (pas des URLs de post)=${r.invalides}`] : []),
         ...(r.diagnostic ?? []),
       ].join("\n");
 

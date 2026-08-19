@@ -1616,6 +1616,12 @@ export interface ImportFileRow {
   contenu_id: string | null;
   erreur: string | null;
   tentatives: number;
+  created_at?: string | null;
+}
+
+/** Une URL scrapable est celle d'un post précis, pas celle d'un profil. */
+export function estUrlDePost(url: string): boolean {
+  return /\/(?:photo|video)\/\d+/.test(url);
 }
 
 /** Enfile des URLs pour scrape+pipeline serveur (idempotent sur pending/running). */
@@ -1629,12 +1635,19 @@ export async function enqueueImportUrls(
     /** Langue d'origine — stockée sur chaque ligne import_file. */
     langue?: string | null;
   },
-): Promise<{ batchId: string; enqueued: number; skipped: number }> {
+): Promise<{ batchId: string; enqueued: number; skipped: number; invalides: string[] }> {
   const batchId = opts.batchId ?? crypto.randomUUID();
   const langue = normaliserLangue(opts.langue ?? null);
   let enqueued = 0;
   let skipped = 0;
+  const invalides: string[] = [];
   for (const url of opts.urls) {
+    // Une URL de profil enfilée comme un post consomme un run Apify, échoue,
+    // et brûle ses tentatives jusqu'à mourir en file. Autant la refuser ici.
+    if (!estUrlDePost(url)) {
+      invalides.push(url);
+      continue;
+    }
     const { error } = await supabase.from("import_file").insert({
       post_url: url,
       compte_reference_id: opts.compteReferenceId,
@@ -1650,10 +1663,21 @@ export async function enqueueImportUrls(
     }
     enqueued += 1;
   }
-  return { batchId, enqueued, skipped };
+  return { batchId, enqueued, skipped, invalides };
 }
 
-/** Claim d'une ligne import_file libre. */
+export const MAX_TENTATIVES_IMPORT = 5;
+
+/** Statuts qu'un worker peut reprendre — `running` compris si le bail a expiré. */
+export const STATUTS_REPRENABLES = ["pending", "failed", "running"] as const;
+
+/**
+ * Claim d'une ligne import_file libre.
+ *
+ * `running` est repris quand le bail a expiré : un worker tué en plein scrape
+ * (timeout Edge, redéploiement) laissait sinon sa ligne bloquée à vie — et,
+ * l'index unique couvrant `running`, la ré-enfiler était impossible.
+ */
 export async function claimImportFile(
   supabase: Supabase,
 ): Promise<ImportFileRow | null> {
@@ -1662,8 +1686,8 @@ export async function claimImportFile(
   const { data: candidats } = await supabase
     .from("import_file")
     .select("id")
-    .in("statut", ["pending", "failed"])
-    .lt("tentatives", 5)
+    .in("statut", STATUTS_REPRENABLES)
+    .lt("tentatives", MAX_TENTATIVES_IMPORT)
     .or(libre)
     .order("created_at")
     .limit(8);
@@ -1687,11 +1711,26 @@ export async function claimImportFile(
   return null;
 }
 
+/**
+ * Panne de capacité côté fournisseur, pas défaut du post : budget Apify saturé,
+ * quota, ou erreur serveur. Ça se retente — ça ne se compte pas comme un échec.
+ */
+export function estErreurCapacite(message: string): boolean {
+  return (
+    /memory-limit-exceeded|rate.?limit|too many requests|quota/i.test(message) ||
+    /Apify (?:402|429|5\d\d)\b/.test(message)
+  );
+}
+
+/** Fenêtre au-delà de laquelle une ligne qui ne fait que se reporter est abandonnée. */
+const REPORT_MAX_MS = 12 * 3600_000;
+const REPORT_MS = 3 * 60_000;
+
 /** Scrape une URL en file → crée/réouvre le contenu (pipeline ensuite via claimContenu). */
 export async function traiterImportFile(
   supabase: Supabase,
   row: ImportFileRow,
-): Promise<{ ok: boolean; contenuId?: string; erreur?: string }> {
+): Promise<{ ok: boolean; contenuId?: string; erreur?: string; reporte?: boolean }> {
   try {
     const cree = await importerLien(
       supabase,
@@ -1713,6 +1752,25 @@ export async function traiterImportFile(
     return { ok: true, contenuId: cree.id };
   } catch (error) {
     const msg = messageErreur(error);
+    const depuis = row.created_at ? Date.now() - new Date(row.created_at).getTime() : 0;
+
+    // Un pic de charge sur Apify renvoie 402 « memory limit » sur des posts
+    // parfaitement valides. En comptant ça comme un échec, cinq rafales
+    // suffisaient à condamner définitivement le slideshow.
+    if (estErreurCapacite(msg) && depuis < REPORT_MAX_MS) {
+      const report = new Date(Date.now() + REPORT_MS + Math.random() * REPORT_MS);
+      await supabase
+        .from("import_file")
+        .update({
+          statut: "pending",
+          erreur: `Report (capacité fournisseur) — ${msg}`,
+          lease_until: report.toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id);
+      return { ok: false, erreur: msg, reporte: true };
+    }
+
     await supabase
       .from("import_file")
       .update({

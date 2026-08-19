@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   MARGE_UPDATE_SEC,
+  estErreurCapacite,
   estNouveauDepuisImport,
+  estUrlDePost,
   filtrerNouveauxDepuisImport,
   idPostTiktok,
   maxIdTiktok,
@@ -107,6 +109,38 @@ describe("estNouveauDepuisImport", () => {
         maxIdConnu: maxIdTiktok(connus),
       }),
     ).toBe(false);
+  });
+});
+
+describe("estUrlDePost", () => {
+  it("accepte un post photo ou vidéo", () => {
+    expect(estUrlDePost(ANCIEN)).toBe(true);
+    expect(estUrlDePost(RECENT)).toBe(true);
+  });
+
+  it("refuse une URL de profil", () => {
+    // Enfilée comme un post, elle consommait un run Apify puis mourait en file.
+    expect(estUrlDePost("https://www.tiktok.com/@katsreset")).toBe(false);
+    expect(estUrlDePost("https://www.tiktok.com/@relatableoutof10?sophia_listing=abc")).toBe(
+      false,
+    );
+  });
+});
+
+describe("estErreurCapacite", () => {
+  it("reconnaît une saturation du fournisseur", () => {
+    expect(
+      estErreurCapacite(
+        'Apify 402: {"error":{"type":"actor-memory-limit-exceeded","message":"By launching this job you will exceed the memory limit of 65536MB"}}',
+      ),
+    ).toBe(true);
+    expect(estErreurCapacite("Apify 429: too many requests")).toBe(true);
+    expect(estErreurCapacite("Apify 503: bad gateway")).toBe(true);
+  });
+
+  it("laisse un vrai échec de post compter comme un échec", () => {
+    expect(estErreurCapacite('Apify 400: {"error":{"type":"run-failed"}}')).toBe(false);
+    expect(estErreurCapacite("Aucune slide exploitable")).toBe(false);
   });
 });
 
