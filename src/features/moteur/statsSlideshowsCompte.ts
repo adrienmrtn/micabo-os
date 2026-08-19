@@ -29,6 +29,9 @@ export interface StatsCompteSlideshows {
 
 const SANS_COMPTE = "__none__";
 
+/** PostgREST plafonne souvent à 1000 lignes par requête, même avec .limit(8000). */
+export const PAGE_STATS_CONTENUS = 1000;
+
 export function normaliserHandleSource(handle: string): string {
   return handle.trim().replace(/^@+/, "");
 }

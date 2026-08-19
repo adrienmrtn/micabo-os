@@ -21,6 +21,11 @@ export function handleDeLUrl(url: string | null | undefined): string | null {
   return m ? normaliserHandle(m[1]) : null;
 }
 
+/** Saisie admin : `@katsreset` ou l'URL complète du profil. */
+export function handleTiktokDepuisSaisie(saisie: string): string {
+  return handleDeLUrl(saisie) || saisie.trim().replace(/^@+/, "");
+}
+
 /**
  * L'URL appartient-elle à CE compte ? Comparaison exacte du handle : un `ilike`
  * `%@sophia%` attraperait aussi `@sophia_officiel`, dont les slideshows ne
