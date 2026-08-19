@@ -2,6 +2,7 @@ import {
   downloadImage,
   listerDiaporamas,
   listerPostsProfil,
+  normaliserHandleTiktok,
   scrapePost,
   type ScrapedPost,
 } from "./apify.ts";
@@ -33,6 +34,7 @@ import {
   idPostTiktok,
   maxIdTiktok,
   normaliserCreateTime,
+  urlsManquantes,
 } from "./import_nouveaux.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
 
@@ -58,8 +60,16 @@ export const LANGUES_CIBLES = [
 const SLIDES_PAR_PASSAGE = 2;
 /** 1 slide / passage nettoyage : Fal≤90s + store doit tenir sous le mur Edge ~150s. */
 const SLIDES_NETTOYAGE_PAR_PASSAGE = 1;
-/** Apify `resultsPerPage` — on vise tout le profil (plafond acteur). */
-const SCRAPE_TOUS = 100;
+/**
+ * Apify `resultsPerPage` pour le listing d'un profil. À 100, un compte qui a
+ * publié 150 slideshows n'en révélait que la première tranche : le reste était
+ * introuvable, y compris via « Mettre à jour ». Surchargeable sans redéploiement
+ * par `IMPORT_LISTING_MAX`.
+ */
+const SCRAPE_TOUS = Number(Deno.env.get("IMPORT_LISTING_MAX") ?? "") || 600;
+
+/** PostgREST s'arrête à ~1000 lignes sans `range` — il faut paginer explicitement. */
+const PAGE_POSTGREST = 1000;
 
 export interface SlideBrut {
   position: number;
@@ -546,18 +556,65 @@ export async function importerLien(
  * Liste les URLs de diaporamas à importer pour un compte (sans scraper les
  * visuels). Le client lance ensuite 1 agent scrapePost par URL en parallèle.
  */
+/**
+ * Ids TikTok déjà en stock. Paginé : sans `range`, PostgREST s'arrête à ~1000
+ * lignes et on ré-enfile alors des slideshows déjà importés.
+ */
+async function idsTiktokConnus(
+  supabase: Supabase,
+  compteReferenceId: string,
+): Promise<{ tous: Set<string>; deCetteSource: string[] }> {
+  const tous = new Set<string>();
+  const deCetteSource: string[] = [];
+  for (let from = 0; ; from += PAGE_POSTGREST) {
+    const { data, error } = await supabase
+      .from("contenus")
+      .select("source_url, compte_reference_id")
+      .not("source_url", "is", null)
+      .range(from, from + PAGE_POSTGREST - 1);
+    if (error) throw error;
+    const lot = data ?? [];
+    for (const row of lot) {
+      const id = idDe(row.source_url ?? "");
+      tous.add(id);
+      if (row.compte_reference_id === compteReferenceId) deCetteSource.push(id);
+    }
+    if (lot.length < PAGE_POSTGREST) break;
+  }
+  return { tous, deCetteSource };
+}
+
+export interface ListingCompte {
+  handle: string;
+  /** URLs à enfiler, déjà ordonnées par vues décroissantes. */
+  urls: string[];
+  /** Slideshows découverts sur le profil. */
+  total: number;
+  /** Parmi eux, ceux déjà en stock. */
+  connus: number;
+  /** Découverts mais jamais importés — ce que « Mettre à jour » rattrape. */
+  manquants: number;
+  /** Sous-ensemble des manquants publié depuis le dernier import (indicatif). */
+  nouveaux: number;
+  source: "page" | "apify" | "mixte" | "aucune";
+  /** Pourquoi la découverte a donné ça — remonté tel quel dans les logs UI. */
+  diagnostic: string[];
+}
+
+/**
+ * Découvre les slideshows d'un compte source.
+ *
+ * `nouveauxSeulement` (bouton « Mettre à jour ») enfile **tout ce qui manque**,
+ * pas seulement ce qui est postérieur au dernier scrape : un premier import
+ * tronqué (plafond de listing, handle invalide, Apify en carafe) laissait sinon
+ * des dizaines de slideshows inatteignables à vie, l'update répondant « aucun
+ * nouveau » alors que le stock était incomplet.
+ */
 export async function listerUrlsCompteReference(
   supabase: Supabase,
   compteReferenceId: string,
-  opts: { nouveauxSeulement?: boolean } = {},
-): Promise<{
-  handle: string;
-  urls: string[];
-  total: number;
-  connus: number;
-  nouveaux: number;
-  source: "page" | "apify" | "mixte";
-}> {
+  opts: { nouveauxSeulement?: boolean; marquerScrape?: boolean } = {},
+): Promise<ListingCompte> {
   const { data: ref } = await supabase
     .from("comptes_reference")
     .select("id, handle_tiktok, dernier_scrape_at")
@@ -565,87 +622,104 @@ export async function listerUrlsCompteReference(
     .single();
   if (!ref) throw new Error("Compte de référence introuvable");
 
-  const handle = String(ref.handle_tiktok).replace(/^@/, "");
-  const { data: connusContenu } = await supabase
-    .from("contenus")
-    .select("source_url, compte_reference_id")
-    .not("source_url", "is", null);
-  const deja = new Set((connusContenu ?? []).map((s) => idDe(s.source_url ?? "")));
-  const idsCetteSource = (connusContenu ?? [])
-    .filter((s) => s.compte_reference_id === compteReferenceId)
-    .map((s) => idDe(s.source_url ?? ""));
-  const maxIdConnu = maxIdTiktok(idsCetteSource);
+  // Le champ contient parfois l'URL du profil collée telle quelle : sans
+  // normalisation, la page publique était interrogée sur une URL absurde et
+  // seule la première tranche Apify remontait.
+  const handle = normaliserHandleTiktok(String(ref.handle_tiktok ?? ""));
+  if (!handle) throw new Error(`Handle TikTok illisible : « ${ref.handle_tiktok} »`);
+
+  const { tous: deja, deCetteSource } = await idsTiktokConnus(supabase, compteReferenceId);
+  const maxIdConnu = maxIdTiktok(deCetteSource);
 
   const vues = new Map<string, number>();
   const createTimeParId = new Map<string, number>();
-  let source: "page" | "apify" | "mixte" = "page";
   const urlsSet = new Set<string>();
+  const diagnostic: string[] = [];
+  let viaPage = 0;
+  let viaApify = 0;
 
   // 1) Page publique TikTok (gratuit, rapide) — IDs photo uniquement.
   try {
-    for (const u of await listerDiaporamas(handle)) urlsSet.add(u);
-  } catch {
-    // on retombe sur Apify ci-dessous
+    const depuisPage = await listerDiaporamas(handle);
+    for (const u of depuisPage) urlsSet.add(u);
+    viaPage = depuisPage.length;
+    diagnostic.push(`page TikTok: ${viaPage} slideshow(s)`);
+  } catch (error) {
+    diagnostic.push(`page TikTok indisponible: ${messageErreur(error)}`);
   }
 
   // 2) Apify profil sans télécharger les images — complète / ordonne par vues.
   //    Chaque slideshow sera re-scrapé individuellement ensuite (1 agent / post).
   try {
     const posts = await listerPostsProfil(handle, SCRAPE_TOUS);
-    if (posts.length > 0) {
-      source = urlsSet.size > 0 ? "mixte" : "apify";
-      for (const p of posts) {
-        if (!p.webVideoUrl) continue;
-        const estPhoto =
-          p.imageUrls.length > 0 ||
-          /\/photo\//.test(p.webVideoUrl) ||
-          urlsSet.has(p.webVideoUrl);
-        if (!estPhoto) continue;
-        urlsSet.add(p.webVideoUrl);
-        const pid = idDe(p.webVideoUrl);
-        vues.set(pid, p.stats?.vues ?? 0);
-        const ct = normaliserCreateTime(p.createTime);
-        if (ct) createTimeParId.set(pid, ct);
-      }
+    for (const p of posts) {
+      if (!p.webVideoUrl) continue;
+      const estPhoto =
+        p.imageUrls.length > 0 ||
+        /\/photo\//.test(p.webVideoUrl) ||
+        urlsSet.has(p.webVideoUrl);
+      if (!estPhoto) continue;
+      urlsSet.add(p.webVideoUrl);
+      viaApify += 1;
+      const pid = idDe(p.webVideoUrl);
+      vues.set(pid, p.stats?.vues ?? 0);
+      const ct = normaliserCreateTime(p.createTime);
+      if (ct) createTimeParId.set(pid, ct);
     }
-  } catch {
-    // Si Apify cale, on garde la liste page seule.
+    diagnostic.push(
+      `Apify: ${viaApify} slideshow(s) sur ${posts.length} post(s) (plafond ${SCRAPE_TOUS})`,
+    );
+    if (posts.length >= SCRAPE_TOUS) {
+      diagnostic.push(
+        `plafond de listing atteint — relance pour aller plus loin ou monte IMPORT_LISTING_MAX`,
+      );
+    }
+  } catch (error) {
+    diagnostic.push(`Apify indisponible: ${messageErreur(error)}`);
   }
+
+  const source: ListingCompte["source"] =
+    viaPage > 0 && viaApify > 0 ? "mixte" : viaApify > 0 ? "apify" : viaPage > 0 ? "page" : "aucune";
 
   // Tous les slideshows (inédits + déjà connus) : les connus seront réouverts
   // sur le même contenu (re-pipeline, historique Passages conservé) — sauf
-  // `nouveauxSeulement` (update : uniquement depuis le dernier import).
+  // `nouveauxSeulement`, qui ne reprend que ce qui manque.
   const toutes = [...urlsSet].sort(
     (a, b) => (vues.get(idDe(b)) ?? 0) - (vues.get(idDe(a)) ?? 0),
   );
-  const connus = toutes.filter((u) => deja.has(idDe(u))).length;
+  const manquantes = urlsManquantes(toutes, deja);
   const dernierImportAt = ref.dernier_scrape_at
     ? new Date(String(ref.dernier_scrape_at))
     : null;
-  const urls = opts.nouveauxSeulement
-    ? toutes.filter((u) =>
-        estNouveauDepuisImport({
-          url: u,
-          createTime: createTimeParId.get(idDe(u)) ?? null,
-          connusIds: deja,
-          dernierImportAt,
-          maxIdConnu,
-        }),
-      )
-    : toutes;
+  const nouveaux = manquantes.filter((u) =>
+    estNouveauDepuisImport({
+      url: u,
+      createTime: createTimeParId.get(idDe(u)) ?? null,
+      connusIds: deja,
+      dernierImportAt,
+      maxIdConnu,
+    }),
+  ).length;
+  const urls = opts.nouveauxSeulement ? manquantes : toutes;
 
-  await supabase
-    .from("comptes_reference")
-    .update({ dernier_scrape_at: new Date().toISOString() })
-    .eq("id", compteReferenceId);
+  // Ne dater le scrape que s'il a réellement vu le profil : sinon un listing
+  // en échec marquait le compte « à jour » et gelait les updates suivants.
+  if (opts.marquerScrape && toutes.length > 0) {
+    await supabase
+      .from("comptes_reference")
+      .update({ dernier_scrape_at: new Date().toISOString() })
+      .eq("id", compteReferenceId);
+  }
 
   return {
     handle,
     urls,
     total: toutes.length,
-    connus,
-    nouveaux: urls.filter((u) => !deja.has(idDe(u))).length,
+    connus: toutes.length - manquantes.length,
+    manquants: manquantes.length,
+    nouveaux,
     source,
+    diagnostic,
   };
 }
 
@@ -657,7 +731,9 @@ export async function importerCompteReference(
   supabase: Supabase,
   compteReferenceId: string,
 ): Promise<{ crees: number; ids: string[]; scrapes: number }> {
-  const listed = await listerUrlsCompteReference(supabase, compteReferenceId);
+  const listed = await listerUrlsCompteReference(supabase, compteReferenceId, {
+    marquerScrape: true,
+  });
   const ids: string[] = [];
   let crees = 0;
   for (const url of listed.urls) {

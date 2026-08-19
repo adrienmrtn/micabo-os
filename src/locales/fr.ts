@@ -676,14 +676,14 @@ export const fr = {
         "Liste les slideshows, puis lance 1 agent de scrape + pipeline par TikTok en parallèle (pertinence, ELO, nettoyage, trad). Logs complets. Sans bloquer la page — plusieurs comptes aussi en parallèle.",
       update: "Mettre à jour",
       updateAide:
-        "Importe uniquement les TikToks publiés depuis le dernier import de ce compte — pas les anciens déjà en stock.",
-      updateLance: "Mise à jour lancée — nouveaux TikToks seulement (voir logs).",
+        "Rattrape tout ce qui manque sur ce compte : les nouveaux TikToks, mais aussi ceux qu'un import précédent avait laissés de côté. Ce qui est déjà en stock n'est pas ré-importé.",
+      updateLance: "Mise à jour lancée — rattrapage des slideshows manquants (voir logs).",
       updateToutes: "Mettre à jour les sources",
       updateToutesAide:
-        "Pour chaque compte déjà importé : récupère les nouveaux TikToks depuis le dernier import. Les anciens ne sont pas ré-importés.",
+        "Pour chaque compte déjà importé : enfile les slideshows du profil absents du stock. Les comptes passent 2 par 2 pour ne pas saturer le serveur.",
       updateToutesGo: "Mettre à jour ({{count}})",
       updateToutesLance:
-        "Mise à jour lancée sur {{count}} source(s) — nouveaux TikToks seulement.",
+        "Mise à jour lancée sur {{count}} source(s) — les slideshows manquants sont enfilés.",
       updateToutesVide:
         "Aucune source déjà importée à mettre à jour (lance d’abord Extraire).",
       importLien: "Importer un TikTok",

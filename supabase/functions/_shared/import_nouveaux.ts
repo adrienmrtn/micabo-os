@@ -21,6 +21,15 @@ export function maxIdTiktok(ids: Iterable<string>): bigint | null {
 
 export const MARGE_UPDATE_SEC = 2 * 3600;
 
+/**
+ * Ce que « Mettre à jour » doit enfiler : tout slideshow exposé par le profil
+ * et absent du stock. Le filtre par date ne sert plus qu'à l'affichage — il
+ * décidait auparavant de l'enfilage, figeant à vie un premier import tronqué.
+ */
+export function urlsManquantes(urlsProfil: string[], connusIds: Set<string>): string[] {
+  return urlsProfil.filter((url) => !connusIds.has(idPostTiktok(url)));
+}
+
 export function estNouveauDepuisImport(opts: {
   url: string;
   createTime?: number | null;

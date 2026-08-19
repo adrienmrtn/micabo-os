@@ -26,7 +26,7 @@ import type { LigneJournalOubli } from "./oubliSource";
 import { compteEnProcessus } from "./warmup";
 import { ugcVisages } from "./ugcVisages";
 import { corpsAssignationUgcVideoTest } from "./corpsAssignationUgcVideoTest";
-import { handleTiktokDepuisSaisie } from "./oubliSource";
+import { decouperEnLots, handleTiktokDepuisSaisie } from "./oubliSource";
 import {
   aggregerStatsSlideshowsParCompte,
   PAGE_STATS_CONTENUS,
@@ -2747,8 +2747,12 @@ export const enqueueImportCompte = (
     handle: string;
     total: number;
     connus: number;
+    /** Découverts sur le profil mais absents du stock. */
+    manquants: number;
     nouveaux: number;
     source: string;
+    /** Ce que la découverte a vu / raté, à afficher tel quel dans les logs. */
+    diagnostic?: string[];
     batchId: string;
     enqueued: number;
     skipped: number;
@@ -2784,18 +2788,65 @@ export const enqueueImportUrls = (opts: {
     langue: opts.langue ?? null,
   });
 
-/** Progression d'un batch d'import serveur. */
-export const statsImportBatch = (batchId: string) =>
-  invoke<{
-    ok: boolean;
-    total: number;
-    pending: number;
-    running: number;
-    done: number;
-    failed: number;
-    contenusPending: number;
-    contenusDone: number;
-  }>("import-contenu", { stats: true, batchId });
+export interface StatsImportBatch {
+  total: number;
+  pending: number;
+  running: number;
+  done: number;
+  failed: number;
+  contenusPending: number;
+  contenusDone: number;
+}
+
+/**
+ * Progression d'un batch, lue directement en base.
+ *
+ * Elle passait par l'Edge Function : pendant un import la concurrence Edge est
+ * déjà prise par les workers, et le suivi retombait en « Failed to send a
+ * request to the Edge Function » toutes les 4 s, sur tous les comptes à la fois.
+ * PostgREST suffit — et ne rentre pas en concurrence avec le scrape.
+ */
+export async function statsImportBatch(batchId: string): Promise<StatsImportBatch> {
+  const lignes: Array<{ statut: string; contenu_id: string | null }> = [];
+  for (let from = 0; ; from += PAGE_STATS_CONTENUS) {
+    const { data, error } = await supabase
+      .from("import_file")
+      .select("statut, contenu_id")
+      .eq("batch_id", batchId)
+      .range(from, from + PAGE_STATS_CONTENUS - 1);
+    if (error) throw error;
+    const lot = (data ?? []) as Array<{ statut: string; contenu_id: string | null }>;
+    lignes.push(...lot);
+    if (lot.length < PAGE_STATS_CONTENUS) break;
+  }
+
+  const contenuIds = lignes.map((r) => r.contenu_id).filter((id): id is string => Boolean(id));
+  let contenusPending = 0;
+  let contenusDone = 0;
+  // `in(...)` va dans l'URL : par lots, sinon un gros batch dépasse la taille max.
+  for (const lot of decouperEnLots(contenuIds, 150)) {
+    const { data, error } = await supabase
+      .from("contenus")
+      .select("import_statut, import_etape")
+      .in("id", lot);
+    if (error) throw error;
+    for (const c of data ?? []) {
+      if (c.import_statut === "done" || c.import_etape === "elo_insuffisant") contenusDone += 1;
+      else contenusPending += 1;
+    }
+  }
+
+  const parStatut = (s: string) => lignes.filter((r) => r.statut === s).length;
+  return {
+    total: lignes.length,
+    pending: parStatut("pending"),
+    running: parStatut("running"),
+    done: parStatut("done"),
+    failed: parStatut("failed"),
+    contenusPending,
+    contenusDone,
+  };
+}
 
 /** Contenu d'un batch avec rapport ELO (pour logs live). */
 export async function contenusEloDuBatch(batchId: string): Promise<

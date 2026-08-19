@@ -7,6 +7,7 @@ import {
   idPostTiktok,
   maxIdTiktok,
   normaliserCreateTime,
+  urlsManquantes,
 } from "./importNouveaux";
 
 const ANCIEN = "https://www.tiktok.com/@src/photo/7000000000000000000";
@@ -106,6 +107,32 @@ describe("estNouveauDepuisImport", () => {
         maxIdConnu: maxIdTiktok(connus),
       }),
     ).toBe(false);
+  });
+});
+
+describe("urlsManquantes", () => {
+  it("ne garde que ce qui n’est pas déjà en stock", () => {
+    expect(urlsManquantes([ANCIEN, MILIEU, RECENT], new Set(["7500000000000000000"]))).toEqual([
+      ANCIEN,
+      RECENT,
+    ]);
+  });
+
+  it("rattrape un stock incomplet même quand tout est plus vieux que le dernier scrape", () => {
+    // Le cas qui répondait « aucun nouveau TikTok » : 40 slideshows importés,
+    // le reste du profil plus ancien que le dernier scrape, donc inatteignable.
+    const profil = Array.from(
+      { length: 150 },
+      (_, i) => `https://www.tiktok.com/@src/photo/${7000000000000000000n + BigInt(i)}`,
+    );
+    const enStock = new Set(profil.slice(0, 40).map((u) => idPostTiktok(u)));
+
+    expect(urlsManquantes(profil, enStock)).toHaveLength(110);
+  });
+
+  it("ne propose rien quand le stock couvre tout le profil", () => {
+    const profil = [ANCIEN, MILIEU];
+    expect(urlsManquantes(profil, new Set(profil.map(idPostTiktok)))).toEqual([]);
   });
 });
 
