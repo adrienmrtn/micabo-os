@@ -31,6 +31,24 @@ export async function trouverPropreExistant(
   };
 }
 
+/**
+ * Compte une tentative de nettoyage AVANT l'appel provider : un worker tué au
+ * mur Edge doit quand même laisser une trace, sinon la slide est rejouée à
+ * l'infini et le repli sur le brut ne part jamais. Renvoie le compteur à jour.
+ */
+export async function incrementerTentativeSlide(
+  supabase: Supabase,
+  contenuId: string,
+  position: number,
+): Promise<number> {
+  const { data, error } = await supabase.rpc("bump_contenu_slide_tentative", {
+    p_contenu_id: contenuId,
+    p_position: position,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
 /** Écrit media_id sur UNE position sans écraser les autres slides. */
 export async function patchSlideMediaId(
   supabase: Supabase,
