@@ -4,6 +4,10 @@ import {
   ocrFrame,
   scoreRelevance,
 } from "../_shared/gemini.ts";
+import {
+  prochainesSlidesANettoyer,
+  slidesEpuisees,
+} from "../_shared/nettoyage_file.ts";
 import { assertAuthorised, chargerPrompt, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
@@ -18,7 +22,6 @@ const SEUIL_PERTINENCE = 50;
 // d'espacer les reprises dans le TEMPS — on retente donc au passage suivant du
 // cron (chaque minute), jusqu'à MAX_TENTATIVES_NETTOYAGE passages, ce qui laisse
 // Gemini se dégager entre deux. Le brut n'est versé qu'en tout dernier recours.
-const MAX_TENTATIVES_NETTOYAGE = 4;
 
 interface Slide {
   position: number;
@@ -141,33 +144,36 @@ async function avancer(supabase: Supabase, sujet: any): Promise<string> {
     }
 
     // 3 — nettoyage des visuels retenus, versés dans la bibliothèque.
-    const aNettoyer = slides.filter((s) => s.media_id === null);
-    if (aNettoyer.length > 0) {
-      for (const slide of aNettoyer.slice(0, SLIDES_PAR_PASSAGE)) {
+    if (slides.some((s) => !s.media_id)) {
+      // Tout dernier recours après plusieurs passages : on verse le brut pour ne
+      // pas bloquer le sujet. Il reste signalé, et la composition tentera de le
+      // remplacer par un visuel propre de la bibliothèque.
+      for (const slide of slidesEpuisees(slides)) {
+        slide.media_id = await stockerBrut(supabase, sujet, slide);
+        slide.tentatives = undefined;
+        await ecrireSlides(supabase, sujet.id, slides);
+      }
+
+      // Les moins tentées d'abord : une slide capricieuse ne doit pas repasser
+      // en tête à chaque cron et affamer le reste du sujet.
+      for (const slide of prochainesSlidesANettoyer(slides, SLIDES_PAR_PASSAGE)) {
+        // Tentative comptée AVANT l'appel : le worker est régulièrement tué en
+        // cours de route (WORKER_RESOURCE_LIMIT) et un compteur écrit après ne
+        // serait jamais persisté — la slide repartait alors indéfiniment.
+        slide.tentatives = (slide.tentatives ?? 0) + 1;
+        await ecrireSlides(supabase, sujet.id, slides);
+
+        // Échec passager (Gemini surchargé) : on NE fige PAS le brut. On laisse
+        // media_id à null pour RE-TENTER le vrai nettoyage au passage suivant.
         const propre = await nettoyerVersBibliotheque(supabase, sujet, slide);
         if (propre) {
           slide.media_id = propre;
           slide.tentatives = undefined;
-        } else {
-          // Échec passager (Gemini surchargé) : on NE fige PAS le brut. On laisse
-          // media_id à null pour RE-TENTER le vrai nettoyage au passage suivant.
-          slide.tentatives = (slide.tentatives ?? 0) + 1;
-          if (slide.tentatives >= MAX_TENTATIVES_NETTOYAGE) {
-            // Tout dernier recours après plusieurs passages : on verse le brut
-            // pour ne pas bloquer le sujet. Il reste signalé, et la composition
-            // tentera de le remplacer par un visuel propre de la bibliothèque.
-            slide.media_id = await stockerBrut(supabase, sujet, slide);
-          }
         }
-        // On enregistre slide par slide, pas à la fin du lot : le worker est
-        // régulièrement tué en cours de route (WORKER_RESOURCE_LIMIT), et le
-        // média était alors déjà en base sans que son id soit retenu. Le
-        // passage suivant reprenait la même slide et butait sur l'unicité de
-        // storage_path, ce qui condamnait le sujet.
-        await supabase
-          .from("sujets")
-          .update({ structure_slides: slides })
-          .eq("id", sujet.id);
+        // On enregistre slide par slide, pas à la fin du lot : le média était
+        // sinon déjà en base sans que son id soit retenu, et le passage suivant
+        // butait sur l'unicité de storage_path, ce qui condamnait le sujet.
+        await ecrireSlides(supabase, sujet.id, slides);
       }
       return "nettoyage";
     }
@@ -187,6 +193,14 @@ async function avancer(supabase: Supabase, sujet: any): Promise<string> {
       .eq("id", sujet.id);
     return "failed";
   }
+}
+
+async function ecrireSlides(
+  supabase: Supabase,
+  sujetId: string,
+  slides: Slide[],
+): Promise<void> {
+  await supabase.from("sujets").update({ structure_slides: slides }).eq("id", sujetId);
 }
 
 /**

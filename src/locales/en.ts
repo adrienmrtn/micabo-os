@@ -706,6 +706,27 @@ export const en = {
       epuise: "Out of stock — add a linked account (similar source) to keep going.",
       confirmDelete:
         "Delete this TikTok source account? Already imported slideshows and images are kept (nothing is erased).",
+      oublier: "Forget this account",
+      oublierAide:
+        "Erases EVERYTHING this account produced (slideshows, images, assigned posts, import queue) and removes it from the list — so you can re-import it from scratch, with no duplicates.",
+      oublierTitre: "Forget @{{handle}} and erase everything?",
+      oublierDetail:
+        "Will be deleted: {{contenus}} slideshow(s), {{medias}} image(s) and their files, {{posts}} assigned post(s), {{sujets}} legacy topic(s), {{importFile}} import queue row(s).",
+      oublierPosters_one:
+        "{{count}} publishing account is linked to this source: it will lose the link and run out of material.",
+      oublierPosters_other:
+        "{{count}} publishing accounts are linked to this source: they will lose the link and run out of material.",
+      oublierConjoints_one:
+        "{{count}} linked account will be detached (kept, with its own slideshows).",
+      oublierConjoints_other:
+        "{{count}} linked accounts will be detached (kept, with their own slideshows).",
+      oublierIrreversible:
+        "Irreversible. The account disappears from the list; you can add it back and re-import it as a brand new account.",
+      oublierGo: "Delete everything",
+      oublierEnCours: "Deleting…",
+      oublierProgres: "{{contenus}} slideshow(s) deleted · {{restant}} left…",
+      oublierFait:
+        "@{{handle}} forgotten — {{contenus}} slideshow(s), {{medias}} image(s) and {{fichiers}} file(s) erased. You can re-import it from scratch.",
     },
     sujets: {
       title: "Topics",

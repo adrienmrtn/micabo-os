@@ -17,7 +17,17 @@ import {
   attacherLabelsAuMedia,
   mediaPropreMemeLabel,
 } from "./media_labels.ts";
-import { patchSlideMediaId, trouverPropreExistant } from "./slide_media.ts";
+import {
+  MAX_TENTATIVES_NETTOYAGE,
+  prochainesSlidesANettoyer,
+  slidesEpuisees,
+  tentativesSlide,
+} from "./nettoyage_file.ts";
+import {
+  incrementerTentativeSlide,
+  patchSlideMediaId,
+  trouverPropreExistant,
+} from "./slide_media.ts";
 import {
   estNouveauDepuisImport,
   idPostTiktok,
@@ -48,7 +58,6 @@ export const LANGUES_CIBLES = [
 const SLIDES_PAR_PASSAGE = 2;
 /** 1 slide / passage nettoyage : Fal≤90s + store doit tenir sous le mur Edge ~150s. */
 const SLIDES_NETTOYAGE_PAR_PASSAGE = 1;
-const MAX_TENTATIVES_NETTOYAGE = 4;
 /** Apify `resultsPerPage` — on vise tout le profil (plafond acteur). */
 const SCRAPE_TOUS = 100;
 
@@ -692,24 +701,52 @@ export interface NettoyageRapport {
 
 export interface AvancerImportResultat {
   etape: string;
+  /**
+   * Le passage a-t-il fait avancer le pipeline ? Un passage stérile incrémente
+   * `import_tentatives`, qui sert de priorité inverse dans `claimContenu` :
+   * un diaporama récalcitrant laisse ainsi passer les autres imports.
+   */
+  progres: boolean;
   /** Présent sur les étapes elo / elo_insuffisant. */
   elo?: EloRapport;
   /** Présent sur l'étape nettoyage. */
   nettoyage?: NettoyageRapport;
 }
 
+/** Ligne `contenus` telle que renvoyée par le claim (colonnes non typées). */
+// deno-lint-ignore no-explicit-any
+type ContenuRow = any;
+
 /**
- * Avance le pipeline d'UN pas. Ordre :
+ * Avance le pipeline d'UN pas et tient à jour le compteur d'échecs stériles.
+ */
+export async function avancerImport(
+  supabase: Supabase,
+  contenu: ContenuRow,
+): Promise<AvancerImportResultat> {
+  const r = await executerPasImport(supabase, contenu);
+  const tentatives = Number(contenu.import_tentatives ?? 0);
+  try {
+    await marquer(supabase, contenu.id, {
+      import_tentatives: r.progres ? 0 : tentatives + 1,
+    });
+  } catch {
+    // Bookkeeping de priorité : ne doit jamais faire échouer le passage.
+  }
+  return r;
+}
+
+/**
+ * Un pas du pipeline. Ordre :
  * OCR hook → pertinence → OCR reste → ELO par langue (gate) → nettoyage (1×)
  * → valide (texte OCR source uniquement).
  *
  * Sophia + traduction hors-source = à l'assignation minuit
  * (`assurerDeckPourLangue`), pas à l'import.
  */
-// deno-lint-ignore no-explicit-any
-export async function avancerImport(
+async function executerPasImport(
   supabase: Supabase,
-  contenu: any,
+  contenu: ContenuRow,
 ): Promise<AvancerImportResultat> {
   const slides: SlideBrut[] = [...(contenu.structure_slides ?? [])];
   const langueSource: string = contenu.langue_source ?? "fr";
@@ -748,7 +785,7 @@ export async function avancerImport(
         structure_slides: slides,
         import_etape: "ocr",
       });
-      return { etape: "ocr" };
+      return { etape: "ocr", progres: true };
     }
 
     // 2 — Pertinence (métrique ELO ; pas de rejet dur ici)
@@ -764,12 +801,12 @@ export async function avancerImport(
         statut: "brouillon",
         import_etape: "pertinence",
       });
-      return { etape: "pertinence" };
+      return { etape: "pertinence", progres: true };
     }
 
     if (contenu.statut === "rejete") {
       await marquer(supabase, contenu.id, { import_statut: "done", import_etape: "rejete" });
-      return { etape: "rejete" };
+      return { etape: "rejete", progres: true };
     }
 
     // 3 — OCR du reste
@@ -782,7 +819,7 @@ export async function avancerImport(
         structure_slides: slides,
         import_etape: "ocr",
       });
-      return { etape: "ocr" };
+      return { etape: "ocr", progres: true };
     }
 
     // 4 — ELO par langue → ne garde que les langues ≥ seuil
@@ -816,7 +853,7 @@ export async function avancerImport(
           import_erreur: "Aucune langue avec ELO au-dessus du seuil — TikTok non importé",
           import_elo_rapport: elo,
         });
-        return { etape: "elo_insuffisant", elo };
+        return { etape: "elo_insuffisant", elo, progres: true };
       }
 
       // Sync OCR → deck langue source (toujours, base pour traductions ultérieures).
@@ -845,23 +882,52 @@ export async function avancerImport(
           contenu.import_etape !== "traduction" && contenu.import_etape !== "sophia" &&
           contenu.import_etape !== "done") {
         await marquer(supabase, contenu.id, { import_etape: "elo" });
-        return { etape: "elo", elo };
+        return { etape: "elo", elo, progres: true };
       }
     }
 
     // 5 — Nettoyage image UNE fois (language-agnostique)
-    const aNettoyer = slides.filter((s) => !s.media_id);
-    if (aNettoyer.length > 0) {
+    if (slides.some((s) => !s.media_id)) {
       const rapports: NettoyageSlideRapport[] = [];
-      for (const slide of aNettoyer.slice(0, SLIDES_NETTOYAGE_PAR_PASSAGE)) {
+      let progres = false;
+
+      // 5a — Slides à bout d'essais : on les sort de la file SANS rappeler le
+      // provider. Sinon elles repassent en tête à chaque passage et le reste du
+      // diaporama (puis les autres comptes) n'est jamais nettoyé.
+      for (const slide of slidesEpuisees(slides)) {
+        const rapport: NettoyageSlideRapport = {
+          position: slide.position,
+          ok: false,
+          lignes: [
+            `slide #${slide.position} · ${tentativesSlide(slide)} tentatives épuisées`,
+          ],
+        };
+        const secours =
+          (await trouverPropreExistant(supabase, contenu.id, slide.position))?.id ??
+            (await tenterRemplacementLabel(supabase, contenu, slides, rapport));
+        slide.media_id = secours ?? (await stockerBrut(supabase, contenu, slide));
+        slide.tentatives = undefined;
+        rapport.ok = Boolean(secours);
+        rapport.motif = secours
+          ? "récupéré après tentatives épuisées"
+          : "brut après max tentatives";
+        rapport.lignes.push(`→ media_id=${slide.media_id} · file débloquée`);
+        await patchSlideMediaId(supabase, contenu.id, slide.position, slide.media_id);
+        rapports.push(rapport);
+        progres = true;
+      }
+
+      // 5b — Une slide « fraîche » par passage, la moins tentée d'abord : une
+      // slide capricieuse ne monopolise pas le diaporama.
+      for (
+        const slide of prochainesSlidesANettoyer(slides, SLIDES_NETTOYAGE_PAR_PASSAGE)
+      ) {
         const r = await nettoyerSlide(supabase, contenu, slide);
         rapports.push(r.rapport);
-        if (r.mediaId) {
-          slide.media_id = r.mediaId;
-          slide.tentatives = undefined;
-          // Patch atomique : survit aux lost-updates / timeout après upload.
-          await patchSlideMediaId(supabase, contenu.id, slide.position, r.mediaId);
-        } else {
+        slide.tentatives = r.tentatives;
+
+        let lie = r.mediaId;
+        if (!lie) {
           // Fal a peut‑être uploadé puis le worker est mort avant le lien.
           const orphelin = await trouverPropreExistant(
             supabase,
@@ -869,82 +935,38 @@ export async function avancerImport(
             slide.position,
           );
           if (orphelin) {
-            slide.media_id = orphelin.id;
-            slide.tentatives = undefined;
+            lie = orphelin.id;
             r.rapport.ok = true;
             r.rapport.motif = "propre orphelin rattache";
             r.rapport.lignes.push(
               `→ propre deja en storage rattache media_id=${orphelin.id}`,
             );
-            await patchSlideMediaId(
-              supabase,
-              contenu.id,
-              slide.position,
-              orphelin.id,
-            );
           } else {
-            const remplace = await tenterRemplacementLabel(
-              supabase,
-              contenu,
-              slides,
-              r.rapport,
-            );
-            if (remplace) {
-              slide.media_id = remplace;
-              slide.tentatives = undefined;
-              await patchSlideMediaId(
-                supabase,
-                contenu.id,
-                slide.position,
-                remplace,
-              );
-            } else {
-              slide.tentatives = (slide.tentatives ?? 0) + 1;
-              if (slide.tentatives >= MAX_TENTATIVES_NETTOYAGE) {
-                // Dernière chance : un propre a pu être écrit entre-temps.
-                const encore = await trouverPropreExistant(
-                  supabase,
-                  contenu.id,
-                  slide.position,
-                );
-                if (encore) {
-                  slide.media_id = encore.id;
-                  r.rapport.ok = true;
-                  r.rapport.lignes.push(
-                    `→ propre trouvé avant brut media_id=${encore.id}`,
-                  );
-                  await patchSlideMediaId(
-                    supabase,
-                    contenu.id,
-                    slide.position,
-                    encore.id,
-                  );
-                } else {
-                  slide.media_id = await stockerBrut(supabase, contenu, slide);
-                  r.rapport.lignes.push(
-                    `→ brut stocké après ${slide.tentatives} échecs (plus de retry)`,
-                  );
-                  r.rapport.motif = "brut après max tentatives";
-                  await patchSlideMediaId(
-                    supabase,
-                    contenu.id,
-                    slide.position,
-                    slide.media_id,
-                  );
-                }
-              } else {
-                r.rapport.lignes.push(
-                  `→ retry prévu (${slide.tentatives}/${MAX_TENTATIVES_NETTOYAGE})`,
-                );
-              }
-            }
+            lie = await tenterRemplacementLabel(supabase, contenu, slides, r.rapport);
           }
         }
-        await marquer(supabase, contenu.id, {
-          structure_slides: slides,
-          import_etape: "nettoyage",
-        });
+
+        if (lie) {
+          slide.media_id = lie;
+          slide.tentatives = undefined;
+          // Patch atomique : survit aux lost-updates / timeout après upload,
+          // et remet `tentatives` à zéro côté base.
+          await patchSlideMediaId(supabase, contenu.id, slide.position, lie);
+          progres = true;
+        } else {
+          r.rapport.lignes.push(
+            r.tentatives >= MAX_TENTATIVES_NETTOYAGE
+              ? `→ tentatives épuisées (${r.tentatives}/${MAX_TENTATIVES_NETTOYAGE}) — repli brut au prochain passage`
+              : `→ retry prévu (${r.tentatives}/${MAX_TENTATIVES_NETTOYAGE})`,
+          );
+        }
       }
+
+      // `structure_slides` n'est pas réécrit en entier ici : media_id et
+      // tentatives passent par les RPC atomiques, un write complet écraserait
+      // le travail d'un worker parallèle (la boucle d'origine).
+      await marquer(supabase, contenu.id, { import_etape: "nettoyage" });
+
       const nettoyage: NettoyageRapport = {
         slides: rapports,
         texte: rapports
@@ -962,7 +984,7 @@ export async function avancerImport(
           })
           .join("\n"),
       };
-      return { etape: "nettoyage", nettoyage };
+      return { etape: "nettoyage", nettoyage, progres };
     }
 
     // 6 — Recalcule ELO cold-start puis valide.
@@ -1012,13 +1034,13 @@ export async function avancerImport(
       import_erreur: null,
       import_tentatives: 0,
     });
-    return { etape: "done" };
+    return { etape: "done", progres: true };
   } catch (error) {
     await marquer(supabase, contenu.id, {
       import_statut: "failed",
       import_erreur: messageErreur(error),
     });
-    return { etape: "failed" };
+    return { etape: "failed", progres: false };
   }
 }
 
@@ -1194,12 +1216,21 @@ async function prolongerLease(supabase: Supabase, contenuId: string): Promise<vo
     .eq("id", contenuId);
 }
 
-/** Stocke le résultat Fal/Replicate. verifyClean est en pause (pas d'appel Gemini). */
+/**
+ * Stocke le résultat Fal/Replicate. verifyClean est en pause (pas d'appel Gemini).
+ *
+ * Ne relance jamais : tout échec revient en `mediaId: null` avec le compteur de
+ * tentatives à jour, pour que l'appelant décide (orphelin, biblio, brut).
+ */
 async function nettoyerSlide(
   supabase: Supabase,
   contenu: any,
   slide: SlideBrut,
-): Promise<{ mediaId: string | null; rapport: NettoyageSlideRapport }> {
+): Promise<{
+  mediaId: string | null;
+  tentatives: number;
+  rapport: NettoyageSlideRapport;
+}> {
   const labelEtape: Record<string, string> = {
     text_removal: "① Fal",
     replicate_text_removal: "② FALLBACK Replicate",
@@ -1226,8 +1257,19 @@ async function nettoyerSlide(
     rapport.moteur = "reuse";
     lignes.push(`reuse propre existant ${deja.storage_path} → ${deja.id}`);
     await patchSlideMediaId(supabase, contenu.id, slide.position, deja.id);
-    return { mediaId: deja.id, rapport };
+    return { mediaId: deja.id, tentatives: 0, rapport };
   }
+
+  // Tentative comptée AVANT l'appel provider : le mur Edge (~150 s) tue le
+  // worker en plein nettoyage, et un compteur écrit après ne serait jamais
+  // persisté — la slide repartirait indéfiniment pour un tour.
+  let tentatives = tentativesSlide(slide) + 1;
+  try {
+    tentatives = await incrementerTentativeSlide(supabase, contenu.id, slide.position);
+  } catch (e) {
+    lignes.push(`warn compteur tentatives: ${messageErreur(e)}`);
+  }
+  lignes.push(`tentative ${tentatives}/${MAX_TENTATIVES_NETTOYAGE}`);
 
   let propreBase64: string | null = null;
   let moteur: string | undefined;
@@ -1269,7 +1311,7 @@ async function nettoyerSlide(
     console.warn(
       `[import nettoyage] contenu=${contenu.id} slide=${slide.position} ${msg}`,
     );
-    return { mediaId: null, rapport };
+    return { mediaId: null, tentatives, rapport };
   }
 
   await prolongerLease(supabase, contenu.id);
@@ -1277,48 +1319,62 @@ async function nettoyerSlide(
   if (!propreBase64) {
     rapport.motif = "aucune image renvoyée";
     lignes.push("échec: aucune image après Fal + fallbacks");
-    return { mediaId: null, rapport };
+    return { mediaId: null, tentatives, rapport };
   }
 
   await prolongerLease(supabase, contenu.id);
 
-  const { mime, ext } = mimeDepuisBase64(propreBase64, mimeDeclare);
-  const path = `propre/${contenu.id}/${slide.position}.${ext}`;
-  const bytes = Uint8Array.from(atob(propreBase64), (c) => c.charCodeAt(0));
-  const { error: upErr } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, bytes, {
-      contentType: mime,
-      upsert: true,
-      cacheControl: "0",
-    });
-  if (upErr) throw upErr;
+  // Stockage : une erreur ici ne doit pas remonter, sinon `avancerImport`
+  // bascule en `failed` sans laisser l'appelant tenter orphelin / biblio / brut.
+  let media: { id: string };
+  try {
+    const { mime, ext } = mimeDepuisBase64(propreBase64, mimeDeclare);
+    const path = `propre/${contenu.id}/${slide.position}.${ext}`;
+    const bytes = Uint8Array.from(atob(propreBase64), (c) => c.charCodeAt(0));
+    const { error: upErr } = await supabase.storage
+      .from(BUCKET)
+      .upload(path, bytes, {
+        contentType: mime,
+        upsert: true,
+        cacheControl: "0",
+      });
+    if (upErr) throw upErr;
 
-  // Lien media_id AVANT labels (labels ne doivent pas faire perdre le Fal OK).
-  const publicUrl = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-  const url = `${publicUrl}?v=${Date.now()}`;
+    // Lien media_id AVANT labels (labels ne doivent pas faire perdre le Fal OK).
+    const publicUrl = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+    const url = `${publicUrl}?v=${Date.now()}`;
 
-  const { data: media, error } = await supabase
-    .from("media_library")
-    .upsert(
-      {
-        compte_reference_id: contenu.compte_reference_id,
-        contenu_id: contenu.id,
-        storage_path: path,
-        url,
-        source: "nettoye_reference",
-        langue: contenu.langue_source,
-        visage_identifiable: null,
-        verifie_le: new Date().toISOString(),
-        texte_restant: false,
-        // Évite un 2ᵉ SeedVR au minuit si l'upscale import a réussi.
-        ...(upscaleFait ? { upscale_le: new Date().toISOString() } : {}),
-      },
-      { onConflict: "storage_path" },
-    )
-    .select("id")
-    .single();
-  if (error) throw error;
+    const { data, error } = await supabase
+      .from("media_library")
+      .upsert(
+        {
+          compte_reference_id: contenu.compte_reference_id,
+          contenu_id: contenu.id,
+          storage_path: path,
+          url,
+          source: "nettoye_reference",
+          langue: contenu.langue_source,
+          visage_identifiable: null,
+          verifie_le: new Date().toISOString(),
+          texte_restant: false,
+          // Évite un 2ᵉ SeedVR au minuit si l'upscale import a réussi.
+          ...(upscaleFait ? { upscale_le: new Date().toISOString() } : {}),
+        },
+        { onConflict: "storage_path" },
+      )
+      .select("id")
+      .single();
+    if (error) throw error;
+    media = data;
+  } catch (e) {
+    const msg = messageErreur(e);
+    rapport.motif = `stockage KO: ${msg}`;
+    lignes.push(`échec stockage après nettoyage: ${msg}`);
+    console.warn(
+      `[import nettoyage] contenu=${contenu.id} slide=${slide.position} stockage ${msg}`,
+    );
+    return { mediaId: null, tentatives, rapport };
+  }
 
   try {
     await patchSlideMediaId(supabase, contenu.id, slide.position, media.id);
@@ -1340,7 +1396,7 @@ async function nettoyerSlide(
   }
 
   rapport.ok = true;
-  return { mediaId: media.id, rapport };
+  return { mediaId: media.id, tentatives: 0, rapport };
 }
 
 // deno-lint-ignore no-explicit-any
@@ -1419,6 +1475,7 @@ export async function prochainContenu(
   if (contenuId) query = query.eq("id", contenuId);
   else {
     query = query
+      .order("import_tentatives", { ascending: true })
       .order("pertinence_score", { ascending: true, nullsFirst: true })
       .order("created_at");
   }
@@ -1430,7 +1487,13 @@ export async function prochainContenu(
 /** Fal peut prendre ~2 min/slide × 2 slides — lease court → double worker écrase le résultat. */
 const LEASE_MS = 8 * 60_000;
 
-/** Claim atomique d'un contenu libre (lease) pour workers parallèles. */
+/**
+ * Claim atomique d'un contenu libre (lease) pour workers parallèles.
+ *
+ * `import_tentatives` en premier critère : un diaporama qui enchaîne les
+ * passages stériles passe derrière les imports frais au lieu d'aspirer tous
+ * les workers.
+ */
 export async function claimContenu(
   supabase: Supabase,
   // deno-lint-ignore no-explicit-any
@@ -1442,6 +1505,7 @@ export async function claimContenu(
     .select("id")
     .in("import_statut", ["pending", "running", "failed"])
     .or(libre)
+    .order("import_tentatives", { ascending: true })
     .order("pertinence_score", { ascending: true, nullsFirst: true })
     .order("created_at")
     .limit(8);
