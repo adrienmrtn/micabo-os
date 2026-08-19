@@ -1,155 +1,96 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-/**
- * Test d'intégration de l'orchestrateur : c'est bien `demarrerMajToutesSources`
- * qui tourne, seules la couche API et l'horloge sont simulées. Un « serveur »
- * factice draine sa file au fil du temps simulé.
- */
+import {
+  STAGNATION_MS,
+  deciderTick,
+  etatDepuisRun,
+  type MajSourcesRun,
+} from "./majSequentielle";
 
-/** Éléments encore en file côté « serveur » simulé. */
-let restant = 0;
-/** Un compte lancé, avec l'état de la file au moment où il part. */
-let lancements: Array<{ compteId: string; restantAuDepart: number }> = [];
-/** Force une file figée pour tester le garde-fou de stagnation. */
-let fileFigee: number | null = null;
-/** Rend le suivi par batch illisible : il abandonne au bout de 8 échecs. */
-let statsCassees = false;
-
-vi.mock("@/lib/supabase/client", () => ({
-  supabase: {
-    from: () => ({
-      select: () => ({ eq: async () => ({ data: [] }) }),
-    }),
-  },
-}));
-
-vi.mock("@/features/moteur/api", () => ({
-  fileImportEnCours: async () => ({ file: 0, pipeline: fileFigee ?? restant }),
-  enqueueImportCompte: async (compteReferenceId: string) => {
-    lancements.push({ compteId: compteReferenceId, restantAuDepart: restant });
-    restant += 5;
-    return {
-      ok: true,
-      batchId: `batch-${compteReferenceId}`,
-      total: 5,
-      connus: 0,
-      manquants: 5,
-      nouveaux: 5,
-      enqueued: 5,
-      skipped: 0,
-      source: "apify",
-      diagnostic: [],
-    };
-  },
-  statsImportBatch: async () => {
-    if (statsCassees) throw new Error("Failed to send a request to the Edge Function");
-    return {
-    total: 5,
-    pending: restant,
-    running: 0,
-    done: 5 - restant,
-    failed: 0,
-    contenusPending: restant,
-    contenusDone: 5 - restant,
-    };
-  },
-  contenusEloDuBatch: async () => [],
-  enqueueImportUrls: async () => ({ ok: true, batchId: "x", enqueued: 0, skipped: 0 }),
-}));
-
+const T0 = 1_000_000;
 const COMPTES = [
-  { compteReferenceId: "a", handle: "alpha", langue: "fr" },
-  { compteReferenceId: "b", handle: "beta", langue: "fr" },
-  { compteReferenceId: "c", handle: "gamma", langue: "fr" },
+  { id: "a", handle: "alpha", langue: "fr" },
+  { id: "b", handle: "beta", langue: "fr" },
+  { id: "c", handle: "gamma", langue: "fr" },
 ];
 
-let drain: ReturnType<typeof setInterval>;
+function run(over: Partial<MajSourcesRun> = {}): MajSourcesRun {
+  return {
+    statut: "running",
+    comptes: COMPTES,
+    index: 0,
+    faits: 0,
+    handle: null,
+    phase: "attente",
+    restant: 0,
+    minRestant: null,
+    dernierProgresAt: null,
+    journal: [],
+    ...over,
+  };
+}
 
-beforeEach(() => {
-  restant = 0;
-  lancements = [];
-  fileFigee = null;
-  statsCassees = false;
-  vi.resetModules();
-  vi.useFakeTimers();
-  // Le drain serveur : un élément traité toutes les 2 s de temps simulé.
-  drain = setInterval(() => {
-    if (restant > 0) restant -= 1;
-  }, 2_000);
+describe("deciderTick", () => {
+  it("enfile le prochain compte seulement si la file est vide", () => {
+    const d = deciderTick(run(), { file: 0, pipeline: 0 }, T0);
+    expect(d).toEqual({ type: "enfiler", index: 0, compte: COMPTES[0] });
+  });
+
+  it("n'enfile jamais un compte tant qu'il reste du scrape ou du pipeline", () => {
+    const d = deciderTick(run({ index: 1, faits: 1 }), { file: 0, pipeline: 5 }, T0);
+    expect(d.type).toBe("attendre");
+    if (d.type === "attendre") expect(d.restant).toBe(5);
+  });
+
+  it("passe au compte suivant (index) une fois la file vidée", () => {
+    const d = deciderTick(run({ index: 1, faits: 1 }), { file: 0, pipeline: 0 }, T0);
+    expect(d).toEqual({ type: "enfiler", index: 1, compte: COMPTES[1] });
+  });
+
+  it("termine quand tous les comptes sont passés", () => {
+    const d = deciderTick(run({ index: 3, faits: 3 }), { file: 0, pipeline: 0 }, T0);
+    expect(d).toEqual({ type: "done" });
+  });
+
+  it("coupe si la file ne descend plus pendant le délai de stagnation", () => {
+    const fige = run({ minRestant: 12, dernierProgresAt: T0, restant: 12 });
+    const avant = deciderTick(fige, { file: 0, pipeline: 12 }, T0 + STAGNATION_MS - 1);
+    expect(avant.type).toBe("attendre");
+    const apres = deciderTick(fige, { file: 0, pipeline: 12 }, T0 + STAGNATION_MS);
+    expect(apres.type).toBe("bloquee");
+  });
+
+  it("ne fait rien si la séquence n'est plus running (annulée / finie)", () => {
+    expect(deciderTick(run({ statut: "cancelled" }), { file: 0, pipeline: 0 }, T0).type).toBe(
+      "rien",
+    );
+    expect(deciderTick(run({ statut: "done" }), { file: 0, pipeline: 0 }, T0).type).toBe("rien");
+  });
 });
 
-afterEach(() => {
-  clearInterval(drain);
-  vi.useRealTimers();
-});
-
-describe("demarrerMajToutesSources", () => {
-  it("lance les comptes un par un, chacun sur une file vide", async () => {
-    const mod = await import("./importJobs");
-    mod.demarrerMajToutesSources(COMPTES);
-    await vi.advanceTimersByTimeAsync(600_000);
-
-    expect(lancements.map((l) => l.compteId)).toEqual(["a", "b", "c"]);
-    // Le cœur du correctif : aucun compte ne part sur une file encore chargée.
-    for (const l of lancements) expect(l.restantAuDepart).toBe(0);
-    expect(mod.getMajSources().actif).toBe(false);
+describe("etatDepuisRun — survit à la fermeture de page", () => {
+  it("reconstitue l'UI depuis l'état persisté, sans session navigateur", () => {
+    const persisté = run({
+      index: 2,
+      faits: 2,
+      handle: "gamma",
+      phase: "import",
+      restant: 0,
+    });
+    // Simule un reload : plus aucun store client, seulement Postgres.
+    expect(etatDepuisRun(persisté)).toEqual({
+      actif: true,
+      total: 3,
+      faits: 2,
+      handle: "gamma",
+      phase: "import",
+      restant: 0,
+    });
   });
 
-  it("ne démarre jamais deux comptes en même temps", async () => {
-    const mod = await import("./importJobs");
-    mod.demarrerMajToutesSources(COMPTES);
-
-    let maxSimultane = 0;
-    for (let i = 0; i < 300; i += 1) {
-      await vi.advanceTimersByTimeAsync(2_000);
-      const etat = mod.getMajSources();
-      if (etat.actif && etat.phase === "import") maxSimultane = Math.max(maxSimultane, 1);
-      // `faits` n'avance que quand le compte précédent est terminé.
-      expect(etat.faits).toBeLessThanOrEqual(lancements.length);
-    }
-    expect(maxSimultane).toBe(1);
-    expect(lancements).toHaveLength(3);
-  });
-
-  it("s'arrête à la demande sans lancer les comptes restants", async () => {
-    const mod = await import("./importJobs");
-    mod.demarrerMajToutesSources(COMPTES);
-    await vi.advanceTimersByTimeAsync(3_000);
-    expect(lancements).toHaveLength(1);
-
-    mod.annulerMajSources();
-    await vi.advanceTimersByTimeAsync(600_000);
-
-    expect(lancements.map((l) => l.compteId)).toEqual(["a"]);
-    expect(mod.getMajSources().actif).toBe(false);
-  });
-
-  it("attend la file même quand le suivi du compte a abandonné", async () => {
-    // Le polling du batch renonce après 8 échecs de lecture alors que le
-    // serveur draine encore : sans l'attente sur la file globale, le compte
-    // suivant partirait par-dessus le travail en cours.
-    statsCassees = true;
-    const mod = await import("./importJobs");
-    mod.demarrerMajToutesSources(COMPTES.slice(0, 2));
-    await vi.advanceTimersByTimeAsync(600_000);
-
-    expect(lancements.map((l) => l.compteId)).toEqual(["a", "b"]);
-    expect(lancements[1].restantAuDepart).toBe(0);
-  });
-
-  it("coupe la séquence si la file ne descend plus, sans rien enfiler", async () => {
-    fileFigee = 12;
-    const mod = await import("./importJobs");
-    const jobId = mod.demarrerMajToutesSources(COMPTES);
-
-    await vi.advanceTimersByTimeAsync(9 * 60_000);
-    expect(mod.getImportJobs().find((j) => j.id === jobId)?.statut).toBe("encours");
-
-    await vi.advanceTimersByTimeAsync(2 * 60_000);
-    expect(lancements).toEqual([]);
-    const chef = mod.getImportJobs().find((j) => j.id === jobId);
-    expect(chef?.statut).toBe("echec");
-    expect(chef?.logs.some((l) => l.message.includes("figée"))).toBe(true);
-    expect(mod.getMajSources().actif).toBe(false);
+  it("n'affiche plus la barre une fois la séquence terminée ou annulée", () => {
+    expect(etatDepuisRun(run({ statut: "done", faits: 3 })).actif).toBe(false);
+    expect(etatDepuisRun(run({ statut: "cancelled", faits: 1 })).actif).toBe(false);
+    expect(etatDepuisRun(null).actif).toBe(false);
   });
 });

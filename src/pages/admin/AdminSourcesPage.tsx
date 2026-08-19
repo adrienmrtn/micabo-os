@@ -30,15 +30,12 @@ import {
   stockParSource,
   supprimerSource,
   type LigneJournalOubli,
+  lireMajSourcesRun,
+  demarrerMajSourcesServeur,
+  annulerMajSourcesServeur,
 } from "@/features/moteur/api";
-import {
-  annulerMajSources,
-  demarrerImportCompte,
-  demarrerImportLien,
-  demarrerMajToutesSources,
-  getMajSources,
-  subscribeMajSources,
-} from "@/features/moteur/importJobs";
+import { demarrerImportCompte, demarrerImportLien, syncMajJobDepuisRun } from "@/features/moteur/importJobs";
+import { etatDepuisRun } from "@/features/moteur/majSequentielle";
 import { ImportHistoriquePanel } from "@/features/moteur/ImportHistoriquePanel";
 import { ImportJobsPanel } from "@/features/moteur/ImportJobsPanel";
 import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
@@ -980,34 +977,64 @@ function FormAjoutSource({ niches }: { niches: NicheLabel[] }) {
 
 function BarreUpdateSources({ sources }: { sources: CompteReference[] }) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [message, setMessage] = React.useState<string | null>(null);
-  const maj = React.useSyncExternalStore(subscribeMajSources, getMajSources, getMajSources);
   const aJour = sources.filter((s) => s.is_active && s.dernier_scrape_at && s.langue);
+
+  const run = useQuery({
+    queryKey: ["maj-sources-run"],
+    queryFn: lireMajSourcesRun,
+    refetchInterval: 4_000,
+  });
+
+  React.useEffect(() => {
+    syncMajJobDepuisRun(run.data ?? null);
+  }, [run.data]);
+
+  const maj = etatDepuisRun(run.data ?? null);
+
+  const lancerMut = useMutation({
+    mutationFn: () =>
+      demarrerMajSourcesServeur(
+        aJour.map((s) => ({
+          id: s.id,
+          handle: s.handle_tiktok,
+          langue: s.langue,
+        })),
+      ),
+    onSuccess: async (r) => {
+      syncMajJobDepuisRun(r.etat);
+      await queryClient.invalidateQueries({ queryKey: ["maj-sources-run"] });
+      setMessage(t("sources.updateToutesLance", { count: aJour.length }));
+    },
+    onError: (e) => setMessage((e as Error).message),
+  });
+
+  const stopMut = useMutation({
+    mutationFn: annulerMajSourcesServeur,
+    onSuccess: async (r) => {
+      syncMajJobDepuisRun(r.etat);
+      await queryClient.invalidateQueries({ queryKey: ["maj-sources-run"] });
+    },
+  });
 
   const lancer = () => {
     if (aJour.length === 0) {
       setMessage(t("sources.updateToutesVide"));
       return;
     }
-    demarrerMajToutesSources(
-      aJour.map((s) => ({
-        compteReferenceId: s.id,
-        handle: s.handle_tiktok,
-        langue: s.langue,
-      })),
-    );
-    setMessage(t("sources.updateToutesLance", { count: aJour.length }));
+    lancerMut.mutate();
   };
 
   const enCours = maj.actif
     ? maj.phase === "attente"
       ? t("sources.updateToutesAttente", {
-          index: maj.faits + 1,
+          index: Math.min(maj.faits + 1, maj.total),
           total: maj.total,
           restant: maj.restant,
         })
       : t("sources.updateToutesEnCours", {
-          index: maj.faits + 1,
+          index: Math.min(maj.faits + 1, maj.total),
           total: maj.total,
           handle: maj.handle ?? "",
         })
@@ -1022,11 +1049,11 @@ function BarreUpdateSources({ sources }: { sources: CompteReference[] }) {
         {message && <p className="text-xs text-muted-foreground">{message}</p>}
       </div>
       {maj.actif ? (
-        <Button variant="outline" onClick={() => annulerMajSources()}>
+        <Button variant="outline" onClick={() => stopMut.mutate()} disabled={stopMut.isPending}>
           {t("sources.updateToutesStop")}
         </Button>
       ) : (
-        <Button disabled={aJour.length === 0} onClick={lancer}>
+        <Button disabled={aJour.length === 0 || lancerMut.isPending} onClick={lancer}>
           <RefreshCw className="size-3.5" />
           {t("sources.updateToutesGo", { count: aJour.length })}
         </Button>

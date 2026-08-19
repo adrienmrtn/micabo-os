@@ -13,6 +13,12 @@ import {
   STATUTS_REPRENABLES,
   traiterImportFile,
 } from "../_shared/import_contenu.ts";
+import {
+  annulerMajSources,
+  demarrerMajSources,
+  lireMajSourcesRun,
+  tickMajSources,
+} from "../_shared/maj_sources.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 /**
@@ -22,10 +28,13 @@ import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared
  *   { enqueueUrls: true, urls, compteReferenceId?, labelIds?, batchId? }
  *   { postUrl, ... } → enqueue 1 URL (ou scrape immédiat si scrapeNow)
  *   { worker: true } → claim 1 file OU 1 contenu, traite, rechaîne si file non vide
+ *   { majSourcesDemarrer, comptes } → séquence persistée, 1 compte, file vidée entre chaque
+ *   { majSourcesAnnuler: true } / { majSourcesEtat: true } / { majSourcesTick: true }
  *   { contenuId } / {} → un pas (compat)
  *   { batchId, stats: true } → progression batch
  *
  * Les workers cron (×12 / min) + auto-chaînage Edge drainent sans le navigateur.
+ * La séquence « update all » vit dans reglages : fermer l'onglet ne l'arrête pas.
  */
 Deno.serve(async (request) => {
   const denied = await assertAuthorised(request);
@@ -45,6 +54,36 @@ Deno.serve(async (request) => {
     if (body?.stats && body?.batchId) {
       const s = await statsImportBatch(supabase, String(body.batchId));
       return json({ ok: true, ...s });
+    }
+
+    if (body?.majSourcesEtat) {
+      const etat = await lireMajSourcesRun(supabase);
+      return json({ ok: true, etat });
+    }
+
+    if (body?.majSourcesAnnuler) {
+      const etat = await annulerMajSources(supabase);
+      return json({ ok: true, etat });
+    }
+
+    if (body?.majSourcesTick) {
+      const tick = await tickMajSources(supabase);
+      if (tick.more) kickWorkers(request, 1);
+      return json({ ok: true, ...tick });
+    }
+
+    if (body?.majSourcesDemarrer && Array.isArray(body.comptes)) {
+      const comptes = (body.comptes as Array<{ id?: string; handle?: string; langue?: string }>)
+        .map((c) => ({
+          id: String(c.id ?? ""),
+          handle: String(c.handle ?? ""),
+          langue: String(c.langue ?? ""),
+        }))
+        .filter((c) => c.id && c.handle);
+      const r = await demarrerMajSources(supabase, comptes);
+      const tick = await tickMajSources(supabase);
+      if (tick.more) kickWorkers(request, AMORCE_WORKERS);
+      return json({ ok: true, deja: r.deja, etat: tick.etat ?? r.etat });
     }
 
     // Relance manuelle : boost ELO au seuil puis file nettoyage.
@@ -218,6 +257,29 @@ Deno.serve(async (request) => {
   }
 });
 
+async function continuer(
+  supabase: ReturnType<typeof serviceClient>,
+  extra: {
+    action: string;
+    contenuId?: string;
+    etape?: string;
+    fileId?: string;
+    error?: string;
+    elo?: unknown;
+  },
+): Promise<{
+  action: string;
+  more: boolean;
+  contenuId?: string;
+  etape?: string;
+  fileId?: string;
+  error?: string;
+}> {
+  if (await hasMoreWork(supabase)) return { ...extra, more: true };
+  const tick = await tickMajSources(supabase);
+  return { ...extra, more: tick.more };
+}
+
 async function runWorker(
   supabase: ReturnType<typeof serviceClient>,
 ): Promise<{
@@ -232,38 +294,37 @@ async function runWorker(
   const file = await claimImportFile(supabase);
   if (file) {
     const r = await traiterImportFile(supabase, file);
-    const more = await hasMoreWork(supabase);
     if (!r.ok) {
-      return {
+      return continuer(supabase, {
         action: r.reporte ? "scrape_reporte" : "scrape_failed",
-        more,
         fileId: file.id,
         error: r.erreur,
-      };
+      });
     }
-    return {
+    return continuer(supabase, {
       action: "scrape",
-      more,
       fileId: file.id,
       contenuId: r.contenuId,
-    };
+    });
   }
 
   const contenu = await claimContenu(supabase);
   if (!contenu) {
     const backfill = await prochainBackfill(supabase);
-    if (!backfill) return { action: "idle", more: false };
+    if (!backfill) {
+      const tick = await tickMajSources(supabase);
+      return { action: tick.action, more: tick.more };
+    }
     const r = await avancerImport(supabase, backfill);
     await supabase
       .from("contenus")
       .update({ import_lease_until: null })
       .eq("id", backfill.id);
-    return {
+    return continuer(supabase, {
       action: "backfill",
-      more: await hasMoreWork(supabase),
       contenuId: backfill.id,
       etape: r.etape,
-    };
+    });
   }
 
   const r = await avancerImport(supabase, contenu);
@@ -272,13 +333,12 @@ async function runWorker(
     .update({ import_lease_until: null })
     .eq("id", contenu.id);
 
-  return {
+  return continuer(supabase, {
     action: "pipeline",
-    more: await hasMoreWork(supabase),
     contenuId: contenu.id,
     etape: r.etape,
     ...(r.elo ? { elo: r.elo } : {}),
-  };
+  });
 }
 
 async function hasMoreWork(

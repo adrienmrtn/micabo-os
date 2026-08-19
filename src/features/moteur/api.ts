@@ -23,6 +23,7 @@ import type {
   Passage,
 } from "./types";
 import type { LigneJournalOubli } from "./oubliSource";
+import { type MajSourcesRun } from "./majSequentielle";
 import { compteEnProcessus } from "./warmup";
 import { ugcVisages } from "./ugcVisages";
 import { corpsAssignationUgcVideoTest } from "./corpsAssignationUgcVideoTest";
@@ -2810,21 +2811,29 @@ export interface StatsImportBatch {
  * repassent alors en `running`. Les compter bloquerait la séquence sur un
  * échec définitif.
  */
-export async function fileImportEnCours(): Promise<{ file: number; pipeline: number }> {
-  const [scrapes, pipelines] = await Promise.all([
-    supabase
-      .from("import_file")
-      .select("id", { count: "exact", head: true })
-      .in("statut", ["pending", "running"]),
-    supabase
-      .from("contenus")
-      .select("id", { count: "exact", head: true })
-      .in("import_statut", ["pending", "running"]),
-  ]);
-  if (scrapes.error) throw scrapes.error;
-  if (pipelines.error) throw pipelines.error;
-  return { file: scrapes.count ?? 0, pipeline: pipelines.count ?? 0 };
+export async function lireMajSourcesRun(): Promise<MajSourcesRun | null> {
+  const { data, error } = await supabase
+    .from("reglages")
+    .select("valeur")
+    .eq("cle", "maj_sources_run")
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.valeur as MajSourcesRun | null) ?? null;
 }
+
+/** Démarre (ou reprend) la séquence persistée. Survit à la fermeture de l'onglet. */
+export const demarrerMajSourcesServeur = (
+  comptes: Array<{ id: string; handle: string; langue: string }>,
+) =>
+  invoke<{ ok: boolean; deja?: boolean; etat: MajSourcesRun }>("import-contenu", {
+    majSourcesDemarrer: true,
+    comptes,
+  });
+
+export const annulerMajSourcesServeur = () =>
+  invoke<{ ok: boolean; etat: MajSourcesRun | null }>("import-contenu", {
+    majSourcesAnnuler: true,
+  });
 
 /**
  * Progression d'un batch, lue directement en base.
