@@ -10,6 +10,7 @@ import {
   enqueueImportUrls,
   statsImportBatch,
 } from "@/features/moteur/api";
+import { etatDepuisRun, type MajSourcesRun } from "@/features/moteur/majSequentielle";
 import { handleTiktokDepuisSaisie } from "@/features/moteur/oubliSource";
 import { supabase } from "@/lib/supabase/client";
 
@@ -378,4 +379,52 @@ export function demarrerImportCompte(opts: {
 export function clearImportJobsTermines() {
   jobs = jobs.filter((j) => j.statut === "encours");
   emit();
+}
+
+/** Avancement de la séquence, lu depuis Postgres (survit à la navigation). */
+export type MajSourcesEtat = ReturnType<typeof etatDepuisRun>;
+
+let majJobId: string | null = null;
+
+function niveauVersLog(niveau: string): ImportLogLevel {
+  if (niveau === "error") return "error";
+  if (niveau === "ok") return "ok";
+  if (niveau === "warn") return "warn";
+  return "info";
+}
+
+/**
+ * Reconstruit le job du panneau à partir de l'état persisté. Revenir sur la
+ * page reprend les logs là où le serveur les a laissés.
+ */
+export function syncMajJobDepuisRun(run: MajSourcesRun | null): MajSourcesEtat {
+  const etat = etatDepuisRun(run);
+  if (!run) return etat;
+  // Page rouverte après coup : on ne recrée pas un job terminé.
+  if (run.statut !== "running" && !majJobId) return etat;
+
+  const titre = `Mise à jour séquentielle — ${run.comptes.length} source(s)`;
+  let job = majJobId ? jobs.find((j) => j.id === majJobId) : undefined;
+  if (!job) {
+    majJobId = newJob(titre);
+    job = jobs.find((j) => j.id === majJobId);
+  }
+  if (!job) return etat;
+
+  const logs: ImportLogLine[] = (run.journal ?? []).map((l) => ({
+    at: Date.parse(l.at) || Date.now(),
+    level: niveauVersLog(l.niveau),
+    message: l.message,
+    detail: l.detail,
+  }));
+  const statut: ImportJobStatut =
+    run.statut === "running" ? "encours" : run.statut === "bloquee" ? "echec" : "ok";
+  upsertJob({
+    ...job,
+    titre,
+    logs,
+    statut,
+    endedAt: statut === "encours" ? undefined : (job.endedAt ?? Date.now()),
+  });
+  return etat;
 }

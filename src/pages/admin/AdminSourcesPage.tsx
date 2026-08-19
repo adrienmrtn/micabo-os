@@ -30,8 +30,12 @@ import {
   stockParSource,
   supprimerSource,
   type LigneJournalOubli,
+  lireMajSourcesRun,
+  demarrerMajSourcesServeur,
+  annulerMajSourcesServeur,
 } from "@/features/moteur/api";
-import { demarrerImportCompte, demarrerImportLien } from "@/features/moteur/importJobs";
+import { demarrerImportCompte, demarrerImportLien, syncMajJobDepuisRun } from "@/features/moteur/importJobs";
+import { etatDepuisRun } from "@/features/moteur/majSequentielle";
 import { ImportHistoriquePanel } from "@/features/moteur/ImportHistoriquePanel";
 import { ImportJobsPanel } from "@/features/moteur/ImportJobsPanel";
 import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
@@ -973,36 +977,87 @@ function FormAjoutSource({ niches }: { niches: NicheLabel[] }) {
 
 function BarreUpdateSources({ sources }: { sources: CompteReference[] }) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [message, setMessage] = React.useState<string | null>(null);
   const aJour = sources.filter((s) => s.is_active && s.dernier_scrape_at && s.langue);
+
+  const run = useQuery({
+    queryKey: ["maj-sources-run"],
+    queryFn: lireMajSourcesRun,
+    refetchInterval: 4_000,
+  });
+
+  React.useEffect(() => {
+    syncMajJobDepuisRun(run.data ?? null);
+  }, [run.data]);
+
+  const maj = etatDepuisRun(run.data ?? null);
+
+  const lancerMut = useMutation({
+    mutationFn: () =>
+      demarrerMajSourcesServeur(
+        aJour.map((s) => ({
+          id: s.id,
+          handle: s.handle_tiktok,
+          langue: s.langue,
+        })),
+      ),
+    onSuccess: async (r) => {
+      syncMajJobDepuisRun(r.etat);
+      await queryClient.invalidateQueries({ queryKey: ["maj-sources-run"] });
+      setMessage(t("sources.updateToutesLance", { count: aJour.length }));
+    },
+    onError: (e) => setMessage((e as Error).message),
+  });
+
+  const stopMut = useMutation({
+    mutationFn: annulerMajSourcesServeur,
+    onSuccess: async (r) => {
+      syncMajJobDepuisRun(r.etat);
+      await queryClient.invalidateQueries({ queryKey: ["maj-sources-run"] });
+    },
+  });
 
   const lancer = () => {
     if (aJour.length === 0) {
       setMessage(t("sources.updateToutesVide"));
       return;
     }
-    for (const s of aJour) {
-      demarrerImportCompte({
-        compteReferenceId: s.id,
-        handle: s.handle_tiktok,
-        langue: s.langue,
-        nouveauxSeulement: true,
-      });
-    }
-    setMessage(t("sources.updateToutesLance", { count: aJour.length }));
+    lancerMut.mutate();
   };
+
+  const enCours = maj.actif
+    ? maj.phase === "attente"
+      ? t("sources.updateToutesAttente", {
+          index: Math.min(maj.faits + 1, maj.total),
+          total: maj.total,
+          restant: maj.restant,
+        })
+      : t("sources.updateToutesEnCours", {
+          index: Math.min(maj.faits + 1, maj.total),
+          total: maj.total,
+          handle: maj.handle ?? "",
+        })
+    : null;
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
       <div className="min-w-0 space-y-1">
         <p className="text-sm font-medium">{t("sources.updateToutes")}</p>
         <p className="text-xs text-muted-foreground">{t("sources.updateToutesAide")}</p>
+        {enCours && <p className="text-xs font-medium text-primary">{enCours}</p>}
         {message && <p className="text-xs text-muted-foreground">{message}</p>}
       </div>
-      <Button disabled={aJour.length === 0} onClick={lancer}>
-        <RefreshCw className="size-3.5" />
-        {t("sources.updateToutesGo", { count: aJour.length })}
-      </Button>
+      {maj.actif ? (
+        <Button variant="outline" onClick={() => stopMut.mutate()} disabled={stopMut.isPending}>
+          {t("sources.updateToutesStop")}
+        </Button>
+      ) : (
+        <Button disabled={aJour.length === 0 || lancerMut.isPending} onClick={lancer}>
+          <RefreshCw className="size-3.5" />
+          {t("sources.updateToutesGo", { count: aJour.length })}
+        </Button>
+      )}
     </div>
   );
 }

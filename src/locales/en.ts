@@ -680,9 +680,14 @@ export const en = {
       updateLance: "Update started — catching up on missing slideshows (see logs).",
       updateToutes: "Update sources",
       updateToutesAide:
-        "For each already-imported account: queue the profile's slideshows that are missing from stock. Accounts go 2 at a time so the server stays healthy.",
+        "For each already-imported account: queue the profile's slideshows that are missing from stock. Accounts run one at a time, and the next one only starts once the queue is fully drained. You can leave the page — it keeps going on the server.",
       updateToutesGo: "Update ({{count}})",
-      updateToutesLance: "Update started on {{count}} source(s) — missing slideshows are queued.",
+      updateToutesLance:
+        "Update started on {{count}} source(s) — one account at a time, queue drained in between. You can leave the page.",
+      updateToutesEnCours: "{{index}}/{{total}} — @{{handle}} running",
+      updateToutesAttente:
+        "{{index}}/{{total}} — waiting for the queue to drain ({{restant}} left)",
+      updateToutesStop: "Stop",
       updateToutesVide: "No already-imported source to update (run Extract first).",
       importLien: "Import a TikTok",
       importLienAide:

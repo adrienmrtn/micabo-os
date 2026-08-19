@@ -23,6 +23,7 @@ import type {
   Passage,
 } from "./types";
 import type { LigneJournalOubli } from "./oubliSource";
+import { type MajSourcesRun } from "./majSequentielle";
 import { compteEnProcessus } from "./warmup";
 import { ugcVisages } from "./ugcVisages";
 import { corpsAssignationUgcVideoTest } from "./corpsAssignationUgcVideoTest";
@@ -2801,6 +2802,38 @@ export interface StatsImportBatch {
   contenusPending: number;
   contenusDone: number;
 }
+
+/**
+ * Ce qui reste en cours côté serveur, tous batches confondus — exactement ce
+ * que l'historique montre en « En file » et « Pipeline… ».
+ *
+ * Les lignes `failed` sont hors compte : le drain les reprend, et elles
+ * repassent alors en `running`. Les compter bloquerait la séquence sur un
+ * échec définitif.
+ */
+export async function lireMajSourcesRun(): Promise<MajSourcesRun | null> {
+  const { data, error } = await supabase
+    .from("reglages")
+    .select("valeur")
+    .eq("cle", "maj_sources_run")
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.valeur as MajSourcesRun | null) ?? null;
+}
+
+/** Démarre (ou reprend) la séquence persistée. Survit à la fermeture de l'onglet. */
+export const demarrerMajSourcesServeur = (
+  comptes: Array<{ id: string; handle: string; langue: string }>,
+) =>
+  invoke<{ ok: boolean; deja?: boolean; etat: MajSourcesRun }>("import-contenu", {
+    majSourcesDemarrer: true,
+    comptes,
+  });
+
+export const annulerMajSourcesServeur = () =>
+  invoke<{ ok: boolean; etat: MajSourcesRun | null }>("import-contenu", {
+    majSourcesAnnuler: true,
+  });
 
 /**
  * Progression d'un batch, lue directement en base.
