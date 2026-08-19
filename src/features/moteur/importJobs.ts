@@ -8,8 +8,15 @@ import {
   contenusEloDuBatch,
   enqueueImportCompte,
   enqueueImportUrls,
+  fileImportEnCours,
   statsImportBatch,
 } from "@/features/moteur/api";
+import {
+  attenteInitiale,
+  avancerAttente,
+  delaiSondage,
+  type EtatAttente,
+} from "@/features/moteur/majSequentielle";
 import { handleTiktokDepuisSaisie } from "@/features/moteur/oubliSource";
 import { supabase } from "@/lib/supabase/client";
 
@@ -378,4 +385,227 @@ export function demarrerImportCompte(opts: {
 export function clearImportJobsTermines() {
   jobs = jobs.filter((j) => j.statut === "encours");
   emit();
+}
+
+/** Avancement de la séquence « Mettre à jour les sources ». */
+export interface MajSourcesEtat {
+  actif: boolean;
+  total: number;
+  /** Comptes déjà traités (l'index du compte en cours vaut `faits + 1`). */
+  faits: number;
+  handle: string | null;
+  phase: "import" | "attente" | null;
+  /** Éléments encore en file serveur pendant une phase d'attente. */
+  restant: number;
+}
+
+const MAJ_ETAT_VIDE: MajSourcesEtat = {
+  actif: false,
+  total: 0,
+  faits: 0,
+  handle: null,
+  phase: null,
+  restant: 0,
+};
+
+let majEtat: MajSourcesEtat = MAJ_ETAT_VIDE;
+const majListeners = new Set<Listener>();
+
+export function subscribeMajSources(listener: Listener): () => void {
+  majListeners.add(listener);
+  return () => {
+    majListeners.delete(listener);
+  };
+}
+
+export function getMajSources(): MajSourcesEtat {
+  return majEtat;
+}
+
+function setMaj(patch: Partial<MajSourcesEtat>) {
+  majEtat = { ...majEtat, ...patch };
+  for (const l of majListeners) l();
+}
+
+const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Résout quand le job quitte l'état « en cours ». */
+function attendreFinJob(jobId: string): Promise<ImportJobStatut> {
+  const terminal = (): ImportJobStatut | null => {
+    const j = jobs.find((x) => x.id === jobId);
+    // Job évincé du store (plafond de 20) : rien de plus à attendre.
+    if (!j) return "ok";
+    return j.statut === "encours" ? null : j.statut;
+  };
+  const immediat = terminal();
+  if (immediat) return Promise.resolve(immediat);
+  return new Promise((resolve) => {
+    const off = subscribeImportJobs(() => {
+      const s = terminal();
+      if (!s) return;
+      off();
+      resolve(s);
+    });
+  });
+}
+
+/**
+ * Au-delà, une file qui ne descend plus est considérée figée : on arrête la
+ * séquence au lieu d'empiler sur un drain mort.
+ */
+const STAGNATION_MS = 10 * 60_000;
+
+type Jeton = { annule: boolean };
+let jetonCourant: Jeton | null = null;
+
+/** Demande l'arrêt de la séquence après le compte en cours. */
+export function annulerMajSources(): void {
+  if (jetonCourant) jetonCourant.annule = true;
+}
+
+async function attendreFileVide(
+  jobId: string,
+  jeton: Jeton,
+): Promise<"vide" | "bloquee" | "annule"> {
+  let etat: EtatAttente = attenteInitiale(Date.now());
+  let dernierLog = 0;
+  let echecs = 0;
+
+  for (;;) {
+    if (jeton.annule) return "annule";
+
+    let mesure;
+    try {
+      mesure = await fileImportEnCours();
+      echecs = 0;
+    } catch (e) {
+      echecs += 1;
+      if (echecs >= ECHECS_AVANT_ABANDON) {
+        log(
+          jobId,
+          "error",
+          `File illisible après ${echecs} tentatives — séquence stoppée`,
+          `Sans lecture de la file, enfiler la suite reviendrait à travailler à l'aveugle.\n${(e as Error).message}`,
+        );
+        return "bloquee";
+      }
+      await pause(delaiSondage(0) * echecs);
+      continue;
+    }
+
+    const pas = avancerAttente(etat, mesure, Date.now(), STAGNATION_MS);
+    etat = pas.etat;
+
+    if (pas.verdict.type === "vide") {
+      setMaj({ restant: 0 });
+      return "vide";
+    }
+    if (pas.verdict.type === "bloquee") {
+      log(
+        jobId,
+        "error",
+        `File figée à ${pas.verdict.restant} élément(s) depuis ${Math.round(
+          pas.verdict.depuisMs / 60_000,
+        )} min — séquence stoppée`,
+        "Rien de neuf n'est enfilé tant que la file ne redescend pas : vérifie les crons de drain.",
+      );
+      return "bloquee";
+    }
+
+    setMaj({ restant: pas.verdict.restant });
+    if (Date.now() - dernierLog >= 60_000) {
+      dernierLog = Date.now();
+      log(
+        jobId,
+        "info",
+        `Attente de la file — ${mesure.file} scrape(s), ${mesure.pipeline} pipeline(s)`,
+      );
+    }
+    await pause(delaiSondage(pas.verdict.restant));
+  }
+}
+
+/**
+ * Met à jour les sources une par une, file vidée entre chaque.
+ *
+ * Le compte suivant ne part que quand plus rien n'est « En file » ni
+ * « Pipeline… » : la charge serveur reste celle d'un seul compte, quel que
+ * soit le nombre de sources.
+ */
+export function demarrerMajToutesSources(
+  comptes: Array<{ compteReferenceId: string; handle: string; langue: string }>,
+): string {
+  const jobId = newJob(`Mise à jour séquentielle — ${comptes.length} source(s)`);
+  const jeton: Jeton = { annule: false };
+  jetonCourant = jeton;
+  setMaj({
+    actif: true,
+    total: comptes.length,
+    faits: 0,
+    handle: null,
+    phase: "attente",
+    restant: 0,
+  });
+
+  void (async () => {
+    try {
+      log(
+        jobId,
+        "info",
+        `Séquence — un compte à la fois, file vidée entre chaque`,
+        comptes.map((c) => `@${handleTiktokDepuisSaisie(c.handle)}`).join(", "),
+      );
+
+      for (const [i, compte] of comptes.entries()) {
+        const rang = `[${i + 1}/${comptes.length}]`;
+        const handle = handleTiktokDepuisSaisie(compte.handle);
+
+        if (jeton.annule) {
+          log(jobId, "warn", `Arrêt demandé — ${i} compte(s) traité(s)`);
+          fin(jobId, "ok");
+          return;
+        }
+
+        setMaj({ faits: i, handle, phase: "attente" });
+        const attente = await attendreFileVide(jobId, jeton);
+        if (attente === "annule") {
+          log(jobId, "warn", `Arrêt demandé — ${i} compte(s) traité(s)`);
+          fin(jobId, "ok");
+          return;
+        }
+        if (attente === "bloquee") {
+          log(jobId, "error", `Séquence arrêtée avant ${rang} @${handle}`);
+          fin(jobId, "echec");
+          return;
+        }
+
+        setMaj({ faits: i, handle, phase: "import" });
+        log(jobId, "info", `${rang} @${handle} — mise à jour`);
+        const sousJob = demarrerImportCompte({
+          compteReferenceId: compte.compteReferenceId,
+          handle: compte.handle,
+          langue: compte.langue,
+          nouveauxSeulement: true,
+        });
+        const statut = await attendreFinJob(sousJob);
+        log(
+          jobId,
+          statut === "echec" ? "warn" : "ok",
+          `${rang} @${handle} — ${statut === "echec" ? "échec (on continue)" : "terminé"}`,
+        );
+        setMaj({ faits: i + 1 });
+      }
+
+      log(jobId, "ok", `Séquence terminée — ${comptes.length} compte(s)`);
+      fin(jobId, "ok");
+    } catch (e) {
+      log(jobId, "error", "Séquence interrompue", (e as Error).message);
+      fin(jobId, "echec");
+    } finally {
+      setMaj(MAJ_ETAT_VIDE);
+      if (jetonCourant === jeton) jetonCourant = null;
+    }
+  })();
+
+  return jobId;
 }

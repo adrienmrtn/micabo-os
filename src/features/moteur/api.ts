@@ -2803,6 +2803,30 @@ export interface StatsImportBatch {
 }
 
 /**
+ * Ce qui reste en cours côté serveur, tous batches confondus — exactement ce
+ * que l'historique montre en « En file » et « Pipeline… ».
+ *
+ * Les lignes `failed` sont hors compte : le drain les reprend, et elles
+ * repassent alors en `running`. Les compter bloquerait la séquence sur un
+ * échec définitif.
+ */
+export async function fileImportEnCours(): Promise<{ file: number; pipeline: number }> {
+  const [scrapes, pipelines] = await Promise.all([
+    supabase
+      .from("import_file")
+      .select("id", { count: "exact", head: true })
+      .in("statut", ["pending", "running"]),
+    supabase
+      .from("contenus")
+      .select("id", { count: "exact", head: true })
+      .in("import_statut", ["pending", "running"]),
+  ]);
+  if (scrapes.error) throw scrapes.error;
+  if (pipelines.error) throw pipelines.error;
+  return { file: scrapes.count ?? 0, pipeline: pipelines.count ?? 0 };
+}
+
+/**
  * Progression d'un batch, lue directement en base.
  *
  * Elle passait par l'Edge Function : pendant un import la concurrence Edge est

@@ -680,10 +680,14 @@ export const fr = {
       updateLance: "Mise à jour lancée — rattrapage des slideshows manquants (voir logs).",
       updateToutes: "Mettre à jour les sources",
       updateToutesAide:
-        "Pour chaque compte déjà importé : enfile les slideshows du profil absents du stock. Les comptes passent 2 par 2 pour ne pas saturer le serveur.",
+        "Pour chaque compte déjà importé : enfile les slideshows du profil absents du stock. Les comptes passent un par un, et le suivant ne part qu'une fois la file entièrement vidée — la charge serveur reste celle d'un seul compte.",
       updateToutesGo: "Mettre à jour ({{count}})",
       updateToutesLance:
-        "Mise à jour lancée sur {{count}} source(s) — les slideshows manquants sont enfilés.",
+        "Mise à jour lancée sur {{count}} source(s) — un compte à la fois, file vidée entre chaque.",
+      updateToutesEnCours: "{{index}}/{{total}} — @{{handle}} en cours",
+      updateToutesAttente:
+        "{{index}}/{{total}} — attente que la file se vide ({{restant}} restant(s))",
+      updateToutesStop: "Arrêter",
       updateToutesVide:
         "Aucune source déjà importée à mettre à jour (lance d’abord Extraire).",
       importLien: "Importer un TikTok",

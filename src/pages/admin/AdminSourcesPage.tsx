@@ -31,7 +31,14 @@ import {
   supprimerSource,
   type LigneJournalOubli,
 } from "@/features/moteur/api";
-import { demarrerImportCompte, demarrerImportLien } from "@/features/moteur/importJobs";
+import {
+  annulerMajSources,
+  demarrerImportCompte,
+  demarrerImportLien,
+  demarrerMajToutesSources,
+  getMajSources,
+  subscribeMajSources,
+} from "@/features/moteur/importJobs";
 import { ImportHistoriquePanel } from "@/features/moteur/ImportHistoriquePanel";
 import { ImportJobsPanel } from "@/features/moteur/ImportJobsPanel";
 import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
@@ -974,6 +981,7 @@ function FormAjoutSource({ niches }: { niches: NicheLabel[] }) {
 function BarreUpdateSources({ sources }: { sources: CompteReference[] }) {
   const { t } = useTranslation();
   const [message, setMessage] = React.useState<string | null>(null);
+  const maj = React.useSyncExternalStore(subscribeMajSources, getMajSources, getMajSources);
   const aJour = sources.filter((s) => s.is_active && s.dernier_scrape_at && s.langue);
 
   const lancer = () => {
@@ -981,28 +989,48 @@ function BarreUpdateSources({ sources }: { sources: CompteReference[] }) {
       setMessage(t("sources.updateToutesVide"));
       return;
     }
-    for (const s of aJour) {
-      demarrerImportCompte({
+    demarrerMajToutesSources(
+      aJour.map((s) => ({
         compteReferenceId: s.id,
         handle: s.handle_tiktok,
         langue: s.langue,
-        nouveauxSeulement: true,
-      });
-    }
+      })),
+    );
     setMessage(t("sources.updateToutesLance", { count: aJour.length }));
   };
+
+  const enCours = maj.actif
+    ? maj.phase === "attente"
+      ? t("sources.updateToutesAttente", {
+          index: maj.faits + 1,
+          total: maj.total,
+          restant: maj.restant,
+        })
+      : t("sources.updateToutesEnCours", {
+          index: maj.faits + 1,
+          total: maj.total,
+          handle: maj.handle ?? "",
+        })
+    : null;
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
       <div className="min-w-0 space-y-1">
         <p className="text-sm font-medium">{t("sources.updateToutes")}</p>
         <p className="text-xs text-muted-foreground">{t("sources.updateToutesAide")}</p>
+        {enCours && <p className="text-xs font-medium text-primary">{enCours}</p>}
         {message && <p className="text-xs text-muted-foreground">{message}</p>}
       </div>
-      <Button disabled={aJour.length === 0} onClick={lancer}>
-        <RefreshCw className="size-3.5" />
-        {t("sources.updateToutesGo", { count: aJour.length })}
-      </Button>
+      {maj.actif ? (
+        <Button variant="outline" onClick={() => annulerMajSources()}>
+          {t("sources.updateToutesStop")}
+        </Button>
+      ) : (
+        <Button disabled={aJour.length === 0} onClick={lancer}>
+          <RefreshCw className="size-3.5" />
+          {t("sources.updateToutesGo", { count: aJour.length })}
+        </Button>
+      )}
     </div>
   );
 }
