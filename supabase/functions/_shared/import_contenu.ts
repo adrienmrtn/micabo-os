@@ -1624,6 +1624,8 @@ export function estUrlDePost(url: string): boolean {
   return /\/(?:photo|video)\/\d+/.test(url);
 }
 
+const LOT_ENQUEUE = 100;
+
 /** Enfile des URLs pour scrape+pipeline serveur (idempotent sur pending/running). */
 export async function enqueueImportUrls(
   supabase: Supabase,
@@ -1641,28 +1643,41 @@ export async function enqueueImportUrls(
   let enqueued = 0;
   let skipped = 0;
   const invalides: string[] = [];
+
+  // Une URL de profil enfilée comme un post consomme un run Apify, échoue,
+  // et brûle ses tentatives jusqu'à mourir en file. Autant la refuser ici.
+  const aEnfiler: string[] = [];
   for (const url of opts.urls) {
-    // Une URL de profil enfilée comme un post consomme un run Apify, échoue,
-    // et brûle ses tentatives jusqu'à mourir en file. Autant la refuser ici.
-    if (!estUrlDePost(url)) {
-      invalides.push(url);
-      continue;
-    }
-    const { error } = await supabase.from("import_file").insert({
-      post_url: url,
-      compte_reference_id: opts.compteReferenceId,
-      label_ids: opts.labelIds ?? [],
-      batch_id: batchId,
-      langue,
-      statut: "pending",
-    });
-    if (error) {
-      // Unique pending/running sur post_url → déjà en file
-      skipped += 1;
-      continue;
-    }
-    enqueued += 1;
+    if (estUrlDePost(url)) aEnfiler.push(url);
+    else invalides.push(url);
   }
+
+  const ligne = (url: string) => ({
+    post_url: url,
+    compte_reference_id: opts.compteReferenceId,
+    label_ids: opts.labelIds ?? [],
+    batch_id: batchId,
+    langue,
+    statut: "pending",
+  });
+
+  // Par paquets : 230 insertions unitaires approchaient le mur Edge de 150 s.
+  // L'index unique est partiel, donc pas d'`on conflict` possible — en cas de
+  // doublon dans un paquet, on retombe ligne à ligne pour ne perdre que lui.
+  for (let i = 0; i < aEnfiler.length; i += LOT_ENQUEUE) {
+    const lot = aEnfiler.slice(i, i + LOT_ENQUEUE);
+    const { error } = await supabase.from("import_file").insert(lot.map(ligne));
+    if (!error) {
+      enqueued += lot.length;
+      continue;
+    }
+    for (const url of lot) {
+      const { error: unitaire } = await supabase.from("import_file").insert(ligne(url));
+      if (unitaire) skipped += 1;
+      else enqueued += 1;
+    }
+  }
+
   return { batchId, enqueued, skipped, invalides };
 }
 
