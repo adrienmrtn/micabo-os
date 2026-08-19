@@ -83,6 +83,26 @@ export function cumulerCompteurs(a: OubliCompteurs, b: Partial<OubliCompteurs>):
   };
 }
 
+export type NiveauJournalOubli = "info" | "ok" | "warn" | "error";
+
+export interface LigneJournalOubli {
+  at: string;
+  niveau: NiveauJournalOubli;
+  message: string;
+}
+
+/** Une ligne lisible des compteurs — pour le journal admin, pas pour l'UI i18n. */
+export function resumeCompteurs(c: Partial<OubliCompteurs>): string {
+  const parts: string[] = [];
+  if (c.contenus) parts.push(`${c.contenus} slideshow(s)`);
+  if (c.medias) parts.push(`${c.medias} image(s)`);
+  if (c.fichiers) parts.push(`${c.fichiers} fichier(s)`);
+  if (c.posts) parts.push(`${c.posts} post(s)`);
+  if (c.sujets) parts.push(`${c.sujets} sujet(s)`);
+  if (c.importFile) parts.push(`${c.importFile} ligne(s) de file`);
+  return parts.join(" · ") || "rien";
+}
+
 /** Découpe pour les `in(...)` PostgREST et les `remove(...)` storage (URL/payload bornés). */
 export function decouperEnLots<T>(items: T[], taille: number): T[][] {
   const max = Math.max(1, Math.floor(taille));

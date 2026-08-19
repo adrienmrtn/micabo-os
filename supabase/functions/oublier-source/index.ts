@@ -41,9 +41,14 @@ Deno.serve(async (request) => {
 
     const brut = Number(corps.lot ?? LOT_CONTENUS_DEFAUT);
     const lot = Number.isFinite(brut) ? Math.min(60, Math.max(1, Math.floor(brut))) : LOT_CONTENUS_DEFAUT;
+    console.log(`[oubli] passe demandée id=${compteReferenceId} lot=${lot}`);
     const r = await oublierSourceLot(supabase, compteReferenceId, lot);
+    console.log(
+      `[oubli] passe finie @${r.handle || "?"} termine=${r.termine} restant=${r.restant} lignes=${r.journal.length}`,
+    );
     return json({ ok: true, ...r });
   } catch (error) {
+    console.error(`[oubli] échec id=${compteReferenceId} : ${messageErreur(error)}`);
     return json({ ok: false, error: messageErreur(error) }, 500);
   }
 });

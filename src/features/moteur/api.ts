@@ -22,6 +22,7 @@ import type {
   EloImportRapport,
   Passage,
 } from "./types";
+import type { LigneJournalOubli } from "./oubliSource";
 import { compteEnProcessus } from "./warmup";
 import { ugcVisages } from "./ugcVisages";
 import { corpsAssignationUgcVideoTest } from "./corpsAssignationUgcVideoTest";
@@ -252,6 +253,8 @@ export interface OubliSourceCompteurs {
   importFile: number;
 }
 
+export type { LigneJournalOubli, NiveauJournalOubli } from "./oubliSource";
+
 /** Ce qu'« oublier » cette source détruirait — sans rien toucher. */
 export function apercuOubliSource(compteReferenceId: string) {
   return invoke<{ ok: boolean; apercu: OubliSourceApercu }>("oublier-source", {
@@ -268,11 +271,18 @@ function oublierSourcePasse(compteReferenceId: string) {
     termine: boolean;
     restant: number;
     supprimes: OubliSourceCompteurs;
+    journal?: LigneJournalOubli[];
   }>("oublier-source", { compteReferenceId });
 }
 
 /** Passes maximum : garde-fou contre une boucle infinie si l'Edge ne progresse plus. */
 const OUBLI_PASSES_MAX = 200;
+
+export interface OubliSourceResultat {
+  handle: string;
+  fait: OubliSourceCompteurs;
+  journal: LigneJournalOubli[];
+}
 
 /**
  * Oublie une source de bout en bout : slideshows, images, posts, sujets legacy,
@@ -281,8 +291,12 @@ const OUBLI_PASSES_MAX = 200;
  */
 export async function oublierSource(
   compteReferenceId: string,
-  onProgres?: (fait: OubliSourceCompteurs, restant: number) => void,
-): Promise<OubliSourceCompteurs> {
+  onProgres?: (
+    fait: OubliSourceCompteurs,
+    restant: number,
+    journal: LigneJournalOubli[],
+  ) => void,
+): Promise<OubliSourceResultat> {
   let total: OubliSourceCompteurs = {
     contenus: 0,
     medias: 0,
@@ -291,8 +305,16 @@ export async function oublierSource(
     sujets: 0,
     importFile: 0,
   };
+  const journal: LigneJournalOubli[] = [];
+  const noter = (niveau: LigneJournalOubli["niveau"], message: string) => {
+    journal.push({ at: new Date().toISOString(), niveau, message });
+    onProgres?.(total, -1, journal);
+  };
+
+  noter("info", "Démarrage de l'oubli — l'Edge travaille par lots (~15 slideshows).");
 
   for (let passe = 0; passe < OUBLI_PASSES_MAX; passe += 1) {
+    noter("info", `Passe ${passe + 1} — appel de l'Edge…`);
     const r = await oublierSourcePasse(compteReferenceId);
     total = {
       contenus: total.contenus + r.supprimes.contenus,
@@ -302,8 +324,13 @@ export async function oublierSource(
       sujets: total.sujets + r.supprimes.sujets,
       importFile: total.importFile + r.supprimes.importFile,
     };
-    onProgres?.(total, r.restant);
-    if (r.termine) return total;
+    journal.push(...(r.journal ?? []));
+    onProgres?.(total, r.restant, journal);
+    if (r.termine) {
+      noter("ok", "Oubli terminé — le compte a disparu de la liste.");
+      return { handle: r.handle, fait: total, journal };
+    }
+    noter("info", `Encore ${r.restant} slideshow(s) — prochaine passe.`);
   }
 
   throw new Error("Oubli interrompu : trop de passages sans fin (relance pour finir).");
