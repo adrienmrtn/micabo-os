@@ -14,6 +14,7 @@ import {
   MessageCircle,
   MessageSquareQuote,
   MoonStar,
+  Scissors,
   Settings,
   UserRound,
   Users,
@@ -59,6 +60,12 @@ export function AdminLayout() {
               label: t("nav.slideshows"),
               icon: ListOrdered,
               description: t("navDesc.slideshows"),
+            },
+            {
+              to: "/admin/papier",
+              label: t("nav.papier"),
+              icon: Scissors,
+              description: t("navDesc.papier"),
             },
             {
               to: "/admin/bibliotheque",

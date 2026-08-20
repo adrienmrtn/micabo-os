@@ -3110,6 +3110,77 @@ export const scraperSourceVersContenus = (compteReferenceId: string) =>
 export const lancerMinuitVnext = (body: Record<string, unknown> = {}) =>
   invoke<{ ok: boolean; saute?: boolean; jour?: string }>("minuit-vnext", body);
 
+export type PapierStatut = "queued" | "scripting" | "images" | "clips" | "ready" | "failed";
+
+export type PapierJournal = { at: string; etape: string; detail: string };
+
+export type PapierScene = {
+  id: string;
+  master_id: string;
+  index: number;
+  narration: string;
+  overlay: string;
+  image_prompt: string;
+  video_prompt: string;
+  image_path: string | null;
+  image_url: string | null;
+  clip_path: string | null;
+  clip_url: string | null;
+  duree_cible: 4 | 6 | 8;
+};
+
+export type PapierMaster = {
+  id: string;
+  date_publication: string;
+  topic: string | null;
+  kind: string;
+  narration_style: string;
+  script: { title?: string; hook?: string; cta?: string } | null;
+  statut: PapierStatut;
+  etape: string | null;
+  progression: number;
+  erreur: string | null;
+  journal: PapierJournal[];
+  created_at: string;
+  updated_at: string;
+  papier_scenes?: PapierScene[];
+};
+
+export type PapierTickResultat = {
+  ok: boolean;
+  done?: boolean;
+  kick?: boolean;
+  masterId?: string;
+  date?: string;
+  statut?: PapierStatut;
+  progression?: number;
+  detail?: string;
+  error?: string;
+};
+
+export async function listerPapierMasters(limite = 14): Promise<PapierMaster[]> {
+  const { data, error } = await supabase
+    .from("papier_masters")
+    .select("*, papier_scenes(*)")
+    .order("date_publication", { ascending: false })
+    .limit(limite);
+  if (error) throw error;
+  return (data ?? []).map((row) => {
+    const r = row as PapierMaster;
+    const scenes = [...(r.papier_scenes ?? [])].sort((a, b) => a.index - b.index);
+    return { ...r, journal: Array.isArray(r.journal) ? r.journal : [], papier_scenes: scenes };
+  });
+}
+
+export const lancerPapierJour = (body: { date?: string; topic?: string } = {}) =>
+  invoke<PapierTickResultat>("papier-cm", { action: "assurer", ...body });
+
+export const relancerPapier = (id: string) =>
+  invoke<PapierTickResultat>("papier-cm", { action: "relancer", id });
+
+export const regenererPapier = (id: string, topic?: string) =>
+  invoke<PapierTickResultat>("papier-cm", { action: "regenerer", id, topic });
+
 export const lancerScoringVnext = (compteId?: string) =>
   invoke<{ ok: boolean; contenus: number; comptes: number }>("scoring", {
     compteId: compteId ?? null,

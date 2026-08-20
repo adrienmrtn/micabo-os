@@ -4,6 +4,7 @@ import {
   type AssignationCompteResultat,
 } from "../_shared/assignation_contenu.ts";
 import { kickAssignationUgcVideo } from "../_shared/assignation_ugc_video.ts";
+import { kickPapierCm } from "../_shared/papier_master.ts";
 import { scrapeStats } from "../_shared/apify.ts";
 import {
   kickRattrapageElo,
@@ -46,12 +47,13 @@ const POSTS_RELEVES = 30;
  *   - crée passages statut=assigne (musique + hashtags)
  *
  *   {}  → kick rattrapage-elo (async) + assignation + upscale + ugc
- *   { etapes?: ['stats'|'scores'|'assignation'|'upscale'|'variations'|'rattrapage'|'ugc_ai_video'], compteId?, date?, forcer? }
+ *   { etapes?: ['stats'|'scores'|'assignation'|'upscale'|'variations'|'rattrapage'|'ugc_ai_video'|'papier_cm'], compteId?, date?, forcer? }
  *   etape `rattrapage` : stats 4j + ELO langue/compte + snapshot vues (contourne PAUSE_ELO_RUNTIME)
  *                        — kick async si tous comptes (évite timeout cron)
  *   etape `upscale` : SeedVR Fal sur photos assignées du jour sans upscale_le
  *                     (strip C2PA en fin dans le drain — pas de double strip)
- *   etape `ugc_ai_video` : EN DERNIER — kick drain assignation-ugc-video (NB→Kling→concat)
+ *   etape `ugc_ai_video` : kick drain assignation-ugc-video (NB→Kling→concat)
+ *   etape `papier_cm` : master papier FR du jour (script → Nano Banana → Seedance)
  */
 Deno.serve(async (request) => {
   const denied = await assertAuthorised(request);
@@ -100,7 +102,7 @@ Deno.serve(async (request) => {
     // ugc_ai_video : TOUJOURS en dernier (après slideshow + upscale).
     const etapes: string[] = Array.isArray(body?.etapes)
       ? body.etapes
-      : ["rattrapage", "assignation", "upscale", "ugc_ai_video"];
+      : ["rattrapage", "assignation", "upscale", "ugc_ai_video", "papier_cm"];
     const jour = body?.date ?? aujourdhuiParis();
     const compteId: string | null = body?.compteId ?? null;
 
@@ -253,6 +255,14 @@ Deno.serve(async (request) => {
         kick: true,
         detail:
           "drain assignation-ugc-video démarré (Nano Banana → Kling → concat utilisation)",
+      };
+    }
+    if (etapes.includes("papier_cm")) {
+      kickPapierCm(request, { date: jour });
+      out.papier_cm = {
+        ok: true,
+        kick: true,
+        detail: "master papier FR du jour (script → Nano Banana → Seedance, ticks auto-chaînés)",
       };
     }
 
