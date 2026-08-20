@@ -4939,53 +4939,42 @@ export type MediaBiblioLabel = {
   est_hook: boolean;
 };
 
-async function idLabelHookClient(): Promise<string | null> {
-  const { data } = await supabase.from("labels").select("id").eq("slug", SLUG_HOOK).maybeSingle();
-  return (data?.id as string | undefined) ?? null;
-}
-
-/** Photos propres du label (intersection Hook optionnelle). */
+/** Photos propres du label (intersection Hook via `est_hook`). */
 export async function listerBiblioDuLabel(
   labelId: string,
   opts: { hookSeulement?: boolean; exclureHook?: boolean } = {},
 ): Promise<MediaBiblioLabel[]> {
-  const hookId = await idLabelHookClient();
   const { data: liens, error: errL } = await supabase
     .from("media_labels")
     .select("media_id")
     .eq("label_id", labelId)
     .limit(800);
   if (errL) throw errL;
-  let ids = [...new Set((liens ?? []).map((l) => l.media_id as string))];
-  if ((opts.hookSeulement || opts.exclureHook) && hookId && ids.length) {
-    const { data: hooks, error: errH } = await supabase
-      .from("media_labels")
-      .select("media_id")
-      .eq("label_id", hookId)
-      .in("media_id", ids);
-    if (errH) throw errH;
-    const set = new Set((hooks ?? []).map((h) => h.media_id as string));
-    ids = opts.hookSeulement
-      ? ids.filter((id) => set.has(id))
-      : ids.filter((id) => !set.has(id));
-  }
+  const ids = [...new Set((liens ?? []).map((l) => l.media_id as string))];
   if (ids.length === 0) return [];
-  let q = supabase
-    .from("media_library")
-    .select("id, url, caption, est_hook")
-    .in("id", ids)
-    .like("storage_path", "propre/%")
-    .eq("texte_restant", false);
-  if (opts.hookSeulement && !hookId) q = q.eq("est_hook", true);
-  if (opts.exclureHook) q = q.eq("est_hook", false);
-  const { data, error } = await q.limit(400);
-  if (error) throw error;
-  return (data ?? []).map((m) => ({
-    id: m.id as string,
-    url: m.url as string,
-    caption: (m.caption as string | null) ?? null,
-    est_hook: Boolean(m.est_hook),
-  }));
+
+  const out: MediaBiblioLabel[] = [];
+  for (const lot of decouperEnLots(ids, 80)) {
+    let q = supabase
+      .from("media_library")
+      .select("id, url, caption, est_hook")
+      .in("id", lot)
+      .like("storage_path", "propre/%")
+      .eq("texte_restant", false);
+    if (opts.hookSeulement) q = q.eq("est_hook", true);
+    if (opts.exclureHook) q = q.eq("est_hook", false);
+    const { data, error } = await q;
+    if (error) throw error;
+    for (const m of data ?? []) {
+      out.push({
+        id: m.id as string,
+        url: m.url as string,
+        caption: (m.caption as string | null) ?? null,
+        est_hook: Boolean(m.est_hook),
+      });
+    }
+  }
+  return out.slice(0, 400);
 }
 
 export const listerImagesHookDuLabel = (labelId: string) =>
