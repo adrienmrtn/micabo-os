@@ -7,6 +7,7 @@ import {
   hookTexteDepuisDeck,
   normaliserEloManuel,
   parserSlidesGenerees,
+  requeteVisuel,
   scoreCaptionCritere,
   tirerMediaParCritere,
   tokeniserCritere,
@@ -25,6 +26,13 @@ describe("tokeniserCritere / scoreCaptionCritere", () => {
     );
     expect(scoreCaptionCritere("A sunny beach", "cafe dark")).toBe(0);
   });
+
+  it("Ctrl+F : café (slide) trouve coffee / cafeteria", () => {
+    expect(scoreCaptionCritere("A woman holding a coffee cup", "Prends un café le matin")).toBeGreaterThan(
+      0,
+    );
+    expect(scoreCaptionCritere("People sitting in a cafeteria", "café")).toBeGreaterThan(0);
+  });
 });
 
 describe("tirerMediaParCritere", () => {
@@ -38,6 +46,17 @@ describe("tirerMediaParCritere", () => {
     const r = tirerMediaParCritere(pool, "cafe dark", new Set());
     expect(r.fallback).toBe(false);
     expect(r.media?.id).toBe("a");
+  });
+
+  it("cherche le texte de la slide, pas seulement le critère IA", () => {
+    const r = tirerMediaParCritere(
+      pool,
+      requeteVisuel("morning ritual", "Prends un café"),
+      new Set(),
+    );
+    expect(r.fallback).toBe(false);
+    expect(r.media?.id).toBe("a");
+    expect(r.motif).toMatch(/cafe/i);
   });
 
   it("exclut les ids déjà pris", () => {
