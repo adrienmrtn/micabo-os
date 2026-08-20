@@ -362,6 +362,12 @@ export interface Label {
   ugc_ai_video: boolean;
   /** Genre imposé pour les prénoms TikTok des créateurs de ce label. */
   genre: LabelGenre | null;
+  /** Thème / style rédigé par l'admin (création semi-manuelle). */
+  style_theme?: string | null;
+  /** Prompt dédié pour rédiger les slides de ce label. */
+  prompt_creation?: string | null;
+  /** Exemples de textes déjà rédigés (feed few-shot). */
+  exemples_feed?: string[];
 }
 
 /** Slide language-agnostique d'un contenu (visuel partagé). */
@@ -370,6 +376,10 @@ export interface ContenuSlide {
   media_id: string | null;
   raw_url?: string | null;
   reference_url?: string | null;
+  /** Image figée (hook, ou choix admin) — jamais re-tirée à l'assignation. */
+  pinned?: boolean;
+  /** Mots-clés caption (sujet + ton) pour résoudre l'image à l'assignation. */
+  critere?: string | null;
 }
 
 /** Slide traduite + placement Sophia (par langue). */
@@ -434,6 +444,10 @@ export interface Contenu {
   variation_langue: string | null;
   /** Marqué UGC — scan visage premier plan sur les images. */
   ugc_compatible: boolean;
+  /** import = pipeline TikTok ; manuel = création semi-manuelle admin. */
+  creation_mode?: "import" | "manuel";
+  /** Slideshow d'origine du hook (musique reprise). */
+  hook_contenu_id?: string | null;
   created_at: string;
 }
 

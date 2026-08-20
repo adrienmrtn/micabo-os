@@ -6,8 +6,8 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
-import { Check, ImageUp, RefreshCw, ScanText, Sparkles, Trash2, X } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import { Check, ImageUp, PenLine, RefreshCw, ScanText, Sparkles, Trash2, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -364,6 +364,13 @@ const DeckLangue = React.memo(function DeckLangue({
                     {t("slideshows.sansTexte")}
                   </p>
                 )}
+                {s.pinned ? (
+                  <p className="text-[10px] text-muted-foreground">{t("creation.pinned")}</p>
+                ) : s.critere ? (
+                  <p className="text-[10px] text-muted-foreground">
+                    {t("creation.critere")} : {s.critere}
+                  </p>
+                ) : null}
               </div>
             </div>
           );
@@ -1140,6 +1147,9 @@ function DetailSlideshow({
               </Badge>
               <Badge variant="outline">{d.import_statut}</Badge>
               {d.import_etape && <Badge variant="outline">{d.import_etape}</Badge>}
+              {d.creation_mode === "manuel" && (
+                <Badge variant="outline">{t("slideshows.manuelBadge")}</Badge>
+              )}
               {d.ugc_compatible && (
                 <Badge variant="success" className="gap-1">
                   <Check className="size-3" />
@@ -1726,6 +1736,13 @@ export function AdminSlideshowsPage() {
               <CardTitle>{t("slideshows.title")}</CardTitle>
               <CardDescription>{t("slideshows.subtitle")}</CardDescription>
             </div>
+            <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" asChild>
+              <Link to="/admin/creation">
+                <PenLine className="size-4" />
+                {t("labels.creerPost")}
+              </Link>
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -1741,6 +1758,7 @@ export function AdminSlideshowsPage() {
                   })
                 : t("slideshows.reimportPhotos")}
             </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -2063,6 +2081,11 @@ export function AdminSlideshowsPage() {
                       >
                         {c.statut}
                       </Badge>
+                      {c.creation_mode === "manuel" && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {t("slideshows.manuelBadge")}
+                        </Badge>
+                      )}
                       {c.ugc_compatible && (
                         <Badge variant="success" className="gap-0.5 text-[10px]">
                           <Check className="size-2.5" />

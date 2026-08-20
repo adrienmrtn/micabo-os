@@ -36,6 +36,12 @@ import {
 } from "./statsSlideshowsCompte";
 import { comptePrincipal, normaliserTypeCompte, resoudrePremierCompte } from "./comptesCm";
 import { estLabelSysteme, SLUG_HOOK } from "./mediaCaption";
+import {
+  ELO_MANUEL_DEFAUT,
+  hookTexteDepuisDeck,
+  SLIDES_MANUEL_MAX,
+  SLIDES_MANUEL_MIN,
+} from "./creationManuelle";
 import { normaliserReglagesPapier } from "./papierReglages";
 import type { CompteIdentifiants, CompteResumePoster, TypeCompte } from "./types";
 
@@ -4882,6 +4888,9 @@ export async function majLabel(
     couleur?: string | null;
     ugc_ai_video?: boolean;
     genre?: "homme" | "femme" | null;
+    style_theme?: string | null;
+    prompt_creation?: string | null;
+    exemples_feed?: string[];
   },
 ): Promise<void> {
   const body: Record<string, unknown> = { ...patch };
@@ -4889,6 +4898,235 @@ export async function majLabel(
   const { error } = await supabase.from("labels").update(body).eq("id", id);
   if (error) throw error;
 }
+
+export type MediaBiblioLabel = {
+  id: string;
+  url: string;
+  caption: string | null;
+  est_hook: boolean;
+};
+
+async function idLabelHookClient(): Promise<string | null> {
+  const { data } = await supabase.from("labels").select("id").eq("slug", SLUG_HOOK).maybeSingle();
+  return (data?.id as string | undefined) ?? null;
+}
+
+/** Photos propres du label (intersection Hook optionnelle). */
+export async function listerBiblioDuLabel(
+  labelId: string,
+  opts: { hookSeulement?: boolean; exclureHook?: boolean } = {},
+): Promise<MediaBiblioLabel[]> {
+  const hookId = await idLabelHookClient();
+  const { data: liens, error: errL } = await supabase
+    .from("media_labels")
+    .select("media_id")
+    .eq("label_id", labelId)
+    .limit(800);
+  if (errL) throw errL;
+  let ids = [...new Set((liens ?? []).map((l) => l.media_id as string))];
+  if ((opts.hookSeulement || opts.exclureHook) && hookId && ids.length) {
+    const { data: hooks, error: errH } = await supabase
+      .from("media_labels")
+      .select("media_id")
+      .eq("label_id", hookId)
+      .in("media_id", ids);
+    if (errH) throw errH;
+    const set = new Set((hooks ?? []).map((h) => h.media_id as string));
+    ids = opts.hookSeulement
+      ? ids.filter((id) => set.has(id))
+      : ids.filter((id) => !set.has(id));
+  }
+  if (ids.length === 0) return [];
+  let q = supabase
+    .from("media_library")
+    .select("id, url, caption, est_hook")
+    .in("id", ids)
+    .like("storage_path", "propre/%")
+    .eq("texte_restant", false);
+  if (opts.hookSeulement && !hookId) q = q.eq("est_hook", true);
+  if (opts.exclureHook) q = q.eq("est_hook", false);
+  const { data, error } = await q.limit(400);
+  if (error) throw error;
+  return (data ?? []).map((m) => ({
+    id: m.id as string,
+    url: m.url as string,
+    caption: (m.caption as string | null) ?? null,
+    est_hook: Boolean(m.est_hook),
+  }));
+}
+
+export const listerImagesHookDuLabel = (labelId: string) =>
+  listerBiblioDuLabel(labelId, { hookSeulement: true });
+
+export interface HookDuLabel {
+  contenuId: string;
+  hook: string;
+  titre: string;
+  langueSource: string;
+  musiqueTitre: string | null;
+  createdAt: string;
+}
+
+/** Hooks = overlay 1ʳᵉ slide des slideshows du label (langue source). */
+export async function listerHooksDuLabel(labelId: string): Promise<HookDuLabel[]> {
+  const { data: liens, error: errL } = await supabase
+    .from("contenu_labels")
+    .select("contenu_id")
+    .eq("label_id", labelId);
+  if (errL) throw errL;
+  const ids = [...new Set((liens ?? []).map((r) => r.contenu_id as string))];
+  if (ids.length === 0) return [];
+
+  type Ligne = {
+    id: string;
+    titre: string;
+    langue_source: string;
+    musique_titre: string | null;
+    created_at: string;
+    structure_slides: ContenuSlide[];
+  };
+  const contenus: Ligne[] = [];
+  for (let i = 0; i < ids.length; i += 80) {
+    const slice = ids.slice(i, i + 80);
+    const { data, error } = await supabase
+      .from("contenus")
+      .select("id, titre, langue_source, musique_titre, created_at, structure_slides")
+      .in("id", slice)
+      .eq("statut", "valide")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    contenus.push(...((data ?? []) as Ligne[]));
+  }
+  contenus.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const top = contenus.slice(0, 200);
+  if (top.length === 0) return [];
+
+  const { data: decks, error: errD } = await supabase
+    .from("contenu_langues")
+    .select("contenu_id, langue, slides")
+    .in(
+      "contenu_id",
+      top.map((c) => c.id),
+    );
+  if (errD) throw errD;
+
+  const deckPar = new Map<
+    string,
+    Array<{ position?: number; texte_overlay?: string | null }>
+  >();
+  for (const d of decks ?? []) {
+    deckPar.set(
+      `${d.contenu_id}:${d.langue}`,
+      (d.slides ?? []) as Array<{ position?: number; texte_overlay?: string | null }>,
+    );
+  }
+
+  const firstMediaIds = top
+    .map((c) => {
+      const slides = [...(c.structure_slides ?? [])].sort((a, b) => a.position - b.position);
+      return slides[0]?.media_id ?? null;
+    })
+    .filter((id): id is string => Boolean(id));
+  const captions = new Map<string, string>();
+  if (firstMediaIds.length) {
+    const { data: medias } = await supabase
+      .from("media_library")
+      .select("id, caption")
+      .in("id", firstMediaIds);
+    for (const m of medias ?? []) {
+      const cap = String(m.caption ?? "").trim();
+      if (cap) captions.set(m.id as string, cap);
+    }
+  }
+
+  const out: HookDuLabel[] = [];
+  const vus = new Set<string>();
+  for (const c of top) {
+    const deck = deckPar.get(`${c.id}:${c.langue_source}`) ?? [];
+    let hook = hookTexteDepuisDeck(deck);
+    if (!hook) hook = (c.titre ?? "").trim();
+    if (!hook) {
+      const slides = [...(c.structure_slides ?? [])].sort((a, b) => a.position - b.position);
+      const mid = slides[0]?.media_id;
+      hook = (mid && captions.get(mid)) || "";
+    }
+    if (!hook) continue;
+    const cle = hook.toLowerCase();
+    if (vus.has(cle)) continue;
+    vus.add(cle);
+    out.push({
+      contenuId: c.id,
+      hook,
+      titre: c.titre,
+      langueSource: c.langue_source,
+      musiqueTitre: c.musique_titre,
+      createdAt: c.created_at,
+    });
+  }
+  return out;
+}
+
+export type SlideBrouillonManuel = {
+  position: number;
+  texte: string;
+  critere: string;
+  pinned: boolean;
+  media_id: string | null;
+  preview_media_id?: string | null;
+  preview_url?: string | null;
+  fallback?: boolean;
+  motif?: string;
+};
+
+export async function genererSlideshowManuel(input: {
+  labelId: string;
+  hook: string;
+  nbSlides: number;
+  promptExtra?: string;
+  hookMediaId?: string | null;
+}): Promise<SlideBrouillonManuel[]> {
+  const r = await invoke<{ ok: boolean; slides?: SlideBrouillonManuel[] }>(
+    "creation-manuelle",
+    {
+      action: "generer",
+      labelId: input.labelId,
+      hook: input.hook,
+      nbSlides: input.nbSlides,
+      promptExtra: input.promptExtra ?? "",
+      hookMediaId: input.hookMediaId ?? null,
+    },
+  );
+  return r.slides ?? [];
+}
+
+export async function previewTiragesManuel(
+  labelId: string,
+  slides: SlideBrouillonManuel[],
+): Promise<SlideBrouillonManuel[]> {
+  const r = await invoke<{ ok: boolean; slides?: SlideBrouillonManuel[] }>(
+    "creation-manuelle",
+    { action: "preview", labelId, slides },
+  );
+  return r.slides ?? [];
+}
+
+export async function validerSlideshowManuel(input: {
+  labelId: string;
+  hook: string;
+  hookContenuId?: string | null;
+  elo?: number;
+  langueSource?: string | null;
+  slides: SlideBrouillonManuel[];
+}): Promise<string> {
+  const r = await invoke<{ ok: boolean; contenuId?: string }>("creation-manuelle", {
+    action: "valider",
+    ...input,
+  });
+  if (!r.contenuId) throw new Error("Validation sans contenuId");
+  return r.contenuId;
+}
+
+export { ELO_MANUEL_DEFAUT, SLIDES_MANUEL_MAX, SLIDES_MANUEL_MIN };
 
 export async function supprimerLabel(id: string): Promise<void> {
   const { data: lab } = await supabase
