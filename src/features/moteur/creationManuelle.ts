@@ -8,27 +8,94 @@ const STOP = new Set([
   "a", "an", "the", "and", "or", "of", "to", "in", "on", "with", "for", "from",
   "de", "du", "des", "la", "le", "les", "un", "une", "et", "ou", "en", "au",
   "aux", "d", "l", "el", "los", "las", "und", "der", "die", "das",
+  "this", "that", "your", "you", "est", "pas", "plus", "dans", "qui", "que",
+  "pour", "par", "sur", "une", "how", "why", "what", "when", "not", "are",
 ]);
 
-export function tokeniserCritere(brut: string): string[] {
-  const t = brut
+/** Équivalents FR/EN courants : slide « café » ↔ caption Florence « coffee ». */
+const ALIAS: Record<string, string[]> = {
+  cafe: ["coffee", "espresso", "latte", "cappuccino"],
+  coffee: ["cafe", "espresso"],
+  livre: ["book", "books"],
+  book: ["livre", "books"],
+  books: ["book", "livre"],
+  lecture: ["reading", "book"],
+  reading: ["lecture", "book"],
+  femme: ["woman", "girl"],
+  woman: ["femme", "girl"],
+  homme: ["man", "guy"],
+  man: ["homme", "guy"],
+  voiture: ["car"],
+  car: ["voiture"],
+  argent: ["money", "cash"],
+  money: ["argent", "cash"],
+  sport: ["gym", "fitness", "workout"],
+  gym: ["sport", "fitness", "workout"],
+  cuisine: ["kitchen"],
+  kitchen: ["cuisine"],
+  plage: ["beach"],
+  beach: ["plage"],
+  ville: ["city"],
+  city: ["ville"],
+  rue: ["street"],
+  street: ["rue"],
+  bureau: ["office", "desk"],
+  office: ["bureau"],
+  matin: ["morning"],
+  morning: ["matin"],
+  nuit: ["night"],
+  night: ["nuit"],
+};
+
+export function normaliserRecherche(brut: string): string {
+  return brut
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
-  return t
+}
+
+export function tokeniserCritere(brut: string): string[] {
+  return normaliserRecherche(brut)
     .split(/[^a-z0-9]+/)
     .map((w) => w.trim())
     .filter((w) => w.length >= 2 && !STOP.has(w));
 }
 
-/** 0..1 : part des tokens du critère présents dans la caption. */
-export function scoreCaptionCritere(caption: string, critere: string): number {
-  const q = tokeniserCritere(critere);
-  if (q.length === 0) return 0;
-  const bag = new Set(tokeniserCritere(caption));
+/** Texte slide + critère IA → une seule requête Ctrl+F. */
+export function requeteVisuel(
+  critere?: string | null,
+  texte?: string | null,
+): string {
+  return [critere, texte]
+    .map((s) => String(s ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+/**
+ * 0..1 : part des mots de la requête trouvés dans la caption (sous-chaîne,
+ * accents ignorés, alias FR/EN). « café » matche « coffee » / « cafeteria ».
+ */
+export function scoreCaptionCritere(caption: string, requete: string): number {
+  const tokens = tokeniserCritere(requete).filter((t) => t.length >= 3);
+  const hay = normaliserRecherche(caption);
+  if (tokens.length === 0 || !hay) return 0;
   let hit = 0;
-  for (const tok of q) if (bag.has(tok)) hit += 1;
-  return hit / q.length;
+  for (const tok of tokens) {
+    const variantes = [tok, ...(ALIAS[tok] ?? [])].map(normaliserRecherche);
+    if (variantes.some((v) => v.length >= 3 && hay.includes(v))) hit += 1;
+  }
+  return hit / tokens.length;
+}
+
+export function tokensCaptionMatches(caption: string, requete: string): string[] {
+  const tokens = tokeniserCritere(requete).filter((t) => t.length >= 3);
+  const hay = normaliserRecherche(caption);
+  return tokens.filter((tok) =>
+    [tok, ...(ALIAS[tok] ?? [])]
+      .map(normaliserRecherche)
+      .some((v) => v.length >= 3 && hay.includes(v)),
+  );
 }
 
 export interface MediaCaptionCandidat {
@@ -45,8 +112,8 @@ export interface TirageVisuel<T extends MediaCaptionCandidat> {
 }
 
 /**
- * Résout une image pour un critère dans la biblio du label.
- * Match sur les captions ; sinon image aléatoire du pool (fallback + log).
+ * Résout une image : Ctrl+F des mots de la slide / du critère dans les captions.
+ * Sinon image aléatoire du pool (fallback + log).
  */
 export function tirerMediaParCritere<T extends MediaCaptionCandidat>(
   pool: T[],
@@ -59,7 +126,7 @@ export function tirerMediaParCritere<T extends MediaCaptionCandidat>(
     return { media: null, score: 0, fallback: true, motif: "pool vide" };
   }
 
-  const tokens = tokeniserCritere(critere);
+  const tokens = tokeniserCritere(critere).filter((t) => t.length >= 3);
   if (tokens.length > 0) {
     let meilleur: T | null = null;
     let meilleurScore = 0;
@@ -71,23 +138,27 @@ export function tirerMediaParCritere<T extends MediaCaptionCandidat>(
       }
     }
     if (meilleur && meilleurScore > 0) {
+      const hits = tokensCaptionMatches(meilleur.caption ?? "", critere);
       return {
         media: meilleur,
         score: meilleurScore,
         fallback: false,
-        motif: `match caption (${Math.round(meilleurScore * 100)} %)`,
+        motif: `match «${hits.slice(0, 4).join(", ")}» (${Math.round(meilleurScore * 100)} %)`,
       };
     }
   }
 
   const pick = disponibles[Math.floor(rng() * disponibles.length)]!;
+  const avecCaption = disponibles.some((m) => String(m.caption ?? "").trim());
   return {
     media: pick,
     score: 0,
     fallback: true,
-    motif: tokens.length
-      ? "aucun match caption → aléatoire du label"
-      : "critère vide → aléatoire du label",
+    motif: !tokens.length
+      ? "critère vide → aléatoire du label"
+      : avecCaption
+        ? "aucun match caption → aléatoire du label"
+        : "aucune caption dans le pool → aléatoire",
   };
 }
 
