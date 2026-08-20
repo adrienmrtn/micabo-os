@@ -5,7 +5,11 @@
 
 import { generateTextCreative } from "./gemini.ts";
 import { LANGUES_CIBLES } from "./import_contenu.ts";
+import { decouperEnLots } from "./oubli_source_cible.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
+
+/** Au-delà, PostgREST répond 400 Bad Request (URL `.in()` trop longue). */
+const LOT_IN = 80;
 
 export type Supabase = ReturnType<typeof serviceClient>;
 
@@ -175,41 +179,37 @@ export async function chargerBiblioLabel(
   labelId: string,
   opts: { hookSeulement?: boolean; exclureHook?: boolean } = {},
 ): Promise<Array<{ id: string; url: string; caption: string | null; est_hook: boolean }>> {
-  const hookId = await idLabelHook(supabase);
-  const { data: liens } = await supabase
+  const { data: liens, error: errL } = await supabase
     .from("media_labels")
     .select("media_id")
     .eq("label_id", labelId)
     .limit(800);
-  let ids = [...new Set((liens ?? []).map((l) => l.media_id as string))];
-  if ((opts.hookSeulement || opts.exclureHook) && hookId && ids.length) {
-    const { data: hooks } = await supabase
-      .from("media_labels")
-      .select("media_id")
-      .eq("label_id", hookId)
-      .in("media_id", ids);
-    const set = new Set((hooks ?? []).map((h) => h.media_id as string));
-    ids = opts.hookSeulement
-      ? ids.filter((id) => set.has(id))
-      : ids.filter((id) => !set.has(id));
-  }
+  if (errL) throw errL;
+  const ids = [...new Set((liens ?? []).map((l) => l.media_id as string))];
   if (ids.length === 0) return [];
-  let q = supabase
-    .from("media_library")
-    .select("id, url, caption, est_hook")
-    .in("id", ids)
-    .like("storage_path", "propre/%")
-    .eq("texte_restant", false);
-  if (opts.hookSeulement && !hookId) q = q.eq("est_hook", true);
-  if (opts.exclureHook) q = q.eq("est_hook", false);
-  const { data, error } = await q.limit(400);
-  if (error) throw error;
-  return (data ?? []).map((m) => ({
-    id: m.id as string,
-    url: m.url as string,
-    caption: (m.caption as string | null) ?? null,
-    est_hook: Boolean(m.est_hook),
-  }));
+
+  const out: Array<{ id: string; url: string; caption: string | null; est_hook: boolean }> = [];
+  for (const lot of decouperEnLots(ids, LOT_IN)) {
+    let q = supabase
+      .from("media_library")
+      .select("id, url, caption, est_hook")
+      .in("id", lot)
+      .like("storage_path", "propre/%")
+      .eq("texte_restant", false);
+    if (opts.hookSeulement) q = q.eq("est_hook", true);
+    if (opts.exclureHook) q = q.eq("est_hook", false);
+    const { data, error } = await q;
+    if (error) throw error;
+    for (const m of data ?? []) {
+      out.push({
+        id: m.id as string,
+        url: m.url as string,
+        caption: (m.caption as string | null) ?? null,
+        est_hook: Boolean(m.est_hook),
+      });
+    }
+  }
+  return out.slice(0, 400);
 }
 
 export interface SlideBrouillon {

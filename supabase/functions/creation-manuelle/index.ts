@@ -112,6 +112,8 @@ Deno.serve(async (request) => {
 
     return json({ ok: false, error: `action inconnue: ${action || "(vide)"}` }, 400);
   } catch (e) {
-    return json({ ok: false, error: messageErreur(e) }, 500);
+    const msg = messageErreur(e);
+    console.error(`[creation-manuelle] ${action}: ${msg}`);
+    return json({ ok: false, error: msg }, 500);
   }
 });
