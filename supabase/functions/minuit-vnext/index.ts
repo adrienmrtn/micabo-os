@@ -55,7 +55,7 @@ const POSTS_RELEVES = 30;
  *                     (strip C2PA en fin dans le drain — pas de double strip)
  *   etape `ugc_ai_video` : kick drain assignation-ugc-video (NB→Kling→concat)
  *   etape `papier_cm` : plus de master du jour — original seulement si la bibliothèque est vide
- *   etape `papier_assign` : chaque CM pioche un master FR inutilisé dans sa langue
+   *   etape `papier_assign` : chaque CM tire au hasard un master FR inutilisé dans sa langue
  */
 Deno.serve(async (request) => {
   const denied = await assertAuthorised(request);
@@ -274,7 +274,7 @@ Deno.serve(async (request) => {
         out.papier_assign = {
           ok: true,
           kick: true,
-          detail: "chaque CM pioche un master FR inutilisé dans sa langue",
+          detail: "chaque CM tire au hasard un master FR inutilisé dans sa langue",
         };
       }
     }

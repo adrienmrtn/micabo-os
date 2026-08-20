@@ -6,6 +6,7 @@ import {
   estLanguePapierPrete,
   hashtagsDepuisLangue,
   masterClipsComplets,
+  mastersLibresPourLangue,
   pairesAssignationPapier,
   piocherMasterInutilise,
   statutMasterDepuisAssets,
@@ -103,14 +104,17 @@ describe("master clips → ready", () => {
 describe("piocherMasterInutilise", () => {
   const a = { id: "m-a" };
   const b = { id: "m-b" };
+  const c = { id: "m-c" };
 
-  it("prend le plus ancien master pas encore servi dans cette langue", () => {
-    expect(piocherMasterInutilise([a, b], [], "de")).toBe("m-a");
+  it("tire au hasard parmi les masters encore libres", () => {
+    expect(piocherMasterInutilise([a, b, c], [], "de", () => 0)).toBe("m-a");
+    expect(piocherMasterInutilise([a, b, c], [], "de", () => 0.99)).toBe("m-c");
     expect(
       piocherMasterInutilise(
-        [a, b],
+        [a, b, c],
         [{ master_id: "m-a", langue: "de", est_test: false }],
         "de",
+        () => 0,
       ),
     ).toBe("m-b");
   });
@@ -131,14 +135,17 @@ describe("piocherMasterInutilise", () => {
     expect(
       piocherMasterInutilise([a], [{ master_id: "m-a", langue: "de", est_test: false }], "de"),
     ).toBeNull();
+    expect(
+      mastersLibresPourLangue([a], [{ master_id: "m-a", langue: "de", est_test: false }], "de"),
+    ).toEqual([]);
   });
 
   it("deux CM de la même langue piochent deux masters distincts", () => {
     const pris: Array<{ master_id: string; langue: string; est_test: boolean }> = [];
-    const premier = piocherMasterInutilise([a, b], pris, "en");
+    const premier = piocherMasterInutilise([a, b], pris, "en", () => 0);
     expect(premier).toBe("m-a");
     pris.push({ master_id: premier!, langue: "en", est_test: false });
-    const second = piocherMasterInutilise([a, b], pris, "en");
+    const second = piocherMasterInutilise([a, b], pris, "en", () => 0);
     expect(second).toBe("m-b");
   });
 });

@@ -2,11 +2,21 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Library, Loader2, RefreshCw, RotateCcw, Scissors, Settings2, Sparkles } from "lucide-react";
+import {
+  ChevronDown,
+  Library,
+  Loader2,
+  Moon,
+  RefreshCw,
+  RotateCcw,
+  Scissors,
+  Settings2,
+  Sparkles,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, EmptyState } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { aujourdhuiParis, ecrireReglage, lireReglages } from "@/features/moteur/api";
@@ -25,6 +35,7 @@ import {
 import { drapeauLangue, nomLangue } from "@/features/moteur/langues";
 import { REGLAGES_PAPIER_DEFAUT } from "@/features/moteur/papierReglages";
 import { TesterAssignationPapierCard } from "@/features/moteur/TesterAssignationPapierCard";
+import { cn } from "@/lib/utils";
 
 const STATUT_VARIANT: Record<PapierStatut, "default" | "secondary" | "destructive" | "outline"> = {
   queued: "outline",
@@ -39,8 +50,25 @@ function masterEnCours(m: PapierMaster): boolean {
   return !["ready", "failed"].includes(m.statut);
 }
 
+function videoFrDe(master: PapierMaster): string | null {
+  return (
+    master.video_url ||
+    master.papier_langues?.find((l) => l.langue === "fr" && l.video_url)?.video_url ||
+    null
+  );
+}
+
 function languesConsommees(master: PapierMaster): string[] {
   return [...new Set((master.papier_posts ?? []).map((p) => p.langue))].sort();
+}
+
+function vignetteMaster(master: PapierMaster): string | null {
+  return (
+    videoFrDe(master) ||
+    master.papier_scenes?.find((s) => s.clip_url)?.clip_url ||
+    master.papier_scenes?.find((s) => s.image_url)?.image_url ||
+    null
+  );
 }
 
 export function AdminPapierPage() {
@@ -69,10 +97,8 @@ export function AdminPapierPage() {
   const reglages = useQuery({ queryKey: ["reglages"], queryFn: lireReglages });
   const rows = liste.data ?? [];
   const enCours = rows.find(masterEnCours) ?? null;
-  const biblio = rows.filter((m) => m.statut === "ready" && Boolean(m.video_url));
+  const biblio = rows.filter((m) => m.statut === "ready" && Boolean(m.video_url || videoFrDe(m)));
   const failed = rows.filter((m) => m.statut === "failed");
-  const selection =
-    rows.find((m) => m.id === selectionId) ?? enCours ?? biblio[0] ?? failed[0] ?? null;
   const papier = reglages.data?.papier;
   const falUsage =
     reglages.data?.papier_fal_usage.date === jour ? reglages.data.papier_fal_usage.appels : 0;
@@ -119,183 +145,381 @@ export function AdminPapierPage() {
     relancerLangue.isPending ||
     assigner.isPending;
 
+  const erreur = lancer.error ?? relancer.error ?? regenerer.error ?? assigner.error;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">{t("papier.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("papier.subtitle")}</p>
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          <Link to="/admin/reglages#papier" className="inline-flex items-center gap-1 text-primary">
-            <Settings2 className="h-3.5 w-3.5" />
-            {t("papier.reglagesLien")}
-          </Link>
-          {papier ? (
-            <span>
-              {papier.fal_quota_jour <= 0
-                ? t("papier.quotaFalIllimite", { n: falUsage })
-                : t("papier.quotaFal", { n: falUsage, max: papier.fal_quota_jour })}
-            </span>
-          ) : null}
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <h1 className="font-display text-xl font-semibold tracking-tight">{t("papier.title")}</h1>
+          <p className="max-w-2xl text-sm text-muted-foreground">{t("papier.subtitle")}</p>
+          <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-muted-foreground">
+            <Link to="/admin/reglages#papier" className="inline-flex items-center gap-1 text-primary">
+              <Settings2 className="h-3.5 w-3.5" />
+              {t("papier.reglagesLien")}
+            </Link>
+            {papier ? (
+              <span>
+                {papier.fal_quota_jour <= 0
+                  ? t("papier.quotaFalIllimite", { n: falUsage })
+                  : t("papier.quotaFal", { n: falUsage, max: papier.fal_quota_jour })}
+              </span>
+            ) : null}
+          </div>
         </div>
-      </div>
+        {papier ? (
+          <Button
+            size="sm"
+            variant={papier.actif ? "ghost" : "outline"}
+            disabled={pause.isPending}
+            onClick={() => pause.mutate(!papier.actif)}
+          >
+            {papier.actif ? t("reglages.papierPause") : t("minuit.pauseOff")}
+          </Button>
+        ) : null}
+      </header>
 
       {papier && !papier.actif ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/50 bg-warning/10 px-3 py-2">
-          <p className="text-sm text-warning-foreground">{t("papier.enPause")}</p>
-          <Button size="sm" variant="outline" disabled={pause.isPending} onClick={() => pause.mutate(true)}>
-            {t("minuit.pauseOff")}
-          </Button>
-        </div>
-      ) : papier ? (
-        <div className="flex justify-end">
-          <Button size="sm" variant="ghost" disabled={pause.isPending} onClick={() => pause.mutate(false)}>
-            {t("reglages.papierPause")}
-          </Button>
+        <div className="rounded-md border border-warning/50 bg-warning/10 px-3 py-2 text-sm text-warning-foreground">
+          {t("papier.enPause")}
         </div>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Scissors className="h-4 w-4" />
-            {t("papier.aujourdHui", { date: jour })}
-          </CardTitle>
-          <CardDescription>{t("papier.aujourdHuiAide")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {enCours ? <ResumeMaster master={enCours} /> : (
-            <p className="text-sm text-muted-foreground">{t("papier.aucunAujourdhui")}</p>
-          )}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
+              <Library className="h-4 w-4" />
+              {t("papier.historique")}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {t("papier.biblioAide", { n: biblio.length })}
+            </p>
+          </div>
+        </div>
+
+        {liste.isLoading ? (
+          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+        ) : biblio.length === 0 ? (
+          <EmptyState
+            icon={<Library className="h-5 w-5" />}
+            title={t("papier.vide")}
+            description={t("papier.videAide")}
+          />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {biblio.map((m) => (
+              <CarteBiblio
+                key={m.id}
+                master={m}
+                ouvert={selectionId === m.id}
+                onToggle={() => setSelectionId((id) => (id === m.id ? null : m.id))}
+                onRelancerLangue={(id) => relancerLangue.mutate(id)}
+                busy={busy}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {enCours ? (
+        <BlocRetractable
+          ouvertDefaut
+          icone={<Scissors className="h-4 w-4" />}
+          titre={t("papier.aujourdHui")}
+          sous={t("papier.aujourdHuiAide")}
+          badge={
+            <Badge variant={STATUT_VARIANT[enCours.statut]}>{t(`papier.statut.${enCours.statut}`)}</Badge>
+          }
+        >
+          <ResumeMaster master={enCours} />
+          <FormulairePipeline
+            topic={topic}
+            onTopic={setTopic}
+            onAvancer={() => lancer.mutate()}
+            onRelancer={enCours.statut === "failed" ? () => relancer.mutate(enCours.id) : undefined}
+            onRegenerer={() => regenerer.mutate(enCours.id)}
+            busy={busy}
+            lancerPending={lancer.isPending}
+          />
+          <SousBloc titre={t("papier.voirPlans")} compte={enCours.papier_scenes?.length ?? 0}>
+            <CartesScenes master={enCours} />
+          </SousBloc>
+          {(enCours.papier_langues ?? []).length ? (
+            <SousBloc titre={t("papier.voirLangues")} compte={enCours.papier_langues?.length ?? 0}>
+              <CartesLangues
+                master={enCours}
+                onRelancer={(id) => relancerLangue.mutate(id)}
+                busy={busy}
+              />
+            </SousBloc>
+          ) : null}
+        </BlocRetractable>
+      ) : (
+        <BlocRetractable
+          ouvertDefaut={biblio.length === 0}
+          icone={<Sparkles className="h-4 w-4" />}
+          titre={t("papier.nouveauMaster")}
+          sous={t("papier.nouveauMasterAide")}
+        >
+          <FormulairePipeline
+            topic={topic}
+            onTopic={setTopic}
+            onAvancer={() => lancer.mutate()}
+            busy={busy}
+            lancerPending={lancer.isPending}
+          />
+        </BlocRetractable>
+      )}
+
+      {failed.length ? (
+        <BlocRetractable
+          icone={<RefreshCw className="h-4 w-4" />}
+          titre={t("papier.echecs")}
+          sous={t("papier.nMasters", { count: failed.length })}
+        >
           <div className="space-y-2">
-            <Label htmlFor="papier-topic">{t("papier.topic")}</Label>
-            <Textarea
-              id="papier-topic"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder={t("papier.topicPh")}
-              rows={2}
-            />
+            {failed.map((m) => (
+              <div key={m.id} className="space-y-2 rounded-md border px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm">
+                    <span className="font-medium">{m.date_publication}</span>
+                    {" — "}
+                    {m.topic || t("papier.sansTopic")}
+                  </span>
+                  <Badge variant="destructive">{t("papier.statut.failed")}</Badge>
+                </div>
+                {m.erreur ? <p className="text-xs text-destructive">{m.erreur}</p> : null}
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => relancer.mutate(m.id)}>
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    {t("papier.relancer")}
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => regenerer.mutate(m.id)}>
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    {t("papier.regenerer")}
+                  </Button>
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => lancer.mutate()} disabled={busy}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {t("papier.avancer")}
-            </Button>
-            {enCours && enCours.statut === "failed" ? (
-              <Button variant="outline" onClick={() => relancer.mutate(enCours.id)} disabled={busy}>
-                <RefreshCw className="h-4 w-4" />
-                {t("papier.relancer")}
-              </Button>
-            ) : null}
-            {enCours ? (
-              <Button variant="outline" onClick={() => regenerer.mutate(enCours.id)} disabled={busy}>
-                <RotateCcw className="h-4 w-4" />
-                {t("papier.regenerer")}
-              </Button>
-            ) : null}
-          </div>
-          <div className="space-y-1">
-            <Button variant="outline" onClick={() => assigner.mutate()} disabled={busy}>
-              {assigner.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {t("papier.assigner")}
-            </Button>
-            <p className="text-xs text-muted-foreground">{t("papier.assignerAide")}</p>
-          </div>
+        </BlocRetractable>
+      ) : null}
+
+      <BlocRetractable
+        icone={<Moon className="h-4 w-4" />}
+        titre={t("papier.minuit")}
+        sous={t("papier.minuitAide")}
+      >
+        <div className="space-y-3">
+          <Button variant="outline" onClick={() => assigner.mutate()} disabled={busy}>
+            {assigner.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Moon className="h-4 w-4" />}
+            {t("papier.assigner")}
+          </Button>
           {assigner.isSuccess && assigner.data.detail ? (
             <p className="text-sm text-muted-foreground">{assigner.data.detail}</p>
           ) : null}
-          {lancer.error || relancer.error || regenerer.error || assigner.error ? (
-            <p className="text-sm text-destructive">
-              {(lancer.error ?? relancer.error ?? regenerer.error ?? assigner.error)?.message}
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
+        </div>
+      </BlocRetractable>
 
-      {enCours ? <CartesScenes master={enCours} /> : null}
-      {enCours ? (
-        <CartesLangues
-          master={enCours}
-          onRelancer={(id) => relancerLangue.mutate(id)}
-          busy={busy}
-        />
-      ) : null}
+      <BlocRetractable titre={t("simPapier.title")} sous={t("simPapier.subtitle")}>
+        <TesterAssignationPapierCard nu />
+      </BlocRetractable>
 
-      <TesterAssignationPapierCard />
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Library className="h-4 w-4" />
-            {t("papier.historique")}
-          </CardTitle>
-          <CardDescription>{t("papier.biblioAide")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {liste.isLoading ? (
-            <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
-          ) : biblio.length === 0 && failed.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("papier.vide")}</p>
-          ) : (
-            [...biblio, ...failed].map((m) => {
-              const conso = languesConsommees(m);
-              const actif = selection?.id === m.id;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm ${
-                    actif ? "border-primary bg-primary/5" : ""
-                  }`}
-                  onClick={() => {
-                    setSelectionId(m.id);
-                    if (m.topic) setTopic(m.topic);
-                  }}
-                >
-                  <span className="min-w-0 truncate">
-                    <span className="font-medium">{m.date_publication}</span>
-                    {" — "}
-                    <span className="text-muted-foreground">{m.topic || t("papier.sansTopic")}</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
-                      {conso.length
-                        ? t("papier.consommees", {
-                            langues: conso.map((l) => `${drapeauLangue(l)} ${nomLangue(l)}`).join(", "),
-                          })
-                        : t("papier.aucuneConso")}
-                    </span>
-                  </span>
-                  <Badge variant={STATUT_VARIANT[m.statut]}>{t(`papier.statut.${m.statut}`)}</Badge>
-                </button>
-              );
-            })
-          )}
-        </CardContent>
-      </Card>
-
-      {selection && selection.id !== enCours?.id ? (
-        <>
-          <ResumeMaster master={selection} />
-          {selection.statut === "failed" ? (
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => relancer.mutate(selection.id)} disabled={busy}>
-                <RefreshCw className="h-4 w-4" />
-                {t("papier.relancer")}
-              </Button>
-              <Button variant="outline" onClick={() => regenerer.mutate(selection.id)} disabled={busy}>
-                <RotateCcw className="h-4 w-4" />
-                {t("papier.regenerer")}
-              </Button>
-            </div>
-          ) : null}
-          <CartesScenes master={selection} />
-          <CartesLangues
-            master={selection}
-            onRelancer={(id) => relancerLangue.mutate(id)}
-            busy={busy}
-          />
-        </>
-      ) : null}
+      {erreur ? <p className="text-sm text-destructive">{erreur.message}</p> : null}
     </div>
+  );
+}
+
+function BlocRetractable({
+  titre,
+  sous,
+  icone,
+  badge,
+  ouvertDefaut = false,
+  children,
+}: {
+  titre: string;
+  sous?: string;
+  icone?: React.ReactNode;
+  badge?: React.ReactNode;
+  ouvertDefaut?: boolean;
+  children: React.ReactNode;
+}) {
+  const { t } = useTranslation();
+  const [ouvert, setOuvert] = React.useState(ouvertDefaut);
+  return (
+    <Card>
+      <button
+        type="button"
+        className="flex w-full items-start gap-3 p-5 text-left"
+        aria-expanded={ouvert}
+        onClick={() => setOuvert((v) => !v)}
+      >
+        {icone ? <span className="mt-0.5 text-muted-foreground">{icone}</span> : null}
+        <span className="min-w-0 flex-1 space-y-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="font-display text-lg font-semibold leading-tight">{titre}</span>
+            {badge}
+          </span>
+          {sous ? <span className="block text-sm text-muted-foreground">{sous}</span> : null}
+        </span>
+        <ChevronDown
+          className={cn("mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform", ouvert && "rotate-180")}
+          aria-hidden
+        />
+        <span className="sr-only">{ouvert ? t("papier.fermer") : t("papier.ouvrir")}</span>
+      </button>
+      {ouvert ? <CardContent className="space-y-4">{children}</CardContent> : null}
+    </Card>
+  );
+}
+
+function SousBloc({
+  titre,
+  compte,
+  children,
+}: {
+  titre: string;
+  compte: number;
+  children: React.ReactNode;
+}) {
+  const [ouvert, setOuvert] = React.useState(false);
+  if (!compte) return null;
+  return (
+    <div className="rounded-md border">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm"
+        aria-expanded={ouvert}
+        onClick={() => setOuvert((v) => !v)}
+      >
+        <span className="font-medium">
+          {titre}
+          <span className="ml-2 text-muted-foreground">· {compte}</span>
+        </span>
+        <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", ouvert && "rotate-180")} />
+      </button>
+      {ouvert ? <div className="border-t p-3">{children}</div> : null}
+    </div>
+  );
+}
+
+function FormulairePipeline({
+  topic,
+  onTopic,
+  onAvancer,
+  onRelancer,
+  onRegenerer,
+  busy,
+  lancerPending,
+}: {
+  topic: string;
+  onTopic: (v: string) => void;
+  onAvancer: () => void;
+  onRelancer?: () => void;
+  onRegenerer?: () => void;
+  busy: boolean;
+  lancerPending: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor="papier-topic">{t("papier.topic")}</Label>
+        <Textarea
+          id="papier-topic"
+          value={topic}
+          onChange={(e) => onTopic(e.target.value)}
+          placeholder={t("papier.topicPh")}
+          rows={2}
+        />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={onAvancer} disabled={busy}>
+          {lancerPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          {t("papier.avancer")}
+        </Button>
+        {onRelancer ? (
+          <Button variant="outline" onClick={onRelancer} disabled={busy}>
+            <RefreshCw className="h-4 w-4" />
+            {t("papier.relancer")}
+          </Button>
+        ) : null}
+        {onRegenerer ? (
+          <Button variant="outline" onClick={onRegenerer} disabled={busy}>
+            <RotateCcw className="h-4 w-4" />
+            {t("papier.regenerer")}
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function CarteBiblio({
+  master,
+  ouvert,
+  onToggle,
+  onRelancerLangue,
+  busy,
+}: {
+  master: PapierMaster;
+  ouvert: boolean;
+  onToggle: () => void;
+  onRelancerLangue: (id: string) => void;
+  busy: boolean;
+}) {
+  const { t } = useTranslation();
+  const conso = languesConsommees(master);
+  const vignette = vignetteMaster(master);
+  const titre = master.script?.title || master.topic || t("papier.sansTopic");
+  return (
+    <Card className={cn("overflow-hidden", ouvert && "ring-1 ring-primary")}>
+      <button type="button" className="flex w-full gap-3 p-3 text-left" onClick={onToggle} aria-expanded={ouvert}>
+        <div className="relative h-28 w-16 shrink-0 overflow-hidden rounded-md bg-muted">
+          {vignette ? (
+            vignette.endsWith(".png") || vignette.includes("/img-") ? (
+              <img src={vignette} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <video src={vignette} className="h-full w-full object-cover" muted playsInline preload="metadata" />
+            )
+          ) : null}
+        </div>
+        <span className="min-w-0 flex-1 space-y-1.5">
+          <span className="block truncate font-medium leading-snug">{titre}</span>
+          <span className="block text-xs text-muted-foreground">{master.date_publication}</span>
+          <span className="flex flex-wrap items-center gap-1">
+            {conso.length === 0 ? (
+              <Badge variant="outline">{t("papier.libre")}</Badge>
+            ) : (
+              <>
+                <span className="text-xs text-muted-foreground">{t("papier.consommees")}</span>
+                {conso.map((l) => (
+                  <span key={l} title={nomLangue(l)} className="text-sm">
+                    {drapeauLangue(l)}
+                  </span>
+                ))}
+              </>
+            )}
+          </span>
+        </span>
+        <ChevronDown
+          className={cn("mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform", ouvert && "rotate-180")}
+        />
+      </button>
+      {ouvert ? (
+        <div className="space-y-3 border-t p-3">
+          <ResumeMaster master={master} />
+          <SousBloc titre={t("papier.voirPlans")} compte={master.papier_scenes?.length ?? 0}>
+            <CartesScenes master={master} />
+          </SousBloc>
+          <SousBloc titre={t("papier.voirLangues")} compte={master.papier_langues?.length ?? 0}>
+            <CartesLangues master={master} onRelancer={onRelancerLangue} busy={busy} />
+          </SousBloc>
+        </div>
+      ) : null}
+    </Card>
   );
 }
 
@@ -303,24 +527,22 @@ function ResumeMaster({ master }: { master: PapierMaster }) {
   const { t } = useTranslation();
   const pct = Math.round((master.progression ?? 0) * 100);
   const scenes = master.papier_scenes ?? [];
-  const videoFr =
-    master.video_url ||
-    master.papier_langues?.find((l) => l.langue === "fr" && l.video_url)?.video_url ||
-    null;
+  const videoFr = videoFrDe(master);
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={STATUT_VARIANT[master.statut]}>{t(`papier.statut.${master.statut}`)}</Badge>
         <span className="text-sm text-muted-foreground">
-          {t("papier.plans", { count: scenes.length })} · {pct}%
+          {t("papier.plans", { count: scenes.length })}
+          {master.statut !== "ready" ? ` · ${pct}%` : ""}
         </span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-        <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
-      </div>
-      {master.script?.title ? (
-        <p className="text-sm font-medium">{master.script.title}</p>
+      {master.statut !== "ready" ? (
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+          <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+        </div>
       ) : null}
+      {master.script?.title ? <p className="text-sm font-medium">{master.script.title}</p> : null}
       {videoFr ? (
         <div className="space-y-1">
           <p className="text-xs text-muted-foreground">{t("papier.videoFr")}</p>
@@ -355,21 +577,14 @@ function CartesLangues({
   onRelancer: (id: string) => void;
   busy: boolean;
 }) {
-  const { t } = useTranslation();
   const langues = master.papier_langues ?? [];
   if (!langues.length) return null;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("papier.langues")}</CardTitle>
-        <CardDescription>{t("papier.languesAide")}</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {langues.map((l) => (
-          <CarteLangue key={l.id} langue={l} onRelancer={onRelancer} busy={busy} />
-        ))}
-      </CardContent>
-    </Card>
+    <div className="grid gap-3 sm:grid-cols-2">
+      {langues.map((l) => (
+        <CarteLangue key={l.id} langue={l} onRelancer={onRelancer} busy={busy} />
+      ))}
+    </div>
   );
 }
 
@@ -421,9 +636,9 @@ function CartesScenes({ master }: { master: PapierMaster }) {
   const scenes = master.papier_scenes ?? [];
   if (!scenes.length) return null;
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2">
       {scenes.map((s) => (
-        <Card key={s.id} className="overflow-hidden">
+        <div key={s.id} className="overflow-hidden rounded-md border">
           <div className="aspect-[9/16] bg-muted">
             {s.clip_url ? (
               <video src={s.clip_url} className="h-full w-full object-cover" controls muted playsInline />
@@ -435,15 +650,15 @@ function CartesScenes({ master }: { master: PapierMaster }) {
               </div>
             )}
           </div>
-          <CardContent className="space-y-1 p-3">
+          <div className="space-y-1 p-3">
             <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
               <span>{t("papier.plan", { n: s.index + 1 })}</span>
               <span>{s.duree_cible}s</span>
             </div>
             {s.overlay ? <p className="text-xs font-medium">{s.overlay}</p> : null}
             <p className="text-sm leading-snug">{s.narration}</p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       ))}
     </div>
   );

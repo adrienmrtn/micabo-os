@@ -1,6 +1,6 @@
 /**
  * Assigne depuis la bibliothèque de masters FR.
- * Chaque CM pioche un master pas encore utilisé dans sa langue.
+ * Chaque CM tire au hasard un master pas encore utilisé dans sa langue.
  * La voix / vidéo de la langue se crée à la demande (pas au pipeline).
  */
 

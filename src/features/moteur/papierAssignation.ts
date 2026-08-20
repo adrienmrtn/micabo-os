@@ -61,19 +61,32 @@ export function masterUtiliseDansLangue(
   return posts.some((p) => p.master_id === masterId && p.langue === langue && !p.est_test);
 }
 
+/** Masters FR prêts pas encore servis dans cette langue. */
+export function mastersLibresPourLangue(
+  masters: Array<{ id: string }>,
+  posts: PostPapierConso[],
+  langue: string,
+): Array<{ id: string }> {
+  const pris = new Set(
+    posts.filter((p) => p.langue === langue && !p.est_test).map((p) => p.master_id),
+  );
+  return masters.filter((m) => !pris.has(m.id));
+}
+
 /**
- * Plus ancien master FR prêt pas encore utilisé dans cette langue.
- * Chaque langue pioche un master distinct ; un CM qui a posté ne le revoit pas.
+ * Un master FR libre, au hasard, pour cette langue.
+ * Un CM qui l'a déjà reçu dans cette langue ne le revoit pas.
  */
 export function piocherMasterInutilise(
   masters: Array<{ id: string }>,
   posts: PostPapierConso[],
   langue: string,
+  hasard: () => number = Math.random,
 ): string | null {
-  const pris = new Set(
-    posts.filter((p) => p.langue === langue && !p.est_test).map((p) => p.master_id),
-  );
-  return masters.find((m) => !pris.has(m.id))?.id ?? null;
+  const libres = mastersLibresPourLangue(masters, posts, langue);
+  if (!libres.length) return null;
+  const i = Math.min(libres.length - 1, Math.floor(hasard() * libres.length));
+  return libres[i]!.id;
 }
 
 /** Légende TikTok : hook puis CTA, prêts à coller. */
