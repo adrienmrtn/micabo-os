@@ -34,6 +34,9 @@ import {
   type LigneStatSlideshow,
   type StatsCompteSlideshows,
 } from "./statsSlideshowsCompte";
+import { comptePrincipal, normaliserTypeCompte } from "./comptesCm";
+import { normaliserReglagesPapier } from "./papierReglages";
+import type { CompteIdentifiants, CompteResumePoster, TypeCompte } from "./types";
 
 export type { EloImportRapport };
 
@@ -367,7 +370,10 @@ export async function listerComptes(): Promise<CompteAvecDetails[]> {
     .eq("is_active", true)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return data as CompteAvecDetails[];
+  return ((data ?? []) as CompteAvecDetails[]).map((c) => ({
+    ...c,
+    type_compte: normaliserTypeCompte(c.type_compte),
+  }));
 }
 
 /**
@@ -392,6 +398,7 @@ export async function creerCompte(input: {
 }): Promise<void> {
   const { error } = await supabase.from("comptes").insert({
     poster_id: input.posterId,
+    type_compte: "perso",
     compte_reference_id: input.compteReferenceId,
     langue: input.langue,
     persona_nom: input.personaNom.trim() || null,
@@ -472,21 +479,30 @@ export async function listerPosters(): Promise<PosterProfil[]> {
   const { data: comptes } = await supabase
     .from("comptes")
     .select(
-      "id, poster_id, handle_tiktok, persona_nom, persona_bio, avatar_url, score, score_maj_at, warmup_started_at, warmup_ends_at, comptes_reference(handle_tiktok)",
+      "id, poster_id, type_compte, langue, handle_tiktok, persona_nom, persona_bio, avatar_url, score, score_maj_at, warmup_started_at, warmup_ends_at, comptes_reference(handle_tiktok)",
     )
     .eq("is_active", true)
     .order("created_at", { ascending: false });
-  // Un poster ne doit avoir qu'UN compte actif ; si par accident il y en a
-  // plusieurs, on garde le premier (le plus récent) — le MÊME que celui affiché
-  // par l'éditeur, pour que le @ du lien et celui du champ coïncident toujours.
-  const compteParPoster = new Map<string, NonNullable<typeof comptes>[number]>();
-  const referenceParPoster = new Map<string, string>();
+  const comptesParPoster = new Map<string, CompteResumePoster[]>();
   for (const c of comptes ?? []) {
-    if (!compteParPoster.has(c.poster_id)) compteParPoster.set(c.poster_id, c);
     const ref = (c as { comptes_reference?: { handle_tiktok?: string } }).comptes_reference;
-    if (ref?.handle_tiktok && !referenceParPoster.has(c.poster_id)) {
-      referenceParPoster.set(c.poster_id, ref.handle_tiktok);
-    }
+    const resume: CompteResumePoster = {
+      id: c.id,
+      type_compte: normaliserTypeCompte(c.type_compte),
+      langue: c.langue,
+      handle_tiktok: c.handle_tiktok,
+      persona_nom: c.persona_nom,
+      persona_bio: c.persona_bio,
+      avatar_url: c.avatar_url,
+      score: c.score ?? null,
+      score_maj_at: c.score_maj_at ?? null,
+      warmup_started_at: (c.warmup_started_at as string | null) ?? null,
+      warmup_ends_at: (c.warmup_ends_at as string | null) ?? null,
+      reference_handle: ref?.handle_tiktok ?? null,
+    };
+    const liste = comptesParPoster.get(c.poster_id) ?? [];
+    liste.push(resume);
+    comptesParPoster.set(c.poster_id, liste);
   }
 
   const nomParId = new Map(
@@ -497,24 +513,26 @@ export async function listerPosters(): Promise<PosterProfil[]> {
   );
 
   return (profils ?? []).map((p) => {
-    const compte = compteParPoster.get(p.id);
+    const liste = comptesParPoster.get(p.id) ?? [];
+    const compte = comptePrincipal(liste);
     return {
       ...p,
       hm_ugc_ai_video: Boolean(
         (p as { hm_ugc_ai_video?: boolean }).hm_ugc_ai_video,
       ),
       role: (parUtilisateur.get(p.id) ?? null) as PosterProfil["role"],
+      comptes: liste,
       compte_id: compte?.id ?? null,
       handle_tiktok: compte?.handle_tiktok ?? null,
-      reference_handle: referenceParPoster.get(p.id) ?? null,
+      reference_handle: compte?.reference_handle ?? null,
       persona_nom: compte?.persona_nom ?? null,
       persona_bio: compte?.persona_bio ?? null,
       avatar_url: compte?.avatar_url ?? null,
       /** ELO / forme du compte TikTok (moyenne pondérée des perfs). */
       score: compte?.score ?? null,
       score_maj_at: compte?.score_maj_at ?? null,
-      warmup_started_at: (compte?.warmup_started_at as string | null) ?? null,
-      warmup_ends_at: (compte?.warmup_ends_at as string | null) ?? null,
+      warmup_started_at: compte?.warmup_started_at ?? null,
+      warmup_ends_at: compte?.warmup_ends_at ?? null,
       manager_nom: p.manager_id ? (nomParId.get(p.manager_id) ?? null) : null,
     };
   });
@@ -625,6 +643,7 @@ export async function majCoutMensuel(userId: string, montant: number | null): Pr
 
 export interface MonCompte {
   id: string;
+  type_compte: TypeCompte;
   persona_nom: string | null;
   persona_bio: string | null;
   handle_tiktok: string | null;
@@ -634,26 +653,91 @@ export interface MonCompte {
   warmup_ends_at: string | null;
 }
 
-/** Le compte de publication du poster connecté : son identité TikTok (pseudo,
- *  bio, avatar), générée automatiquement à la création. La RLS ne renvoie que
- *  sa propre ligne. */
-export async function monCompte(): Promise<MonCompte | null> {
+/** Tous les comptes du poster connecté (RLS : ses lignes seulement). */
+export async function mesComptes(): Promise<MonCompte[]> {
   const { data, error } = await supabase
     .from("comptes")
     .select(
-      "id, persona_nom, persona_bio, handle_tiktok, avatar_url, langue, warmup_started_at, warmup_ends_at",
+      "id, type_compte, persona_nom, persona_bio, handle_tiktok, avatar_url, langue, warmup_started_at, warmup_ends_at",
     )
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data as MonCompte) ?? null;
+  return ((data ?? []) as Array<Omit<MonCompte, "type_compte"> & { type_compte?: string }>).map(
+    (c) => ({
+      ...c,
+      type_compte: normaliserTypeCompte(c.type_compte),
+    }),
+  );
 }
 
-/** Le poster met à jour son pseudo TikTok (après avoir créé son compte). */
-export async function majMonHandle(handle: string): Promise<void> {
-  const { error } = await supabase.rpc("maj_mon_handle", { nouveau: handle });
+/** Premier compte perso (rétrocompat calendrier / warmup). */
+export async function monCompte(): Promise<MonCompte | null> {
+  const liste = await mesComptes();
+  return comptePrincipal(liste) ?? null;
+}
+
+/** Le poster met à jour le @ d'un de ses comptes. */
+export async function majMonHandle(handle: string, compteId?: string): Promise<void> {
+  const { error } = await supabase.rpc("maj_mon_handle", {
+    nouveau: handle,
+    cible: compteId ?? null,
+  });
   if (error) throw error;
+}
+
+export function ajouterCompteCm(input: {
+  posterId: string;
+  langue: string;
+  tiktok_email: string;
+  tiktok_password: string;
+  tiktok_2fa_note?: string;
+  notes_hm?: string;
+  handle_tiktok?: string;
+  persona_nom?: string;
+}) {
+  return invoke<{ ok: boolean; compteId: string }>("manage-users", {
+    action: "ajouter_compte_cm",
+    userId: input.posterId,
+    langue: input.langue,
+    tiktok_email: input.tiktok_email,
+    tiktok_password: input.tiktok_password,
+    tiktok_2fa_note: input.tiktok_2fa_note ?? "",
+    notes_hm: input.notes_hm ?? "",
+    handle_tiktok: input.handle_tiktok ?? "",
+    persona_nom: input.persona_nom ?? "",
+  });
+}
+
+export function majIdentifiantsCm(input: {
+  compteId: string;
+  tiktok_email: string;
+  tiktok_password: string;
+  tiktok_2fa_note?: string;
+  notes_hm?: string;
+}) {
+  return invoke<{ ok: boolean }>("manage-users", {
+    action: "maj_identifiants_cm",
+    compteId: input.compteId,
+    tiktok_email: input.tiktok_email,
+    tiktok_password: input.tiktok_password,
+    tiktok_2fa_note: input.tiktok_2fa_note ?? "",
+    notes_hm: input.notes_hm ?? "",
+  });
+}
+
+export async function lireIdentifiantsCm(
+  compteId: string,
+): Promise<CompteIdentifiants | null> {
+  const { data, error } = await supabase
+    .from("compte_identifiants")
+    .select(
+      "compte_id, tiktok_email, tiktok_password, tiktok_2fa_note, notes_hm, renseigne_at, vu_par_poster_at",
+    )
+    .eq("compte_id", compteId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as CompteIdentifiants) ?? null;
 }
 
 /** Le poster met à jour SON lien de conversation Upwork depuis son espace. */
@@ -2569,6 +2653,12 @@ export async function lireReglages(): Promise<Reglages> {
       heures: 24,
       ...((map.get("warmup") as Partial<Reglages["warmup"]> | undefined) ?? {}),
     },
+    papier: normaliserReglagesPapier(map.get("papier")),
+    papier_fal_usage: {
+      date: null,
+      appels: 0,
+      ...((map.get("papier_fal_usage") as Partial<Reglages["papier_fal_usage"]> | undefined) ?? {}),
+    },
   };
 }
 
@@ -3026,6 +3116,234 @@ export const scraperSourceVersContenus = (compteReferenceId: string) =>
 /** Pipeline minuit v-next : stats → (scores PAUSE) → assignation contenus. */
 export const lancerMinuitVnext = (body: Record<string, unknown> = {}) =>
   invoke<{ ok: boolean; saute?: boolean; jour?: string }>("minuit-vnext", body);
+
+export type PapierStatut = "queued" | "scripting" | "images" | "clips" | "ready" | "failed";
+
+export type PapierJournal = { at: string; etape: string; detail: string };
+
+export type PapierScene = {
+  id: string;
+  master_id: string;
+  index: number;
+  narration: string;
+  overlay: string;
+  image_prompt: string;
+  video_prompt: string;
+  image_path: string | null;
+  image_url: string | null;
+  clip_path: string | null;
+  clip_url: string | null;
+  duree_cible: 4 | 6 | 8;
+};
+
+export type PapierLangueStatut =
+  | "queued"
+  | "translating"
+  | "voice"
+  | "mix"
+  | "render"
+  | "karaoke"
+  | "ready"
+  | "failed";
+
+export type PapierLangue = {
+  id: string;
+  master_id: string;
+  langue: string;
+  title: string | null;
+  hook: string | null;
+  cta: string | null;
+  hashtags: string | null;
+  statut: PapierLangueStatut;
+  etape: string | null;
+  progression: number;
+  erreur: string | null;
+  video_url: string | null;
+  video_mix_url: string | null;
+};
+
+export type PapierMaster = {
+  id: string;
+  date_publication: string;
+  topic: string | null;
+  kind: string;
+  narration_style: string;
+  script: { title?: string; hook?: string; cta?: string } | null;
+  statut: PapierStatut;
+  etape: string | null;
+  progression: number;
+  erreur: string | null;
+  journal: PapierJournal[];
+  created_at: string;
+  updated_at: string;
+  papier_scenes?: PapierScene[];
+  papier_langues?: PapierLangue[];
+  papier_posts?: Array<{ id: string; compte_id: string; langue: string; est_test?: boolean }>;
+};
+
+export type PapierPost = {
+  id: string;
+  compte_id: string;
+  date_publication_prevue: string;
+  master_id: string;
+  langue_id: string;
+  langue: string;
+  title: string | null;
+  caption: string | null;
+  hashtags: string | null;
+  video_url: string;
+  video_path: string | null;
+  statut: "assigne" | "publie";
+  est_test?: boolean;
+  publie_at: string | null;
+  created_at: string;
+};
+
+export type PapierPostCalendrier = PapierPost & {
+  persona_nom: string | null;
+  handle_tiktok: string | null;
+  poster_prenom: string | null;
+  poster_nom: string | null;
+};
+
+export type PapierAssignResultat = {
+  ok: boolean;
+  assigns?: number;
+  comptes?: number;
+  langues?: number;
+  dates?: string[];
+  detail?: string;
+  test?: boolean;
+  posts?: PapierPost[];
+  error?: string;
+};
+
+export type PapierTickResultat = {
+  ok: boolean;
+  done?: boolean;
+  kick?: boolean;
+  masterId?: string;
+  date?: string;
+  statut?: PapierStatut;
+  progression?: number;
+  detail?: string;
+  error?: string;
+};
+
+export async function listerPapierMasters(limite = 14): Promise<PapierMaster[]> {
+  const { data, error } = await supabase
+    .from("papier_masters")
+    .select("*, papier_scenes(*), papier_langues(*), papier_posts(id, compte_id, langue, est_test)")
+    .order("date_publication", { ascending: false })
+    .limit(limite);
+  if (error) throw error;
+  return (data ?? []).map((row) => {
+    const r = row as PapierMaster;
+    const scenes = [...(r.papier_scenes ?? [])].sort((a, b) => a.index - b.index);
+    const langues = [...(r.papier_langues ?? [])].sort((a, b) => a.langue.localeCompare(b.langue));
+    const posts = (r.papier_posts ?? []).filter((p) => !p.est_test);
+    return {
+      ...r,
+      journal: Array.isArray(r.journal) ? r.journal : [],
+      papier_scenes: scenes,
+      papier_langues: langues,
+      papier_posts: posts,
+    };
+  });
+}
+
+export const lancerPapierJour = (body: { date?: string; topic?: string } = {}) =>
+  invoke<PapierTickResultat>("papier-cm", { action: "assurer", manuel: true, ...body });
+
+export const relancerPapier = (id: string) =>
+  invoke<PapierTickResultat>("papier-cm", { action: "relancer", manuel: true, id });
+
+export const regenererPapier = (id: string, topic?: string) =>
+  invoke<PapierTickResultat>("papier-cm", { action: "regenerer", manuel: true, id, topic });
+
+export const lancerPapierLocales = (masterId: string) =>
+  invoke<PapierTickResultat>("papier-cm", { action: "tick_locales", manuel: true, masterId });
+
+export const relancerPapierLangue = (id: string) =>
+  invoke<PapierTickResultat>("papier-cm", { action: "relancer_langue", manuel: true, id });
+
+export const assignerPapierCm = (
+  body: {
+    date?: string;
+    masterId?: string;
+    langueId?: string;
+    fenetreJours?: number;
+    compteId?: string;
+    test?: boolean;
+  } = {},
+) => invoke<PapierAssignResultat>("papier-cm", { action: "assigner", manuel: true, ...body });
+
+export const testerAssignationPapier = (body: {
+  compteId: string;
+  date?: string;
+  masterId?: string;
+}) =>
+  invoke<PapierAssignResultat>("papier-cm", {
+    action: "assigner",
+    manuel: true,
+    test: true,
+    ...body,
+  });
+
+export const annulerAssignationPapierTest = (compteId: string, date?: string) =>
+  invoke<{ ok: boolean; supprimes?: number; error?: string }>("papier-cm", {
+    action: "annuler_test",
+    manuel: true,
+    compteId,
+    date,
+  });
+
+export async function mesPapierPosts(compteId: string): Promise<PapierPost[]> {
+  const { data, error } = await supabase
+    .from("papier_posts")
+    .select("*")
+    .eq("compte_id", compteId)
+    .eq("est_test", false)
+    .order("date_publication_prevue", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  return (data ?? []) as PapierPost[];
+}
+
+export async function papierPostsCalendrier(): Promise<PapierPostCalendrier[]> {
+  const { data, error } = await supabase
+    .from("papier_posts")
+    .select("*, comptes(persona_nom, handle_tiktok, profiles(prenom, nom))")
+    .eq("est_test", false)
+    .order("date_publication_prevue", { ascending: false, nullsFirst: false })
+    .limit(400);
+  if (error) throw error;
+  // deno-lint-ignore no-explicit-any
+  return ((data ?? []) as any[]).map((row) => ({
+    ...row,
+    persona_nom: row.comptes?.persona_nom ?? null,
+    handle_tiktok: row.comptes?.handle_tiktok ?? null,
+    poster_prenom: row.comptes?.profiles?.prenom ?? null,
+    poster_nom: row.comptes?.profiles?.nom ?? null,
+  })) as PapierPostCalendrier[];
+}
+
+export async function listerPapierPostsTest(
+  compteId: string,
+  date?: string,
+): Promise<PapierPost[]> {
+  let q = supabase
+    .from("papier_posts")
+    .select("*")
+    .eq("compte_id", compteId)
+    .eq("est_test", true)
+    .order("date_publication_prevue", { ascending: false })
+    .limit(20);
+  if (date) q = q.eq("date_publication_prevue", date);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as PapierPost[];
+}
 
 export const lancerScoringVnext = (compteId?: string) =>
   invoke<{ ok: boolean; contenus: number; comptes: number }>("scoring", {

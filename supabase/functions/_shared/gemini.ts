@@ -149,6 +149,22 @@ export async function generateTextFast(prompt: string): Promise<string> {
   throw new Error(failures.join(" | "));
 }
 
+/** Texte créatif (sujet / script papier) : température haute, un tour de modèles. */
+export async function generateTextCreative(
+  prompt: string,
+  temperature = 0.9,
+): Promise<string> {
+  const failures: string[] = [];
+  for (const model of TEXT_MODELS) {
+    try {
+      return textOf(await call(model, [{ text: prompt }], { temperature }));
+    } catch (error) {
+      failures.push(`${model}: ${messageErreur(error)}`);
+    }
+  }
+  throw new Error(failures.join(" | "));
+}
+
 export async function fetchImageAsInline(url: string): Promise<Part> {
   // Passe par le helper Apify : les visuels issus du key-value store exigent
   // le token, ceux déjà rapatriés dans notre Storage sont servis tels quels.
