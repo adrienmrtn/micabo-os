@@ -217,25 +217,34 @@ export async function slidesSansCaption(
     );
 }
 
+const PAGE_RATTRAPAGE = 1000;
+/** Un clic = tout le stock propre sans caption (PostgREST pagine à 1000). */
+export const LIMITE_RATTRAPAGE_DEFAUT = 20_000;
+
 export async function listerMediasARattraper(
   supabase: Supabase,
   opts: { limit?: number } = {},
 ): Promise<{ id: string; url: string; motif: "caption" | "hook" }[]> {
-  const limit = Math.min(2000, Math.max(1, opts.limit ?? 400));
-  const { data: sansCaption, error } = await supabase
-    .from("media_library")
-    .select("id, url")
-    .like("storage_path", "propre/%")
-    .is("caption_statut", null)
-    .order("created_at", { ascending: true })
-    .limit(limit);
-  if (error) throw error;
-
+  const limit = Math.min(LIMITE_RATTRAPAGE_DEFAUT, Math.max(1, opts.limit ?? 400));
   const out: { id: string; url: string; motif: "caption" | "hook" }[] = [];
   const vus = new Set<string>();
-  for (const m of sansCaption ?? []) {
-    vus.add(m.id as string);
-    out.push({ id: m.id as string, url: m.url as string, motif: "caption" });
+
+  for (let offset = 0; out.length < limit; offset += PAGE_RATTRAPAGE) {
+    const fin = Math.min(offset + PAGE_RATTRAPAGE, limit) - 1;
+    const { data: sansCaption, error } = await supabase
+      .from("media_library")
+      .select("id, url")
+      .like("storage_path", "propre/%")
+      .is("caption_statut", null)
+      .order("created_at", { ascending: true })
+      .range(offset, fin);
+    if (error) throw error;
+    if (!sansCaption?.length) break;
+    for (const m of sansCaption) {
+      vus.add(m.id as string);
+      out.push({ id: m.id as string, url: m.url as string, motif: "caption" });
+    }
+    if (sansCaption.length < PAGE_RATTRAPAGE) break;
   }
 
   if (out.length >= limit) return out;
@@ -325,7 +334,9 @@ export async function demarrerRattrapageCaption(
   const courant = await lireRattrapageCaption(supabase);
   if (courant?.statut === "running") return courant;
 
-  const medias = await listerMediasARattraper(supabase, { limit: 2000 });
+  const medias = await listerMediasARattraper(supabase, {
+    limit: LIMITE_RATTRAPAGE_DEFAUT,
+  });
   if (medias.length === 0) {
     const { data, error } = await supabase
       .from("caption_rattrapage_runs")
@@ -346,7 +357,9 @@ export async function demarrerRattrapageCaption(
     .insert({
       statut: "running",
       total: medias.length,
-      logs: [`Rattrapage captions sur ${medias.length} photo(s) — 6 workers / min, tu peux fermer.`],
+        logs: [
+          `Rattrapage captions sur ${medias.length} photo(s) — 6 workers × 4 en parallèle / min. Tu peux fermer, les logs restent ici.`,
+        ],
     })
     .select("id, statut, total, fait, ok, aucune, hooks, echecs, logs, started_at, updated_at")
     .single();
