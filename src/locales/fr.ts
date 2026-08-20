@@ -833,6 +833,28 @@ export const fr = {
       ugcPersonaChoisir: "Choisir un persona…",
       ugcPersonaRequis: "Un persona est requis si UGC AI est activé.",
     },
+    cm: {
+      badge: "CM",
+      ajouter: "Ajouter un compte CM",
+      ajouterAide:
+        "Compte TikTok de la boîte, une langue. Les identifiants doivent déjà exister — tu les donnes au créateur.",
+      creer: "Créer le compte CM",
+      langue: "Langue du compte CM",
+      email: "Email TikTok",
+      password: "Mot de passe TikTok",
+      deuxFa: "2FA / codes de secours",
+      deuxFaPh: "Optionnel — secret TOTP ou codes",
+      identifiants: "Identifiants TikTok",
+      identifiantsAbsents: "Aucun identifiant enregistré pour ce compte CM.",
+      languePrise: "Ce créateur a déjà un compte CM dans cette langue.",
+      toutesLanguesPrises: "Un compte CM existe déjà pour chaque langue disponible.",
+      copier: "Copier",
+      aideCreateur:
+        "Connecte-toi à ce TikTok avec les identifiants fournis. Tu ne crées pas le compte — il existe déjà.",
+      selecteur: "Compte",
+      perso: "Perso",
+      videoPlusTard: "Les vidéos papier de ce compte CM arriveront ici.",
+    },
     posters: {
       title: "Posters",
       subtitle: "Créateurs et recruteurs.",
@@ -860,6 +882,7 @@ export const fr = {
       ajouterRecruteur: "Ajouter un recruteur",
       creationRefusee: "Création refusée pour cette langue — réessaie ou contacte un admin.",
       gererCompte: "Gérer le compte",
+      gererComptes: "Comptes TikTok",
       creerCompte: "Créer le compte de publication",
       sansCompteCree: "Ce poster n'a pas encore de compte de publication.",
       labelsAide:

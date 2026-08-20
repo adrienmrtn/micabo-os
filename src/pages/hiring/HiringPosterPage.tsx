@@ -24,6 +24,9 @@ import {
   majCompte,
   supprimerPoster,
 } from "@/features/moteur/api";
+import { comptesCm, languesCmPrises } from "@/features/moteur/comptesCm";
+import { FormulaireCompteCm } from "@/features/moteur/FormulaireCompteCm";
+import { drapeauLangue } from "@/features/moteur/langues";
 import { WarmupBadge } from "@/features/moteur/WarmupBadge";
 import type { PosterProfil } from "@/features/moteur/types";
 
@@ -174,8 +177,35 @@ function LignePoster({ poster: p }: { poster: PosterProfil }) {
           ) : (
             <p className="text-xs text-muted-foreground">{t("hiring.identiteEnCours")}</p>
           )}
+          <ComptesCmPoster poster={p} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function ComptesCmPoster({ poster }: { poster: PosterProfil }) {
+  const { t } = useTranslation();
+  const cms = comptesCm(poster.comptes ?? []);
+  const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
+
+  return (
+    <div className="mt-2 space-y-2 border-t pt-2">
+      {cms.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {cms.map((c) => (
+            <Badge key={c.id} variant="outline">
+              {t("cm.badge")} · {drapeauLangue(c.langue)}
+              {c.handle_tiktok ? ` @${c.handle_tiktok}` : ""}
+            </Badge>
+          ))}
+        </div>
+      )}
+      <FormulaireCompteCm
+        posterId={poster.id}
+        languesProposees={langues.data ?? []}
+        languesPrises={languesCmPrises(poster.comptes ?? [])}
+      />
     </div>
   );
 }

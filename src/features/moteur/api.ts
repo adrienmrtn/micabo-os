@@ -34,6 +34,8 @@ import {
   type LigneStatSlideshow,
   type StatsCompteSlideshows,
 } from "./statsSlideshowsCompte";
+import { comptePrincipal, normaliserTypeCompte } from "./comptesCm";
+import type { CompteIdentifiants, CompteResumePoster, TypeCompte } from "./types";
 
 export type { EloImportRapport };
 
@@ -367,7 +369,10 @@ export async function listerComptes(): Promise<CompteAvecDetails[]> {
     .eq("is_active", true)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return data as CompteAvecDetails[];
+  return ((data ?? []) as CompteAvecDetails[]).map((c) => ({
+    ...c,
+    type_compte: normaliserTypeCompte(c.type_compte),
+  }));
 }
 
 /**
@@ -392,6 +397,7 @@ export async function creerCompte(input: {
 }): Promise<void> {
   const { error } = await supabase.from("comptes").insert({
     poster_id: input.posterId,
+    type_compte: "perso",
     compte_reference_id: input.compteReferenceId,
     langue: input.langue,
     persona_nom: input.personaNom.trim() || null,
@@ -472,21 +478,30 @@ export async function listerPosters(): Promise<PosterProfil[]> {
   const { data: comptes } = await supabase
     .from("comptes")
     .select(
-      "id, poster_id, handle_tiktok, persona_nom, persona_bio, avatar_url, score, score_maj_at, warmup_started_at, warmup_ends_at, comptes_reference(handle_tiktok)",
+      "id, poster_id, type_compte, langue, handle_tiktok, persona_nom, persona_bio, avatar_url, score, score_maj_at, warmup_started_at, warmup_ends_at, comptes_reference(handle_tiktok)",
     )
     .eq("is_active", true)
     .order("created_at", { ascending: false });
-  // Un poster ne doit avoir qu'UN compte actif ; si par accident il y en a
-  // plusieurs, on garde le premier (le plus récent) — le MÊME que celui affiché
-  // par l'éditeur, pour que le @ du lien et celui du champ coïncident toujours.
-  const compteParPoster = new Map<string, NonNullable<typeof comptes>[number]>();
-  const referenceParPoster = new Map<string, string>();
+  const comptesParPoster = new Map<string, CompteResumePoster[]>();
   for (const c of comptes ?? []) {
-    if (!compteParPoster.has(c.poster_id)) compteParPoster.set(c.poster_id, c);
     const ref = (c as { comptes_reference?: { handle_tiktok?: string } }).comptes_reference;
-    if (ref?.handle_tiktok && !referenceParPoster.has(c.poster_id)) {
-      referenceParPoster.set(c.poster_id, ref.handle_tiktok);
-    }
+    const resume: CompteResumePoster = {
+      id: c.id,
+      type_compte: normaliserTypeCompte(c.type_compte),
+      langue: c.langue,
+      handle_tiktok: c.handle_tiktok,
+      persona_nom: c.persona_nom,
+      persona_bio: c.persona_bio,
+      avatar_url: c.avatar_url,
+      score: c.score ?? null,
+      score_maj_at: c.score_maj_at ?? null,
+      warmup_started_at: (c.warmup_started_at as string | null) ?? null,
+      warmup_ends_at: (c.warmup_ends_at as string | null) ?? null,
+      reference_handle: ref?.handle_tiktok ?? null,
+    };
+    const liste = comptesParPoster.get(c.poster_id) ?? [];
+    liste.push(resume);
+    comptesParPoster.set(c.poster_id, liste);
   }
 
   const nomParId = new Map(
@@ -497,24 +512,26 @@ export async function listerPosters(): Promise<PosterProfil[]> {
   );
 
   return (profils ?? []).map((p) => {
-    const compte = compteParPoster.get(p.id);
+    const liste = comptesParPoster.get(p.id) ?? [];
+    const compte = comptePrincipal(liste);
     return {
       ...p,
       hm_ugc_ai_video: Boolean(
         (p as { hm_ugc_ai_video?: boolean }).hm_ugc_ai_video,
       ),
       role: (parUtilisateur.get(p.id) ?? null) as PosterProfil["role"],
+      comptes: liste,
       compte_id: compte?.id ?? null,
       handle_tiktok: compte?.handle_tiktok ?? null,
-      reference_handle: referenceParPoster.get(p.id) ?? null,
+      reference_handle: compte?.reference_handle ?? null,
       persona_nom: compte?.persona_nom ?? null,
       persona_bio: compte?.persona_bio ?? null,
       avatar_url: compte?.avatar_url ?? null,
       /** ELO / forme du compte TikTok (moyenne pondérée des perfs). */
       score: compte?.score ?? null,
       score_maj_at: compte?.score_maj_at ?? null,
-      warmup_started_at: (compte?.warmup_started_at as string | null) ?? null,
-      warmup_ends_at: (compte?.warmup_ends_at as string | null) ?? null,
+      warmup_started_at: compte?.warmup_started_at ?? null,
+      warmup_ends_at: compte?.warmup_ends_at ?? null,
       manager_nom: p.manager_id ? (nomParId.get(p.manager_id) ?? null) : null,
     };
   });
@@ -625,6 +642,7 @@ export async function majCoutMensuel(userId: string, montant: number | null): Pr
 
 export interface MonCompte {
   id: string;
+  type_compte: TypeCompte;
   persona_nom: string | null;
   persona_bio: string | null;
   handle_tiktok: string | null;
@@ -634,26 +652,91 @@ export interface MonCompte {
   warmup_ends_at: string | null;
 }
 
-/** Le compte de publication du poster connecté : son identité TikTok (pseudo,
- *  bio, avatar), générée automatiquement à la création. La RLS ne renvoie que
- *  sa propre ligne. */
-export async function monCompte(): Promise<MonCompte | null> {
+/** Tous les comptes du poster connecté (RLS : ses lignes seulement). */
+export async function mesComptes(): Promise<MonCompte[]> {
   const { data, error } = await supabase
     .from("comptes")
     .select(
-      "id, persona_nom, persona_bio, handle_tiktok, avatar_url, langue, warmup_started_at, warmup_ends_at",
+      "id, type_compte, persona_nom, persona_bio, handle_tiktok, avatar_url, langue, warmup_started_at, warmup_ends_at",
     )
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data as MonCompte) ?? null;
+  return ((data ?? []) as Array<Omit<MonCompte, "type_compte"> & { type_compte?: string }>).map(
+    (c) => ({
+      ...c,
+      type_compte: normaliserTypeCompte(c.type_compte),
+    }),
+  );
 }
 
-/** Le poster met à jour son pseudo TikTok (après avoir créé son compte). */
-export async function majMonHandle(handle: string): Promise<void> {
-  const { error } = await supabase.rpc("maj_mon_handle", { nouveau: handle });
+/** Premier compte perso (rétrocompat calendrier / warmup). */
+export async function monCompte(): Promise<MonCompte | null> {
+  const liste = await mesComptes();
+  return comptePrincipal(liste) ?? null;
+}
+
+/** Le poster met à jour le @ d'un de ses comptes. */
+export async function majMonHandle(handle: string, compteId?: string): Promise<void> {
+  const { error } = await supabase.rpc("maj_mon_handle", {
+    nouveau: handle,
+    cible: compteId ?? null,
+  });
   if (error) throw error;
+}
+
+export function ajouterCompteCm(input: {
+  posterId: string;
+  langue: string;
+  tiktok_email: string;
+  tiktok_password: string;
+  tiktok_2fa_note?: string;
+  notes_hm?: string;
+  handle_tiktok?: string;
+  persona_nom?: string;
+}) {
+  return invoke<{ ok: boolean; compteId: string }>("manage-users", {
+    action: "ajouter_compte_cm",
+    userId: input.posterId,
+    langue: input.langue,
+    tiktok_email: input.tiktok_email,
+    tiktok_password: input.tiktok_password,
+    tiktok_2fa_note: input.tiktok_2fa_note ?? "",
+    notes_hm: input.notes_hm ?? "",
+    handle_tiktok: input.handle_tiktok ?? "",
+    persona_nom: input.persona_nom ?? "",
+  });
+}
+
+export function majIdentifiantsCm(input: {
+  compteId: string;
+  tiktok_email: string;
+  tiktok_password: string;
+  tiktok_2fa_note?: string;
+  notes_hm?: string;
+}) {
+  return invoke<{ ok: boolean }>("manage-users", {
+    action: "maj_identifiants_cm",
+    compteId: input.compteId,
+    tiktok_email: input.tiktok_email,
+    tiktok_password: input.tiktok_password,
+    tiktok_2fa_note: input.tiktok_2fa_note ?? "",
+    notes_hm: input.notes_hm ?? "",
+  });
+}
+
+export async function lireIdentifiantsCm(
+  compteId: string,
+): Promise<CompteIdentifiants | null> {
+  const { data, error } = await supabase
+    .from("compte_identifiants")
+    .select(
+      "compte_id, tiktok_email, tiktok_password, tiktok_2fa_note, notes_hm, renseigne_at, vu_par_poster_at",
+    )
+    .eq("compte_id", compteId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as CompteIdentifiants) ?? null;
 }
 
 /** Le poster met à jour SON lien de conversation Upwork depuis son espace. */

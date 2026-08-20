@@ -41,8 +41,10 @@ interface PersonaUgcLibre {
  * Gestion des posters / recruteurs.
  *
  *   { action: "create", prenom, nom, password, langue?, langues?, role?, posts_par_jour? }
- *   { action: "ensure_compte", userId, langue, posts_par_jour? } — file admin → compte
- *   { action: "start_warmup", compteId }  — créateur (son compte) ou admin
+ *   { action: "ensure_compte", userId, langue, posts_par_jour? } — file admin → compte perso
+ *   { action: "ajouter_compte_cm", userId, langue, tiktok_email, tiktok_password, … }
+ *   { action: "maj_identifiants_cm", compteId, tiktok_email, tiktok_password, … }
+ *   { action: "start_warmup", compteId }  — créateur (son compte perso) ou admin
  *   { action: "skip_warmup", compteId }   — admin : compte actif immédiat
  *   { action: "delete", userId }
  *
@@ -89,11 +91,14 @@ async function gererRequete(request: Request): Promise<Response> {
 
     const { data: compte, error } = await supabase
       .from("comptes")
-      .select("id, poster_id, warmup_started_at, warmup_ends_at")
+      .select("id, poster_id, type_compte, warmup_started_at, warmup_ends_at")
       .eq("id", compteId)
       .maybeSingle();
     if (error) return json({ error: error.message }, 400);
     if (!compte) return json({ error: "compte introuvable" }, 404);
+    if (compte.type_compte === "cm") {
+      return json({ error: "Un compte CM n'a pas de warmup" }, 400);
+    }
 
     if (acces.role === "poster" && acces.userId !== "cron") {
       if (compte.poster_id !== acces.userId) {
@@ -140,11 +145,14 @@ async function gererRequete(request: Request): Promise<Response> {
 
     const { data: compte, error } = await supabase
       .from("comptes")
-      .select("id, warmup_started_at, warmup_ends_at")
+      .select("id, type_compte, warmup_started_at, warmup_ends_at")
       .eq("id", compteId)
       .maybeSingle();
     if (error) return json({ error: error.message }, 400);
     if (!compte) return json({ error: "compte introuvable" }, 404);
+    if (compte.type_compte === "cm") {
+      return json({ error: "Un compte CM n'a pas de warmup" }, 400);
+    }
 
     const now = new Date().toISOString();
     const { error: updErr } = await supabase
@@ -337,6 +345,7 @@ async function gererRequete(request: Request): Promise<Response> {
       .from("comptes")
       .select("id")
       .eq("poster_id", userId)
+      .eq("type_compte", "perso")
       .maybeSingle();
     if (deja?.id) {
       return json({ ok: true, deja: true, compteId: deja.id });
@@ -394,6 +403,147 @@ async function gererRequete(request: Request): Promise<Response> {
     return json({ ok: true, compte });
   }
 
+  if (body.action === "ajouter_compte_cm") {
+    const userId = String(body.userId ?? "").trim();
+    const langue = String(body.langue ?? "").trim().toLowerCase();
+    const emailTiktok = String(body.tiktok_email ?? "").trim();
+    const passwordTiktok = String(body.tiktok_password ?? "");
+    const deuxFa = String(body.tiktok_2fa_note ?? "").trim();
+    const notesHm = String(body.notes_hm ?? "").trim();
+    const handle = String(body.handle_tiktok ?? "").trim().replace(/^@+/, "");
+    const personaNom = String(body.persona_nom ?? "").trim();
+    if (!userId || !langue) return json({ error: "userId et langue requis" }, 400);
+    if (!emailTiktok || passwordTiktok.length < 1) {
+      return json({ error: "Identifiants TikTok (email + mot de passe) requis" }, 400);
+    }
+
+    const interdit = await refuserSiHorsEquipe(supabase, acces, userId);
+    if (interdit) return interdit;
+
+    if (estRoleManager(acces.role) && acces.userId !== "cron") {
+      const { data: hm } = await supabase
+        .from("profiles")
+        .select("langues")
+        .eq("id", acces.userId)
+        .maybeSingle();
+      const gerees = ((hm?.langues as string[] | null) ?? [])
+        .map((l) => l.toLowerCase())
+        .filter(Boolean);
+      if (gerees.length > 0 && !gerees.includes(langue)) {
+        return json(
+          { error: `Langue « ${langue} » hors des langues gérées (${gerees.join(", ")})` },
+          400,
+        );
+      }
+    }
+
+    const { data: deja } = await supabase
+      .from("comptes")
+      .select("id")
+      .eq("poster_id", userId)
+      .eq("type_compte", "cm")
+      .eq("langue", langue)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (deja?.id) {
+      return json({ error: `CM_LANGUE_PRISE`, message: `Un compte CM ${langue} existe déjà` }, 409);
+    }
+
+    const { data: compte, error } = await supabase
+      .from("comptes")
+      .insert({
+        poster_id: userId,
+        type_compte: "cm",
+        langue,
+        posts_par_jour: 1,
+        warmup_started_at: null,
+        warmup_ends_at: null,
+        is_active: true,
+        ugc_ai: false,
+        ugc_ai_video: false,
+        ugc_persona_id: null,
+        handle_tiktok: handle || null,
+        persona_nom: personaNom || null,
+      })
+      .select("id")
+      .single();
+    if (error || !compte) {
+      const msg = error?.message ?? "CREATION_COMPTE_CM_ECHOUEE";
+      if (/comptes_cm_un_par_langue/.test(msg)) {
+        return json({ error: "CM_LANGUE_PRISE" }, 409);
+      }
+      return json({ error: msg }, 400);
+    }
+
+    const { error: idErr } = await supabase.from("compte_identifiants").insert({
+      compte_id: compte.id,
+      tiktok_email: emailTiktok,
+      tiktok_password: passwordTiktok,
+      tiktok_2fa_note: deuxFa || null,
+      notes_hm: notesHm || null,
+      renseigne_par: acces.userId === "cron" ? null : acces.userId,
+    });
+    if (idErr) {
+      await supabase.from("comptes").delete().eq("id", compte.id);
+      return json({ error: idErr.message }, 400);
+    }
+
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("langues")
+      .eq("id", userId)
+      .maybeSingle();
+    const actuelles = ((prof?.langues as string[] | null) ?? []).map((l) => l.toLowerCase());
+    if (!actuelles.includes(langue)) {
+      await supabase
+        .from("profiles")
+        .update({ langues: [...actuelles, langue] })
+        .eq("id", userId);
+    }
+
+    return json({ ok: true, compteId: compte.id });
+  }
+
+  if (body.action === "maj_identifiants_cm") {
+    const compteId = String(body.compteId ?? "").trim();
+    const emailTiktok = String(body.tiktok_email ?? "").trim();
+    const passwordTiktok = String(body.tiktok_password ?? "");
+    const deuxFa = String(body.tiktok_2fa_note ?? "").trim();
+    const notesHm = String(body.notes_hm ?? "").trim();
+    if (!compteId) return json({ error: "compteId requis" }, 400);
+    if (!emailTiktok || passwordTiktok.length < 1) {
+      return json({ error: "Identifiants TikTok (email + mot de passe) requis" }, 400);
+    }
+
+    const { data: compte } = await supabase
+      .from("comptes")
+      .select("id, poster_id, type_compte")
+      .eq("id", compteId)
+      .maybeSingle();
+    if (!compte) return json({ error: "compte introuvable" }, 404);
+    if (compte.type_compte !== "cm") {
+      return json({ error: "Identifiants réservés aux comptes CM" }, 400);
+    }
+
+    const interdit = await refuserSiHorsEquipe(supabase, acces, compte.poster_id);
+    if (interdit) return interdit;
+
+    const { error } = await supabase.from("compte_identifiants").upsert(
+      {
+        compte_id: compteId,
+        tiktok_email: emailTiktok,
+        tiktok_password: passwordTiktok,
+        tiktok_2fa_note: deuxFa || null,
+        notes_hm: notesHm || null,
+        renseigne_par: acces.userId === "cron" ? null : acces.userId,
+        renseigne_at: new Date().toISOString(),
+      },
+      { onConflict: "compte_id" },
+    );
+    if (error) return json({ error: error.message }, 400);
+    return json({ ok: true });
+  }
+
   if (body.action === "delete") {
     if (!body.userId) return json({ error: "userId requis" }, 400);
     if (acces.role !== "admin") {
@@ -417,6 +567,35 @@ async function gererRequete(request: Request): Promise<Response> {
   return json({ error: "action inconnue" }, 400);
 }
 
+
+/** Admin : tout. HM : ses créateurs. DM : créateurs des HM de son équipe. */
+async function refuserSiHorsEquipe(
+  supabase: Supabase,
+  acces: { userId: string; role: string },
+  posterId: string,
+): Promise<Response | null> {
+  if (acces.role === "admin" || acces.userId === "cron") return null;
+
+  const { data: cible } = await supabase
+    .from("profiles")
+    .select("manager_id")
+    .eq("id", posterId)
+    .maybeSingle();
+  if (!cible) return json({ error: "forbidden" }, 403);
+
+  if (cible.manager_id === acces.userId) return null;
+
+  if (acces.role === "directing_manager" && cible.manager_id) {
+    const { data: hm } = await supabase
+      .from("profiles")
+      .select("manager_id")
+      .eq("id", cible.manager_id)
+      .maybeSingle();
+    if (hm?.manager_id === acces.userId) return null;
+  }
+
+  return json({ error: "forbidden" }, 403);
+}
 
 function normaliser(valeur: string): string {
   return valeur
@@ -878,6 +1057,7 @@ async function preparerCompte(
     .from("comptes")
     .insert({
       poster_id: posterId,
+      type_compte: "perso",
       compte_reference_id: referenceId,
       langue,
       posts_par_jour: postsParJour,

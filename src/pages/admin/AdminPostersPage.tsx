@@ -19,6 +19,8 @@ import { badgeManager, estRoleManager, useAuth } from "@/features/auth/AuthConte
 import { CompteursPhases, ListeCreateursSuivi } from "@/features/hiring/SuiviCreateurs";
 import { equipesParDm, hmsDuDm, hmsSansDm, nomProfil, resumeHm } from "@/features/hiring/suiviEquipe";
 import { CompteEditor, PostsParJourCompte } from "@/features/moteur/CompteEditor";
+import { comptePerso, comptesCm, estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
+import { FormulaireCompteCm } from "@/features/moteur/FormulaireCompteCm";
 import {
   assurerComptePoster,
   creerPoster,
@@ -437,13 +439,18 @@ export function AdminPostersPage() {
   const [filtreLangue, setFiltreLangue] = React.useState("");
   const [filtreLabel, setFiltreLabel] = React.useState("");
 
-  const compteDe = React.useMemo(() => {
-    const m = new Map<string, CompteAvecDetails>();
-    for (const c of comptes.data ?? []) if (!m.has(c.poster_id)) m.set(c.poster_id, c);
+  const comptesParPoster = React.useMemo(() => {
+    const m = new Map<string, CompteAvecDetails[]>();
+    for (const c of comptes.data ?? []) {
+      const liste = m.get(c.poster_id) ?? [];
+      liste.push(c);
+      m.set(c.poster_id, liste);
+    }
     return m;
   }, [comptes.data]);
 
   const [ficheId, setFicheId] = React.useState<string | null>(null);
+  const [ficheCompteId, setFicheCompteId] = React.useState<string | null>(null);
   const [gererCompteOuvert, setGererCompteOuvert] = React.useState(false);
 
   const creerCompteVide = useMutation({
@@ -564,6 +571,7 @@ export function AdminPostersPage() {
 
   const ouvrirFiche = (id: string) => {
     setFicheId(id);
+    setFicheCompteId(null);
     setGererCompteOuvert(false);
     setPromoId(null);
     setPromoLangues([]);
@@ -798,10 +806,10 @@ export function AdminPostersPage() {
       warmup_ends_at: p.warmup_ends_at,
     });
     if (filtrePhase !== "tous" && phase !== filtrePhase) return false;
-    const compte = compteDe.get(p.id);
-    if (filtreLangue && compte?.langue !== filtreLangue) return false;
+    const liste = comptesParPoster.get(p.id) ?? [];
+    if (filtreLangue && !liste.some((c) => c.langue === filtreLangue)) return false;
     if (filtreLabel) {
-      const labs = compte ? (labelsComptes.data?.get(compte.id) ?? []) : [];
+      const labs = liste.flatMap((c) => labelsComptes.data?.get(c.id) ?? []);
       if (!labs.some((l) => l.id === filtreLabel)) return false;
     }
     return true;
@@ -936,7 +944,9 @@ export function AdminPostersPage() {
   };
 
   const carteCreateur = (poster: PosterProfil) => {
-    const compte = compteDe.get(poster.id);
+    const liste = comptesParPoster.get(poster.id) ?? [];
+    const compte = comptePerso(liste);
+    const cms = comptesCm(liste);
     // Préfère le handle du compte TikTok (source de vérité), sinon profil.
     const tiktok = lienTikTokHandle(compte?.handle_tiktok ?? poster.handle_tiktok);
     return (
@@ -958,9 +968,14 @@ export function AdminPostersPage() {
             <span className="text-sm font-semibold tracking-tight">{nomAffiche(poster)}</span>
             {compte?.ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
             {compte?.ugc_ai && !compte.ugc_ai_video && <BadgeUgc label="UGC" />}
+            {cms.map((c) => (
+              <Badge key={c.id} variant="outline">
+                {t("cm.badge")} · {drapeauLangue(c.langue)}
+              </Badge>
+            ))}
             {!poster.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
           </div>
-          <DrapeauxLangues codes={compte?.langue ? [compte.langue] : []} />
+          <DrapeauxLangues codes={liste.map((c) => c.langue)} />
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {poster.score != null && (
@@ -1100,7 +1115,9 @@ export function AdminPostersPage() {
   })();
 
   const fiche = ficheId ? tous.find((p) => p.id === ficheId) : null;
-  const ficheCompte = fiche ? compteDe.get(fiche.id) : undefined;
+  const ficheComptes = fiche ? (comptesParPoster.get(fiche.id) ?? []) : [];
+  const ficheCompte =
+    ficheComptes.find((c) => c.id === ficheCompteId) ?? comptePerso(ficheComptes);
   const ficheLabs =
     ficheCompte && labelsComptes.data ? (labelsComptes.data.get(ficheCompte.id) ?? []) : [];
   const ficheCreateurs =
@@ -1351,21 +1368,19 @@ export function AdminPostersPage() {
                     {t("posters.eloCompte", { score: Number(fiche.score).toFixed(1) })}
                   </Badge>
                 )}
-                <WarmupBadge
-                  compteId={fiche.compte_id}
-                  startedAt={fiche.warmup_started_at}
-                  endsAt={fiche.warmup_ends_at}
-                  showStart={Boolean(fiche.compte_id)}
-                  startPending={warmupStart.isPending}
-                  onStart={
-                    fiche.compte_id ? () => warmupStart.mutate(fiche.compte_id!) : undefined
-                  }
-                  showSkip={Boolean(fiche.compte_id)}
-                  skipPending={warmupSkip.isPending}
-                  onSkip={
-                    fiche.compte_id ? () => warmupSkip.mutate(fiche.compte_id!) : undefined
-                  }
-                />
+                {ficheCompte && !estCompteCm(ficheCompte) && (
+                  <WarmupBadge
+                    compteId={ficheCompte.id}
+                    startedAt={ficheCompte.warmup_started_at}
+                    endsAt={ficheCompte.warmup_ends_at}
+                    showStart
+                    startPending={warmupStart.isPending}
+                    onStart={() => warmupStart.mutate(ficheCompte.id)}
+                    showSkip
+                    skipPending={warmupSkip.isPending}
+                    onSkip={() => warmupSkip.mutate(ficheCompte.id)}
+                  />
+                )}
               </div>
 
               <CreateurUpwork
@@ -1373,7 +1388,26 @@ export function AdminPostersPage() {
                 onSave={(url) => enregistrerUpwork.mutate({ id: fiche.id, url })}
               />
 
-              {ficheCompte ? (
+              {ficheComptes.length > 1 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {ficheComptes.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setFicheCompteId(c.id)}
+                      className={
+                        ficheCompte?.id === c.id
+                          ? "rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground"
+                          : "rounded-md border px-2 py-1 text-xs"
+                      }
+                    >
+                      {estCompteCm(c) ? t("cm.badge") : t("cm.perso")} · {drapeauLangue(c.langue)}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {ficheCompte && !estCompteCm(ficheCompte) ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <LangueCompteSelect compte={ficheCompte} />
                   <LabelsCompteSelect compteId={ficheCompte.id} actifs={ficheLabs} />
@@ -1381,7 +1415,7 @@ export function AdminPostersPage() {
                     <PostsParJourCompte compte={ficheCompte} />
                   </div>
                 </div>
-              ) : (
+              ) : !ficheCompte ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed p-3">
                   <p className="text-sm text-muted-foreground">{t("posters.sansCompteCree")}</p>
                   <Button
@@ -1392,7 +1426,13 @@ export function AdminPostersPage() {
                     {creerCompteVide.isPending ? t("common.saving") : t("posters.creerCompte")}
                   </Button>
                 </div>
-              )}
+              ) : null}
+
+              <FormulaireCompteCm
+                posterId={fiche.id}
+                languesProposees={langues.data ?? []}
+                languesPrises={languesCmPrises(ficheComptes)}
+              />
 
               {gererCompteOuvert && ficheCompte && (
                 <div className="rounded-md border p-3">

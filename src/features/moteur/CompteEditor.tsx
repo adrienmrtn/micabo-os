@@ -15,6 +15,8 @@ import {
   supprimerCompte,
 } from "@/features/moteur/api";
 import { listerUgcPersonas } from "@/features/ugc/api";
+import { estCompteCm } from "@/features/moteur/comptesCm";
+import { IdentifiantsCm } from "@/features/moteur/FormulaireCompteCm";
 import { nomLangue } from "@/features/moteur/langues";
 import type { CompteAvecDetails } from "@/features/moteur/types";
 
@@ -478,6 +480,28 @@ export function CompteEditor({ compte }: { compte: CompteAvecDetails }) {
     mutationFn: () => supprimerCompte(compte.id),
     onSuccess: () => rafraichirComptes(queryClient),
   });
+
+  if (estCompteCm(compte)) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <Badge>{t("cm.badge")}</Badge>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-destructive hover:text-destructive"
+            onClick={() => {
+              if (window.confirm(t("comptes.confirmDelete"))) retirer.mutate();
+            }}
+          >
+            {t("comptes.supprimerCompte")}
+          </Button>
+        </div>
+        <IdentifiantsCm compteId={compte.id} editable />
+        <InfosCompte compte={compte} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">

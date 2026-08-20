@@ -28,10 +28,38 @@ export interface CompteReference {
   created_at: string;
 }
 
+export type TypeCompte = "perso" | "cm";
+
+export interface CompteIdentifiants {
+  compte_id: string;
+  tiktok_email: string;
+  tiktok_password: string;
+  tiktok_2fa_note: string | null;
+  notes_hm: string | null;
+  renseigne_at: string;
+  vu_par_poster_at: string | null;
+}
+
+export interface CompteResumePoster {
+  id: string;
+  type_compte: TypeCompte;
+  langue: string;
+  handle_tiktok: string | null;
+  persona_nom: string | null;
+  persona_bio: string | null;
+  avatar_url: string | null;
+  score: number | null;
+  score_maj_at: string | null;
+  warmup_started_at: string | null;
+  warmup_ends_at: string | null;
+  reference_handle: string | null;
+}
+
 export interface Compte {
   id: string;
   poster_id: string;
   compte_reference_id: string | null;
+  type_compte: TypeCompte;
   langue: string;
   persona_nom: string | null;
   persona_bio: string | null;
@@ -179,6 +207,8 @@ export interface PosterProfil {
   role: "admin" | "poster" | "hiring_manager" | "directing_manager" | null;
   /** Recruteur UGC AI VIDEO : créateurs = marque vidéo + persona, sans labels. */
   hm_ugc_ai_video: boolean;
+  /** Tous les comptes actifs du créateur (perso + CM). */
+  comptes: CompteResumePoster[];
 }
 
 export interface ReglagesScoring {

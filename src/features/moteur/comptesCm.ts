@@ -1,0 +1,66 @@
+import type { TypeCompte } from "./types";
+
+export type { TypeCompte };
+
+export function normaliserTypeCompte(valeur: unknown): TypeCompte {
+  return valeur === "cm" ? "cm" : "perso";
+}
+
+export function estCompteCm(compte: { type_compte?: string | null }): boolean {
+  return normaliserTypeCompte(compte.type_compte) === "cm";
+}
+
+/** Compte perso (warmup / slideshow / UGC) — le premier s'il y en a plusieurs. */
+export function comptePerso<T extends { type_compte?: string | null }>(
+  comptes: T[],
+): T | undefined {
+  return comptes.find((c) => !estCompteCm(c));
+}
+
+export function comptesCm<T extends { type_compte?: string | null }>(comptes: T[]): T[] {
+  return comptes.filter(estCompteCm);
+}
+
+/** Compte affiché par défaut : perso s'il existe, sinon le premier. */
+export function comptePrincipal<T extends { type_compte?: string | null }>(
+  comptes: T[],
+): T | undefined {
+  return comptePerso(comptes) ?? comptes[0];
+}
+
+export function languesCmPrises(
+  comptes: Array<{ type_compte?: string | null; langue: string }>,
+): string[] {
+  return [...new Set(comptesCm(comptes).map((c) => c.langue).filter(Boolean))];
+}
+
+export function languesDisponiblesPourCm(
+  proposees: string[],
+  prises: string[],
+): string[] {
+  const occupees = new Set(prises);
+  return proposees.filter((l) => !occupees.has(l));
+}
+
+export function cleCompteActif(userId: string): string {
+  return `compte-actif-${userId}`;
+}
+
+export function lireCompteActif(userId: string, comptes: Array<{ id: string }>): string | null {
+  if (comptes.length === 0) return null;
+  try {
+    const sauve = localStorage.getItem(cleCompteActif(userId));
+    if (sauve && comptes.some((c) => c.id === sauve)) return sauve;
+  } catch {
+    /* private mode */
+  }
+  return null;
+}
+
+export function ecrireCompteActif(userId: string, compteId: string): void {
+  try {
+    localStorage.setItem(cleCompteActif(userId), compteId);
+  } catch {
+    /* private mode */
+  }
+}

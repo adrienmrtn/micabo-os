@@ -832,6 +832,28 @@ export const en = {
       ugcPersonaChoisir: "Pick a persona…",
       ugcPersonaRequis: "A persona is required when UGC AI is on.",
     },
+    cm: {
+      badge: "CM",
+      ajouter: "Add a CM account",
+      ajouterAide:
+        "Company TikTok account, one language. Credentials must already exist — you hand them to the creator.",
+      creer: "Create CM account",
+      langue: "CM account language",
+      email: "TikTok email",
+      password: "TikTok password",
+      deuxFa: "2FA / backup codes",
+      deuxFaPh: "Optional — TOTP secret or codes",
+      identifiants: "TikTok credentials",
+      identifiantsAbsents: "No credentials stored for this CM account.",
+      languePrise: "This creator already has a CM account in this language.",
+      toutesLanguesPrises: "A CM account already exists for every available language.",
+      copier: "Copy",
+      aideCreateur:
+        "Log into this TikTok with the credentials provided. You don’t create the account — it already exists.",
+      selecteur: "Account",
+      perso: "Personal",
+      videoPlusTard: "Paper videos for this CM account will show up here.",
+    },
     posters: {
       title: "Posters",
       subtitle: "Creators and recruiters.",
@@ -859,6 +881,7 @@ export const en = {
       ajouterRecruteur: "Add a recruiter",
       creationRefusee: "Creation refused for this language — try again or contact an admin.",
       gererCompte: "Manage account",
+      gererComptes: "TikTok accounts",
       creerCompte: "Create the publishing account",
       sansCompteCree: "This poster doesn't have a publishing account yet.",
       labelsAide:

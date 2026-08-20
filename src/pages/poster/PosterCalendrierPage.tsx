@@ -17,7 +17,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, EmptyState } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase/client";
-import { aujourdhui, demarrerWarmup, majMonHandle, monCompte } from "@/features/moteur/api";
+import {
+  aujourdhui,
+  demarrerWarmup,
+  majMonHandle,
+  mesComptes,
+  type MonCompte,
+} from "@/features/moteur/api";
+import {
+  comptePrincipal,
+  ecrireCompteActif,
+  estCompteCm,
+  lireCompteActif,
+} from "@/features/moteur/comptesCm";
+import { IdentifiantsCm } from "@/features/moteur/FormulaireCompteCm";
+import { drapeauLangue, nomLangue } from "@/features/moteur/langues";
 import { WarmupBadge } from "@/features/moteur/WarmupBadge";
 import { statutWarmup } from "@/features/moteur/warmup";
 import { useAuth } from "@/features/auth/AuthContext";
@@ -25,6 +39,7 @@ import { cn } from "@/lib/utils";
 
 interface PostCalendrier {
   id: string;
+  compte_id: string | null;
   date_publication_prevue: string | null;
   type: string;
   statut: string;
@@ -105,25 +120,55 @@ function CartePost({ post, creneau }: { post: PostCalendrier; creneau?: number }
  * automatiquement à la création du compte, que le poster recopie pour monter son
  * vrai compte TikTok. Rien à créer ici — juste à afficher ce qui existe déjà.
  */
-function IdentiteTikTok() {
+function SelecteurCompte({
+  comptes,
+  actifId,
+  onChange,
+}: {
+  comptes: MonCompte[];
+  actifId: string;
+  onChange: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  if (comptes.length < 2) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-xs text-muted-foreground">{t("cm.selecteur")}</span>
+      {comptes.map((c) => (
+        <button
+          key={c.id}
+          type="button"
+          onClick={() => onChange(c.id)}
+          className={
+            c.id === actifId
+              ? "rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground"
+              : "rounded-md border px-2.5 py-1 text-xs"
+          }
+        >
+          {estCompteCm(c) ? t("cm.badge") : t("cm.perso")} · {drapeauLangue(c.langue)}
+          {c.handle_tiktok ? ` @${c.handle_tiktok}` : ""}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function IdentiteTikTok({ compte }: { compte: MonCompte }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { data: compte } = useQuery({ queryKey: ["mon-compte"], queryFn: monCompte });
+  const cm = estCompteCm(compte);
 
   const [editHandle, setEditHandle] = React.useState(false);
   const [handle, setHandle] = React.useState("");
 
   const majHandle = useMutation({
-    mutationFn: () => majMonHandle(handle),
+    mutationFn: () => majMonHandle(handle, compte.id),
     onSuccess: () => {
       setEditHandle(false);
-      queryClient.invalidateQueries({ queryKey: ["mon-compte"] });
+      queryClient.invalidateQueries({ queryKey: ["mes-comptes"] });
     },
   });
 
-
-  // Le poster n'a pas encore de compte de publication : rien à afficher.
-  if (!compte) return null;
 
   const copier = (texte: string) => navigator.clipboard?.writeText(texte);
 
@@ -140,7 +185,7 @@ function IdentiteTikTok() {
           )}
           <div className="min-w-0 flex-1 space-y-1.5">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {t("identite.titre")}
+              {cm ? `${t("cm.badge")} · ${nomLangue(compte.langue)}` : t("identite.titre")}
             </p>
             {compte.persona_nom && <p className="text-sm font-semibold">{compte.persona_nom}</p>}
 
@@ -199,7 +244,14 @@ function IdentiteTikTok() {
                 </Button>
               )}
             </div>
-            <p className="pt-1 text-xs text-muted-foreground">{t("identite.aide")}</p>
+            <p className="pt-1 text-xs text-muted-foreground">
+              {cm ? t("cm.aideCreateur") : t("identite.aide")}
+            </p>
+            {cm && (
+              <div className="pt-2">
+                <IdentifiantsCm compteId={compte.id} editable={false} />
+              </div>
+            )}
           </div>
         </div>
       </CardContent>
@@ -216,15 +268,31 @@ export function PosterCalendrierPage() {
     queryFn: mesPosts,
     enabled: Boolean(user?.id),
   });
-  const { data: compte } = useQuery({
-    queryKey: ["mon-compte"],
-    queryFn: monCompte,
+  const { data: comptes } = useQuery({
+    queryKey: ["mes-comptes"],
+    queryFn: mesComptes,
     enabled: Boolean(user?.id),
   });
+  const [compteId, setCompteId] = React.useState<string | null>(null);
+  const compte =
+    (comptes ?? []).find((c) => c.id === compteId) ?? comptePrincipal(comptes ?? []);
+
+  React.useEffect(() => {
+    if (!user?.id || !comptes?.length) return;
+    const sauve = lireCompteActif(user.id, comptes);
+    const id = sauve ?? comptePrincipal(comptes)?.id ?? null;
+    setCompteId(id);
+  }, [user?.id, comptes]);
+
+  const choisirCompte = (id: string) => {
+    setCompteId(id);
+    if (user?.id) ecrireCompteActif(user.id, id);
+  };
+
   const startWarmup = useMutation({
     mutationFn: () => demarrerWarmup(compte!.id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["mon-compte"] });
+      void queryClient.invalidateQueries({ queryKey: ["mes-comptes"] });
     },
   });
 
@@ -239,12 +307,13 @@ export function PosterCalendrierPage() {
   const parJour = React.useMemo(() => {
     const carte = new Map<string, PostCalendrier[]>();
     for (const post of posts ?? []) {
+      if (compte?.id && post.compte_id && post.compte_id !== compte.id) continue;
       const date = post.date_publication_prevue;
       if (!date) continue;
       carte.set(date, [...(carte.get(date) ?? []), post]);
     }
     return carte;
-  }, [posts]);
+  }, [posts, compte?.id]);
 
   if (isPending) {
     return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
@@ -276,9 +345,20 @@ export function PosterCalendrierPage() {
       })
     : null;
 
+  const estCm = compte ? estCompteCm(compte) : false;
+
   return (
     <div className="space-y-8">
-      {/* Warmup : le créateur démarre le timer ici (plus côté HM). */}
+      {comptes && comptes.length > 0 && (
+        <SelecteurCompte
+          comptes={comptes}
+          actifId={compte?.id ?? ""}
+          onChange={choisirCompte}
+        />
+      )}
+
+      {/* Warmup : le créateur démarre le timer ici (plus côté HM). Pas pour les CM. */}
+      {compte && !estCm && (
       <div
         className={cn(
           "flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between",
@@ -320,8 +400,9 @@ export function PosterCalendrierPage() {
           </div>
         )}
       </div>
+      )}
 
-      <IdentiteTikTok />
+      {compte && <IdentiteTikTok compte={compte} />}
 
       <Link
         to="/createur/parrainage"
@@ -342,7 +423,10 @@ export function PosterCalendrierPage() {
       <section className="space-y-4">
         <h2 className="text-lg font-semibold tracking-tight">{t("calendrier.aujourdhui")}</h2>
         {duJour.length === 0 ? (
-          <EmptyState icon={<CalendarCheck className="size-5" />} title={t("calendrier.rien")} />
+          <EmptyState
+            icon={<CalendarCheck className="size-5" />}
+            title={estCm ? t("cm.videoPlusTard") : t("calendrier.rien")}
+          />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {duJour.map((post, index) => (
