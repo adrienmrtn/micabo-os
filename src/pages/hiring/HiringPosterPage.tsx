@@ -26,7 +26,7 @@ import {
 } from "@/features/moteur/api";
 import { comptePrincipal, estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
 import { FormulaireAjouterCompte } from "@/features/moteur/FormulaireCompteCm";
-import { drapeauLangue } from "@/features/moteur/langues";
+import { EnteteCompte } from "@/features/moteur/VignetteCompte";
 import { WarmupBadge } from "@/features/moteur/WarmupBadge";
 import type { PosterProfil } from "@/features/moteur/types";
 
@@ -45,6 +45,7 @@ const selectClass =
 function LignePoster({ poster: p }: { poster: PosterProfil }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
   const comptes = p.comptes ?? [];
   const [compteId, setCompteId] = React.useState(
     () => comptePrincipal(comptes)?.id ?? p.compte_id ?? "",
@@ -85,164 +86,136 @@ function LignePoster({ poster: p }: { poster: PosterProfil }) {
   });
 
   return (
-    <div className="flex items-start gap-3 rounded-lg border p-3">
-      {p.avatar_url ? (
-        <img src={p.avatar_url} alt="" className="size-11 shrink-0 rounded-full border object-cover" />
-      ) : (
-        <div className="size-11 shrink-0 rounded-full border bg-muted" />
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium">
-            {[p.prenom, p.nom].filter(Boolean).join(" ") || p.email}
-          </span>
-          {!p.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
-          {compteActif && !estCompteCm(compteActif) && (
-            <WarmupBadge
-              compteId={compteActif.id}
-              startedAt={compteActif.warmup_started_at}
-              endsAt={compteActif.warmup_ends_at}
-            />
-          )}
-          {!edite && (
-            <span className="ml-auto flex items-center gap-3">
-              {compteActif && (
-                <button
-                  type="button"
-                  onClick={() => setEdite(true)}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-primary"
-                >
-                  <Pencil className="size-3" />
-                  {t("common.edit")}
-                </button>
-              )}
-              <button
-                type="button"
-                disabled={supprimer.isPending}
-                onClick={() => {
-                  if (window.confirm(t("hiring.confirmSuppr", { nom: [p.prenom, p.nom].filter(Boolean).join(" ") || p.email })))
-                    supprimer.mutate();
-                }}
-                className="inline-flex items-center gap-1 text-xs font-medium text-destructive"
-              >
-                <Trash2 className="size-3" />
-                {t("common.delete")}
-              </button>
+    <div className="space-y-3 rounded-lg border p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">
+              {[p.prenom, p.nom].filter(Boolean).join(" ") || p.email}
             </span>
-          )}
+            {!p.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
+          </div>
+          <p className="truncate text-xs text-muted-foreground">{p.email}</p>
         </div>
-        <p className="truncate text-xs text-muted-foreground">{p.email}</p>
-
-        <div className="mt-1.5 space-y-1 border-t pt-1.5">
-          {edite ? (
-            <div className="space-y-2">
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label htmlFor={`nom-${p.id}`} className="text-xs">
-                    {t("comptes.nomAffiche")}
-                  </Label>
-                  <Input id={`nom-${p.id}`} value={nom} onChange={(e) => setNom(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor={`h-${p.id}`} className="text-xs">
-                    {t("comptes.pseudo")}
-                  </Label>
-                  <Input id={`h-${p.id}`} value={handle} onChange={(e) => setHandle(e.target.value)} />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor={`bio-${p.id}`} className="text-xs">
-                  {t("comptes.bioProposee")}
-                </Label>
-                <textarea
-                  id={`bio-${p.id}`}
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  rows={2}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" disabled={enregistrer.isPending} onClick={() => enregistrer.mutate()}>
-                  <Check className="size-4" />
-                  {enregistrer.isPending ? t("common.saving") : t("common.save")}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setEdite(false)}>
-                  <X className="size-4" />
-                  {t("common.cancel")}
-                </Button>
-              </div>
-              {enregistrer.isError && (
-                <p className="text-xs text-destructive">{(enregistrer.error as Error).message}</p>
-              )}
-            </div>
-          ) : compteActif?.handle_tiktok ? (
-            <>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-                <a
-                  href={`https://www.tiktok.com/@${compteActif.handle_tiktok.replace(/^@/, "")}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-medium text-primary underline underline-offset-2"
-                >
-                  @{compteActif.handle_tiktok.replace(/^@/, "")}
-                </a>
-                {compteActif.persona_nom && (
-                  <span className="text-muted-foreground">{compteActif.persona_nom}</span>
-                )}
-              </div>
-              {compteActif.persona_bio && (
-                <p className="whitespace-pre-wrap text-xs text-muted-foreground">
-                  {compteActif.persona_bio}
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="text-xs text-muted-foreground">{t("hiring.identiteEnCours")}</p>
-          )}
-          <ComptesPoster poster={p} compteId={compteActif?.id} onSelect={setCompteId} />
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] text-muted-foreground">
+            {t("posters.nbComptes", { n: comptes.length })}
+          </span>
+          <button
+            type="button"
+            disabled={supprimer.isPending}
+            onClick={() => {
+              if (window.confirm(t("hiring.confirmSuppr", { nom: [p.prenom, p.nom].filter(Boolean).join(" ") || p.email })))
+                supprimer.mutate();
+            }}
+            className="inline-flex items-center gap-1 text-xs font-medium text-destructive"
+          >
+            <Trash2 className="size-3" />
+            {t("common.delete")}
+          </button>
         </div>
       </div>
-    </div>
-  );
-}
 
-function ComptesPoster({
-  poster,
-  compteId,
-  onSelect,
-}: {
-  poster: PosterProfil;
-  compteId?: string;
-  onSelect: (id: string) => void;
-}) {
-  const { t } = useTranslation();
-  const comptes = poster.comptes ?? [];
-  const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
-
-  return (
-    <div className="mt-2 space-y-2 border-t pt-2">
-      {comptes.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {comptes.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => onSelect(c.id)}
-              className={
-                compteId === c.id
-                  ? "rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground"
-                  : "rounded-md border px-2 py-0.5 text-xs"
-              }
-            >
-              {estCompteCm(c) ? t("cm.badge") : t("cm.perso")} · {drapeauLangue(c.langue)}
-              {c.handle_tiktok ? ` @${c.handle_tiktok}` : ""}
-            </button>
-          ))}
-        </div>
+      {comptes.length === 0 ? (
+        <p className="rounded-md border border-dashed px-2.5 py-2 text-xs text-muted-foreground">
+          {t("posters.aucunCompte")}
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {comptes.map((c) => {
+            const ouvert = compteActif?.id === c.id;
+            return (
+              <li
+                key={c.id}
+                className={
+                  ouvert
+                    ? "space-y-2 rounded-md border border-primary/40 bg-muted/20 p-2.5"
+                    : "space-y-2 rounded-md border p-2.5"
+                }
+              >
+                <div className="cursor-pointer" onClick={() => setCompteId(c.id)}>
+                  <EnteteCompte
+                    compact
+                    compte={c}
+                    extra={
+                      !estCompteCm(c) ? (
+                        <div className="mt-1">
+                          <WarmupBadge
+                            compteId={c.id}
+                            startedAt={c.warmup_started_at}
+                            endsAt={c.warmup_ends_at}
+                          />
+                        </div>
+                      ) : undefined
+                    }
+                  />
+                </div>
+                {ouvert && edite ? (
+                  <div className="space-y-2 border-t pt-2">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label htmlFor={`nom-${c.id}`} className="text-xs">
+                          {t("comptes.nomAffiche")}
+                        </Label>
+                        <Input id={`nom-${c.id}`} value={nom} onChange={(e) => setNom(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor={`h-${c.id}`} className="text-xs">
+                          {t("comptes.pseudo")}
+                        </Label>
+                        <Input id={`h-${c.id}`} value={handle} onChange={(e) => setHandle(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`bio-${c.id}`} className="text-xs">
+                        {t("comptes.bioProposee")}
+                      </Label>
+                      <textarea
+                        id={`bio-${c.id}`}
+                        value={bio}
+                        onChange={(e) => setBio(e.target.value)}
+                        rows={2}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" disabled={enregistrer.isPending} onClick={() => enregistrer.mutate()}>
+                        <Check className="size-4" />
+                        {enregistrer.isPending ? t("common.saving") : t("common.save")}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEdite(false)}>
+                        <X className="size-4" />
+                        {t("common.cancel")}
+                      </Button>
+                    </div>
+                    {enregistrer.isError && (
+                      <p className="text-xs text-destructive">{(enregistrer.error as Error).message}</p>
+                    )}
+                  </div>
+                ) : ouvert ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
+                    <p className="text-xs text-muted-foreground">
+                      {c.persona_bio ||
+                        (c.handle_tiktok ? "" : t("hiring.identiteEnCours"))}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setEdite(true)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-primary"
+                    >
+                      <Pencil className="size-3" />
+                      {t("common.edit")}
+                    </button>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
       )}
+
       <FormulaireAjouterCompte
-        posterId={poster.id}
+        posterId={p.id}
         languesProposees={langues.data ?? []}
         languesPrisesCm={languesCmPrises(comptes)}
       />

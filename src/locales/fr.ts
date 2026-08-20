@@ -939,11 +939,11 @@ export const fr = {
     },
     posters: {
       title: "Posters",
-      subtitle: "Créateurs et recruteurs.",
+      subtitle: "Créateurs (logins) et leurs comptes TikTok.",
       creerPosterDesc: "Crée un accès créateur (email généré + mot de passe).",
       aideTitre: "Aide",
       aideAcces:
-        "Crée les accès de tes freelances. Identifiants : email généré + mot de passe affiché à la création.",
+        "Un créateur = un login. Il peut avoir plusieurs comptes TikTok (perso ou CM). Identifiants : email généré + mot de passe affiché à la création.",
       prenom: "Prénom",
       nom: "Nom",
       emailGenere: "Email généré",
@@ -965,8 +965,12 @@ export const fr = {
       creationRefusee: "Création refusée pour cette langue — réessaie ou contacte un admin.",
       gererCompte: "Gérer le compte",
       gererComptes: "Comptes TikTok",
-      creerCompte: "Créer le compte de publication",
-      sansCompteCree: "Ce poster n'a pas encore de compte de publication.",
+      ficheComptes: "Comptes TikTok",
+      nbComptes: "{{n}} compte(s)",
+      aucunCompte: "Aucun compte TikTok",
+      compteSansHandle: "Pas encore de @",
+      creerCompte: "Créer le premier compte",
+      sansCompteCree: "Ce créateur n'a pas encore de compte TikTok.",
       labelsAide:
         "Sans label sur un créateur, minuit n’assigne rien (intersection labels créateur ∩ contenus).",
       sansLabels: "Sans labels",
@@ -1031,7 +1035,7 @@ export const fr = {
     hiring: {
       title: "Créer un poster",
       subtitle:
-        "Saisis le prénom, le nom et la langue de ce créateur. Tu peux en créer dans plusieurs langues. L’identité TikTok est générée automatiquement.",
+        "Un créateur = un login. Tu lui ajoutes ensuite un ou plusieurs comptes TikTok (perso ou CM). L’identité du premier compte se génère automatiquement.",
       subtitleUgcAiVideo:
         "Mode UGC AI VIDEO : chaque créateur reçoit la marque UGC AI VIDEO, tes labels UGC VIDEO, et un persona unique.",
       langue: "Langue du poster",
