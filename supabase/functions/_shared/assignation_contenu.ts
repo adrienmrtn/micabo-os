@@ -1,3 +1,7 @@
+import {
+  resoudreVisuelsAssignation,
+  type SlideStructureManuel,
+} from "./creation_manuelle.ts";
 import { assurerDeckPourLangue } from "./import_contenu.ts";
 import { mapPool } from "./parallel.ts";
 import { serviceClient } from "./supabase.ts";
@@ -620,6 +624,8 @@ interface SlideStructure {
   media_id?: string | null;
   raw_url?: string | null;
   reference_url?: string | null;
+  pinned?: boolean;
+  critere?: string | null;
 }
 
 interface SlideLangue {
@@ -667,10 +673,30 @@ async function materialiserPostDepuisPassage(
   // Positions parfois number / parfois string selon JSONB → clé normalisée.
   const parPos = new Map(structure.map((s) => [Number(s.position), s]));
 
+  const { parPos: mediaResolus, logs: visuelsLogs } = await resoudreVisuelsAssignation(
+    supabase,
+    args.contenuId,
+    structure.map((s) => ({
+      position: Number(s.position),
+      media_id: s.media_id ?? null,
+      pinned: Boolean(s.pinned && s.media_id),
+      critere: s.critere ?? null,
+      raw_url: s.raw_url ?? null,
+      reference_url: s.reference_url ?? null,
+    })) as SlideStructureManuel[],
+  );
+  if (visuelsLogs.some((l) => l.fallback)) {
+    console.log(
+      `[assignation] contenu=${args.contenuId} visuels ` +
+        visuelsLogs
+          .map((l) => `#${l.position}:${l.motif}`)
+          .join(" · "),
+    );
+  }
+
   const mediaIds = [
     ...new Set(
-      structure
-        .map((s) => s.media_id)
+      [...mediaResolus.values(), ...structure.map((s) => s.media_id)]
         .filter((id): id is string => typeof id === "string" && id.length > 0),
     ),
   ];
@@ -706,7 +732,7 @@ async function materialiserPostDepuisPassage(
 
   const rows = args.slides.map((s) => {
     const visuel = parPos.get(Number(s.position));
-    const mid = visuel?.media_id ?? null;
+    const mid = mediaResolus.get(Number(s.position)) ?? visuel?.media_id ?? null;
     return {
       post_id: post.id,
       position: Number(s.position),
@@ -725,7 +751,10 @@ async function materialiserPostDepuisPassage(
 
   const { error: errL } = await supabase
     .from("passages")
-    .update({ post_id: post.id })
+    .update({
+      post_id: post.id,
+      visuels_resolution: visuelsLogs,
+    })
     .eq("id", args.passageId);
   if (errL) {
     await supabase.from("posts").delete().eq("id", post.id);

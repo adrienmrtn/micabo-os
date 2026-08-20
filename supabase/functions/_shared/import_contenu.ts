@@ -15,6 +15,11 @@ import {
   translateSlideshow,
 } from "./gemini.ts";
 import {
+  assurerHookMedia,
+  captionnerMedia,
+  slidesSansCaption,
+} from "./media_caption.ts";
+import {
   attacherLabelsAuMedia,
   mediaPropreMemeLabel,
 } from "./media_labels.ts";
@@ -58,6 +63,8 @@ export const LANGUES_CIBLES = [
   "tr",
 ] as const;
 const SLIDES_PAR_PASSAGE = 2;
+/** Captions Florence/Moondream : plus légères que le nettoyage Fal. */
+const SLIDES_CAPTION_PAR_PASSAGE = 2;
 /** 1 slide / passage nettoyage : Fal≤90s + store doit tenir sous le mur Edge ~150s. */
 const SLIDES_NETTOYAGE_PAR_PASSAGE = 1;
 /**
@@ -775,6 +782,20 @@ export interface NettoyageRapport {
   texte: string;
 }
 
+export interface CaptionSlideRapport {
+  position: number;
+  ok: boolean;
+  modele?: string;
+  caption?: string | null;
+  hook?: boolean;
+  lignes: string[];
+}
+
+export interface CaptionRapport {
+  slides: CaptionSlideRapport[];
+  texte: string;
+}
+
 export interface AvancerImportResultat {
   etape: string;
   /**
@@ -787,6 +808,8 @@ export interface AvancerImportResultat {
   elo?: EloRapport;
   /** Présent sur l'étape nettoyage. */
   nettoyage?: NettoyageRapport;
+  /** Présent sur l'étape caption. */
+  captions?: CaptionRapport;
 }
 
 /** Ligne `contenus` telle que renvoyée par le claim (colonnes non typées). */
@@ -815,7 +838,7 @@ export async function avancerImport(
 /**
  * Un pas du pipeline. Ordre :
  * OCR hook → pertinence → OCR reste → ELO par langue (gate) → nettoyage (1×)
- * → valide (texte OCR source uniquement).
+ * → caption visuelle (Florence → Moondream) → valide (texte OCR source uniquement).
  *
  * Sophia + traduction hors-source = à l'assignation minuit
  * (`assurerDeckPourLangue`), pas à l'import.
@@ -955,6 +978,7 @@ async function executerPasImport(
       }
 
       if (contenu.import_etape !== "elo" && contenu.import_etape !== "nettoyage" &&
+          contenu.import_etape !== "caption" &&
           contenu.import_etape !== "traduction" && contenu.import_etape !== "sophia" &&
           contenu.import_etape !== "done") {
         await marquer(supabase, contenu.id, { import_etape: "elo" });
@@ -1063,7 +1087,35 @@ async function executerPasImport(
       return { etape: "nettoyage", nettoyage, progres };
     }
 
-    // 6 — Recalcule ELO cold-start puis valide.
+    // 6 — Caption visuelle (Florence → Moondream → aucune) + Hook 1ʳᵉ slide
+    {
+      const aCaption = await slidesSansCaption(supabase, slides);
+      if (aCaption.length > 0) {
+        const rapports: CaptionSlideRapport[] = [];
+        for (const slide of aCaption.slice(0, SLIDES_CAPTION_PAR_PASSAGE)) {
+          rapports.push(await capturerCaptionSlide(supabase, contenu, slide));
+        }
+        await marquer(supabase, contenu.id, { import_etape: "caption" });
+        const captions: CaptionRapport = {
+          slides: rapports,
+          texte: rapports
+            .map((s) => {
+              const head =
+                `══ slide #${s.position} · ${s.ok ? "OK" : "aucune"}` +
+                (s.modele ? ` · ${s.modele}` : "") +
+                (s.hook ? " · Hook" : "");
+              const cap = s.caption ? `  « ${s.caption} »` : "";
+              return [head, cap, ...s.lignes.map((l) => `  ${l}`)]
+                .filter(Boolean)
+                .join("\n");
+            })
+            .join("\n"),
+        };
+        return { etape: "caption", captions, progres: rapports.length > 0 };
+      }
+    }
+
+    // 7 — Recalcule ELO cold-start puis valide.
     // Texte stocké = OCR source uniquement (pas de pub Sophia, pas de trad).
     // Sophia + traduction hors-source → `assurerDeckPourLangue` à l'assignation.
     const { data: langues } = await supabase
@@ -1333,6 +1385,14 @@ async function nettoyerSlide(
     rapport.moteur = "reuse";
     lignes.push(`reuse propre existant ${deja.storage_path} → ${deja.id}`);
     await patchSlideMediaId(supabase, contenu.id, slide.position, deja.id);
+    if (slide.position === 1) {
+      try {
+        await assurerHookMedia(supabase, deja.id);
+        lignes.push("label Hook (1ʳᵉ slide)");
+      } catch (e) {
+        lignes.push(`warn hook: ${messageErreur(e)}`);
+      }
+    }
     return { mediaId: deja.id, tentatives: 0, rapport };
   }
 
@@ -1472,7 +1532,44 @@ async function nettoyerSlide(
   }
 
   rapport.ok = true;
+  if (slide.position === 1) {
+    try {
+      await assurerHookMedia(supabase, media.id);
+      lignes.push("label Hook (1ʳᵉ slide)");
+    } catch (e) {
+      lignes.push(`warn hook: ${messageErreur(e)}`);
+    }
+  }
   return { mediaId: media.id, tentatives: 0, rapport };
+}
+
+async function capturerCaptionSlide(
+  supabase: Supabase,
+  contenu: ContenuRow,
+  slide: { position: number; media_id: string; raw_url?: string | null },
+): Promise<CaptionSlideRapport> {
+  const lignes: string[] = [`slide #${slide.position}`];
+  try {
+    const r = await captionnerMedia(supabase, slide.media_id, {
+      imageUrl: slide.raw_url ?? null,
+    });
+    lignes.push(...r.lignes);
+    return {
+      position: slide.position,
+      ok: r.statut === "ok",
+      modele: r.modele,
+      caption: r.caption,
+      hook: r.estHook,
+      lignes,
+    };
+  } catch (e) {
+    const msg = messageErreur(e);
+    lignes.push(`exception: ${msg}`);
+    console.warn(
+      `[import caption] contenu=${contenu.id} slide=${slide.position} ${msg}`,
+    );
+    return { position: slide.position, ok: false, lignes };
+  }
 }
 
 // deno-lint-ignore no-explicit-any
@@ -1501,6 +1598,13 @@ async function stockerBrut(
     .single();
   if (error) throw error;
   await attacherLabelsAuMedia(supabase, media.id, contenu.id);
+  if (slide.position === 1) {
+    try {
+      await assurerHookMedia(supabase, media.id);
+    } catch {
+      // Hook : ne bloque pas le repli brut
+    }
+  }
   return media.id;
 }
 

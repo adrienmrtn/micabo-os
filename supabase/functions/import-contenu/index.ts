@@ -185,6 +185,7 @@ Deno.serve(async (request) => {
           etape: r.etape,
           elo: r.elo ?? null,
           nettoyage: r.nettoyage ?? null,
+          captions: r.captions ?? null,
         });
       }
       const r = await enqueueImportUrls(supabase, {
@@ -251,6 +252,7 @@ Deno.serve(async (request) => {
       etape: r.etape,
       elo: r.elo ?? null,
       nettoyage: r.nettoyage ?? null,
+      captions: r.captions ?? null,
     });
   } catch (error) {
     return json({ ok: false, error: messageErreur(error) }, 500);

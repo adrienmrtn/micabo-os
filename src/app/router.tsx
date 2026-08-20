@@ -34,6 +34,7 @@ import { AdminUgcPersonasPage } from "@/pages/admin/AdminUgcPersonasPage";
 import { AdminUgcSlideshowsPage } from "@/pages/admin/AdminUgcSlideshowsPage";
 import { AdminUgcVideosPage } from "@/pages/admin/AdminUgcVideosPage";
 import { AdminPapierPage } from "@/pages/admin/AdminPapierPage";
+import { AdminCreationPage } from "@/pages/admin/AdminCreationPage";
 import { PosterCalendrierPage } from "@/pages/poster/PosterCalendrierPage";
 import { PosterReferralPage } from "@/pages/poster/PosterReferralPage";
 import { PosterPostPage } from "@/pages/poster/PosterPostPage";
@@ -69,6 +70,7 @@ export function AppRouter() {
             <Route path="/admin/sources" element={<AdminSourcesPage />} />
             <Route path="/admin/contenus" element={<Navigate to="/admin/slideshows" replace />} />
             <Route path="/admin/slideshows" element={<AdminSlideshowsPage />} />
+            <Route path="/admin/creation" element={<AdminCreationPage />} />
             <Route path="/admin/papier" element={<AdminPapierPage />} />
             <Route path="/admin/assignation-sources" element={<Navigate to="/admin/sources" replace />} />
             <Route path="/admin/reproduisibles" element={<Navigate to="/admin/slideshows" replace />} />

@@ -8,12 +8,18 @@ import {
   ChevronRight,
   ExternalLink,
   Maximize2,
+  ScanText,
   Sparkles,
   Trash2,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { AGENTS_UPSCALE, AGENTS_UPSCALE_SEEDVR, executerEnLot } from "@/lib/lot";
+import {
+  AGENTS_CAPTION,
+  AGENTS_UPSCALE,
+  AGENTS_UPSCALE_SEEDVR,
+  executerEnLot,
+} from "@/lib/lot";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,9 +34,11 @@ import { NettoyageEtapes } from "@/components/moteur/NettoyageEtapes";
 import { UpscaleMediaControl } from "@/components/moteur/UpscaleMediaControl";
 import {
   BIBLIO_PAGE_SIZE,
+  captionnerMediaBiblio,
   lireReglages,
   listerBibliothequePage,
-  listerLabels,
+  listerLabelsBiblio,
+  listerMediasARattraperCaption,
   nettoyerMedia,
   stripC2paMedia,
   supprimerMedia,
@@ -61,6 +69,8 @@ function VignetteMedia({
   premier,
   etapesLot,
   modeleUpscale,
+  captionBusy,
+  onCaption,
 }: {
   media: Media;
   onChange: () => void;
@@ -69,6 +79,8 @@ function VignetteMedia({
   premier: ProviderNettoyage;
   etapesLot?: EvenementEtape[] | null;
   modeleUpscale: ModeleUpscale;
+  captionBusy?: boolean;
+  onCaption: (forcer?: boolean) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const propre = estPropre(media);
@@ -147,7 +159,18 @@ function VignetteMedia({
         ) : (
           <Badge variant="warning">{t("bibliotheque.aNettoyer")}</Badge>
         )}
+        {media.est_hook && (
+          <Badge variant="secondary">{t("bibliotheque.captionHook")}</Badge>
+        )}
+        {media.caption_statut === "aucune" && (
+          <Badge variant="outline">{t("bibliotheque.captionAucune")}</Badge>
+        )}
       </div>
+      {media.caption ? (
+        <p className="line-clamp-3 text-[11px] leading-snug text-muted-foreground" title={media.caption}>
+          {media.caption}
+        </p>
+      ) : null}
 
       {etapes && (nettoyer.isPending || nettoyer.isError || etapesLot) ? (
         <NettoyageEtapes etapes={etapes} className="rounded border bg-muted/30 p-1.5" />
@@ -176,6 +199,21 @@ function VignetteMedia({
               : t("bibliotheque.nettoyer")}
           </Button>
         )}
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 flex-1 px-2 text-xs"
+          disabled={captionBusy || nettoyer.isPending}
+          onClick={() => void onCaption(Boolean(media.caption_statut))}
+          title={t("bibliotheque.rattraperAide")}
+        >
+          <ScanText className="size-3" />
+          {captionBusy
+            ? t("bibliotheque.captionEnCours")
+            : media.caption_statut
+              ? t("bibliotheque.captionEncore")
+              : t("bibliotheque.captionUne")}
+        </Button>
         <UpscaleMediaControl
           mediaId={media.id}
           dejaUpscale={dejaUpscale}
@@ -219,8 +257,13 @@ export function AdminBibliothequePage() {
   const [upscaleLot, setUpscaleLot] = React.useState<{ fait: number; total: number } | null>(null);
   const [upscaleLogs, setUpscaleLogs] = React.useState<string[]>([]);
   const [modeleUpscale, setModeleUpscale] = React.useState<ModeleUpscale>("realesrgan");
+  const [captionLot, setCaptionLot] = React.useState<{ fait: number; total: number } | null>(
+    null,
+  );
+  const [captionLogs, setCaptionLogs] = React.useState<string[]>([]);
+  const [captionUn, setCaptionUn] = React.useState<Set<string>>(() => new Set());
 
-  const labels = useQuery({ queryKey: ["labels"], queryFn: listerLabels });
+  const labels = useQuery({ queryKey: ["labels-biblio"], queryFn: listerLabelsBiblio });
   const biblio = useQuery({
     queryKey: ["medias-biblio", labelId || "tous", page, BIBLIO_PAGE_SIZE],
     queryFn: () =>
@@ -258,7 +301,7 @@ export function AdminBibliothequePage() {
   const aNettoyer = aNettoyerListe.length;
   const aUpscalerListe = affichees.filter((m) => !m.upscale_le);
   const aUpscaler = aUpscalerListe.length;
-  const lotEnCours = lot !== null || c2pa !== null || upscaleLot !== null;
+  const lotEnCours = lot !== null || c2pa !== null || upscaleLot !== null || captionLot !== null;
 
   const basculer = (id: string) =>
     setSelection((s) => {
@@ -440,6 +483,94 @@ export function AdminBibliothequePage() {
     rafraichir();
   }
 
+  async function captionnerUne(media: Media, forcer = false) {
+    setCaptionUn((prev) => new Set(prev).add(media.id));
+    try {
+      const r = await captionnerMediaBiblio(media.id, { forcer });
+      const extra = r.est_hook ? " · Hook" : "";
+      setCaptionLogs((prev) => [
+        ...prev,
+        r.caption_statut === "ok"
+          ? `✓ ${media.id.slice(0, 8)} — ${r.caption ?? ""}${extra}`
+          : `· ${media.id.slice(0, 8)} — ${t("bibliotheque.captionAucune")}${extra}`,
+        ...r.lignes.map((l) => `  ${l}`),
+      ]);
+      rafraichir();
+    } catch (e) {
+      setCaptionLogs((prev) => [
+        ...prev,
+        `✗ ${media.id.slice(0, 8)} — ${(e as Error).message}`,
+      ]);
+    } finally {
+      setCaptionUn((prev) => {
+        const n = new Set(prev);
+        n.delete(media.id);
+        return n;
+      });
+    }
+  }
+
+  /** Rattrapage hors ligne : toutes les photos sans caption / Hook manquant. */
+  async function rattraperCaptions() {
+    setCaptionLogs([`${t("bibliotheque.rattraper")}…`]);
+    let liste: Array<{ id: string; url: string; motif: "caption" | "hook" }>;
+    try {
+      const pending = await listerMediasARattraperCaption();
+      liste = pending.medias;
+    } catch (e) {
+      setCaptionLogs([`✗ ${(e as Error).message}`]);
+      return;
+    }
+    if (liste.length === 0) {
+      setCaptionLogs([t("bibliotheque.rattraperVide")]);
+      return;
+    }
+    setCaptionLot({ fait: 0, total: liste.length });
+    setCaptionLogs([t("bibliotheque.rattraperDebut", { count: liste.length })]);
+    let ok = 0;
+    let aucune = 0;
+    let hooks = 0;
+    let echecs = 0;
+    await executerEnLot(
+      liste,
+      async (item) => {
+        try {
+          const r = await captionnerMediaBiblio(item.id, { forcer: false });
+          if (r.est_hook) hooks += 1;
+          if (r.caption_statut === "ok") {
+            ok += 1;
+            setCaptionLogs((prev) => [
+              ...prev,
+              `✓ ${item.id.slice(0, 8)} — ${r.caption ?? ""}${r.est_hook ? " · Hook" : ""}`,
+            ]);
+          } else {
+            aucune += 1;
+            setCaptionLogs((prev) => [
+              ...prev,
+              `· ${item.id.slice(0, 8)} — ${t("bibliotheque.captionAucune")}${r.est_hook ? " · Hook" : ""}`,
+            ]);
+          }
+        } catch (e) {
+          echecs += 1;
+          setCaptionLogs((prev) => [
+            ...prev,
+            `✗ ${item.id.slice(0, 8)} — ${(e as Error).message}`,
+          ]);
+        }
+      },
+      {
+        largeur: AGENTS_CAPTION,
+        onProgres: (fait, total) => setCaptionLot({ fait, total }),
+      },
+    );
+    setCaptionLogs((prev) => [
+      ...prev,
+      t("bibliotheque.rattraperFin", { ok, aucune, hooks, echecs }),
+    ]);
+    setCaptionLot(null);
+    rafraichir();
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -482,6 +613,21 @@ export function AdminBibliothequePage() {
                 <option value="seedvr">{t("bibliotheque.upscaleSeedvr")}</option>
               </select>
             </label>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={lotEnCours}
+              onClick={() => void rattraperCaptions()}
+              title={t("bibliotheque.rattraperAide")}
+            >
+              <ScanText className="size-4" />
+              {captionLot
+                ? t("bibliotheque.rattraperEnCours", {
+                    fait: captionLot.fait,
+                    total: captionLot.total,
+                  })
+                : t("bibliotheque.rattraper")}
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -540,6 +686,15 @@ export function AdminBibliothequePage() {
           <div className="mt-2 max-h-40 space-y-0.5 overflow-y-auto rounded border bg-muted/30 px-2.5 py-2 font-mono text-[11px] leading-relaxed">
             {upscaleLogs.map((l, i) => (
               <div key={`up-${i}-${l.slice(0, 12)}`} className="break-words text-muted-foreground">
+                {l}
+              </div>
+            ))}
+          </div>
+        )}
+        {captionLogs.length > 0 && (
+          <div className="mt-2 max-h-40 space-y-0.5 overflow-y-auto rounded border bg-muted/30 px-2.5 py-2 font-mono text-[11px] leading-relaxed">
+            {captionLogs.map((l, i) => (
+              <div key={`cap-${i}-${l.slice(0, 12)}`} className="break-words text-muted-foreground">
                 {l}
               </div>
             ))}
@@ -660,6 +815,8 @@ export function AdminBibliothequePage() {
                       premier={premier}
                       etapesLot={etapesLot[media.id] ?? null}
                       modeleUpscale={modeleUpscale}
+                      captionBusy={captionUn.has(media.id) || captionLot !== null}
+                      onCaption={(forcer) => captionnerUne(media, forcer)}
                     />
                   ))}
                 </div>

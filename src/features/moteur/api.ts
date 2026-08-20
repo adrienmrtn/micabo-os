@@ -35,6 +35,13 @@ import {
   type StatsCompteSlideshows,
 } from "./statsSlideshowsCompte";
 import { comptePrincipal, normaliserTypeCompte, resoudrePremierCompte } from "./comptesCm";
+import { estLabelSysteme, SLUG_HOOK } from "./mediaCaption";
+import {
+  ELO_MANUEL_DEFAUT,
+  hookTexteDepuisDeck,
+  SLIDES_MANUEL_MAX,
+  SLIDES_MANUEL_MIN,
+} from "./creationManuelle";
 import { normaliserReglagesPapier } from "./papierReglages";
 import type { CompteIdentifiants, CompteResumePoster, TypeCompte } from "./types";
 
@@ -2444,6 +2451,55 @@ export const stripC2paMedia = (mediaId: string) =>
     error?: string;
   }>("strip-c2pa", { mediaId });
 
+export type CaptionMediaResultat = {
+  ok: boolean;
+  mediaId: string;
+  caption: string | null;
+  caption_statut: "ok" | "aucune";
+  caption_modele: "florence" | "moondream" | "none";
+  est_hook: boolean;
+  lignes: string[];
+  error?: string;
+};
+
+/** Caption visuelle d'une photo déjà stockée (Florence → Moondream). Offline. */
+export async function captionnerMediaBiblio(
+  mediaId: string,
+  opts?: { forcer?: boolean },
+): Promise<CaptionMediaResultat> {
+  const r = await invoke<CaptionMediaResultat>("caption-media", {
+    action: "caption_media",
+    mediaId,
+    forcer: Boolean(opts?.forcer),
+  });
+  if (r?.error) throw new Error(r.error);
+  if (!r?.ok) throw new Error("Réponse caption-media invalide");
+  return r;
+}
+
+export async function listerMediasARattraperCaption(): Promise<{
+  total: number;
+  captions: number;
+  hooks: number;
+  medias: Array<{ id: string; url: string; motif: "caption" | "hook" }>;
+}> {
+  const r = await invoke<{
+    ok?: boolean;
+    total?: number;
+    captions?: number;
+    hooks?: number;
+    medias?: Array<{ id: string; url: string; motif: "caption" | "hook" }>;
+    error?: string;
+  }>("caption-media", { action: "lister", limit: 800 });
+  if (r?.error) throw new Error(r.error);
+  return {
+    total: r.total ?? 0,
+    captions: r.captions ?? 0,
+    hooks: r.hooks ?? 0,
+    medias: r.medias ?? [],
+  };
+}
+
 export type ModeleUpscale = "realesrgan" | "seedvr";
 
 export type UpscaleMediaResultat = {
@@ -4771,8 +4827,15 @@ export function estMarqueUgcAiVideo(lab: { slug?: string | null }): boolean {
   return lab.slug === "ugc-ai-video";
 }
 
-/** Labels thématiques (hors marque système `ugc-ai-video`). */
+/** Labels thématiques (hors marques système `ugc-ai-video` / `hook`). */
 export async function listerLabels(): Promise<Label[]> {
+  const { data, error } = await supabase.from("labels").select("*").order("nom");
+  if (error) throw error;
+  return ((data ?? []) as Label[]).filter((l) => !estLabelSysteme(l));
+}
+
+/** Labels affichés en bibliothèque (inclut Hook, exclut la marque UGC). */
+export async function listerLabelsBiblio(): Promise<Label[]> {
   const { data, error } = await supabase.from("labels").select("*").order("nom");
   if (error) throw error;
   return ((data ?? []) as Label[]).filter((l) => !estMarqueUgcAiVideo(l));
@@ -4794,7 +4857,7 @@ export async function creerLabel(
   opts?: { ugc_ai_video?: boolean; genre?: "homme" | "femme" },
 ): Promise<Label> {
   const base = slugify(nom);
-  if (base === "ugc-ai-video") {
+  if (base === "ugc-ai-video" || base === SLUG_HOOK) {
     throw new Error("LABEL_MARQUE_RESERVE");
   }
   let slug = base;
@@ -4825,6 +4888,9 @@ export async function majLabel(
     couleur?: string | null;
     ugc_ai_video?: boolean;
     genre?: "homme" | "femme" | null;
+    style_theme?: string | null;
+    prompt_creation?: string | null;
+    exemples_feed?: string[];
   },
 ): Promise<void> {
   const body: Record<string, unknown> = { ...patch };
@@ -4833,13 +4899,242 @@ export async function majLabel(
   if (error) throw error;
 }
 
+export type MediaBiblioLabel = {
+  id: string;
+  url: string;
+  caption: string | null;
+  est_hook: boolean;
+};
+
+async function idLabelHookClient(): Promise<string | null> {
+  const { data } = await supabase.from("labels").select("id").eq("slug", SLUG_HOOK).maybeSingle();
+  return (data?.id as string | undefined) ?? null;
+}
+
+/** Photos propres du label (intersection Hook optionnelle). */
+export async function listerBiblioDuLabel(
+  labelId: string,
+  opts: { hookSeulement?: boolean; exclureHook?: boolean } = {},
+): Promise<MediaBiblioLabel[]> {
+  const hookId = await idLabelHookClient();
+  const { data: liens, error: errL } = await supabase
+    .from("media_labels")
+    .select("media_id")
+    .eq("label_id", labelId)
+    .limit(800);
+  if (errL) throw errL;
+  let ids = [...new Set((liens ?? []).map((l) => l.media_id as string))];
+  if ((opts.hookSeulement || opts.exclureHook) && hookId && ids.length) {
+    const { data: hooks, error: errH } = await supabase
+      .from("media_labels")
+      .select("media_id")
+      .eq("label_id", hookId)
+      .in("media_id", ids);
+    if (errH) throw errH;
+    const set = new Set((hooks ?? []).map((h) => h.media_id as string));
+    ids = opts.hookSeulement
+      ? ids.filter((id) => set.has(id))
+      : ids.filter((id) => !set.has(id));
+  }
+  if (ids.length === 0) return [];
+  let q = supabase
+    .from("media_library")
+    .select("id, url, caption, est_hook")
+    .in("id", ids)
+    .like("storage_path", "propre/%")
+    .eq("texte_restant", false);
+  if (opts.hookSeulement && !hookId) q = q.eq("est_hook", true);
+  if (opts.exclureHook) q = q.eq("est_hook", false);
+  const { data, error } = await q.limit(400);
+  if (error) throw error;
+  return (data ?? []).map((m) => ({
+    id: m.id as string,
+    url: m.url as string,
+    caption: (m.caption as string | null) ?? null,
+    est_hook: Boolean(m.est_hook),
+  }));
+}
+
+export const listerImagesHookDuLabel = (labelId: string) =>
+  listerBiblioDuLabel(labelId, { hookSeulement: true });
+
+export interface HookDuLabel {
+  contenuId: string;
+  hook: string;
+  titre: string;
+  langueSource: string;
+  musiqueTitre: string | null;
+  createdAt: string;
+}
+
+/** Hooks = overlay 1ʳᵉ slide des slideshows du label (langue source). */
+export async function listerHooksDuLabel(labelId: string): Promise<HookDuLabel[]> {
+  const { data: liens, error: errL } = await supabase
+    .from("contenu_labels")
+    .select("contenu_id")
+    .eq("label_id", labelId);
+  if (errL) throw errL;
+  const ids = [...new Set((liens ?? []).map((r) => r.contenu_id as string))];
+  if (ids.length === 0) return [];
+
+  type Ligne = {
+    id: string;
+    titre: string;
+    langue_source: string;
+    musique_titre: string | null;
+    created_at: string;
+    structure_slides: ContenuSlide[];
+  };
+  const contenus: Ligne[] = [];
+  for (let i = 0; i < ids.length; i += 80) {
+    const slice = ids.slice(i, i + 80);
+    const { data, error } = await supabase
+      .from("contenus")
+      .select("id, titre, langue_source, musique_titre, created_at, structure_slides")
+      .in("id", slice)
+      .eq("statut", "valide")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    contenus.push(...((data ?? []) as Ligne[]));
+  }
+  contenus.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const top = contenus.slice(0, 200);
+  if (top.length === 0) return [];
+
+  const { data: decks, error: errD } = await supabase
+    .from("contenu_langues")
+    .select("contenu_id, langue, slides")
+    .in(
+      "contenu_id",
+      top.map((c) => c.id),
+    );
+  if (errD) throw errD;
+
+  const deckPar = new Map<
+    string,
+    Array<{ position?: number; texte_overlay?: string | null }>
+  >();
+  for (const d of decks ?? []) {
+    deckPar.set(
+      `${d.contenu_id}:${d.langue}`,
+      (d.slides ?? []) as Array<{ position?: number; texte_overlay?: string | null }>,
+    );
+  }
+
+  const firstMediaIds = top
+    .map((c) => {
+      const slides = [...(c.structure_slides ?? [])].sort((a, b) => a.position - b.position);
+      return slides[0]?.media_id ?? null;
+    })
+    .filter((id): id is string => Boolean(id));
+  const captions = new Map<string, string>();
+  if (firstMediaIds.length) {
+    const { data: medias } = await supabase
+      .from("media_library")
+      .select("id, caption")
+      .in("id", firstMediaIds);
+    for (const m of medias ?? []) {
+      const cap = String(m.caption ?? "").trim();
+      if (cap) captions.set(m.id as string, cap);
+    }
+  }
+
+  const out: HookDuLabel[] = [];
+  const vus = new Set<string>();
+  for (const c of top) {
+    const deck = deckPar.get(`${c.id}:${c.langue_source}`) ?? [];
+    let hook = hookTexteDepuisDeck(deck);
+    if (!hook) hook = (c.titre ?? "").trim();
+    if (!hook) {
+      const slides = [...(c.structure_slides ?? [])].sort((a, b) => a.position - b.position);
+      const mid = slides[0]?.media_id;
+      hook = (mid && captions.get(mid)) || "";
+    }
+    if (!hook) continue;
+    const cle = hook.toLowerCase();
+    if (vus.has(cle)) continue;
+    vus.add(cle);
+    out.push({
+      contenuId: c.id,
+      hook,
+      titre: c.titre,
+      langueSource: c.langue_source,
+      musiqueTitre: c.musique_titre,
+      createdAt: c.created_at,
+    });
+  }
+  return out;
+}
+
+export type SlideBrouillonManuel = {
+  position: number;
+  texte: string;
+  critere: string;
+  pinned: boolean;
+  media_id: string | null;
+  preview_media_id?: string | null;
+  preview_url?: string | null;
+  fallback?: boolean;
+  motif?: string;
+};
+
+export async function genererSlideshowManuel(input: {
+  labelId: string;
+  hook: string;
+  nbSlides: number;
+  promptExtra?: string;
+  hookMediaId?: string | null;
+}): Promise<SlideBrouillonManuel[]> {
+  const r = await invoke<{ ok: boolean; slides?: SlideBrouillonManuel[] }>(
+    "creation-manuelle",
+    {
+      action: "generer",
+      labelId: input.labelId,
+      hook: input.hook,
+      nbSlides: input.nbSlides,
+      promptExtra: input.promptExtra ?? "",
+      hookMediaId: input.hookMediaId ?? null,
+    },
+  );
+  return r.slides ?? [];
+}
+
+export async function previewTiragesManuel(
+  labelId: string,
+  slides: SlideBrouillonManuel[],
+): Promise<SlideBrouillonManuel[]> {
+  const r = await invoke<{ ok: boolean; slides?: SlideBrouillonManuel[] }>(
+    "creation-manuelle",
+    { action: "preview", labelId, slides },
+  );
+  return r.slides ?? [];
+}
+
+export async function validerSlideshowManuel(input: {
+  labelId: string;
+  hook: string;
+  hookContenuId?: string | null;
+  elo?: number;
+  langueSource?: string | null;
+  slides: SlideBrouillonManuel[];
+}): Promise<string> {
+  const r = await invoke<{ ok: boolean; contenuId?: string }>("creation-manuelle", {
+    action: "valider",
+    ...input,
+  });
+  if (!r.contenuId) throw new Error("Validation sans contenuId");
+  return r.contenuId;
+}
+
+export { ELO_MANUEL_DEFAUT, SLIDES_MANUEL_MAX, SLIDES_MANUEL_MIN };
+
 export async function supprimerLabel(id: string): Promise<void> {
   const { data: lab } = await supabase
     .from("labels")
     .select("slug")
     .eq("id", id)
     .maybeSingle();
-  if (lab?.slug === "ugc-ai-video") {
+  if (lab?.slug === "ugc-ai-video" || lab?.slug === SLUG_HOOK) {
     throw new Error("LABEL_MARQUE_PROTEGE");
   }
   const { error } = await supabase.from("labels").delete().eq("id", id);
@@ -4964,18 +5259,34 @@ export async function setLabelsContenu(
   contenuId: string,
   labelIds: string[],
 ): Promise<void> {
-  await syncLabels("contenu_labels", "contenu_id", contenuId, labelIds);
-  // Propager aux images de la bibliothèque liées à ce slideshow.
+  const niches = labelIds.filter((id) => id !== undefined);
+  await syncLabels("contenu_labels", "contenu_id", contenuId, niches);
+  // Propager aux images — le label Hook (1ʳᵉ slide) n'est pas une niche.
   const { data: medias } = await supabase
     .from("media_library")
     .select("id")
     .eq("contenu_id", contenuId);
   const mediaIds = (medias ?? []).map((m) => m.id as string);
   if (mediaIds.length === 0) return;
-  await supabase.from("media_labels").delete().in("media_id", mediaIds);
-  if (labelIds.length === 0) return;
+  const { data: hook } = await supabase
+    .from("labels")
+    .select("id")
+    .eq("slug", SLUG_HOOK)
+    .maybeSingle();
+  const hookId = hook?.id as string | undefined;
+  if (hookId) {
+    await supabase
+      .from("media_labels")
+      .delete()
+      .in("media_id", mediaIds)
+      .neq("label_id", hookId);
+  } else {
+    await supabase.from("media_labels").delete().in("media_id", mediaIds);
+  }
+  const aInserer = niches.filter((id) => id !== hookId);
+  if (aInserer.length === 0) return;
   const rows = mediaIds.flatMap((media_id) =>
-    labelIds.map((label_id) => ({ media_id, label_id })),
+    aInserer.map((label_id) => ({ media_id, label_id })),
   );
   const { error } = await supabase.from("media_labels").insert(rows);
   if (error) throw error;
@@ -4999,6 +5310,15 @@ export interface ContenuListe extends Contenu {
   mediaUrls?: Record<string, string>;
   /** visage_premier_plan par media_id (scan UGC). */
   mediaVisages?: Record<string, boolean | null>;
+  /** Captions + Hook par media_id. */
+  mediaCaptions?: Record<
+    string,
+    {
+      caption: string | null;
+      caption_statut: "ok" | "aucune" | null;
+      est_hook: boolean;
+    }
+  >;
 }
 
 async function metasMediasPropres(
@@ -5006,6 +5326,14 @@ async function metasMediasPropres(
 ): Promise<{
   urls: Record<string, string>;
   visages: Record<string, boolean | null>;
+  captions: Record<
+    string,
+    {
+      caption: string | null;
+      caption_statut: "ok" | "aucune" | null;
+      est_hook: boolean;
+    }
+  >;
 }> {
   const mediaIds = [
     ...new Set(
@@ -5016,15 +5344,23 @@ async function metasMediasPropres(
       ),
     ),
   ];
-  if (mediaIds.length === 0) return { urls: {}, visages: {} };
+  if (mediaIds.length === 0) return { urls: {}, visages: {}, captions: {} };
   // Uniquement storage propre/ — jamais le brut TikTok (même si texte_restant
   // est flagué : c'est encore le JPEG Fal, pas le raw).
   const { data } = await supabase
     .from("media_library")
-    .select("id, url, storage_path, visage_premier_plan")
+    .select("id, url, storage_path, visage_premier_plan, caption, caption_statut, est_hook")
     .in("id", mediaIds);
   const urls: Record<string, string> = {};
   const visages: Record<string, boolean | null> = {};
+  const captions: Record<
+    string,
+    {
+      caption: string | null;
+      caption_statut: "ok" | "aucune" | null;
+      est_hook: boolean;
+    }
+  > = {};
   for (const m of data ?? []) {
     const path = (m.storage_path as string) ?? "";
     const id = m.id as string;
@@ -5032,8 +5368,13 @@ async function metasMediasPropres(
       urls[id] = m.url as string;
     }
     visages[id] = (m.visage_premier_plan as boolean | null) ?? null;
+    captions[id] = {
+      caption: (m.caption as string | null) ?? null,
+      caption_statut: (m.caption_statut as "ok" | "aucune" | null) ?? null,
+      est_hook: Boolean(m.est_hook),
+    };
   }
-  return { urls, visages };
+  return { urls, visages, captions };
 }
 
 export type { StatsCompteSlideshows };
@@ -5190,9 +5531,11 @@ async function enrichirContenusListe(contenus: Contenu[]): Promise<ContenuListe[
     );
     const urls: Record<string, string> = {};
     const visages: Record<string, boolean | null> = {};
+    const captions: NonNullable<ContenuListe["mediaCaptions"]> = {};
     for (const mid of idsContenu) {
       if (metas.urls[mid]) urls[mid] = metas.urls[mid];
       if (mid in metas.visages) visages[mid] = metas.visages[mid];
+      if (mid in metas.captions) captions[mid] = metas.captions[mid];
     }
     return {
       ...c,
@@ -5202,6 +5545,7 @@ async function enrichirContenusListe(contenus: Contenu[]): Promise<ContenuListe[
       nb_posts: postsPar.get(c.id) ?? 0,
       mediaUrls: urls,
       mediaVisages: visages,
+      mediaCaptions: captions,
     };
   });
 }
@@ -5327,6 +5671,7 @@ export async function lireSlideshow(id: string): Promise<SlideshowDetail | null>
     labels,
     mediaUrls: metas.urls,
     mediaVisages: metas.visages,
+    mediaCaptions: metas.captions,
     scores: (langues ?? []).map((l) => ({
       langue: l.langue,
       score: l.score,

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   chargerPilotageDashboard,
   creerLabel,
@@ -23,7 +24,11 @@ import {
   majLabel,
   supprimerLabel,
 } from "@/features/moteur/api";
-import type { LabelGenre } from "@/features/moteur/types";
+import {
+  exemplesFeedDepuisTexte,
+  exemplesFeedVersTexte,
+} from "@/features/moteur/creationManuelle";
+import type { Label as LabelMoteur, LabelGenre } from "@/features/moteur/types";
 import { cn } from "@/lib/utils";
 
 const selectClass =
@@ -151,6 +156,12 @@ function LabelsPilotageCard() {
                   {t("labels.ugcAiVideoBadge")}
                 </Badge>
               )}
+              <Link
+                to={`/admin/creation?label=${lab.id}`}
+                className="text-[10px] text-primary underline-offset-2 hover:underline"
+              >
+                {t("labels.creerPost")}
+              </Link>
               <button
                 type="button"
                 className="ml-1 text-muted-foreground hover:text-destructive"
@@ -162,6 +173,118 @@ function LabelsPilotageCard() {
               </button>
             </div>
           ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LabelStyleCard() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const labels = useQuery({ queryKey: ["labels"], queryFn: listerLabels });
+  const [labelId, setLabelId] = React.useState("");
+  const [styleTheme, setStyleTheme] = React.useState("");
+  const [promptCreation, setPromptCreation] = React.useState("");
+  const [feed, setFeed] = React.useState("");
+
+  const choisi = (labels.data ?? []).find((l) => l.id === labelId) ?? null;
+
+  React.useEffect(() => {
+    if (!choisi) {
+      setStyleTheme("");
+      setPromptCreation("");
+      setFeed("");
+      return;
+    }
+    setStyleTheme(choisi.style_theme ?? "");
+    setPromptCreation(choisi.prompt_creation ?? "");
+    setFeed(exemplesFeedVersTexte(choisi.exemples_feed));
+  }, [choisi]);
+
+  const sauver = useMutation({
+    mutationFn: () =>
+      majLabel(labelId, {
+        style_theme: styleTheme.trim() || null,
+        prompt_creation: promptCreation.trim() || null,
+        exemples_feed: exemplesFeedDepuisTexte(feed),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["labels"] }),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("labels.styleTheme")}</CardTitle>
+        <CardDescription>{t("labels.styleThemeAide")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-1">
+          <Label htmlFor="labStyle">{t("creation.label")}</Label>
+          <select
+            id="labStyle"
+            className={selectClass}
+            value={labelId}
+            onChange={(e) => setLabelId(e.target.value)}
+          >
+            <option value="">{t("creation.choisirLabel")}</option>
+            {(labels.data ?? []).map((l: LabelMoteur) => (
+              <option key={l.id} value={l.id}>
+                {l.nom}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="labTheme">{t("labels.styleTheme")}</Label>
+          <Textarea
+            id="labTheme"
+            rows={3}
+            value={styleTheme}
+            onChange={(e) => setStyleTheme(e.target.value)}
+            disabled={!labelId}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="labPrompt">{t("labels.promptCreation")}</Label>
+          <p className="text-[11px] text-muted-foreground">{t("labels.promptCreationAide")}</p>
+          <Textarea
+            id="labPrompt"
+            rows={4}
+            value={promptCreation}
+            onChange={(e) => setPromptCreation(e.target.value)}
+            disabled={!labelId}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="labFeed">{t("labels.feed")}</Label>
+          <p className="text-[11px] text-muted-foreground">{t("labels.feedAide")}</p>
+          <Textarea
+            id="labFeed"
+            rows={6}
+            value={feed}
+            onChange={(e) => setFeed(e.target.value)}
+            disabled={!labelId}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            disabled={!labelId || sauver.isPending}
+            onClick={() => sauver.mutate()}
+          >
+            {sauver.isPending ? t("common.saving") : t("labels.enregistrerStyle")}
+          </Button>
+          {labelId ? (
+            <Link
+              to={`/admin/creation?label=${labelId}`}
+              className="text-sm text-primary underline underline-offset-2"
+            >
+              {t("labels.creerPost")}
+            </Link>
+          ) : null}
+          {sauver.isError && (
+            <p className="text-sm text-destructive">{(sauver.error as Error).message}</p>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -481,6 +604,7 @@ export function AdminPilotagePage() {
       )}
 
       <LabelsPilotageCard />
+      <LabelStyleCard />
     </div>
   );
 }
