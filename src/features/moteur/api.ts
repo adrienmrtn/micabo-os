@@ -2500,6 +2500,39 @@ export async function listerMediasARattraperCaption(): Promise<{
   };
 }
 
+export type CaptionRattrapageRun = {
+  id: string;
+  statut: "running" | "done" | "failed";
+  total: number;
+  fait: number;
+  ok: number;
+  aucune: number;
+  hooks: number;
+  echecs: number;
+  logs: string[];
+  started_at: string;
+  updated_at: string;
+};
+
+export async function statutRattrapageCaption(): Promise<CaptionRattrapageRun | null> {
+  const r = await invoke<{ ok?: boolean; run?: CaptionRattrapageRun | null; error?: string }>(
+    "caption-media",
+    { action: "statut" },
+  );
+  if (r?.error) throw new Error(r.error);
+  return r.run ?? null;
+}
+
+export async function demarrerRattrapageCaption(): Promise<CaptionRattrapageRun> {
+  const r = await invoke<{ ok?: boolean; run?: CaptionRattrapageRun; error?: string }>(
+    "caption-media",
+    { action: "demarrer" },
+  );
+  if (r?.error) throw new Error(r.error);
+  if (!r.run) throw new Error("Rattrapage sans run");
+  return r.run;
+}
+
 export type ModeleUpscale = "realesrgan" | "seedvr";
 
 export type UpscaleMediaResultat = {

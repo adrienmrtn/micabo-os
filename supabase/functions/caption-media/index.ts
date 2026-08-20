@@ -2,12 +2,18 @@
  * Captions visuelles d'une photo déjà en bibliothèque (offline — URL stockée).
  *
  *   { action: "caption_media", mediaId, forcer? }
- *   { action: "lister" }  → photos à rattraper (sans caption et/ou Hook manquant)
- *   { mediaId }           → alias caption_media
+ *   { action: "lister" }     → photos à rattraper
+ *   { action: "demarrer" }   → file serveur (survit à la fermeture)
+ *   { action: "drain" }      → un lot (cron / kick)
+ *   { action: "statut" }     → run + logs
+ *   { mediaId }              → alias caption_media
  */
 
 import {
   captionnerMedia,
+  demarrerRattrapageCaption,
+  drainRattrapageCaption,
+  lireRattrapageCaption,
   listerMediasARattraper,
 } from "../_shared/media_caption.ts";
 import {
@@ -50,6 +56,25 @@ Deno.serve(async (request) => {
         hooks: medias.filter((m) => m.motif === "hook").length,
         medias,
       });
+    }
+
+    if (action === "statut") {
+      const run = await lireRattrapageCaption(supabase);
+      return json({ ok: true, run });
+    }
+
+    if (action === "demarrer") {
+      const run = await demarrerRattrapageCaption(supabase);
+      if (run.statut === "running" && run.total > 0) {
+        const drain = await drainRattrapageCaption(supabase);
+        return json({ ok: true, run: drain.run ?? run, kick: drain.traites });
+      }
+      return json({ ok: true, run });
+    }
+
+    if (action === "drain") {
+      const drain = await drainRattrapageCaption(supabase);
+      return json({ ok: true, traites: drain.traites, run: drain.run });
     }
 
     if (action === "caption_media") {

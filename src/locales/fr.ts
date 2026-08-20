@@ -1182,7 +1182,8 @@ export const fr = {
       captionEncore: "Re-captionner",
       rattraper: "Rattraper",
       rattraperAide:
-        "Repasse sur les photos déjà importées (hors ligne, sans TikTok) : Florence-2 puis Moondream. Parallélisé, logs ci-dessous. Tu peux aussi le faire photo par photo.",
+        "Repasse sur les photos déjà importées (hors ligne, sans TikTok) : Florence-2 puis Moondream. 6 workers côté serveur — tu peux fermer, ça continue. Logs persistés ici.",
+      rattraperServeur: "Rattrapage serveur {{fait}}/{{total}} — tu peux fermer, ça continue.",
       rattraperEnCours: "Rattrapage… {{fait}}/{{total}}",
       rattraperDebut: "Rattrapage captions sur {{count}} photo(s)…",
       rattraperFin:
