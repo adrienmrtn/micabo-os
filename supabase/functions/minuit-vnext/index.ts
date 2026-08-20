@@ -54,8 +54,8 @@ const POSTS_RELEVES = 30;
  *   etape `upscale` : SeedVR Fal sur photos assignées du jour sans upscale_le
  *                     (strip C2PA en fin dans le drain — pas de double strip)
  *   etape `ugc_ai_video` : kick drain assignation-ugc-video (NB→Kling→concat)
- *   etape `papier_cm` : master papier FR du jour (script → Nano Banana → Seedance)
- *   etape `papier_assign` : vidéos papier prêtes → comptes CM (même langue = même vidéo)
+ *   etape `papier_cm` : plus de master du jour — original seulement si la bibliothèque est vide
+   *   etape `papier_assign` : chaque CM tire au hasard un master FR inutilisé dans sa langue
  */
 Deno.serve(async (request) => {
   const denied = await assertAuthorised(request);
@@ -260,24 +260,23 @@ Deno.serve(async (request) => {
       };
     }
     if (etapes.includes("papier_cm")) {
-      if (!(await papierEstActif(supabase))) {
-        out.papier_cm = { ok: true, saute: true, raison: "papier en pause" };
-      } else {
-        kickPapierCm(request, { date: jour });
-        out.papier_cm = {
-          ok: true,
-          kick: true,
-          detail: "master papier FR du jour (script → Nano Banana → Seedance, ticks auto-chaînés)",
-        };
-      }
+      out.papier_cm = {
+        ok: true,
+        saute: true,
+        raison: "bibliothèque — un original naît seulement si plus aucun master libre",
+      };
     }
     if (etapes.includes("papier_assign")) {
-      kickPapierCm(request, { action: "assigner", date: jour, fenetreJours: 2 });
-      out.papier_assign = {
-        ok: true,
-        kick: true,
-        detail: "vidéos papier prêtes → comptes CM (jour + veille)",
-      };
+      if (!(await papierEstActif(supabase))) {
+        out.papier_assign = { ok: true, saute: true, raison: "papier en pause" };
+      } else {
+        kickPapierCm(request, { action: "assigner", date: jour });
+        out.papier_assign = {
+          ok: true,
+          kick: true,
+          detail: "chaque CM tire au hasard un master FR inutilisé dans sa langue",
+        };
+      }
     }
 
     return json(out);

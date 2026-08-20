@@ -3217,6 +3217,8 @@ export type PapierMaster = {
   journal: PapierJournal[];
   created_at: string;
   updated_at: string;
+  video_url?: string | null;
+  video_path?: string | null;
   papier_scenes?: PapierScene[];
   papier_langues?: PapierLangue[];
   papier_posts?: Array<{ id: string; compte_id: string; langue: string; est_test?: boolean }>;
@@ -3256,6 +3258,8 @@ export type PapierAssignResultat = {
   detail?: string;
   test?: boolean;
   posts?: PapierPost[];
+  besoinOriginal?: boolean;
+  kicksLangue?: string[];
   error?: string;
 };
 
@@ -3271,11 +3275,11 @@ export type PapierTickResultat = {
   error?: string;
 };
 
-export async function listerPapierMasters(limite = 14): Promise<PapierMaster[]> {
+export async function listerPapierMasters(limite = 60): Promise<PapierMaster[]> {
   const { data, error } = await supabase
     .from("papier_masters")
     .select("*, papier_scenes(*), papier_langues(*), papier_posts(id, compte_id, langue, est_test)")
-    .order("date_publication", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(limite);
   if (error) throw error;
   return (data ?? []).map((row) => {

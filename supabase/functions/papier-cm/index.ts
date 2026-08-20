@@ -1,9 +1,10 @@
 /**
- * Master papier FR + fan-out 14 langues (TTS / mix / karaoke Fal).
+ * Bibliothèque de masters papier FR + localisation à l'assignation.
  * Auth : JWT admin ou x-cron-secret.
  *
  *   tick | assurer | relancer | regenerer
- *   tick_locales | relancer_langue | assigner | annuler_test
+ *   tick_locales (FR, ou une langue demandée) | relancer_langue
+ *   assigner | annuler_test
  */
 
 import {
@@ -12,15 +13,11 @@ import {
   supprimerPapierPostsTest,
 } from "../_shared/papier_assignation.ts";
 import { papierEstActif } from "../_shared/papier_reglages.ts";
-import {
-  avancerLangue,
-  relancerLangue,
-  tickLocalesMaster,
-} from "../_shared/papier_locales.ts";
+import { assurerLangueMaster, avancerLangue, relancerLangue } from "../_shared/papier_locales.ts";
 import {
   avancerMaster,
-  assurerMasterJour,
   kickPapierCm,
+  masterEnCoursOuNouveau,
   regenererMaster,
   relancerMaster,
   tickPapierJour,
@@ -34,6 +31,7 @@ type Tick = {
   kick?: boolean;
   masterId?: string;
   langueId?: string;
+  langue?: string;
 };
 
 Deno.serve(async (request) => {
@@ -80,6 +78,12 @@ Deno.serve(async (request) => {
         }
       }
       const out = await assignerPapierComptes(supabase, opts);
+      for (const langueId of out.kicksLangue ?? []) {
+        kickPapierCm(request, { action: "tick_locales", manuel: true, langueId });
+      }
+      if (out.besoinOriginal) {
+        kickPapierCm(request, { action: "assurer", manuel: Boolean(opts.test) || manuel });
+      }
       return json(out);
     }
 
@@ -100,7 +104,8 @@ Deno.serve(async (request) => {
       }
       const masterId = String(body?.masterId ?? "");
       if (!masterId) return json({ ok: false, error: "masterId requis" }, 400);
-      const tick = await tickLocalesMaster(supabase, masterId);
+      const fr = await assurerLangueMaster(supabase, masterId, "fr");
+      const tick = await avancerLangue(supabase, fr.id);
       return json(enchainer(request, tick, masterId));
     }
 
@@ -109,7 +114,9 @@ Deno.serve(async (request) => {
       if (!id) return json({ ok: false, error: "id requis" }, 400);
       const row = await relancerLangue(supabase, id);
       if (row.statut === "ready") {
-        kickPapierCm(request, { action: "assigner", masterId: row.master_id });
+        if (row.langue !== "fr") {
+          kickPapierCm(request, { action: "assigner" });
+        }
         return json({ ok: true, done: true, langueId: id, statut: "ready" });
       }
       const tick = await avancerLangue(supabase, id);
@@ -117,7 +124,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === "assurer") {
-      const master = await assurerMasterJour(supabase, {
+      const master = await masterEnCoursOuNouveau(supabase, {
         date: typeof body?.date === "string" ? body.date : undefined,
         topic: typeof body?.topic === "string" ? body.topic : undefined,
       });
@@ -130,7 +137,7 @@ Deno.serve(async (request) => {
       if (!id) return json({ ok: false, error: "id requis" }, 400);
       const master = await relancerMaster(supabase, id);
       if (master.statut === "ready") {
-        return json(enchainer(request, { done: true, statut: "ready", masterId: id }, id));
+        return json({ ok: true, done: true, statut: "ready", masterId: id });
       }
       const tick = await avancerMaster(supabase, id);
       return json({ ok: true, ...enchainer(request, tick, id) });
@@ -168,9 +175,8 @@ function enchainer(request: Request, tick: Tick, masterId?: string) {
       kickPapierCm(request, { action: "tick_locales", masterId: id, langueId: tick.langueId });
       return { ...tick, kick: true };
     }
-    if (tick.done && tick.statut === "ready") {
-      kickPapierCm(request, { action: "assigner", masterId: id });
-      kickPapierCm(request, { action: "tick_locales", masterId: id });
+    if (tick.done && tick.statut === "ready" && tick.langue && tick.langue !== "fr") {
+      kickPapierCm(request, { action: "assigner" });
       return { ...tick, kick: true };
     }
     return tick;
@@ -180,12 +186,8 @@ function enchainer(request: Request, tick: Tick, masterId?: string) {
     kickPapierCm(request, { masterId: id });
     return { ...tick, kick: true };
   }
-  if (tick.done && tick.statut === "ready") {
+  if (tick.done && tick.statut === "clips") {
     kickPapierCm(request, { action: "tick_locales", masterId: id });
-    return { ...tick, kick: true };
-  }
-  if (tick.done) {
-    kickPapierCm(request, { action: "assigner", masterId: id });
     return { ...tick, kick: true };
   }
   return tick;
