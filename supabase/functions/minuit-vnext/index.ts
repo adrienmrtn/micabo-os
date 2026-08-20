@@ -5,6 +5,7 @@ import {
 } from "../_shared/assignation_contenu.ts";
 import { kickAssignationUgcVideo } from "../_shared/assignation_ugc_video.ts";
 import { kickPapierCm } from "../_shared/papier_master.ts";
+import { papierEstActif } from "../_shared/papier_reglages.ts";
 import { scrapeStats } from "../_shared/apify.ts";
 import {
   kickRattrapageElo,
@@ -259,12 +260,16 @@ Deno.serve(async (request) => {
       };
     }
     if (etapes.includes("papier_cm")) {
-      kickPapierCm(request, { date: jour });
-      out.papier_cm = {
-        ok: true,
-        kick: true,
-        detail: "master papier FR du jour (script → Nano Banana → Seedance, ticks auto-chaînés)",
-      };
+      if (!(await papierEstActif(supabase))) {
+        out.papier_cm = { ok: true, saute: true, raison: "papier en pause" };
+      } else {
+        kickPapierCm(request, { date: jour });
+        out.papier_cm = {
+          ok: true,
+          kick: true,
+          detail: "master papier FR du jour (script → Nano Banana → Seedance, ticks auto-chaînés)",
+        };
+      }
     }
     if (etapes.includes("papier_assign")) {
       kickPapierCm(request, { action: "assigner", date: jour, fenetreJours: 2 });

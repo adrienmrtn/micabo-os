@@ -1,3 +1,5 @@
+import type { PapierFalUsage, ReglagesPapier } from "./papierReglages";
+
 export type PipelineStatut = "pending" | "running" | "done" | "failed";
 export type SujetStatut = "propose" | "retenu" | "rejete" | "utilise";
 export type PostType = "recycle" | "remanie" | "nouveau" | "contenu";
@@ -291,6 +293,8 @@ export interface Reglages {
   nettoyage: ReglagesNettoyage;
   file_labels_comptes: ReglagesFileLabels;
   warmup: ReglagesWarmup;
+  papier: ReglagesPapier;
+  papier_fal_usage: PapierFalUsage;
 }
 
 export interface StatsCompte {

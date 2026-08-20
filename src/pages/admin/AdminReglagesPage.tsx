@@ -8,12 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  aujourdhuiParis,
   ecrireReglage,
   lireReglages,
   listerLabelIdsAvecUgc,
   listerLabels,
 } from "@/features/moteur/api";
 import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
+import { VOIX_PAPIER, type DureeClipReglage } from "@/features/moteur/papierReglages";
 import {
   SCHEMA_ASSIGNATION,
   SCHEMA_UPDATE_ELO,
@@ -239,6 +241,7 @@ export function AdminReglagesPage() {
       // File déjà autosauvegardée à chaque edit — on resync quand même.
       await ecrireReglage("file_labels_comptes", r.file_labels_comptes);
       await ecrireReglage("warmup", r.warmup);
+      await ecrireReglage("papier", r.papier);
     },
     onSuccess: () => {
       setBrouillon(null);
@@ -515,6 +518,137 @@ export function AdminReglagesPage() {
                 onChange={(n) => majScoring({ variation_profondeur_max: n })}
               />
             </div>
+          </section>
+        </CardContent>
+      </Card>
+
+      {/* ── Papier CM ── */}
+      <Card id="papier">
+        <CardHeader>
+          <CardTitle>{t("reglages.actionPapier")}</CardTitle>
+          <CardDescription>{t("reglages.actionPapierDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <section className="space-y-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={!reglages.papier.actif}
+                onChange={(e) =>
+                  maj({ papier: { ...reglages.papier, actif: !e.target.checked } })
+                }
+              />
+              {t("reglages.papierPause")}
+            </label>
+            <p className="text-xs text-muted-foreground">{t("reglages.papierPauseAide")}</p>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-sm font-medium">{t("reglages.papierDuree")}</h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ChampNombre
+                id="papierDuree"
+                label={t("reglages.papierDureeSec")}
+                min={20}
+                max={90}
+                valeur={reglages.papier.duree_cible_sec}
+                onChange={(n) => maj({ papier: { ...reglages.papier, duree_cible_sec: n } })}
+              />
+              <div className="space-y-2">
+                <Label htmlFor="papierClip">{t("reglages.papierDureeClip")}</Label>
+                <select
+                  id="papierClip"
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={String(reglages.papier.duree_clip)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const duree_clip: DureeClipReglage =
+                      v === "4" || v === "6" || v === "8" ? (Number(v) as 4 | 6 | 8) : "auto";
+                    maj({ papier: { ...reglages.papier, duree_clip } });
+                  }}
+                >
+                  <option value="auto">{t("reglages.papierClipAuto")}</option>
+                  <option value="4">4 s</option>
+                  <option value="6">6 s</option>
+                  <option value="8">8 s</option>
+                </select>
+                <p className="text-xs text-muted-foreground">{t("reglages.papierDureeAide")}</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-sm font-medium">{t("reglages.papierVoix")}</h3>
+            <div className="space-y-2 sm:max-w-xs">
+              <Label htmlFor="papierVoix">{t("reglages.papierVoixDefaut")}</Label>
+              <select
+                id="papierVoix"
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={reglages.papier.voix}
+                onChange={(e) => maj({ papier: { ...reglages.papier, voix: e.target.value } })}
+              >
+                {VOIX_PAPIER.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {LANGUES_CIBLES.map((code) => (
+                <div key={code} className="space-y-1">
+                  <Label htmlFor={`papier-voix-${code}`} className="text-xs">
+                    {nomLangue(code)}
+                  </Label>
+                  <select
+                    id={`papier-voix-${code}`}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={reglages.papier.voix_par_langue[code] ?? ""}
+                    onChange={(e) => {
+                      const voix_par_langue = { ...reglages.papier.voix_par_langue };
+                      if (e.target.value) voix_par_langue[code] = e.target.value;
+                      else delete voix_par_langue[code];
+                      maj({ papier: { ...reglages.papier, voix_par_langue } });
+                    }}
+                  >
+                    <option value="">{t("reglages.papierVoixSuivre")}</option>
+                    {VOIX_PAPIER.map((v) => (
+                      <option key={v} value={v}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="space-y-3 sm:max-w-xs">
+            <ChampNombre
+              id="papierQuota"
+              label={t("reglages.papierQuota")}
+              min={0}
+              valeur={reglages.papier.fal_quota_jour}
+              onChange={(n) => maj({ papier: { ...reglages.papier, fal_quota_jour: n } })}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("reglages.papierQuotaAide")}
+              {" · "}
+              {reglages.papier.fal_quota_jour <= 0
+                ? t("reglages.papierQuotaIllimite", {
+                    n:
+                      reglages.papier_fal_usage.date === aujourdhuiParis()
+                        ? reglages.papier_fal_usage.appels
+                        : 0,
+                  })
+                : t("reglages.papierQuotaUsage", {
+                    n:
+                      reglages.papier_fal_usage.date === aujourdhuiParis()
+                        ? reglages.papier_fal_usage.appels
+                        : 0,
+                    max: reglages.papier.fal_quota_jour,
+                  })}
+            </p>
           </section>
         </CardContent>
       </Card>

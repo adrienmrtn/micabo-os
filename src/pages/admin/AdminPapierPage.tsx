@@ -1,14 +1,15 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Loader2, RefreshCw, RotateCcw, Scissors, Sparkles } from "lucide-react";
+import { Loader2, RefreshCw, RotateCcw, Scissors, Settings2, Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { aujourdhuiParis } from "@/features/moteur/api";
+import { aujourdhuiParis, ecrireReglage, lireReglages } from "@/features/moteur/api";
 import {
   assignerPapierCm,
   lancerPapierJour,
@@ -23,6 +24,7 @@ import {
   type PapierStatut,
 } from "@/features/moteur/api";
 import { drapeauLangue, nomLangue } from "@/features/moteur/langues";
+import { REGLAGES_PAPIER_DEFAUT } from "@/features/moteur/papierReglages";
 
 const STATUT_VARIANT: Record<PapierStatut, "default" | "secondary" | "destructive" | "outline"> = {
   queued: "outline",
@@ -55,7 +57,11 @@ export function AdminPapierPage() {
     },
   });
 
+  const reglages = useQuery({ queryKey: ["reglages"], queryFn: lireReglages });
   const today = (liste.data ?? []).find((m) => m.date_publication === jour) ?? null;
+  const papier = reglages.data?.papier;
+  const falUsage =
+    reglages.data?.papier_fal_usage.date === jour ? reglages.data.papier_fal_usage.appels : 0;
 
   React.useEffect(() => {
     if (today?.topic && !topic) setTopic(today.topic);
@@ -63,6 +69,7 @@ export function AdminPapierPage() {
 
   function invalider() {
     void queryClient.invalidateQueries({ queryKey: ["papier-masters"] });
+    void queryClient.invalidateQueries({ queryKey: ["reglages"] });
   }
 
   const lancer = useMutation({
@@ -89,6 +96,11 @@ export function AdminPapierPage() {
     mutationFn: (masterId: string) => assignerPapierCm({ masterId }),
     onSuccess: invalider,
   });
+  const pause = useMutation({
+    mutationFn: (actif: boolean) =>
+      ecrireReglage("papier", { ...REGLAGES_PAPIER_DEFAUT, ...papier, actif }),
+    onSuccess: invalider,
+  });
 
   const busy =
     lancer.isPending ||
@@ -103,7 +115,35 @@ export function AdminPapierPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">{t("papier.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("papier.subtitle")}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <Link to="/admin/reglages#papier" className="inline-flex items-center gap-1 text-primary">
+            <Settings2 className="h-3.5 w-3.5" />
+            {t("papier.reglagesLien")}
+          </Link>
+          {papier ? (
+            <span>
+              {papier.fal_quota_jour <= 0
+                ? t("papier.quotaFalIllimite", { n: falUsage })
+                : t("papier.quotaFal", { n: falUsage, max: papier.fal_quota_jour })}
+            </span>
+          ) : null}
+        </div>
       </div>
+
+      {papier && !papier.actif ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warning/50 bg-warning/10 px-3 py-2">
+          <p className="text-sm text-warning-foreground">{t("papier.enPause")}</p>
+          <Button size="sm" variant="outline" disabled={pause.isPending} onClick={() => pause.mutate(true)}>
+            {t("minuit.pauseOff")}
+          </Button>
+        </div>
+      ) : papier ? (
+        <div className="flex justify-end">
+          <Button size="sm" variant="ghost" disabled={pause.isPending} onClick={() => pause.mutate(false)}>
+            {t("reglages.papierPause")}
+          </Button>
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader>

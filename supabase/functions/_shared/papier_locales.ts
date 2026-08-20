@@ -4,7 +4,13 @@
  */
 
 import { incrusterKaraokeFal } from "./fal_auto_subtitle.ts";
-import { synthetiserVoixFal, VOIX_PAPIER_DEFAUT } from "./fal_elevenlabs_tts.ts";
+import { synthetiserVoixFal } from "./fal_elevenlabs_tts.ts";
+import {
+  chargerReglagesPapier,
+  estErreurQuotaFal,
+  reserverFalPapier,
+  voixPourLangue,
+} from "./papier_reglages.ts";
 import { mergerAudioVideoFal } from "./fal_merge_audio.ts";
 import { mergerVideosFal } from "./fal_merge_videos.ts";
 import {
@@ -218,6 +224,14 @@ export async function assurerLanguesMaster(
   const byLang = new Map(
     ((existants ?? []) as PapierLangueRow[]).map((r) => [r.langue, r]),
   );
+  const reglages = await chargerReglagesPapier(supabase);
+  for (const row of byLang.values()) {
+    if (row.statut !== "queued" && row.statut !== "translating") continue;
+    const voice = voixPourLangue(reglages, row.langue);
+    if (voice === row.voice) continue;
+    await supabase.from("papier_langues").update({ voice }).eq("id", row.id);
+    row.voice = voice;
+  }
   const manquantes = LANGUES_PAPIER.filter((l) => !byLang.has(l));
   if (manquantes.length) {
     const { data: inserted, error: insErr } = await supabase
@@ -226,7 +240,7 @@ export async function assurerLanguesMaster(
         manquantes.map((langue) => ({
           master_id: masterId,
           langue,
-          voice: VOIX_PAPIER_DEFAUT,
+          voice: voixPourLangue(reglages, langue),
           statut: "queued",
           etape: "traduction",
         })),
@@ -317,6 +331,7 @@ async function etapeVoix(
   for (const scene of scenes) {
     if (outOfTime(t0)) return false;
     if (scene.audio_url) continue;
+    await reserverFalPapier(supabase);
     const tts = await synthetiserVoixFal({
       text: scene.narration,
       langue: row.langue,
@@ -361,6 +376,7 @@ async function etapeMix(
     if (!scene.audio_url) throw new Error(`Plan ${scene.index + 1} sans voix`);
     const clip = clips.find((c) => c.index === scene.index)?.clip_url;
     if (!clip) throw new Error(`Plan ${scene.index + 1} sans clip master`);
+    await reserverFalPapier(supabase);
     const mix = await mergerAudioVideoFal({ videoUrl: clip, audioUrl: scene.audio_url });
     const path = `papiers/${row.master_id}/${row.langue}/mix-${scene.index}.mp4`;
     const url = await uploader(supabase, path, mix.bytes, mix.mime);
@@ -393,6 +409,7 @@ async function etapeRender(
     if (!res.ok) throw new Error(`Téléchargement mix ${res.status}`);
     bytes = new Uint8Array(await res.arrayBuffer());
   } else {
+    await reserverFalPapier(supabase);
     const merged = await mergerVideosFal({ videoUrls: urls });
     bytes = merged.bytes;
     mime = merged.mime;
@@ -417,6 +434,7 @@ async function etapeKaraoke(supabase: Supabase, row: PapierLangueRow): Promise<v
   if (row.video_url) return;
   const source = row.video_mix_url;
   if (!source) throw new Error("Vidéo mixte absente");
+  await reserverFalPapier(supabase);
   const kar = await incrusterKaraokeFal({ videoUrl: source, langue: row.langue });
   const path = `papiers/${row.master_id}/${row.langue}/final.mp4`;
   const url = await uploader(supabase, path, kar.bytes, kar.mime);
@@ -522,6 +540,21 @@ export async function avancerLangue(
     row = (await chargerLangue(supabase, langueId))!;
     return resumerLangue(row, true, "langue prête");
   } catch (error) {
+    if (estErreurQuotaFal(error)) {
+      const msg = messageErreur(error);
+      return {
+        ok: true,
+        idle: true,
+        kick: false,
+        done: false,
+        langueId,
+        masterId: row.master_id,
+        langue: row.langue,
+        statut: row.statut,
+        detail: msg,
+        error: msg,
+      };
+    }
     const msg = messageErreur(error);
     await patchLangue(
       supabase,

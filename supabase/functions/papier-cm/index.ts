@@ -7,6 +7,7 @@
  */
 
 import { assignerPapierComptes } from "../_shared/papier_assignation.ts";
+import { papierEstActif } from "../_shared/papier_reglages.ts";
 import {
   avancerLangue,
   relancerLangue,
@@ -45,8 +46,15 @@ Deno.serve(async (request) => {
   }
 
   const action = String(body?.action ?? "tick");
+  const manuel = Boolean(body?.manuel || body?.forcer);
 
   try {
+    if (!manuel && (action === "tick" || action === "tick_locales")) {
+      if (!(await papierEstActif(supabase))) {
+        return json({ ok: true, saute: true, idle: true, raison: "papier en pause" });
+      }
+    }
+
     if (action === "assigner") {
       const out = await assignerPapierComptes(supabase, {
         date: typeof body?.date === "string" ? body.date : undefined,

@@ -7,9 +7,14 @@ import { editerNanoBananaPro, genererNanoBananaPro } from "./fal_nano_banana.ts"
 import { attendreSeedanceI2V, soumettreSeedanceI2V, type SeedanceQueued } from "./fal_seedance.ts";
 import { ecrireScriptPapier, proposerTopicPapier } from "./papier_script.ts";
 import {
+  chargerReglagesPapier,
+  dureeCibleClipReglee,
+  estErreurQuotaFal,
+  reserverFalPapier,
+} from "./papier_reglages.ts";
+import {
   bibleVisuelle,
   coverPromptPapier,
-  dureeCibleClip,
   motionPromptPapier,
   storyContext,
   type PapierKind,
@@ -22,7 +27,6 @@ type Supabase = ReturnType<typeof serviceClient>;
 
 const BUCKET = "medias";
 const TICK_BUDGET_MS = 42_000;
-const TARGET_SECONDS = 48;
 
 const started = () => Date.now();
 const remaining = (t0: number) => Math.max(0, TICK_BUDGET_MS - (Date.now() - t0));
@@ -326,11 +330,12 @@ async function etapeScript(supabase: Supabase, master: PapierMasterRow): Promise
   const topic = master.topic?.trim();
   if (!topic) throw new Error("Sujet manquant");
   await patchMaster(supabase, master.id, { statut: "scripting", etape: "script", progression: 0.1 });
+  const reglages = await chargerReglagesPapier(supabase);
   const script = await ecrireScriptPapier({
     topic,
     kind: master.kind,
     style: master.narration_style,
-    targetSeconds: TARGET_SECONDS,
+    targetSeconds: reglages.duree_cible_sec,
   });
   const rows = script.scenes.map((s) => ({
     master_id: master.id,
@@ -339,7 +344,7 @@ async function etapeScript(supabase: Supabase, master: PapierMasterRow): Promise
     overlay: s.overlay,
     image_prompt: s.imagePrompt,
     video_prompt: s.videoPrompt,
-    duree_cible: dureeCibleClip(s.narration),
+    duree_cible: dureeCibleClipReglee(s.narration, reglages.duree_clip),
   }));
   const { error } = await supabase.from("papier_scenes").insert(rows);
   if (error) throw error;
@@ -377,6 +382,7 @@ async function etapeImages(
       ? `${base}\n\nThe attached image${refs.length > 1 ? "s are" : " is"} a STYLE AND CHARACTER REFERENCE: keep EXACTLY the same characters (same faces, same hair, same clothing shapes and colours), the same materials, palette and lighting, so the video reads as one single illustrated story. Do not copy the composition — render the new scene described above as the next shot of that same story.`
       : base;
 
+    await reserverFalPapier(supabase);
     const img = refs.length
       ? await editerNanoBananaPro(refs, prompt, undefined, { aspectRatio: "9:16" })
       : await genererNanoBananaPro(prompt);
@@ -418,6 +424,7 @@ async function etapeClips(
     if (!scene.image_url) throw new Error(`Plan ${i + 1} sans image`);
 
     if (!scene.clip_fal?.request_id && !scene.clip_fal?.status_url) {
+      await reserverFalPapier(supabase);
       const queued = await soumettreSeedanceI2V({
         prompt: motionPromptPapier(scene.video_prompt || scene.narration, {
           bible,
@@ -532,6 +539,20 @@ export async function avancerMaster(
     if (!clipsOk) return resumer(master, false, "clips en cours", scenes);
     return resumer(master, true, "master prêt", scenes);
   } catch (error) {
+    if (estErreurQuotaFal(error)) {
+      const msg = messageErreur(error);
+      return {
+        ok: true,
+        idle: true,
+        kick: false,
+        done: false,
+        masterId,
+        date: master.date_publication,
+        statut: master.statut,
+        detail: msg,
+        error: msg,
+      };
+    }
     const msg = messageErreur(error);
     await patchMaster(
       supabase,

@@ -35,6 +35,7 @@ import {
   type StatsCompteSlideshows,
 } from "./statsSlideshowsCompte";
 import { comptePrincipal, normaliserTypeCompte } from "./comptesCm";
+import { normaliserReglagesPapier } from "./papierReglages";
 import type { CompteIdentifiants, CompteResumePoster, TypeCompte } from "./types";
 
 export type { EloImportRapport };
@@ -2652,6 +2653,12 @@ export async function lireReglages(): Promise<Reglages> {
       heures: 24,
       ...((map.get("warmup") as Partial<Reglages["warmup"]> | undefined) ?? {}),
     },
+    papier: normaliserReglagesPapier(map.get("papier")),
+    papier_fal_usage: {
+      date: null,
+      appels: 0,
+      ...((map.get("papier_fal_usage") as Partial<Reglages["papier_fal_usage"]> | undefined) ?? {}),
+    },
   };
 }
 
@@ -3241,23 +3248,23 @@ export async function listerPapierMasters(limite = 14): Promise<PapierMaster[]> 
 }
 
 export const lancerPapierJour = (body: { date?: string; topic?: string } = {}) =>
-  invoke<PapierTickResultat>("papier-cm", { action: "assurer", ...body });
+  invoke<PapierTickResultat>("papier-cm", { action: "assurer", manuel: true, ...body });
 
 export const relancerPapier = (id: string) =>
-  invoke<PapierTickResultat>("papier-cm", { action: "relancer", id });
+  invoke<PapierTickResultat>("papier-cm", { action: "relancer", manuel: true, id });
 
 export const regenererPapier = (id: string, topic?: string) =>
-  invoke<PapierTickResultat>("papier-cm", { action: "regenerer", id, topic });
+  invoke<PapierTickResultat>("papier-cm", { action: "regenerer", manuel: true, id, topic });
 
 export const lancerPapierLocales = (masterId: string) =>
-  invoke<PapierTickResultat>("papier-cm", { action: "tick_locales", masterId });
+  invoke<PapierTickResultat>("papier-cm", { action: "tick_locales", manuel: true, masterId });
 
 export const relancerPapierLangue = (id: string) =>
-  invoke<PapierTickResultat>("papier-cm", { action: "relancer_langue", id });
+  invoke<PapierTickResultat>("papier-cm", { action: "relancer_langue", manuel: true, id });
 
 export const assignerPapierCm = (
   body: { date?: string; masterId?: string; langueId?: string; fenetreJours?: number } = {},
-) => invoke<PapierAssignResultat>("papier-cm", { action: "assigner", ...body });
+) => invoke<PapierAssignResultat>("papier-cm", { action: "assigner", manuel: true, ...body });
 
 export async function mesPapierPosts(compteId: string): Promise<PapierPost[]> {
   const { data, error } = await supabase
