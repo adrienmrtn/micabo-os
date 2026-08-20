@@ -3,9 +3,10 @@
  * Auth : JWT admin ou x-cron-secret.
  *
  *   tick | assurer | relancer | regenerer
- *   tick_locales | relancer_langue
+ *   tick_locales | relancer_langue | assigner
  */
 
+import { assignerPapierComptes } from "../_shared/papier_assignation.ts";
 import {
   avancerLangue,
   relancerLangue,
@@ -46,6 +47,16 @@ Deno.serve(async (request) => {
   const action = String(body?.action ?? "tick");
 
   try {
+    if (action === "assigner") {
+      const out = await assignerPapierComptes(supabase, {
+        date: typeof body?.date === "string" ? body.date : undefined,
+        masterId: typeof body?.masterId === "string" ? body.masterId : undefined,
+        langueId: typeof body?.langueId === "string" ? body.langueId : undefined,
+        fenetreJours: typeof body?.fenetreJours === "number" ? body.fenetreJours : undefined,
+      });
+      return json(out);
+    }
+
     if (action === "tick_locales") {
       if (typeof body?.langueId === "string" && body.langueId) {
         const tick = await avancerLangue(supabase, body.langueId);
@@ -62,6 +73,7 @@ Deno.serve(async (request) => {
       if (!id) return json({ ok: false, error: "id requis" }, 400);
       const row = await relancerLangue(supabase, id);
       if (row.statut === "ready") {
+        kickPapierCm(request, { action: "assigner", masterId: row.master_id });
         return json({ ok: true, done: true, langueId: id, statut: "ready" });
       }
       const tick = await avancerLangue(supabase, id);
@@ -121,6 +133,7 @@ function enchainer(request: Request, tick: Tick, masterId?: string) {
       return { ...tick, kick: true };
     }
     if (tick.done && tick.statut === "ready") {
+      kickPapierCm(request, { action: "assigner", masterId: id });
       kickPapierCm(request, { action: "tick_locales", masterId: id });
       return { ...tick, kick: true };
     }
@@ -133,6 +146,10 @@ function enchainer(request: Request, tick: Tick, masterId?: string) {
   }
   if (tick.done && tick.statut === "ready") {
     kickPapierCm(request, { action: "tick_locales", masterId: id });
+    return { ...tick, kick: true };
+  }
+  if (tick.done) {
+    kickPapierCm(request, { action: "assigner", masterId: id });
     return { ...tick, kick: true };
   }
   return tick;

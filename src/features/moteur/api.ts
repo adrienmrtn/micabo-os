@@ -3171,6 +3171,41 @@ export type PapierMaster = {
   updated_at: string;
   papier_scenes?: PapierScene[];
   papier_langues?: PapierLangue[];
+  papier_posts?: Array<{ id: string; compte_id: string; langue: string }>;
+};
+
+export type PapierPost = {
+  id: string;
+  compte_id: string;
+  date_publication_prevue: string;
+  master_id: string;
+  langue_id: string;
+  langue: string;
+  title: string | null;
+  caption: string | null;
+  hashtags: string | null;
+  video_url: string;
+  video_path: string | null;
+  statut: "assigne" | "publie";
+  publie_at: string | null;
+  created_at: string;
+};
+
+export type PapierPostCalendrier = PapierPost & {
+  persona_nom: string | null;
+  handle_tiktok: string | null;
+  poster_prenom: string | null;
+  poster_nom: string | null;
+};
+
+export type PapierAssignResultat = {
+  ok: boolean;
+  assigns?: number;
+  comptes?: number;
+  langues?: number;
+  dates?: string[];
+  detail?: string;
+  error?: string;
 };
 
 export type PapierTickResultat = {
@@ -3188,7 +3223,7 @@ export type PapierTickResultat = {
 export async function listerPapierMasters(limite = 14): Promise<PapierMaster[]> {
   const { data, error } = await supabase
     .from("papier_masters")
-    .select("*, papier_scenes(*), papier_langues(*)")
+    .select("*, papier_scenes(*), papier_langues(*), papier_posts(id, compte_id, langue)")
     .order("date_publication", { ascending: false })
     .limit(limite);
   if (error) throw error;
@@ -3219,6 +3254,38 @@ export const lancerPapierLocales = (masterId: string) =>
 
 export const relancerPapierLangue = (id: string) =>
   invoke<PapierTickResultat>("papier-cm", { action: "relancer_langue", id });
+
+export const assignerPapierCm = (
+  body: { date?: string; masterId?: string; langueId?: string; fenetreJours?: number } = {},
+) => invoke<PapierAssignResultat>("papier-cm", { action: "assigner", ...body });
+
+export async function mesPapierPosts(compteId: string): Promise<PapierPost[]> {
+  const { data, error } = await supabase
+    .from("papier_posts")
+    .select("*")
+    .eq("compte_id", compteId)
+    .order("date_publication_prevue", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  return (data ?? []) as PapierPost[];
+}
+
+export async function papierPostsCalendrier(): Promise<PapierPostCalendrier[]> {
+  const { data, error } = await supabase
+    .from("papier_posts")
+    .select("*, comptes(persona_nom, handle_tiktok, profiles(prenom, nom))")
+    .order("date_publication_prevue", { ascending: false, nullsFirst: false })
+    .limit(400);
+  if (error) throw error;
+  // deno-lint-ignore no-explicit-any
+  return ((data ?? []) as any[]).map((row) => ({
+    ...row,
+    persona_nom: row.comptes?.persona_nom ?? null,
+    handle_tiktok: row.comptes?.handle_tiktok ?? null,
+    poster_prenom: row.comptes?.profiles?.prenom ?? null,
+    poster_nom: row.comptes?.profiles?.nom ?? null,
+  })) as PapierPostCalendrier[];
+}
 
 export const lancerScoringVnext = (compteId?: string) =>
   invoke<{ ok: boolean; contenus: number; comptes: number }>("scoring", {

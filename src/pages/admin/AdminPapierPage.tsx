@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { aujourdhuiParis } from "@/features/moteur/api";
 import {
+  assignerPapierCm,
   lancerPapierJour,
   lancerPapierLocales,
   listerPapierMasters,
@@ -84,13 +85,18 @@ export function AdminPapierPage() {
     mutationFn: (id: string) => relancerPapierLangue(id),
     onSuccess: invalider,
   });
+  const assigner = useMutation({
+    mutationFn: (masterId: string) => assignerPapierCm({ masterId }),
+    onSuccess: invalider,
+  });
 
   const busy =
     lancer.isPending ||
     relancer.isPending ||
     regenerer.isPending ||
     locales.isPending ||
-    relancerLangue.isPending;
+    relancerLangue.isPending ||
+    assigner.isPending;
 
   return (
     <div className="space-y-6">
@@ -145,9 +151,23 @@ export function AdminPapierPage() {
               {t("papier.avancerLangues")}
             </Button>
           ) : null}
-          {lancer.error || relancer.error || regenerer.error || locales.error ? (
+          {today && (today.papier_langues ?? []).some((l) => l.statut === "ready") ? (
+            <div className="space-y-1">
+              <Button variant="outline" onClick={() => assigner.mutate(today.id)} disabled={busy}>
+                {assigner.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {t("papier.assigner")}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                {t("papier.assignerAide")}
+                {today.papier_posts?.length
+                  ? ` · ${t("papier.assignes", { count: today.papier_posts.length })}`
+                  : ""}
+              </p>
+            </div>
+          ) : null}
+          {lancer.error || relancer.error || regenerer.error || locales.error || assigner.error ? (
             <p className="text-sm text-destructive">
-              {(lancer.error ?? relancer.error ?? regenerer.error ?? locales.error)?.message}
+              {(lancer.error ?? relancer.error ?? regenerer.error ?? locales.error ?? assigner.error)?.message}
             </p>
           ) : null}
         </CardContent>

@@ -200,6 +200,14 @@ export async function assignerCompteJour(
     (compte.handle_tiktok as string | null) ??
     String(compte.id).slice(0, 8);
 
+  if (compte.type_compte === "cm") {
+    log(`Compte ${nomCompte} · CM — skip assignation slideshow`);
+    return {
+      ids: [],
+      raison: "Compte CM — hors assignation slideshow (vidéo papier).",
+    };
+  }
+
   // UGC AI VIDEO : hors assignation slideshow minuit (pipeline vidéos à part).
   if (ugcAiVideo) {
     log(`Compte ${nomCompte} · UGC AI VIDEO — skip assignation slideshow`);
@@ -875,6 +883,7 @@ export async function listerComptesSousQuota(
 
   const maintenant = Date.now();
   const comptes = (comptesBruts ?? []).filter((c) => {
+    if (c.type_compte === "cm") return false;
     if (Boolean(c.ugc_ai_video)) return false;
     // Quota 0 (legacy) = toujours à traiter (plancher 1).
     if (opts.ignorerWarmup) return true;
@@ -1007,6 +1016,7 @@ export async function assignerTousComptes(
   // assignerCompteJour renvoyer la raison — sauf filtre batch minuit).
   const maintenant = Date.now();
   const comptes = (comptesBruts ?? []).filter((c) => {
+    if (c.type_compte === "cm" && !compteId) return false;
     if (Boolean(c.ugc_ai_video) && !compteId) return false;
     if (o.ignorerWarmup) return true;
     const ends = c.warmup_ends_at as string | null | undefined;

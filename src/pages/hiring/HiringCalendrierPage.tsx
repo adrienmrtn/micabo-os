@@ -1,12 +1,19 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, EmptyState } from "@/components/ui/card";
-import { lirePost, listerSlides, postsCalendrierAdmin, type PostCalendrierAdmin } from "@/features/moteur/api";
+import {
+  lirePost,
+  listerSlides,
+  papierPostsCalendrier,
+  postsCalendrierAdmin,
+  type PapierPostCalendrier,
+  type PostCalendrierAdmin,
+} from "@/features/moteur/api";
 import { cn } from "@/lib/utils";
 
 /** Aperçu (lecture seule) d'un post : ses slides — image nettoyée + texte. */
@@ -96,9 +103,51 @@ function couleurs(compteId: string): React.CSSProperties {
     borderColor: `hsl(${h} 60% 80%)`,
   };
 }
-function nomCreateur(post: PostCalendrierAdmin): string {
+function nomCreateur(post: { poster_prenom?: string | null; poster_nom?: string | null; persona_nom?: string | null; handle_tiktok?: string | null }): string {
   const perso = [post.poster_prenom, post.poster_nom].filter(Boolean).join(" ");
   return perso || post.persona_nom || (post.handle_tiktok ? `@${post.handle_tiktok}` : "—");
+}
+
+function ApercuPapier({
+  post,
+  onClose,
+}: {
+  post: PapierPostCalendrier;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div
+        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-lg border bg-card p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">{t("hiring.apercuPapier")}</p>
+            <p className="text-xs text-muted-foreground">
+              {nomCreateur(post)} · {post.date_publication_prevue}
+            </p>
+          </div>
+          <Button size="icon" variant="ghost" aria-label={t("common.close")} onClick={onClose}>
+            <X />
+          </Button>
+        </div>
+        <video src={post.video_url} className="mb-3 w-full rounded-md bg-muted" controls playsInline />
+        {post.title ? <p className="mb-2 text-sm font-medium">{post.title}</p> : null}
+        {post.caption ? (
+          <p className="mb-2 whitespace-pre-wrap text-sm text-muted-foreground">{post.caption}</p>
+        ) : null}
+        {post.hashtags ? <p className="mb-3 text-xs text-muted-foreground">{post.hashtags}</p> : null}
+        <Button asChild variant="outline" className="w-full">
+          <a href={post.video_url} download target="_blank" rel="noreferrer">
+            <Download className="size-3.5" />
+            {t("cm.telecharger")}
+          </a>
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -113,6 +162,10 @@ export function HiringCalendrierPage() {
     queryKey: ["posts-calendrier-manager"],
     queryFn: postsCalendrierAdmin,
   });
+  const { data: papiers, isPending: papierPending } = useQuery({
+    queryKey: ["papier-posts-calendrier-manager"],
+    queryFn: papierPostsCalendrier,
+  });
 
   const maintenant = new Date();
   const [mois, setMois] = React.useState(() => ({
@@ -120,24 +173,43 @@ export function HiringCalendrierPage() {
     mois: maintenant.getMonth(),
   }));
   const [apercu, setApercu] = React.useState<string | null>(null);
+  const [apercuPapier, setApercuPapier] = React.useState<PapierPostCalendrier | null>(null);
+
+  type ItemJour =
+    | { kind: "slide"; post: PostCalendrierAdmin }
+    | { kind: "papier"; post: PapierPostCalendrier };
 
   const parJour = React.useMemo(() => {
-    const carte = new Map<string, PostCalendrierAdmin[]>();
+    const carte = new Map<string, ItemJour[]>();
     for (const post of posts ?? []) {
       const date = post.date_publication_prevue;
       if (!date) continue;
-      carte.set(date, [...(carte.get(date) ?? []), post]);
+      carte.set(date, [...(carte.get(date) ?? []), { kind: "slide", post }]);
+    }
+    for (const post of papiers ?? []) {
+      const date = post.date_publication_prevue;
+      if (!date) continue;
+      carte.set(date, [...(carte.get(date) ?? []), { kind: "papier", post }]);
     }
     return carte;
-  }, [posts]);
+  }, [posts, papiers]);
 
   const legende = React.useMemo(() => {
-    const vus = new Map<string, PostCalendrierAdmin>();
-    for (const post of posts ?? []) if (!vus.has(post.compte_id)) vus.set(post.compte_id, post);
+    const vus = new Map<string, { compte_id: string; nom: string }>();
+    for (const post of posts ?? []) {
+      if (!vus.has(post.compte_id)) {
+        vus.set(post.compte_id, { compte_id: post.compte_id, nom: nomCreateur(post) });
+      }
+    }
+    for (const post of papiers ?? []) {
+      if (!vus.has(post.compte_id)) {
+        vus.set(post.compte_id, { compte_id: post.compte_id, nom: `${nomCreateur(post)} · CM` });
+      }
+    }
     return [...vus.values()];
-  }, [posts]);
+  }, [posts, papiers]);
 
-  if (isPending) {
+  if (isPending || papierPending) {
     return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   }
 
@@ -159,6 +231,7 @@ export function HiringCalendrierPage() {
   return (
     <div className="space-y-4">
       {apercu && <ApercuPost postId={apercu} onClose={() => setApercu(null)} />}
+      {apercuPapier && <ApercuPapier post={apercuPapier} onClose={() => setApercuPapier(null)} />}
 
       <div>
         <h1 className="text-lg font-semibold tracking-tight">{t("hiring.calendrierTitre")}</h1>
@@ -186,16 +259,18 @@ export function HiringCalendrierPage() {
 
       {legende.length > 0 && (
         <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-          {legende.map((post) => (
-            <span key={post.compte_id} className="flex items-center gap-1.5 text-xs">
-              <span className="size-3 rounded-full border" style={couleurs(post.compte_id)} />
-              {nomCreateur(post)}
+          {legende.map((item) => (
+            <span key={item.compte_id} className="flex items-center gap-1.5 text-xs">
+              <span className="size-3 rounded-full border" style={couleurs(item.compte_id)} />
+              {item.nom}
             </span>
           ))}
         </div>
       )}
 
-      {posts?.length === 0 && <EmptyState title={t("hiring.calendrierVide")} />}
+      {posts?.length === 0 && (papiers?.length ?? 0) === 0 && (
+        <EmptyState title={t("hiring.calendrierVide")} />
+      )}
 
       <Card>
         <CardContent className="p-0">
@@ -233,24 +308,39 @@ export function HiringCalendrierPage() {
                     {numero}
                   </span>
 
-                  {duJour.map((post) => (
-                    <button
-                      key={post.id}
-                      type="button"
-                      onClick={() => setApercu(post.id)}
-                      title={`${nomCreateur(post)} — ${post.sujet_titre ?? ""}`}
-                      style={couleurs(post.compte_id)}
-                      className={cn(
-                        "flex w-full max-w-full cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-left text-[11px] leading-tight transition hover:brightness-95",
-                        post.pipeline_statut !== "done" && "opacity-60",
-                      )}
-                    >
-                      <span className="min-w-0 flex-1 truncate">
-                        {post.publie_at ? "✓ " : ""}
-                        {nomCreateur(post)}
-                      </span>
-                    </button>
-                  ))}
+                  {duJour.map((item) =>
+                    item.kind === "papier" ? (
+                      <button
+                        key={item.post.id}
+                        type="button"
+                        onClick={() => setApercuPapier(item.post)}
+                        title={`${nomCreateur(item.post)} — ${item.post.title ?? ""}`}
+                        style={couleurs(item.post.compte_id)}
+                        className="flex w-full max-w-full cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-left text-[11px] leading-tight transition hover:brightness-95"
+                      >
+                        <span className="min-w-0 flex-1 truncate">
+                          CM · {nomCreateur(item.post)}
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        key={item.post.id}
+                        type="button"
+                        onClick={() => setApercu(item.post.id)}
+                        title={`${nomCreateur(item.post)} — ${item.post.sujet_titre ?? ""}`}
+                        style={couleurs(item.post.compte_id)}
+                        className={cn(
+                          "flex w-full max-w-full cursor-pointer items-center gap-1 rounded border px-1.5 py-1 text-left text-[11px] leading-tight transition hover:brightness-95",
+                          item.post.pipeline_statut !== "done" && "opacity-60",
+                        )}
+                      >
+                        <span className="min-w-0 flex-1 truncate">
+                          {item.post.publie_at ? "✓ " : ""}
+                          {nomCreateur(item.post)}
+                        </span>
+                      </button>
+                    ),
+                  )}
                 </div>
               );
             })}
