@@ -3,10 +3,10 @@
  * Auth : JWT admin ou x-cron-secret.
  *
  *   tick | assurer | relancer | regenerer
- *   tick_locales | relancer_langue | assigner
+ *   tick_locales | relancer_langue | assigner | annuler_test
  */
 
-import { assignerPapierComptes } from "../_shared/papier_assignation.ts";
+import { assignerPapierComptes, supprimerPapierPostsTest } from "../_shared/papier_assignation.ts";
 import { papierEstActif } from "../_shared/papier_reglages.ts";
 import {
   avancerLangue,
@@ -61,6 +61,18 @@ Deno.serve(async (request) => {
         masterId: typeof body?.masterId === "string" ? body.masterId : undefined,
         langueId: typeof body?.langueId === "string" ? body.langueId : undefined,
         fenetreJours: typeof body?.fenetreJours === "number" ? body.fenetreJours : undefined,
+        compteId: typeof body?.compteId === "string" ? body.compteId : undefined,
+        test: Boolean(body?.test),
+      });
+      return json(out);
+    }
+
+    if (action === "annuler_test") {
+      const compteId = String(body?.compteId ?? "");
+      if (!compteId) return json({ ok: false, error: "compteId requis" }, 400);
+      const out = await supprimerPapierPostsTest(supabase, {
+        compteId,
+        date: typeof body?.date === "string" ? body.date : undefined,
       });
       return json(out);
     }

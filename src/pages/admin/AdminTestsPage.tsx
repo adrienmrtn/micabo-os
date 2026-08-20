@@ -15,6 +15,7 @@ import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
 import { SimulerMinuitCard } from "@/features/moteur/SimulerMinuitCard";
 import { SimulerMinuitCompteCard } from "@/features/moteur/SimulerMinuitCompteCard";
 import { SimulerUgcVideoAssignationCard } from "@/features/moteur/SimulerUgcVideoAssignationCard";
+import { TesterAssignationPapierCard } from "@/features/moteur/TesterAssignationPapierCard";
 import { TestBrulerTexteCard } from "@/features/moteur/TestBrulerTexteCard";
 import { TestCompletCard } from "@/features/moteur/TestCompletCard";
 
@@ -277,6 +278,12 @@ const TESTS = [
     titreKey: "simUgcVideoLibre.title",
     descKey: "simUgcVideoLibre.subtitle",
     render: () => <SimulerUgcVideoAssignationCard mode="libre" />,
+  },
+  {
+    value: "papier-cm",
+    titreKey: "simPapier.title",
+    descKey: "simPapier.subtitle",
+    render: () => <TesterAssignationPapierCard />,
   },
   { value: "tiktok", titreKey: "tests.tiktokTitre", descKey: "tests.tiktokDesc", render: () => <TesterUnTikTok /> },
   { value: "traduction", titreKey: "tests.tradTitre", descKey: "tests.tradDesc", render: () => <TestTraduction /> },

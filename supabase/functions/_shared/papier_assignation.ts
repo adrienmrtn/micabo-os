@@ -37,6 +37,20 @@ export type PapierAssignOpts = {
   masterId?: string;
   langueId?: string;
   fenetreJours?: number;
+  compteId?: string;
+  test?: boolean;
+};
+
+export type PapierAssignPost = {
+  id: string;
+  compte_id: string;
+  langue: string;
+  title: string | null;
+  caption: string | null;
+  hashtags: string | null;
+  video_url: string;
+  est_test: boolean;
+  date_publication_prevue: string;
 };
 
 export type PapierAssignResultat = {
@@ -46,6 +60,8 @@ export type PapierAssignResultat = {
   langues: number;
   dates: string[];
   detail: string;
+  test?: boolean;
+  posts?: PapierAssignPost[];
 };
 
 export async function assignerPapierComptes(
@@ -61,6 +77,7 @@ export async function assignerPapierComptes(
       langues: 0,
       dates: [],
       detail: "aucun master dans la fenêtre",
+      test: Boolean(opts.test),
     };
   }
 
@@ -82,14 +99,17 @@ export async function assignerPapierComptes(
       langues: 0,
       dates: masters.map((m) => m.date_publication),
       detail: "aucune langue prête",
+      test: Boolean(opts.test),
     };
   }
 
-  const { data: comptesBruts, error: errC } = await supabase
+  let qComptes = supabase
     .from("comptes")
     .select("id, langue, type_compte, is_active")
-    .eq("type_compte", "cm")
-    .eq("is_active", true);
+    .eq("type_compte", "cm");
+  if (opts.compteId) qComptes = qComptes.eq("id", opts.compteId);
+  else if (!opts.test) qComptes = qComptes.eq("is_active", true);
+  const { data: comptesBruts, error: errC } = await qComptes;
   if (errC) throw errC;
   const comptes = comptesBruts ?? [];
 
@@ -105,7 +125,9 @@ export async function assignerPapierComptes(
   for (const [masterId, langs] of parMaster) {
     const jour = dateParMaster.get(masterId);
     if (!jour) continue;
-    const paires = pairesAssignationPapier(comptes, langs);
+    const paires = pairesAssignationPapier(comptes, langs, {
+      inclureInactifs: Boolean(opts.test),
+    });
     for (const paire of paires) {
       const langue = langueParId.get(paire.langueId);
       if (!langue?.video_url) continue;
@@ -121,16 +143,22 @@ export async function assignerPapierComptes(
         video_url: langue.video_url,
         video_path: langue.video_path,
         statut: "assigne",
+        est_test: Boolean(opts.test),
         updated_at: new Date().toISOString(),
       });
     }
   }
 
+  let posts: PapierAssignPost[] = [];
   if (rows.length) {
-    const { error: errU } = await supabase.from("papier_posts").upsert(rows, {
-      onConflict: "compte_id,date_publication_prevue",
-    });
+    const { data: upserted, error: errU } = await supabase
+      .from("papier_posts")
+      .upsert(rows, { onConflict: "compte_id,date_publication_prevue,est_test" })
+      .select(
+        "id, compte_id, langue, title, caption, hashtags, video_url, est_test, date_publication_prevue",
+      );
     if (errU) throw errU;
+    posts = (upserted ?? []) as PapierAssignPost[];
   }
 
   const dates = [...new Set(masters.map((m) => m.date_publication))];
@@ -140,10 +168,29 @@ export async function assignerPapierComptes(
     comptes: new Set(rows.map((r) => r.compte_id as string)).size,
     langues: new Set(langues.map((l) => l.id)).size,
     dates,
+    test: Boolean(opts.test),
+    posts,
     detail: rows.length
-      ? `${rows.length} assignation(s) CM`
-      : "aucun compte CM à assigner",
+      ? `${rows.length} assignation(s) CM${opts.test ? " (test)" : ""}`
+      : opts.compteId
+        ? "aucune langue prête pour ce compte CM"
+        : "aucun compte CM à assigner",
   };
+}
+
+export async function supprimerPapierPostsTest(
+  supabase: Supabase,
+  opts: { compteId: string; date?: string },
+): Promise<{ ok: true; supprimes: number }> {
+  let q = supabase
+    .from("papier_posts")
+    .delete()
+    .eq("est_test", true)
+    .eq("compte_id", opts.compteId);
+  if (opts.date) q = q.eq("date_publication_prevue", opts.date);
+  const { data, error } = await q.select("id");
+  if (error) throw error;
+  return { ok: true, supprimes: (data ?? []).length };
 }
 
 async function resoudreMasters(

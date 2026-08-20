@@ -47,13 +47,19 @@ export function hashtagsDepuisLangue(raw: string | string[] | null | undefined):
   return String(raw ?? "").trim();
 }
 
+export type PairesAssignationOpts = {
+  /** Test admin : on accepte un CM inactif. */
+  inclureInactifs?: boolean;
+};
+
 /**
  * Un CM actif reçoit la langue prête qui correspond.
- * Perso / inactifs / sans vidéo ready : ignorés.
+ * Perso / inactifs / sans vidéo ready : ignorés (sauf test).
  */
 export function pairesAssignationPapier(
   comptes: CompteCmCible[],
   langues: LanguePapierPrete[],
+  opts: PairesAssignationOpts = {},
 ): PaireAssignationPapier[] {
   const parLangue = new Map<string, LanguePapierPrete>();
   for (const langue of langues) {
@@ -64,7 +70,7 @@ export function pairesAssignationPapier(
   const out: PaireAssignationPapier[] = [];
   for (const compte of comptes) {
     if (compte.type_compte != null && compte.type_compte !== "cm") continue;
-    if (compte.is_active === false) continue;
+    if (compte.is_active === false && !opts.inclureInactifs) continue;
     const langue = parLangue.get(compte.langue);
     if (!langue) continue;
     out.push({ compteId: compte.id, langueId: langue.id, langue: compte.langue });

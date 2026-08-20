@@ -3178,7 +3178,7 @@ export type PapierMaster = {
   updated_at: string;
   papier_scenes?: PapierScene[];
   papier_langues?: PapierLangue[];
-  papier_posts?: Array<{ id: string; compte_id: string; langue: string }>;
+  papier_posts?: Array<{ id: string; compte_id: string; langue: string; est_test?: boolean }>;
 };
 
 export type PapierPost = {
@@ -3194,6 +3194,7 @@ export type PapierPost = {
   video_url: string;
   video_path: string | null;
   statut: "assigne" | "publie";
+  est_test?: boolean;
   publie_at: string | null;
   created_at: string;
 };
@@ -3212,6 +3213,8 @@ export type PapierAssignResultat = {
   langues?: number;
   dates?: string[];
   detail?: string;
+  test?: boolean;
+  posts?: PapierPost[];
   error?: string;
 };
 
@@ -3230,7 +3233,7 @@ export type PapierTickResultat = {
 export async function listerPapierMasters(limite = 14): Promise<PapierMaster[]> {
   const { data, error } = await supabase
     .from("papier_masters")
-    .select("*, papier_scenes(*), papier_langues(*), papier_posts(id, compte_id, langue)")
+    .select("*, papier_scenes(*), papier_langues(*), papier_posts(id, compte_id, langue, est_test)")
     .order("date_publication", { ascending: false })
     .limit(limite);
   if (error) throw error;
@@ -3238,11 +3241,13 @@ export async function listerPapierMasters(limite = 14): Promise<PapierMaster[]> 
     const r = row as PapierMaster;
     const scenes = [...(r.papier_scenes ?? [])].sort((a, b) => a.index - b.index);
     const langues = [...(r.papier_langues ?? [])].sort((a, b) => a.langue.localeCompare(b.langue));
+    const posts = (r.papier_posts ?? []).filter((p) => !p.est_test);
     return {
       ...r,
       journal: Array.isArray(r.journal) ? r.journal : [],
       papier_scenes: scenes,
       papier_langues: langues,
+      papier_posts: posts,
     };
   });
 }
@@ -3263,14 +3268,42 @@ export const relancerPapierLangue = (id: string) =>
   invoke<PapierTickResultat>("papier-cm", { action: "relancer_langue", manuel: true, id });
 
 export const assignerPapierCm = (
-  body: { date?: string; masterId?: string; langueId?: string; fenetreJours?: number } = {},
+  body: {
+    date?: string;
+    masterId?: string;
+    langueId?: string;
+    fenetreJours?: number;
+    compteId?: string;
+    test?: boolean;
+  } = {},
 ) => invoke<PapierAssignResultat>("papier-cm", { action: "assigner", manuel: true, ...body });
+
+export const testerAssignationPapier = (body: {
+  compteId: string;
+  date?: string;
+  masterId?: string;
+}) =>
+  invoke<PapierAssignResultat>("papier-cm", {
+    action: "assigner",
+    manuel: true,
+    test: true,
+    ...body,
+  });
+
+export const annulerAssignationPapierTest = (compteId: string, date?: string) =>
+  invoke<{ ok: boolean; supprimes?: number; error?: string }>("papier-cm", {
+    action: "annuler_test",
+    manuel: true,
+    compteId,
+    date,
+  });
 
 export async function mesPapierPosts(compteId: string): Promise<PapierPost[]> {
   const { data, error } = await supabase
     .from("papier_posts")
     .select("*")
     .eq("compte_id", compteId)
+    .eq("est_test", false)
     .order("date_publication_prevue", { ascending: false })
     .limit(200);
   if (error) throw error;
@@ -3281,6 +3314,7 @@ export async function papierPostsCalendrier(): Promise<PapierPostCalendrier[]> {
   const { data, error } = await supabase
     .from("papier_posts")
     .select("*, comptes(persona_nom, handle_tiktok, profiles(prenom, nom))")
+    .eq("est_test", false)
     .order("date_publication_prevue", { ascending: false, nullsFirst: false })
     .limit(400);
   if (error) throw error;
@@ -3292,6 +3326,23 @@ export async function papierPostsCalendrier(): Promise<PapierPostCalendrier[]> {
     poster_prenom: row.comptes?.profiles?.prenom ?? null,
     poster_nom: row.comptes?.profiles?.nom ?? null,
   })) as PapierPostCalendrier[];
+}
+
+export async function listerPapierPostsTest(
+  compteId: string,
+  date?: string,
+): Promise<PapierPost[]> {
+  let q = supabase
+    .from("papier_posts")
+    .select("*")
+    .eq("compte_id", compteId)
+    .eq("est_test", true)
+    .order("date_publication_prevue", { ascending: false })
+    .limit(20);
+  if (date) q = q.eq("date_publication_prevue", date);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as PapierPost[];
 }
 
 export const lancerScoringVnext = (compteId?: string) =>

@@ -257,6 +257,22 @@ export const fr = {
       aucun: "Aucun passage créé — labels / pool / persona UGC à vérifier.",
       annuleOk: "Rollback OK — {{posts}} post(s), {{passages}} passage(s) supprimé(s).",
     },
+    simPapier: {
+      title: "Test assignation papier CM",
+      subtitle:
+        "Assigne la vidéo papier du jour (même langue) à UN compte CM, en test. Invisible sur les calendriers.",
+      compte: "Compte CM",
+      comptePh: "Choisir un compte CM",
+      lancer: "Tester l’assignation",
+      enCours: "Assignation test…",
+      annuler: "Annuler le test",
+      annulerEnCours: "Annulation…",
+      annulerConfirm: "Supprimer l’assignation papier test de ce compte pour aujourd’hui ?",
+      aide: "La langue du compte doit avoir une vidéo ready. Ça n’écrit pas sur l’assignation réelle du jour.",
+      ok: "{{count}} assignation(s) test créée(s).",
+      aucun: "Rien à assigner — langue pas prête, ou pas de compte CM.",
+      annuleOk: "Rollback OK — {{count}} ligne(s) test supprimée(s).",
+    },
     simUgcVideo: {
       title: "Test assignation UGC AI VIDEO",
       subtitle:

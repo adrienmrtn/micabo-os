@@ -25,6 +25,7 @@ import {
 } from "@/features/moteur/api";
 import { drapeauLangue, nomLangue } from "@/features/moteur/langues";
 import { REGLAGES_PAPIER_DEFAUT } from "@/features/moteur/papierReglages";
+import { TesterAssignationPapierCard } from "@/features/moteur/TesterAssignationPapierCard";
 
 const STATUT_VARIANT: Record<PapierStatut, "default" | "secondary" | "destructive" | "outline"> = {
   queued: "outline",
@@ -221,6 +222,8 @@ export function AdminPapierPage() {
           busy={busy}
         />
       ) : null}
+
+      <TesterAssignationPapierCard />
 
       <Card>
         <CardHeader>

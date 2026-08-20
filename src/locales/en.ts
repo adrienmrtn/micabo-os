@@ -257,6 +257,22 @@ export const en = {
       aucun: "No passage created — check labels / pool / UGC persona.",
       annuleOk: "Rollback OK — {{posts}} post(s), {{passages}} passage(s) deleted.",
     },
+    simPapier: {
+      title: "Test CM paper assignment",
+      subtitle:
+        "Assign today's paper video (same language) to ONE CM account, as a test. Hidden from calendars.",
+      compte: "CM account",
+      comptePh: "Choose a CM account",
+      lancer: "Test assignment",
+      enCours: "Test assignment…",
+      annuler: "Cancel test",
+      annulerEnCours: "Cancelling…",
+      annulerConfirm: "Delete this account's paper test assignment for today?",
+      aide: "The account language needs a ready video. This does not overwrite the real assignment of the day.",
+      ok: "{{count}} test assignment(s) created.",
+      aucun: "Nothing to assign — language not ready, or no CM account.",
+      annuleOk: "Rollback OK — {{count}} test row(s) deleted.",
+    },
     simUgcVideo: {
       title: "Test UGC AI VIDEO assignment",
       subtitle:

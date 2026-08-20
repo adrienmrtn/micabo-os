@@ -51,6 +51,15 @@ describe("pairesAssignationPapier", () => {
     ]);
   });
 
+  it("en test, inclut un CM inactif", () => {
+    const paires = pairesAssignationPapier(
+      [{ id: "off", langue: "de", type_compte: "cm", is_active: false }],
+      [de],
+      { inclureInactifs: true },
+    );
+    expect(paires).toEqual([{ compteId: "off", langueId: "lang-de", langue: "de" }]);
+  });
+
   it("ignore perso, inactifs, et langues pas prêtes", () => {
     const paires = pairesAssignationPapier(
       [
