@@ -6,6 +6,22 @@ export function normaliserTypeCompte(valeur: unknown): TypeCompte {
   return valeur === "cm" ? "cm" : "perso";
 }
 
+/**
+ * Premier compte à la création d'un login.
+ * Un poster n'implique pas un perso : CM si demandé + langue, sinon aucun
+ * (login seul). Perso seulement si langue et type ≠ cm / aucun.
+ */
+export function resoudrePremierCompte(
+  type: string | undefined | null,
+  langue?: string | null,
+): TypeCompte | "aucun" {
+  const t = String(type ?? "").trim().toLowerCase();
+  if (t === "aucun" || t === "none") return "aucun";
+  if (!String(langue ?? "").trim()) return "aucun";
+  if (t === "cm") return "cm";
+  return "perso";
+}
+
 export function estCompteCm(compte: { type_compte?: string | null }): boolean {
   return normaliserTypeCompte(compte.type_compte) === "cm";
 }

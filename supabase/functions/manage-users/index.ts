@@ -37,6 +37,18 @@ interface PersonaUgcLibre {
   image_profile_url: string | null;
 }
 
+/** Aligné sur `resoudrePremierCompte` (src/features/moteur/comptesCm.ts). */
+function resoudrePremierCompte(
+  type: unknown,
+  langue: string,
+): "perso" | "cm" | "aucun" {
+  const t = String(type ?? "").trim().toLowerCase();
+  if (t === "aucun" || t === "none") return "aucun";
+  if (!langue) return "aucun";
+  if (t === "cm") return "cm";
+  return "perso";
+}
+
 /**
  * Gestion des posters / recruteurs.
  *
@@ -50,7 +62,7 @@ interface PersonaUgcLibre {
  *   { action: "skip_warmup", compteId }   — admin : compte actif immédiat
  *   { action: "delete", userId }
  *
- * Création poster : compte créé immédiatement (warmup non démarré).
+ * Création poster : premier compte perso, CM, ou aucun (login seul).
  * File FIFO `file_labels_comptes` :
  *   { items: [...], par_langue: { fr: [...], de: [...] } }
  * Priorité : file de la langue du poster → file générale (`items`) → least-used.
@@ -185,7 +197,7 @@ async function gererRequete(request: Request): Promise<Response> {
     const nom = String(body.nom ?? "").trim();
     const password = String(body.password ?? "");
     const langue = String(body.langue ?? "").trim().toLowerCase();
-    const typePremier = String(body.type_compte ?? "").trim().toLowerCase();
+    const typePremier = resoudrePremierCompte(body.type_compte, langue);
     const languesRecues = Array.isArray(body.langues)
       ? (body.langues as unknown[])
         .map((l) => String(l ?? "").trim().toLowerCase())
@@ -195,13 +207,8 @@ async function gererRequete(request: Request): Promise<Response> {
       acces.role === "admin" || acces.role === "directing_manager";
     const roleVoulu =
       body.role === "hiring_manager" && peutCreerHm ? "hiring_manager" : "poster";
-    const creerCm = roleVoulu === "poster" && Boolean(langue) && typePremier === "cm";
-    const creerPerso =
-      roleVoulu === "poster" &&
-      Boolean(langue) &&
-      typePremier !== "cm" &&
-      typePremier !== "aucun" &&
-      typePremier !== "none";
+    const creerCm = roleVoulu === "poster" && typePremier === "cm";
+    const creerPerso = roleVoulu === "poster" && typePremier === "perso";
 
     if (!prenom || password.length < 8) {
       return json({ error: "Prénom requis et mot de passe d'au moins 8 caractères" }, 400);

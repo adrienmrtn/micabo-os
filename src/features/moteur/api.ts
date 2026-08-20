@@ -34,7 +34,7 @@ import {
   type LigneStatSlideshow,
   type StatsCompteSlideshows,
 } from "./statsSlideshowsCompte";
-import { comptePrincipal, normaliserTypeCompte } from "./comptesCm";
+import { comptePrincipal, normaliserTypeCompte, resoudrePremierCompte } from "./comptesCm";
 import { normaliserReglagesPapier } from "./papierReglages";
 import type { CompteIdentifiants, CompteResumePoster, TypeCompte } from "./types";
 
@@ -833,8 +833,10 @@ export function creerPoster(input: {
     prenom: input.prenom,
     nom: input.nom,
     password: input.password,
-    langue: input.type_compte === "aucun" ? "" : (input.langue ?? ""),
-    type_compte: input.type_compte ?? (input.langue ? "perso" : "aucun"),
+    langue: resoudrePremierCompte(input.type_compte, input.langue) === "aucun"
+      ? ""
+      : (input.langue ?? ""),
+    type_compte: resoudrePremierCompte(input.type_compte, input.langue),
     ...(input.posts_par_jour != null
       ? { posts_par_jour: normaliserPostsParJour(Number(input.posts_par_jour)) }
       : {}),

@@ -9,6 +9,7 @@ import {
   languesDisponiblesPourCm,
   languesPourNouveauCompte,
   normaliserTypeCompte,
+  resoudrePremierCompte,
 } from "./comptesCm";
 
 const persoFr = { id: "a", type_compte: "perso" as const, langue: "fr" };
@@ -26,6 +27,16 @@ describe("type_compte", () => {
     expect(estCompteCm(cmDe)).toBe(true);
     expect(estCompteCm(persoFr)).toBe(false);
     expect(estCompteCm({})).toBe(false);
+  });
+
+  it("à la création, un poster n'implique pas un perso", () => {
+    expect(resoudrePremierCompte(undefined, "fr")).toBe("perso");
+    expect(resoudrePremierCompte("perso", "fr")).toBe("perso");
+    expect(resoudrePremierCompte("cm", "de")).toBe("cm");
+    expect(resoudrePremierCompte("aucun", "fr")).toBe("aucun");
+    expect(resoudrePremierCompte("none", "en")).toBe("aucun");
+    expect(resoudrePremierCompte("cm", "")).toBe("aucun");
+    expect(resoudrePremierCompte(undefined, "")).toBe("aucun");
   });
 });
 
