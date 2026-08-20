@@ -6,57 +6,64 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  ajouterCompteCm,
+  ajouterCompte,
   lireIdentifiantsCm,
   majIdentifiantsCm,
 } from "@/features/moteur/api";
-import { languesDisponiblesPourCm } from "@/features/moteur/comptesCm";
+import { languesDisponiblesPourCm, languesPourNouveauCompte } from "@/features/moteur/comptesCm";
 import { nomLangue } from "@/features/moteur/langues";
+import type { TypeCompte } from "@/features/moteur/types";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
-export function FormulaireCompteCm({
+export function FormulaireAjouterCompte({
   posterId,
   languesProposees,
-  languesPrises,
+  languesPrisesCm,
   onCree,
 }: {
   posterId: string;
   languesProposees: string[];
-  languesPrises: string[];
+  languesPrisesCm: string[];
   onCree?: () => void;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const libres = languesDisponiblesPourCm(languesProposees, languesPrises);
+  const libresCm = languesDisponiblesPourCm(languesProposees, languesPrisesCm);
   const [ouvert, setOuvert] = React.useState(false);
-  const [langue, setLangue] = React.useState(libres[0] ?? "");
+  const [typeCompte, setTypeCompte] = React.useState<TypeCompte>("perso");
+  const languesType = languesPourNouveauCompte(typeCompte, languesProposees, languesPrisesCm);
+  const [langue, setLangue] = React.useState(languesType[0] ?? "");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [deuxFa, setDeuxFa] = React.useState("");
   const [handle, setHandle] = React.useState("");
+  const [postsParJour, setPostsParJour] = React.useState<1 | 2 | 3>(2);
 
   React.useEffect(() => {
-    if (langue && libres.includes(langue)) return;
-    setLangue(libres[0] ?? "");
-  }, [libres, langue]);
+    if (langue && languesType.includes(langue)) return;
+    setLangue(languesType[0] ?? "");
+  }, [languesType, langue]);
 
   const creer = useMutation({
     mutationFn: () =>
-      ajouterCompteCm({
+      ajouterCompte({
         posterId,
+        type_compte: typeCompte,
         langue,
+        posts_par_jour: typeCompte === "perso" ? postsParJour : 1,
+        handle_tiktok: handle,
         tiktok_email: email,
         tiktok_password: password,
         tiktok_2fa_note: deuxFa,
-        handle_tiktok: handle,
       }),
     onSuccess: () => {
       setEmail("");
       setPassword("");
       setDeuxFa("");
       setHandle("");
+      setPostsParJour(2);
       setOuvert(false);
       void queryClient.invalidateQueries({ queryKey: ["comptes"] });
       void queryClient.invalidateQueries({ queryKey: ["posters"] });
@@ -64,88 +71,135 @@ export function FormulaireCompteCm({
     },
   });
 
-  if (libres.length === 0) {
-    return <p className="text-xs text-muted-foreground">{t("cm.toutesLanguesPrises")}</p>;
-  }
-
   if (!ouvert) {
     return (
       <Button type="button" size="sm" variant="outline" onClick={() => setOuvert(true)}>
-        {t("cm.ajouter")}
+        {t("cm.ajouterCompte")}
       </Button>
     );
   }
+
+  const cmBloque = typeCompte === "cm" && libresCm.length === 0;
 
   return (
     <form
       className="space-y-3 rounded-md border p-3"
       onSubmit={(e) => {
         e.preventDefault();
+        if (cmBloque) return;
         creer.mutate();
       }}
     >
-      <p className="text-sm font-medium">{t("cm.ajouter")}</p>
-      <p className="text-xs text-muted-foreground">{t("cm.ajouterAide")}</p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1">
-          <Label htmlFor={`cm-langue-${posterId}`}>{t("cm.langue")}</Label>
-          <select
-            id={`cm-langue-${posterId}`}
-            className={selectClass}
-            value={langue}
-            onChange={(e) => setLangue(e.target.value)}
-            required
+      <p className="text-sm font-medium">{t("cm.ajouterCompte")}</p>
+      <p className="text-xs text-muted-foreground">{t("cm.ajouterCompteAide")}</p>
+      <div className="inline-flex rounded-md border p-0.5">
+        {(["perso", "cm"] as const).map((type) => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => setTypeCompte(type)}
+            className={
+              typeCompte === type
+                ? "rounded px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground"
+                : "rounded px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+            }
           >
-            {libres.map((l) => (
-              <option key={l} value={l}>
-                {nomLangue(l)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor={`cm-handle-${posterId}`}>{t("comptes.pseudo")}</Label>
-          <Input
-            id={`cm-handle-${posterId}`}
-            value={handle}
-            placeholder="pseudo.tiktok"
-            onChange={(e) => setHandle(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor={`cm-email-${posterId}`}>{t("cm.email")}</Label>
-          <Input
-            id={`cm-email-${posterId}`}
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor={`cm-pass-${posterId}`}>{t("cm.password")}</Label>
-          <Input
-            id={`cm-pass-${posterId}`}
-            type="text"
-            required
-            autoComplete="off"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1 sm:col-span-2">
-          <Label htmlFor={`cm-2fa-${posterId}`}>{t("cm.deuxFa")}</Label>
-          <Input
-            id={`cm-2fa-${posterId}`}
-            value={deuxFa}
-            placeholder={t("cm.deuxFaPh")}
-            onChange={(e) => setDeuxFa(e.target.value)}
-          />
-        </div>
+            {type === "cm" ? t("cm.badge") : t("cm.perso")}
+          </button>
+        ))}
       </div>
+      <p className="text-xs text-muted-foreground">
+        {typeCompte === "cm" ? t("cm.ajouterAide") : t("cm.ajouterPersoAide")}
+      </p>
+      {cmBloque ? (
+        <p className="text-xs text-muted-foreground">{t("cm.toutesLanguesPrises")}</p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <Label htmlFor={`compte-langue-${posterId}`}>{t("cm.langueCompte")}</Label>
+            <select
+              id={`compte-langue-${posterId}`}
+              className={selectClass}
+              value={langue}
+              onChange={(e) => setLangue(e.target.value)}
+              required
+            >
+              {languesType.map((l) => (
+                <option key={l} value={l}>
+                  {nomLangue(l)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor={`compte-handle-${posterId}`}>{t("comptes.pseudo")}</Label>
+            <Input
+              id={`compte-handle-${posterId}`}
+              value={handle}
+              placeholder="pseudo.tiktok"
+              onChange={(e) => setHandle(e.target.value)}
+            />
+          </div>
+          {typeCompte === "perso" && (
+            <div className="space-y-1 sm:col-span-2">
+              <Label>{t("hiring.postsParJour")}</Label>
+              <div className="inline-flex rounded-md border p-0.5">
+                {([1, 2, 3] as const).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setPostsParJour(n)}
+                    className={
+                      postsParJour === n
+                        ? "rounded px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground"
+                        : "rounded px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+                    }
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {typeCompte === "cm" && (
+            <>
+              <div className="space-y-1">
+                <Label htmlFor={`cm-email-${posterId}`}>{t("cm.email")}</Label>
+                <Input
+                  id={`cm-email-${posterId}`}
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor={`cm-pass-${posterId}`}>{t("cm.password")}</Label>
+                <Input
+                  id={`cm-pass-${posterId}`}
+                  type="text"
+                  required
+                  autoComplete="off"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label htmlFor={`cm-2fa-${posterId}`}>{t("cm.deuxFa")}</Label>
+                <Input
+                  id={`cm-2fa-${posterId}`}
+                  value={deuxFa}
+                  placeholder={t("cm.deuxFaPh")}
+                  onChange={(e) => setDeuxFa(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" size="sm" disabled={creer.isPending || !langue}>
-          {creer.isPending ? t("common.saving") : t("cm.creer")}
+        <Button type="submit" size="sm" disabled={creer.isPending || !langue || cmBloque}>
+          {creer.isPending ? t("common.saving") : t("cm.creerCompte")}
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={() => setOuvert(false)}>
           {t("common.cancel")}
@@ -159,6 +213,23 @@ export function FormulaireCompteCm({
         </p>
       )}
     </form>
+  );
+}
+
+/** @deprecated préfère FormulaireAjouterCompte */
+export function FormulaireCompteCm(props: {
+  posterId: string;
+  languesProposees: string[];
+  languesPrises: string[];
+  onCree?: () => void;
+}) {
+  return (
+    <FormulaireAjouterCompte
+      posterId={props.posterId}
+      languesProposees={props.languesProposees}
+      languesPrisesCm={props.languesPrises}
+      onCree={props.onCree}
+    />
   );
 }
 

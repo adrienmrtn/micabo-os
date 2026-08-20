@@ -24,8 +24,8 @@ import {
   majCompte,
   supprimerPoster,
 } from "@/features/moteur/api";
-import { comptesCm, languesCmPrises } from "@/features/moteur/comptesCm";
-import { FormulaireCompteCm } from "@/features/moteur/FormulaireCompteCm";
+import { comptePrincipal, estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
+import { FormulaireAjouterCompte } from "@/features/moteur/FormulaireCompteCm";
 import { drapeauLangue } from "@/features/moteur/langues";
 import { WarmupBadge } from "@/features/moteur/WarmupBadge";
 import type { PosterProfil } from "@/features/moteur/types";
@@ -45,14 +45,31 @@ const selectClass =
 function LignePoster({ poster: p }: { poster: PosterProfil }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const comptes = p.comptes ?? [];
+  const [compteId, setCompteId] = React.useState(
+    () => comptePrincipal(comptes)?.id ?? p.compte_id ?? "",
+  );
+  const compteActif = comptes.find((c) => c.id === compteId) ?? comptePrincipal(comptes);
   const [edite, setEdite] = React.useState(false);
-  const [nom, setNom] = React.useState(p.persona_nom ?? "");
-  const [handle, setHandle] = React.useState(p.handle_tiktok ?? "");
-  const [bio, setBio] = React.useState(p.persona_bio ?? "");
+  const [nom, setNom] = React.useState(compteActif?.persona_nom ?? p.persona_nom ?? "");
+  const [handle, setHandle] = React.useState(compteActif?.handle_tiktok ?? p.handle_tiktok ?? "");
+  const [bio, setBio] = React.useState(compteActif?.persona_bio ?? p.persona_bio ?? "");
+
+  React.useEffect(() => {
+    if (compteId && comptes.some((c) => c.id === compteId)) return;
+    setCompteId(comptePrincipal(comptes)?.id ?? p.compte_id ?? "");
+  }, [comptes, compteId, p.compte_id]);
+
+  React.useEffect(() => {
+    setNom(compteActif?.persona_nom ?? "");
+    setHandle(compteActif?.handle_tiktok ?? "");
+    setBio(compteActif?.persona_bio ?? "");
+    setEdite(false);
+  }, [compteActif?.id, compteActif?.persona_nom, compteActif?.handle_tiktok, compteActif?.persona_bio]);
 
   const enregistrer = useMutation({
     mutationFn: () =>
-      majCompte(p.compte_id!, {
+      majCompte(compteActif!.id, {
         persona_nom: nom.trim() || null,
         handle_tiktok: handle.trim().replace(/^@/, "") || null,
         persona_bio: bio.trim() || null,
@@ -80,14 +97,16 @@ function LignePoster({ poster: p }: { poster: PosterProfil }) {
             {[p.prenom, p.nom].filter(Boolean).join(" ") || p.email}
           </span>
           {!p.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
-          <WarmupBadge
-            compteId={p.compte_id}
-            startedAt={p.warmup_started_at}
-            endsAt={p.warmup_ends_at}
-          />
+          {compteActif && !estCompteCm(compteActif) && (
+            <WarmupBadge
+              compteId={compteActif.id}
+              startedAt={compteActif.warmup_started_at}
+              endsAt={compteActif.warmup_ends_at}
+            />
+          )}
           {!edite && (
             <span className="ml-auto flex items-center gap-3">
-              {p.compte_id && (
+              {compteActif && (
                 <button
                   type="button"
                   onClick={() => setEdite(true)}
@@ -157,54 +176,75 @@ function LignePoster({ poster: p }: { poster: PosterProfil }) {
                 <p className="text-xs text-destructive">{(enregistrer.error as Error).message}</p>
               )}
             </div>
-          ) : p.handle_tiktok ? (
+          ) : compteActif?.handle_tiktok ? (
             <>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
                 <a
-                  href={`https://www.tiktok.com/@${p.handle_tiktok.replace(/^@/, "")}`}
+                  href={`https://www.tiktok.com/@${compteActif.handle_tiktok.replace(/^@/, "")}`}
                   target="_blank"
                   rel="noreferrer"
                   className="font-medium text-primary underline underline-offset-2"
                 >
-                  @{p.handle_tiktok.replace(/^@/, "")}
+                  @{compteActif.handle_tiktok.replace(/^@/, "")}
                 </a>
-                {p.persona_nom && <span className="text-muted-foreground">{p.persona_nom}</span>}
+                {compteActif.persona_nom && (
+                  <span className="text-muted-foreground">{compteActif.persona_nom}</span>
+                )}
               </div>
-              {p.persona_bio && (
-                <p className="whitespace-pre-wrap text-xs text-muted-foreground">{p.persona_bio}</p>
+              {compteActif.persona_bio && (
+                <p className="whitespace-pre-wrap text-xs text-muted-foreground">
+                  {compteActif.persona_bio}
+                </p>
               )}
             </>
           ) : (
             <p className="text-xs text-muted-foreground">{t("hiring.identiteEnCours")}</p>
           )}
-          <ComptesCmPoster poster={p} />
+          <ComptesPoster poster={p} compteId={compteActif?.id} onSelect={setCompteId} />
         </div>
       </div>
     </div>
   );
 }
 
-function ComptesCmPoster({ poster }: { poster: PosterProfil }) {
+function ComptesPoster({
+  poster,
+  compteId,
+  onSelect,
+}: {
+  poster: PosterProfil;
+  compteId?: string;
+  onSelect: (id: string) => void;
+}) {
   const { t } = useTranslation();
-  const cms = comptesCm(poster.comptes ?? []);
+  const comptes = poster.comptes ?? [];
   const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
 
   return (
     <div className="mt-2 space-y-2 border-t pt-2">
-      {cms.length > 0 && (
+      {comptes.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {cms.map((c) => (
-            <Badge key={c.id} variant="outline">
-              {t("cm.badge")} · {drapeauLangue(c.langue)}
+          {comptes.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => onSelect(c.id)}
+              className={
+                compteId === c.id
+                  ? "rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground"
+                  : "rounded-md border px-2 py-0.5 text-xs"
+              }
+            >
+              {estCompteCm(c) ? t("cm.badge") : t("cm.perso")} · {drapeauLangue(c.langue)}
               {c.handle_tiktok ? ` @${c.handle_tiktok}` : ""}
-            </Badge>
+            </button>
           ))}
         </div>
       )}
-      <FormulaireCompteCm
+      <FormulaireAjouterCompte
         posterId={poster.id}
         languesProposees={langues.data ?? []}
-        languesPrises={languesCmPrises(poster.comptes ?? [])}
+        languesPrisesCm={languesCmPrises(comptes)}
       />
     </div>
   );

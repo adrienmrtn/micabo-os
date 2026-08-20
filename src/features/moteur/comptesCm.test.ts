@@ -7,6 +7,7 @@ import {
   estCompteCm,
   languesCmPrises,
   languesDisponiblesPourCm,
+  languesPourNouveauCompte,
   normaliserTypeCompte,
 } from "./comptesCm";
 
@@ -46,5 +47,10 @@ describe("langues CM", () => {
   it("liste les langues déjà prises et celles encore libres", () => {
     expect(languesCmPrises([persoFr, cmDe, cmEs])).toEqual(["de", "es"]);
     expect(languesDisponiblesPourCm(["fr", "de", "it"], ["de"])).toEqual(["fr", "it"]);
+  });
+
+  it("à l'ajout, un perso reste libre dans une langue déjà CM", () => {
+    expect(languesPourNouveauCompte("perso", ["fr", "de"], ["de"])).toEqual(["fr", "de"]);
+    expect(languesPourNouveauCompte("cm", ["fr", "de"], ["de"])).toEqual(["fr"]);
   });
 });

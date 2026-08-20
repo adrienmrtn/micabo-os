@@ -41,7 +41,8 @@ interface PersonaUgcLibre {
  * Gestion des posters / recruteurs.
  *
  *   { action: "create", prenom, nom, password, langue?, langues?, role?, posts_par_jour? }
- *   { action: "ensure_compte", userId, langue, posts_par_jour? } — file admin → compte perso
+ *   { action: "ensure_compte", userId, langue, posts_par_jour? } — 1er compte perso (idempotent)
+ *   { action: "ajouter_compte", userId, type_compte, langue, … } — compte supplémentaire perso ou CM
  *   { action: "ajouter_compte_cm", userId, langue, tiktok_email, tiktok_password, … }
  *   { action: "maj_identifiants_cm", compteId, tiktok_email, tiktok_password, … }
  *   { action: "start_warmup", compteId }  — créateur (son compte perso) ou admin
@@ -346,162 +347,53 @@ async function gererRequete(request: Request): Promise<Response> {
       .select("id")
       .eq("poster_id", userId)
       .eq("type_compte", "perso")
+      .limit(1)
       .maybeSingle();
     if (deja?.id) {
       return json({ ok: true, deja: true, compteId: deja.id });
     }
 
-    // Créateur sous HM UGC AI VIDEO → marque + labels HM (pas de file admin).
-    let modeUgcAiVideo = false;
-    if (estRoleManager(acces.role) && acces.userId !== "cron") {
-      modeUgcAiVideo = await estHmUgcAiVideo(supabase, acces);
-    } else if (acces.role === "admin") {
-      const { data: cible } = await supabase
-        .from("profiles")
-        .select("manager_id")
-        .eq("id", userId)
-        .maybeSingle();
-      if (cible?.manager_id) {
-        const { data: hm } = await supabase
-          .from("profiles")
-          .select("hm_ugc_ai_video")
-          .eq("id", cible.manager_id)
-          .maybeSingle();
-        modeUgcAiVideo = Boolean(hm?.hm_ugc_ai_video);
-      }
+    return await creerComptePersoPourPoster(supabase, acces, userId, langue, body.posts_par_jour);
+  }
+
+  if (body.action === "ajouter_compte" || body.action === "ajouter_compte_perso") {
+    const userId = String(body.userId ?? "").trim();
+    const langue = String(body.langue ?? "").trim().toLowerCase();
+    const typeCompte = body.action === "ajouter_compte_perso"
+      ? "perso"
+      : (String(body.type_compte ?? "perso") === "cm" ? "cm" : "perso");
+    if (!userId || !langue) return json({ error: "userId et langue requis" }, 400);
+
+    const interdit = await refuserSiHorsEquipe(supabase, acces, userId);
+    if (interdit) return interdit;
+    const langueInterdite = await restreindreLangueGeree(supabase, acces, langue);
+    if (langueInterdite) return langueInterdite;
+
+    if (typeCompte === "cm") {
+      return await creerCompteCmPourPoster(supabase, acces, userId, langue, body);
     }
 
-    let fileItem: FileLabelItem | null = null;
-    let fileItemQueue: FileLabelQueued | null = null;
-    let personaUgc: PersonaUgcLibre | null = null;
-
-    if (modeUgcAiVideo) {
-      personaUgc = await personaUgcLibre(supabase);
-      if (!personaUgc) return json({ error: "NO_UGC_PERSONA" }, 409);
-    } else {
-      const prep = await preparerFileEtPersona(supabase, langue);
-      if (!prep.ok) return json({ error: prep.error }, 409);
-      fileItem = prep.fileItem;
-      fileItemQueue = prep.fileItemQueue;
-      personaUgc = prep.personaUgc;
-    }
-
-    const referenceId = await referenceLibre(supabase, langue);
-    const postsParJour = normaliserPostsParJour(body.posts_par_jour);
-    const compte = await preparerCompte(
+    return await creerComptePersoPourPoster(
       supabase,
+      acces,
       userId,
       langue,
-      referenceId,
-      fileItem,
-      postsParJour,
-      personaUgc,
-      fileItemQueue,
-      { ugcAiVideo: modeUgcAiVideo },
+      body.posts_par_jour,
+      String(body.handle_tiktok ?? "").trim().replace(/^@+/, ""),
     );
-    if (!compte.id) return json({ error: "CREATION_COMPTE_ECHOUEE" }, 500);
-    return json({ ok: true, compte });
   }
 
   if (body.action === "ajouter_compte_cm") {
     const userId = String(body.userId ?? "").trim();
     const langue = String(body.langue ?? "").trim().toLowerCase();
-    const emailTiktok = String(body.tiktok_email ?? "").trim();
-    const passwordTiktok = String(body.tiktok_password ?? "");
-    const deuxFa = String(body.tiktok_2fa_note ?? "").trim();
-    const notesHm = String(body.notes_hm ?? "").trim();
-    const handle = String(body.handle_tiktok ?? "").trim().replace(/^@+/, "");
-    const personaNom = String(body.persona_nom ?? "").trim();
     if (!userId || !langue) return json({ error: "userId et langue requis" }, 400);
-    if (!emailTiktok || passwordTiktok.length < 1) {
-      return json({ error: "Identifiants TikTok (email + mot de passe) requis" }, 400);
-    }
 
     const interdit = await refuserSiHorsEquipe(supabase, acces, userId);
     if (interdit) return interdit;
+    const langueInterdite = await restreindreLangueGeree(supabase, acces, langue);
+    if (langueInterdite) return langueInterdite;
 
-    if (estRoleManager(acces.role) && acces.userId !== "cron") {
-      const { data: hm } = await supabase
-        .from("profiles")
-        .select("langues")
-        .eq("id", acces.userId)
-        .maybeSingle();
-      const gerees = ((hm?.langues as string[] | null) ?? [])
-        .map((l) => l.toLowerCase())
-        .filter(Boolean);
-      if (gerees.length > 0 && !gerees.includes(langue)) {
-        return json(
-          { error: `Langue « ${langue} » hors des langues gérées (${gerees.join(", ")})` },
-          400,
-        );
-      }
-    }
-
-    const { data: deja } = await supabase
-      .from("comptes")
-      .select("id")
-      .eq("poster_id", userId)
-      .eq("type_compte", "cm")
-      .eq("langue", langue)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (deja?.id) {
-      return json({ error: `CM_LANGUE_PRISE`, message: `Un compte CM ${langue} existe déjà` }, 409);
-    }
-
-    const { data: compte, error } = await supabase
-      .from("comptes")
-      .insert({
-        poster_id: userId,
-        type_compte: "cm",
-        langue,
-        posts_par_jour: 1,
-        warmup_started_at: null,
-        warmup_ends_at: null,
-        is_active: true,
-        ugc_ai: false,
-        ugc_ai_video: false,
-        ugc_persona_id: null,
-        handle_tiktok: handle || null,
-        persona_nom: personaNom || null,
-      })
-      .select("id")
-      .single();
-    if (error || !compte) {
-      const msg = error?.message ?? "CREATION_COMPTE_CM_ECHOUEE";
-      if (/comptes_cm_un_par_langue/.test(msg)) {
-        return json({ error: "CM_LANGUE_PRISE" }, 409);
-      }
-      return json({ error: msg }, 400);
-    }
-
-    const { error: idErr } = await supabase.from("compte_identifiants").insert({
-      compte_id: compte.id,
-      tiktok_email: emailTiktok,
-      tiktok_password: passwordTiktok,
-      tiktok_2fa_note: deuxFa || null,
-      notes_hm: notesHm || null,
-      renseigne_par: acces.userId === "cron" ? null : acces.userId,
-    });
-    if (idErr) {
-      await supabase.from("comptes").delete().eq("id", compte.id);
-      return json({ error: idErr.message }, 400);
-    }
-
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("langues")
-      .eq("id", userId)
-      .maybeSingle();
-    const actuelles = ((prof?.langues as string[] | null) ?? []).map((l) => l.toLowerCase());
-    if (!actuelles.includes(langue)) {
-      await supabase
-        .from("profiles")
-        .update({ langues: [...actuelles, langue] })
-        .eq("id", userId);
-    }
-
-    return json({ ok: true, compteId: compte.id });
+    return await creerCompteCmPourPoster(supabase, acces, userId, langue, body);
   }
 
   if (body.action === "maj_identifiants_cm") {
@@ -567,6 +459,190 @@ async function gererRequete(request: Request): Promise<Response> {
   return json({ error: "action inconnue" }, 400);
 }
 
+
+async function restreindreLangueGeree(
+  supabase: Supabase,
+  acces: { userId: string; role: string },
+  langue: string,
+): Promise<Response | null> {
+  if (!estRoleManager(acces.role) || acces.userId === "cron") return null;
+  const { data: hm } = await supabase
+    .from("profiles")
+    .select("langues")
+    .eq("id", acces.userId)
+    .maybeSingle();
+  const gerees = ((hm?.langues as string[] | null) ?? [])
+    .map((l) => l.toLowerCase())
+    .filter(Boolean);
+  if (gerees.length > 0 && !gerees.includes(langue)) {
+    return json(
+      { error: `Langue « ${langue} » hors des langues gérées (${gerees.join(", ")})` },
+      400,
+    );
+  }
+  return null;
+}
+
+async function ajouterLangueProfil(
+  supabase: Supabase,
+  userId: string,
+  langue: string,
+): Promise<void> {
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("langues")
+    .eq("id", userId)
+    .maybeSingle();
+  const actuelles = ((prof?.langues as string[] | null) ?? []).map((l) => l.toLowerCase());
+  if (actuelles.includes(langue)) return;
+  await supabase
+    .from("profiles")
+    .update({ langues: [...actuelles, langue] })
+    .eq("id", userId);
+}
+
+async function modeUgcAiVideoPourPoster(
+  supabase: Supabase,
+  acces: { userId: string; role: string },
+  userId: string,
+): Promise<boolean> {
+  if (estRoleManager(acces.role) && acces.userId !== "cron") {
+    return estHmUgcAiVideo(supabase, acces);
+  }
+  if (acces.role === "admin") {
+    const { data: cible } = await supabase
+      .from("profiles")
+      .select("manager_id")
+      .eq("id", userId)
+      .maybeSingle();
+    if (!cible?.manager_id) return false;
+    const { data: hm } = await supabase
+      .from("profiles")
+      .select("hm_ugc_ai_video")
+      .eq("id", cible.manager_id)
+      .maybeSingle();
+    return Boolean(hm?.hm_ugc_ai_video);
+  }
+  return false;
+}
+
+async function creerComptePersoPourPoster(
+  supabase: Supabase,
+  acces: { userId: string; role: string },
+  userId: string,
+  langue: string,
+  postsParJourBrut: unknown,
+  handleTiktok = "",
+): Promise<Response> {
+  const modeUgcAiVideo = await modeUgcAiVideoPourPoster(supabase, acces, userId);
+  let fileItem: FileLabelItem | null = null;
+  let fileItemQueue: FileLabelQueued | null = null;
+  let personaUgc: PersonaUgcLibre | null = null;
+
+  if (modeUgcAiVideo) {
+    personaUgc = await personaUgcLibre(supabase);
+    if (!personaUgc) return json({ error: "NO_UGC_PERSONA" }, 409);
+  } else {
+    const prep = await preparerFileEtPersona(supabase, langue);
+    if (!prep.ok) return json({ error: prep.error }, 409);
+    fileItem = prep.fileItem;
+    fileItemQueue = prep.fileItemQueue;
+    personaUgc = prep.personaUgc;
+  }
+
+  const referenceId = await referenceLibre(supabase, langue);
+  const postsParJour = normaliserPostsParJour(postsParJourBrut);
+  const compte = await preparerCompte(
+    supabase,
+    userId,
+    langue,
+    referenceId,
+    fileItem,
+    postsParJour,
+    personaUgc,
+    fileItemQueue,
+    { ugcAiVideo: modeUgcAiVideo },
+  );
+  if (!compte.id) return json({ error: "CREATION_COMPTE_ECHOUEE" }, 500);
+  if (handleTiktok) {
+    await supabase.from("comptes").update({ handle_tiktok: handleTiktok }).eq("id", compte.id);
+  }
+  await ajouterLangueProfil(supabase, userId, langue);
+  return json({ ok: true, compte });
+}
+
+async function creerCompteCmPourPoster(
+  supabase: Supabase,
+  acces: { userId: string; role: string },
+  userId: string,
+  langue: string,
+  // deno-lint-ignore no-explicit-any
+  body: any,
+): Promise<Response> {
+  const emailTiktok = String(body.tiktok_email ?? "").trim();
+  const passwordTiktok = String(body.tiktok_password ?? "");
+  const deuxFa = String(body.tiktok_2fa_note ?? "").trim();
+  const notesHm = String(body.notes_hm ?? "").trim();
+  const handle = String(body.handle_tiktok ?? "").trim().replace(/^@+/, "");
+  const personaNom = String(body.persona_nom ?? "").trim();
+  if (!emailTiktok || passwordTiktok.length < 1) {
+    return json({ error: "Identifiants TikTok (email + mot de passe) requis" }, 400);
+  }
+
+  const { data: deja } = await supabase
+    .from("comptes")
+    .select("id")
+    .eq("poster_id", userId)
+    .eq("type_compte", "cm")
+    .eq("langue", langue)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (deja?.id) {
+    return json({ error: "CM_LANGUE_PRISE", message: `Un compte CM ${langue} existe déjà` }, 409);
+  }
+
+  const { data: compte, error } = await supabase
+    .from("comptes")
+    .insert({
+      poster_id: userId,
+      type_compte: "cm",
+      langue,
+      posts_par_jour: 1,
+      warmup_started_at: null,
+      warmup_ends_at: null,
+      is_active: true,
+      ugc_ai: false,
+      ugc_ai_video: false,
+      ugc_persona_id: null,
+      handle_tiktok: handle || null,
+      persona_nom: personaNom || null,
+    })
+    .select("id")
+    .single();
+  if (error || !compte) {
+    const msg = error?.message ?? "CREATION_COMPTE_CM_ECHOUEE";
+    if (/comptes_cm_un_par_langue/.test(msg)) {
+      return json({ error: "CM_LANGUE_PRISE" }, 409);
+    }
+    return json({ error: msg }, 400);
+  }
+
+  const { error: idErr } = await supabase.from("compte_identifiants").insert({
+    compte_id: compte.id,
+    tiktok_email: emailTiktok,
+    tiktok_password: passwordTiktok,
+    tiktok_2fa_note: deuxFa || null,
+    notes_hm: notesHm || null,
+    renseigne_par: acces.userId === "cron" ? null : acces.userId,
+  });
+  if (idErr) {
+    await supabase.from("comptes").delete().eq("id", compte.id);
+    return json({ error: idErr.message }, 400);
+  }
+
+  await ajouterLangueProfil(supabase, userId, langue);
+  return json({ ok: true, compteId: compte.id });
+}
 
 /** Admin : tout. HM : ses créateurs. DM : créateurs des HM de son équipe. */
 async function refuserSiHorsEquipe(

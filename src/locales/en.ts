@@ -903,10 +903,17 @@ export const en = {
     cm: {
       badge: "CM",
       ajouter: "Add a CM account",
+      ajouterCompte: "Add an account",
+      ajouterCompteAide:
+        "One creator = one login. You can attach several TikTok accounts: personal (publishing) or CM (company).",
+      ajouterPersoAide:
+        "Creator TikTok account — labels, warmup and slideshow assignment, same as the first account.",
       ajouterAide:
         "Company TikTok account, one language. Credentials must already exist — you hand them to the creator.",
       creer: "Create CM account",
+      creerCompte: "Create account",
       langue: "CM account language",
+      langueCompte: "Account language",
       email: "TikTok email",
       password: "TikTok password",
       deuxFa: "2FA / backup codes",

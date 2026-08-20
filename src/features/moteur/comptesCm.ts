@@ -42,6 +42,15 @@ export function languesDisponiblesPourCm(
   return proposees.filter((l) => !occupees.has(l));
 }
 
+/** Langues proposées à l'ajout d'un compte : CM = 1 max par langue, perso = toutes. */
+export function languesPourNouveauCompte(
+  type: TypeCompte,
+  proposees: string[],
+  prisesCm: string[],
+): string[] {
+  return type === "cm" ? languesDisponiblesPourCm(proposees, prisesCm) : proposees;
+}
+
 export function cleCompteActif(userId: string): string {
   return `compte-actif-${userId}`;
 }

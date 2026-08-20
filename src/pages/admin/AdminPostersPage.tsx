@@ -19,8 +19,8 @@ import { badgeManager, estRoleManager, useAuth } from "@/features/auth/AuthConte
 import { CompteursPhases, ListeCreateursSuivi } from "@/features/hiring/SuiviCreateurs";
 import { equipesParDm, hmsDuDm, hmsSansDm, nomProfil, resumeHm } from "@/features/hiring/suiviEquipe";
 import { CompteEditor, PostsParJourCompte } from "@/features/moteur/CompteEditor";
-import { comptePerso, comptesCm, estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
-import { FormulaireCompteCm } from "@/features/moteur/FormulaireCompteCm";
+import { comptePerso, estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
+import { FormulaireAjouterCompte } from "@/features/moteur/FormulaireCompteCm";
 import {
   assurerComptePoster,
   creerPoster,
@@ -946,7 +946,6 @@ export function AdminPostersPage() {
   const carteCreateur = (poster: PosterProfil) => {
     const liste = comptesParPoster.get(poster.id) ?? [];
     const compte = comptePerso(liste);
-    const cms = comptesCm(liste);
     // Préfère le handle du compte TikTok (source de vérité), sinon profil.
     const tiktok = lienTikTokHandle(compte?.handle_tiktok ?? poster.handle_tiktok);
     return (
@@ -968,9 +967,10 @@ export function AdminPostersPage() {
             <span className="text-sm font-semibold tracking-tight">{nomAffiche(poster)}</span>
             {compte?.ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
             {compte?.ugc_ai && !compte.ugc_ai_video && <BadgeUgc label="UGC" />}
-            {cms.map((c) => (
+            {liste.map((c) => (
               <Badge key={c.id} variant="outline">
-                {t("cm.badge")} · {drapeauLangue(c.langue)}
+                {estCompteCm(c) ? t("cm.badge") : t("cm.perso")} · {drapeauLangue(c.langue)}
+                {c.handle_tiktok ? ` @${c.handle_tiktok}` : ""}
               </Badge>
             ))}
             {!poster.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
@@ -1388,22 +1388,28 @@ export function AdminPostersPage() {
                 onSave={(url) => enregistrerUpwork.mutate({ id: fiche.id, url })}
               />
 
-              {ficheComptes.length > 1 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {ficheComptes.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setFicheCompteId(c.id)}
-                      className={
-                        ficheCompte?.id === c.id
-                          ? "rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground"
-                          : "rounded-md border px-2 py-1 text-xs"
-                      }
-                    >
-                      {estCompteCm(c) ? t("cm.badge") : t("cm.perso")} · {drapeauLangue(c.langue)}
-                    </button>
-                  ))}
+              {ficheComptes.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {t("posters.gererComptes")}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ficheComptes.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setFicheCompteId(c.id)}
+                        className={
+                          ficheCompte?.id === c.id
+                            ? "rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground"
+                            : "rounded-md border px-2 py-1 text-xs"
+                        }
+                      >
+                        {estCompteCm(c) ? t("cm.badge") : t("cm.perso")} · {drapeauLangue(c.langue)}
+                        {c.handle_tiktok ? ` @${c.handle_tiktok}` : ""}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -1428,10 +1434,10 @@ export function AdminPostersPage() {
                 </div>
               ) : null}
 
-              <FormulaireCompteCm
+              <FormulaireAjouterCompte
                 posterId={fiche.id}
                 languesProposees={langues.data ?? []}
-                languesPrises={languesCmPrises(ficheComptes)}
+                languesPrisesCm={languesCmPrises(ficheComptes)}
               />
 
               {gererCompteOuvert && ficheCompte && (
