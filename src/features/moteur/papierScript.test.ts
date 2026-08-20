@@ -83,6 +83,10 @@ describe("CTA Sophia unique", () => {
     expect(script.scenes[2]?.overlay).toBe("Télécharge Sophia");
   });
 
+  it("l'outro par défaut ne dit Sophia qu'une fois", () => {
+    expect(compterSophia(SOPHIA_OUTRO)).toBe(1);
+  });
+
   it("utilise l'outro par défaut si CTA vide", () => {
     const script = finaliserScript(
       {

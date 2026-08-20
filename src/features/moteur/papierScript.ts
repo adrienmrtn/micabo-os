@@ -1,7 +1,7 @@
 /** Helpers purs du master papier (script, durée, CTA, prompts visuels). */
 
 export const SOPHIA_OUTRO =
-  "Ce fait vient de l'application Sophia : des cours simples et gratuits pour booster ta culture générale. Télécharge Sophia, c'est gratuit.";
+  "Ce fait vient de l'application Sophia : des cours simples et gratuits pour booster ta culture générale. Télécharge l'appli, c'est gratuit.";
 
 export const MOTS_PAR_SECONDE = 2.6;
 
