@@ -1179,7 +1179,8 @@ export const en = {
       captionEncore: "Re-caption",
       rattraper: "Backfill",
       rattraperAide:
-        "Re-runs already imported photos offline (no TikTok): Florence-2 then Moondream. Parallel, logs below. You can also do them one by one.",
+        "Re-runs already imported photos offline (no TikTok): Florence-2 then Moondream. 6 server workers — you can close the tab, it keeps going. Logs stay here.",
+      rattraperServeur: "Server backfill {{fait}}/{{total}} — you can close, it keeps going.",
       rattraperEnCours: "Backfill… {{fait}}/{{total}}",
       rattraperDebut: "Caption backfill on {{count}} photo(s)…",
       rattraperFin:

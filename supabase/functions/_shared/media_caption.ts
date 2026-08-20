@@ -272,3 +272,159 @@ export async function listerMediasARattraper(
   }
   return out;
 }
+
+export const CAPTION_DRAIN_PAR_WORKER = 4;
+
+export interface CaptionRattrapageStatut {
+  id: string;
+  statut: "running" | "done" | "failed";
+  total: number;
+  fait: number;
+  ok: number;
+  aucune: number;
+  hooks: number;
+  echecs: number;
+  logs: string[];
+  started_at: string;
+  updated_at: string;
+}
+
+function rowRun(r: Record<string, unknown>): CaptionRattrapageStatut {
+  return {
+    id: r.id as string,
+    statut: r.statut as CaptionRattrapageStatut["statut"],
+    total: Number(r.total ?? 0),
+    fait: Number(r.fait ?? 0),
+    ok: Number(r.ok ?? 0),
+    aucune: Number(r.aucune ?? 0),
+    hooks: Number(r.hooks ?? 0),
+    echecs: Number(r.echecs ?? 0),
+    logs: Array.isArray(r.logs) ? (r.logs as string[]) : [],
+    started_at: String(r.started_at ?? ""),
+    updated_at: String(r.updated_at ?? ""),
+  };
+}
+
+export async function lireRattrapageCaption(
+  supabase: Supabase,
+): Promise<CaptionRattrapageStatut | null> {
+  const { data, error } = await supabase
+    .from("caption_rattrapage_runs")
+    .select("id, statut, total, fait, ok, aucune, hooks, echecs, logs, started_at, updated_at")
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return rowRun(data as Record<string, unknown>);
+}
+
+export async function demarrerRattrapageCaption(
+  supabase: Supabase,
+): Promise<CaptionRattrapageStatut> {
+  const courant = await lireRattrapageCaption(supabase);
+  if (courant?.statut === "running") return courant;
+
+  const medias = await listerMediasARattraper(supabase, { limit: 2000 });
+  if (medias.length === 0) {
+    const { data, error } = await supabase
+      .from("caption_rattrapage_runs")
+      .insert({
+        statut: "done",
+        total: 0,
+        finished_at: new Date().toISOString(),
+        logs: ["Rien à rattraper — toutes les photos ont déjà une caption (ou un statut)."],
+      })
+      .select("id, statut, total, fait, ok, aucune, hooks, echecs, logs, started_at, updated_at")
+      .single();
+    if (error || !data) throw error ?? new Error("création run vide échouée");
+    return rowRun(data as Record<string, unknown>);
+  }
+
+  const { data: run, error } = await supabase
+    .from("caption_rattrapage_runs")
+    .insert({
+      statut: "running",
+      total: medias.length,
+      logs: [`Rattrapage captions sur ${medias.length} photo(s) — 6 workers / min, tu peux fermer.`],
+    })
+    .select("id, statut, total, fait, ok, aucune, hooks, echecs, logs, started_at, updated_at")
+    .single();
+  if (error || !run) throw error ?? new Error("création run échouée");
+
+  const rows = medias.map((m) => ({
+    run_id: run.id as string,
+    media_id: m.id,
+    motif: m.motif,
+    statut: "pending",
+  }));
+  const TAILLE = 400;
+  for (let i = 0; i < rows.length; i += TAILLE) {
+    const { error: errF } = await supabase
+      .from("caption_rattrapage_file")
+      .insert(rows.slice(i, i + TAILLE));
+    if (errF) throw errF;
+  }
+  return rowRun(run as Record<string, unknown>);
+}
+
+function ligneResultatCaption(r: CaptionPersistee): string {
+  const extra = r.estHook ? " · Hook" : "";
+  if (r.statut === "ok") {
+    return `✓ ${r.mediaId.slice(0, 8)} — ${r.caption ?? ""}${extra}`;
+  }
+  return `· ${r.mediaId.slice(0, 8)} — Pas de caption reconnue${extra}`;
+}
+
+export async function drainRattrapageCaption(
+  supabase: Supabase,
+  opts: { n?: number } = {},
+): Promise<{ traites: number; run: CaptionRattrapageStatut | null }> {
+  const n = Math.min(12, Math.max(1, opts.n ?? CAPTION_DRAIN_PAR_WORKER));
+  const { data: claims, error } = await supabase.rpc("claim_caption_rattrapage", { p_n: n });
+  if (error) throw error;
+  const lots = (claims ?? []) as Array<{
+    id: string;
+    run_id: string;
+    media_id: string;
+    motif: string;
+  }>;
+  if (lots.length === 0) {
+    return { traites: 0, run: await lireRattrapageCaption(supabase) };
+  }
+
+  await Promise.all(
+    lots.map(async (item) => {
+      try {
+        const r = await captionnerMedia(supabase, item.media_id, { forcer: false });
+        await supabase
+          .from("caption_rattrapage_file")
+          .update({ statut: "done", lease_until: null })
+          .eq("id", item.id);
+        await supabase.rpc("appendre_log_caption_rattrapage", {
+          p_run_id: item.run_id,
+          p_ligne: ligneResultatCaption(r),
+          p_ok: r.statut === "ok" ? 1 : 0,
+          p_aucune: r.statut === "ok" ? 0 : 1,
+          p_hooks: r.estHook ? 1 : 0,
+          p_echecs: 0,
+        });
+      } catch (e) {
+        await supabase
+          .from("caption_rattrapage_file")
+          .update({ statut: "failed", lease_until: null })
+          .eq("id", item.id);
+        await supabase.rpc("appendre_log_caption_rattrapage", {
+          p_run_id: item.run_id,
+          p_ligne: `✗ ${item.media_id.slice(0, 8)} — ${messageErreur(e)}`,
+          p_ok: 0,
+          p_aucune: 0,
+          p_hooks: 0,
+          p_echecs: 1,
+        });
+      }
+    }),
+  );
+
+  return { traites: lots.length, run: await lireRattrapageCaption(supabase) };
+}

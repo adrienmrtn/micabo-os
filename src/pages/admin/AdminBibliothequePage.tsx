@@ -15,7 +15,6 @@ import {
 
 import { cn } from "@/lib/utils";
 import {
-  AGENTS_CAPTION,
   AGENTS_UPSCALE,
   AGENTS_UPSCALE_SEEDVR,
   executerEnLot,
@@ -35,11 +34,12 @@ import { UpscaleMediaControl } from "@/components/moteur/UpscaleMediaControl";
 import {
   BIBLIO_PAGE_SIZE,
   captionnerMediaBiblio,
+  demarrerRattrapageCaption,
   lireReglages,
   listerBibliothequePage,
   listerLabelsBiblio,
-  listerMediasARattraperCaption,
   nettoyerMedia,
+  statutRattrapageCaption,
   stripC2paMedia,
   supprimerMedia,
   upscaleMedia,
@@ -257,11 +257,19 @@ export function AdminBibliothequePage() {
   const [upscaleLot, setUpscaleLot] = React.useState<{ fait: number; total: number } | null>(null);
   const [upscaleLogs, setUpscaleLogs] = React.useState<string[]>([]);
   const [modeleUpscale, setModeleUpscale] = React.useState<ModeleUpscale>("realesrgan");
-  const [captionLot, setCaptionLot] = React.useState<{ fait: number; total: number } | null>(
-    null,
-  );
   const [captionLogs, setCaptionLogs] = React.useState<string[]>([]);
   const [captionUn, setCaptionUn] = React.useState<Set<string>>(() => new Set());
+
+  const rattrapage = useQuery({
+    queryKey: ["caption-rattrapage"],
+    queryFn: statutRattrapageCaption,
+    refetchInterval: (q) => (q.state.data?.statut === "running" ? 2000 : false),
+  });
+  const captionRun = rattrapage.data ?? null;
+  const captionLot =
+    captionRun?.statut === "running"
+      ? { fait: captionRun.fait, total: captionRun.total }
+      : null;
 
   const labels = useQuery({ queryKey: ["labels-biblio"], queryFn: listerLabelsBiblio });
   const biblio = useQuery({
@@ -278,11 +286,17 @@ export function AdminBibliothequePage() {
     queryFn: lireReglages,
     staleTime: 30_000,
   });
+
+  React.useEffect(() => {
+    if (captionRun?.statut !== "running" && captionRun?.statut !== "done") return;
+    void queryClient.invalidateQueries({ queryKey: ["medias-biblio"] });
+  }, [captionRun?.fait, captionRun?.statut, queryClient]);
   const premier: ProviderNettoyage = reglages?.nettoyage.provider_principal ?? "fal";
 
   const rafraichir = () => {
     void queryClient.invalidateQueries({ queryKey: ["medias-biblio"] });
     void queryClient.invalidateQueries({ queryKey: ["medias"] });
+    void queryClient.invalidateQueries({ queryKey: ["caption-rattrapage"] });
   };
   const groupes = biblio.data?.groupes ?? [];
   const affichees = biblio.data?.medias ?? [];
@@ -510,65 +524,14 @@ export function AdminBibliothequePage() {
     }
   }
 
-  /** Rattrapage hors ligne : toutes les photos sans caption / Hook manquant. */
+  /** Rattrapage serveur : survit à la fermeture de l’onglet. */
   async function rattraperCaptions() {
-    setCaptionLogs([`${t("bibliotheque.rattraper")}…`]);
-    let liste: Array<{ id: string; url: string; motif: "caption" | "hook" }>;
     try {
-      const pending = await listerMediasARattraperCaption();
-      liste = pending.medias;
+      await demarrerRattrapageCaption();
+      rafraichir();
     } catch (e) {
-      setCaptionLogs([`✗ ${(e as Error).message}`]);
-      return;
+      setCaptionLogs((prev) => [...prev, `✗ ${(e as Error).message}`]);
     }
-    if (liste.length === 0) {
-      setCaptionLogs([t("bibliotheque.rattraperVide")]);
-      return;
-    }
-    setCaptionLot({ fait: 0, total: liste.length });
-    setCaptionLogs([t("bibliotheque.rattraperDebut", { count: liste.length })]);
-    let ok = 0;
-    let aucune = 0;
-    let hooks = 0;
-    let echecs = 0;
-    await executerEnLot(
-      liste,
-      async (item) => {
-        try {
-          const r = await captionnerMediaBiblio(item.id, { forcer: false });
-          if (r.est_hook) hooks += 1;
-          if (r.caption_statut === "ok") {
-            ok += 1;
-            setCaptionLogs((prev) => [
-              ...prev,
-              `✓ ${item.id.slice(0, 8)} — ${r.caption ?? ""}${r.est_hook ? " · Hook" : ""}`,
-            ]);
-          } else {
-            aucune += 1;
-            setCaptionLogs((prev) => [
-              ...prev,
-              `· ${item.id.slice(0, 8)} — ${t("bibliotheque.captionAucune")}${r.est_hook ? " · Hook" : ""}`,
-            ]);
-          }
-        } catch (e) {
-          echecs += 1;
-          setCaptionLogs((prev) => [
-            ...prev,
-            `✗ ${item.id.slice(0, 8)} — ${(e as Error).message}`,
-          ]);
-        }
-      },
-      {
-        largeur: AGENTS_CAPTION,
-        onProgres: (fait, total) => setCaptionLot({ fait, total }),
-      },
-    );
-    setCaptionLogs((prev) => [
-      ...prev,
-      t("bibliotheque.rattraperFin", { ok, aucune, hooks, echecs }),
-    ]);
-    setCaptionLot(null);
-    rafraichir();
   }
 
   return (
@@ -691,8 +654,28 @@ export function AdminBibliothequePage() {
             ))}
           </div>
         )}
-        {captionLogs.length > 0 && (
-          <div className="mt-2 max-h-40 space-y-0.5 overflow-y-auto rounded border bg-muted/30 px-2.5 py-2 font-mono text-[11px] leading-relaxed">
+        {(captionRun || captionLogs.length > 0) && (
+          <div className="mt-2 max-h-52 space-y-0.5 overflow-y-auto rounded border bg-muted/30 px-2.5 py-2 font-mono text-[11px] leading-relaxed">
+            {captionRun ? (
+              <div className="text-foreground">
+                {captionRun.statut === "running"
+                  ? t("bibliotheque.rattraperServeur", {
+                      fait: captionRun.fait,
+                      total: captionRun.total,
+                    })
+                  : t("bibliotheque.rattraperFin", {
+                      ok: captionRun.ok,
+                      aucune: captionRun.aucune,
+                      hooks: captionRun.hooks,
+                      echecs: captionRun.echecs,
+                    })}
+              </div>
+            ) : null}
+            {(captionRun?.logs ?? []).map((l, i) => (
+              <div key={`cap-run-${i}-${l.slice(0, 16)}`} className="break-words text-muted-foreground">
+                {l}
+              </div>
+            ))}
             {captionLogs.map((l, i) => (
               <div key={`cap-${i}-${l.slice(0, 12)}`} className="break-words text-muted-foreground">
                 {l}
