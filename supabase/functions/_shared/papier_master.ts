@@ -13,6 +13,10 @@ import {
   reserverFalPapier,
 } from "./papier_reglages.ts";
 import {
+  masterClipsComplets,
+  statutMasterDepuisAssets,
+} from "./papier_assignation_core.ts";
+import {
   bibleVisuelle,
   coverPromptPapier,
   motionPromptPapier,
@@ -143,11 +147,27 @@ async function patchScene(
 }
 
 function statutDepuisAssets(master: PapierMasterRow, scenes: PapierSceneRow[]): PapierStatut {
-  if (!master.topic?.trim()) return "queued";
-  if (!master.script || scenes.length === 0) return "scripting";
-  if (scenes.some((s) => !s.image_url)) return "images";
-  if (scenes.some((s) => !s.clip_url)) return "clips";
-  return "ready";
+  return statutMasterDepuisAssets(master, scenes);
+}
+
+/** Si tous les clips sont là, passe le master en ready (débloque le fan-out langues). */
+export async function assurerMasterPretSiClips(
+  supabase: Supabase,
+  masterId: string,
+): Promise<boolean> {
+  const master = await chargerMaster(supabase, masterId);
+  if (!master || master.statut === "failed") return false;
+  const scenes = await chargerScenes(supabase, masterId);
+  if (!master.script || !masterClipsComplets(scenes)) return false;
+  if (master.statut !== "ready") {
+    await patchMaster(
+      supabase,
+      masterId,
+      { statut: "ready", etape: "ready", progression: 1, erreur: null, busy: false },
+      { etape: "clips", detail: `${scenes.length} clips` },
+    );
+  }
+  return true;
 }
 
 function progressionDepuis(statut: PapierStatut, scenes: PapierSceneRow[]): number {
@@ -451,12 +471,14 @@ async function etapeClips(
       clip_fal: null,
     });
     const done = scenes.filter((s) => s.clip_url).length;
-    await patchMaster(supabase, master.id, {
-      statut: "clips",
-      etape: "clips",
-      progression: 0.5 + 0.5 * (done / scenes.length),
-    });
-    return false;
+    if (done < scenes.length) {
+      await patchMaster(supabase, master.id, {
+        statut: "clips",
+        etape: "clips",
+        progression: 0.5 + 0.5 * (done / scenes.length),
+      });
+      return false;
+    }
   }
   await patchMaster(
     supabase,
@@ -536,7 +558,13 @@ export async function avancerMaster(
     const clipsOk = await etapeClips(supabase, master, scenes, t0);
     master = (await chargerMaster(supabase, masterId))!;
     scenes = await chargerScenes(supabase, masterId);
-    if (!clipsOk) return resumer(master, false, "clips en cours", scenes);
+    if (!clipsOk) {
+      if (await assurerMasterPretSiClips(supabase, masterId)) {
+        master = (await chargerMaster(supabase, masterId))!;
+        return resumer(master, true, "master prêt", scenes);
+      }
+      return resumer(master, false, "clips en cours", scenes);
+    }
     return resumer(master, true, "master prêt", scenes);
   } catch (error) {
     if (estErreurQuotaFal(error)) {

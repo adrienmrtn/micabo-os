@@ -5,7 +5,9 @@ import {
   datesFenetreParis,
   estLanguePapierPrete,
   hashtagsDepuisLangue,
+  masterClipsComplets,
   pairesAssignationPapier,
+  statutMasterDepuisAssets,
 } from "./papierAssignation";
 
 const fr = { id: "lang-fr", langue: "fr", statut: "ready", video_url: "https://v/fr.mp4" };
@@ -71,6 +73,24 @@ describe("pairesAssignationPapier", () => {
       [fr, de, enQueued],
     );
     expect(paires).toEqual([{ compteId: "cm-fr", langueId: "lang-fr", langue: "fr" }]);
+  });
+});
+
+describe("master clips → ready", () => {
+  it("un master avec tous ses clips est prêt, même si le statut DB dit encore clips", () => {
+    expect(masterClipsComplets([{ clip_url: "a" }, { clip_url: "b" }])).toBe(true);
+    expect(masterClipsComplets([{ clip_url: "a" }, { clip_url: null }])).toBe(false);
+    expect(masterClipsComplets([])).toBe(false);
+    expect(
+      statutMasterDepuisAssets({ topic: "carottes", script: { title: "x" } }, [
+        { image_url: "i", clip_url: "c" },
+      ]),
+    ).toBe("ready");
+    expect(
+      statutMasterDepuisAssets({ topic: "carottes", script: { title: "x" } }, [
+        { image_url: "i", clip_url: null },
+      ]),
+    ).toBe("clips");
   });
 });
 

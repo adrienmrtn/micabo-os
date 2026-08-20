@@ -10,6 +10,8 @@ import {
   hashtagsDepuisLangue,
   pairesAssignationPapier,
 } from "./papier_assignation_core.ts";
+import { assurerLanguesMaster } from "./papier_locales.ts";
+import { assurerMasterPretSiClips } from "./papier_master.ts";
 import { aujourdhuiParis, serviceClient } from "./supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
@@ -98,7 +100,9 @@ export async function assignerPapierComptes(
       comptes: 0,
       langues: 0,
       dates: masters.map((m) => m.date_publication),
-      detail: "aucune langue prête",
+      detail: opts.test
+        ? "master prêt — vidéo de la langue pas encore assemblée (voix + karaoké)"
+        : "aucune langue prête",
       test: Boolean(opts.test),
     };
   }
@@ -191,6 +195,46 @@ export async function supprimerPapierPostsTest(
   const { data, error } = await q.select("id");
   if (error) throw error;
   return { ok: true, supprimes: (data ?? []).length };
+}
+
+/** Test : soigne un master coincé à clips, crée la ligne langue, dit s'il faut kick. */
+export async function preparerAssignationPapierTest(
+  supabase: Supabase,
+  opts: PapierAssignOpts,
+): Promise<{
+  masterId?: string;
+  langue?: string;
+  langueId?: string;
+  ready: boolean;
+  soigne: boolean;
+}> {
+  const masters = await resoudreMasters(supabase, opts);
+  let soigne = false;
+  for (const master of masters) {
+    if (await assurerMasterPretSiClips(supabase, master.id)) soigne = true;
+  }
+  const masterId = masters[0]?.id;
+  if (!masterId || !opts.compteId) {
+    return { masterId, ready: false, soigne };
+  }
+  const { data: compte, error } = await supabase
+    .from("comptes")
+    .select("langue")
+    .eq("id", opts.compteId)
+    .maybeSingle();
+  if (error) throw error;
+  const langue = String((compte as { langue?: string } | null)?.langue ?? "").trim();
+  if (!langue || !soigne) return { masterId, langue, ready: false, soigne };
+
+  const rows = await assurerLanguesMaster(supabase, masterId);
+  const row = rows.find((l) => l.langue === langue);
+  return {
+    masterId,
+    langue,
+    langueId: row?.id,
+    ready: Boolean(row && estLanguePapierPrete(row)),
+    soigne,
+  };
 }
 
 async function resoudreMasters(

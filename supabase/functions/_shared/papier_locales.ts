@@ -5,6 +5,7 @@
 
 import { incrusterKaraokeFal } from "./fal_auto_subtitle.ts";
 import { synthetiserVoixFal } from "./fal_elevenlabs_tts.ts";
+import { assurerMasterPretSiClips } from "./papier_master.ts";
 import {
   chargerReglagesPapier,
   estErreurQuotaFal,
@@ -148,7 +149,11 @@ async function chargerScriptMaster(
     .eq("id", masterId)
     .maybeSingle();
   if (error) throw error;
-  if ((data as { statut?: string } | null)?.statut !== "ready") return null;
+  let statut = (data as { statut?: string } | null)?.statut;
+  if (statut !== "ready") {
+    if (!(await assurerMasterPretSiClips(supabase, masterId))) return null;
+    statut = "ready";
+  }
   return ((data as { script?: PapierScript } | null)?.script ?? null) as PapierScript | null;
 }
 

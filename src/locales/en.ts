@@ -268,9 +268,9 @@ export const en = {
       annuler: "Cancel test",
       annulerEnCours: "Cancelling…",
       annulerConfirm: "Delete this account's paper test assignment for today?",
-      aide: "The account language needs a ready video. This does not overwrite the real assignment of the day.",
+      aide: "The account language needs its assembled video (voice + karaoke). A finished master is enough to start that language. This does not overwrite the real assignment of the day.",
       ok: "{{count}} test assignment(s) created.",
-      aucun: "Nothing to assign — language not ready, or no CM account.",
+      aucun: "Nothing to assign — this language’s video is not assembled yet.",
       annuleOk: "Rollback OK — {{count}} test row(s) deleted.",
     },
     simUgcVideo: {

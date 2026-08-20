@@ -24,6 +24,27 @@ export function estLanguePapierPrete(row: LanguePapierPrete): boolean {
   return row.statut === "ready" && Boolean(row.video_url);
 }
 
+/** Master FR assemblable : tous les clips Seedance sont là. */
+export function masterClipsComplets(
+  scenes: Array<{ clip_url?: string | null }>,
+): boolean {
+  return scenes.length > 0 && scenes.every((s) => Boolean(s.clip_url));
+}
+
+export type StatutMasterPapier = "queued" | "scripting" | "images" | "clips" | "ready";
+
+/** Statut dérivé des assets — pas du champ DB (peut rester coincé à clips). */
+export function statutMasterDepuisAssets(
+  master: { topic?: string | null; script?: unknown },
+  scenes: Array<{ image_url?: string | null; clip_url?: string | null }>,
+): StatutMasterPapier {
+  if (!String(master.topic ?? "").trim()) return "queued";
+  if (!master.script || scenes.length === 0) return "scripting";
+  if (scenes.some((s) => !s.image_url)) return "images";
+  if (scenes.some((s) => !s.clip_url)) return "clips";
+  return "ready";
+}
+
 /** Légende TikTok : hook puis CTA, prêts à coller. */
 export function captionDepuisLangue(row: {
   hook?: string | null;

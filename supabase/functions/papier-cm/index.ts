@@ -6,7 +6,11 @@
  *   tick_locales | relancer_langue | assigner | annuler_test
  */
 
-import { assignerPapierComptes, supprimerPapierPostsTest } from "../_shared/papier_assignation.ts";
+import {
+  assignerPapierComptes,
+  preparerAssignationPapierTest,
+  supprimerPapierPostsTest,
+} from "../_shared/papier_assignation.ts";
 import { papierEstActif } from "../_shared/papier_reglages.ts";
 import {
   avancerLangue,
@@ -56,14 +60,26 @@ Deno.serve(async (request) => {
     }
 
     if (action === "assigner") {
-      const out = await assignerPapierComptes(supabase, {
+      const opts = {
         date: typeof body?.date === "string" ? body.date : undefined,
         masterId: typeof body?.masterId === "string" ? body.masterId : undefined,
         langueId: typeof body?.langueId === "string" ? body.langueId : undefined,
         fenetreJours: typeof body?.fenetreJours === "number" ? body.fenetreJours : undefined,
         compteId: typeof body?.compteId === "string" ? body.compteId : undefined,
         test: Boolean(body?.test),
-      });
+      };
+      if (opts.test) {
+        const prep = await preparerAssignationPapierTest(supabase, opts);
+        if (prep.langueId && !prep.ready && prep.masterId) {
+          kickPapierCm(request, {
+            action: "tick_locales",
+            manuel: true,
+            masterId: prep.masterId,
+            langueId: prep.langueId,
+          });
+        }
+      }
+      const out = await assignerPapierComptes(supabase, opts);
       return json(out);
     }
 
