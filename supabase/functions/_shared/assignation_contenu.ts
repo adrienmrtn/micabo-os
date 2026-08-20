@@ -3,6 +3,7 @@ import {
   type SlideStructureManuel,
 } from "./creation_manuelle.ts";
 import { assurerDeckPourLangue } from "./import_contenu.ts";
+import { decouperEnLots } from "./oubli_source_cible.ts";
 import { mapPool } from "./parallel.ts";
 import { serviceClient } from "./supabase.ts";
 import {
@@ -13,6 +14,43 @@ import {
 /** Comptes traités en parallèle. Gemini (trad + Sophia) est dans assurerDeck —
  *  trop large → 429 ; trop petit → assignation lente. */
 const LARGEUR_ASSIGNATION = 6;
+
+/**
+ * Taille de lot pour les `in(...)`.
+ *
+ * Les ids partent dans l'URL : à ~650 uuid PostgREST répond 400. Le 20/08,
+ * `alpha_male` (965 slideshows), `smart_girl` (796) et `weird_alpha` (719)
+ * dépassaient tous ce seuil. Les erreurs étant ignorées, le pool paraissait
+ * vide, l'assignation ne créait rien et le quota des créateurs tombait à 0 :
+ * plus la bibliothèque grossissait, moins il y avait de posts.
+ */
+export const LOT_IDS = 100;
+
+interface ReponseLot<T> {
+  data: T[] | null;
+  error: { message: string } | null;
+}
+
+/**
+ * `in(...)` découpé en lots, avec l'erreur remontée.
+ *
+ * Remonter compte autant que découper : une lecture qui échoue ne doit jamais
+ * être confondue avec un pool vide, sinon on dégrade la config des créateurs
+ * sur la foi d'une requête ratée.
+ */
+export async function lireParLots<T>(
+  ids: string[],
+  quoi: string,
+  requete: (lot: string[]) => PromiseLike<ReponseLot<T>>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (const lot of decouperEnLots(ids, LOT_IDS)) {
+    const { data, error } = await requete(lot);
+    if (error) throw new Error(`${quoi} (${lot.length} id) : ${error.message}`);
+    if (data) out.push(...data);
+  }
+  return out;
+}
 
 /** Par invocation drain : assez petit pour finir avant timeout Edge / cron. */
 const DRAIN_BATCH = 8;
@@ -73,6 +111,35 @@ interface Candidat {
   musique_plateforme: string | null;
   dejaPoste: boolean;
   derniereDate: string | null;
+}
+
+interface ContenuCandidat {
+  id: string;
+  musique_url: string | null;
+  musique_titre: string | null;
+  musique_plateforme: string | null;
+  ugc_compatible: boolean | null;
+}
+
+/** PostgREST rend l'embed `posts(...)` en objet ou en tableau selon la relation. */
+type PostLie = { est_test?: boolean | null } | Array<{ est_test?: boolean | null }> | null;
+
+function estPassageDeTest(posts: PostLie | undefined): boolean {
+  if (!posts) return false;
+  const p = Array.isArray(posts) ? posts[0] : posts;
+  return Boolean(p?.est_test);
+}
+
+interface PassageHisto {
+  contenu_id: string;
+  date_publication_prevue: string | null;
+  posts?: PostLie;
+}
+
+interface PassageRecent {
+  contenu_id: string;
+  compte_id: string;
+  posts?: PostLie;
 }
 
 /** Tirage top-K pondéré (softmax). */
@@ -557,23 +624,29 @@ async function diagnostiquerPoolVide(
 ): Promise<string> {
   const labelsTxt = labelNoms.length > 0 ? labelNoms.join(", ") : `${labelIds.length} label(s)`;
 
-  const { data: liens } = await supabase
-    .from("contenu_labels")
-    .select("contenu_id")
-    .in("label_id", labelIds);
-  const idsLabel = [...new Set((liens ?? []).map((l) => l.contenu_id as string))];
+  const liens = await lireParLots<{ contenu_id: string }>(
+    labelIds,
+    "Diagnostic — slideshows du label",
+    (lot) => supabase.from("contenu_labels").select("contenu_id").in("label_id", lot),
+  );
+  const idsLabel = [...new Set(liens.map((l) => l.contenu_id))];
   if (idsLabel.length === 0) {
     return `Aucun slideshow tagué « ${labelsTxt} » dans la bibliothèque.`;
   }
 
-  const { data: prets } = await supabase
-    .from("contenus")
-    .select("id")
-    .eq("statut", "valide")
-    .eq("import_statut", "done")
-    .eq("ugc_compatible", ugcAi)
-    .in("id", idsLabel);
-  const idsPrets = (prets ?? []).map((c) => c.id as string);
+  const prets = await lireParLots<{ id: string }>(
+    idsLabel,
+    "Diagnostic — slideshows prêts",
+    (lot) =>
+      supabase
+        .from("contenus")
+        .select("id")
+        .eq("statut", "valide")
+        .eq("import_statut", "done")
+        .eq("ugc_compatible", ugcAi)
+        .in("id", lot),
+  );
+  const idsPrets = prets.map((c) => c.id);
   if (idsPrets.length === 0) {
     return (
       `${idsLabel.length} slideshow(s) « ${labelsTxt} » mais aucun valide + import terminé` +
@@ -589,12 +662,17 @@ async function diagnostiquerPoolVide(
     );
   }
 
-  const { count } = await supabase
-    .from("contenu_langues")
-    .select("contenu_id", { count: "exact", head: true })
-    .eq("langue", langue)
-    .in("contenu_id", idsPrets);
-  const nLangue = count ?? 0;
+  const eligibles = await lireParLots<{ contenu_id: string }>(
+    idsPrets,
+    "Diagnostic — lignes ELO",
+    (lot) =>
+      supabase
+        .from("contenu_langues")
+        .select("contenu_id")
+        .eq("langue", langue)
+        .in("contenu_id", lot),
+  );
+  const nLangue = eligibles.length;
   if (nLangue === 0) {
     return (
       `${idsPrets.length} slideshow(s) « ${labelsTxt} » prêts, mais aucun éligible en ` +
@@ -776,47 +854,57 @@ async function choisirContenu(
 ): Promise<Candidat | null> {
   const ignorerElo = Boolean(opts.ignorerElo);
   // Contenu IDs portant au moins un label du compte
-  const { data: liens } = await supabase
-    .from("contenu_labels")
-    .select("contenu_id")
-    .in("label_id", labelIds);
-  const contenusLabel = [...new Set((liens ?? []).map((l) => l.contenu_id as string))];
+  const liens = await lireParLots<{ contenu_id: string }>(
+    labelIds,
+    "Slideshows du label",
+    (lot) => supabase.from("contenu_labels").select("contenu_id").in("label_id", lot),
+  );
+  const contenusLabel = [...new Set(liens.map((l) => l.contenu_id))];
   if (contenusLabel.length === 0) return null;
 
   // UGC AI ↔ slideshows ugc_compatible ; créateurs classiques ↔ non-UGC.
-  const { data: contenus } = await supabase
-    .from("contenus")
-    .select("id, musique_url, musique_titre, musique_plateforme, ugc_compatible")
-    .eq("statut", "valide")
-    .eq("import_statut", "done")
-    .eq("ugc_compatible", ugcAi)
-    .in("id", contenusLabel);
-  if (!contenus || contenus.length === 0) return null;
+  const contenus = await lireParLots<ContenuCandidat>(
+    contenusLabel,
+    "Slideshows prêts",
+    (lot) =>
+      supabase
+        .from("contenus")
+        .select("id, musique_url, musique_titre, musique_plateforme, ugc_compatible")
+        .eq("statut", "valide")
+        .eq("import_statut", "done")
+        .eq("ugc_compatible", ugcAi)
+        .in("id", lot),
+  );
+  if (contenus.length === 0) return null;
 
-  const contenuIds = contenus.map((c) => c.id as string);
-  const meta = new Map(contenus.map((c) => [c.id as string, c]));
+  const contenuIds = contenus.map((c) => c.id);
+  const meta = new Map(contenus.map((c) => [c.id, c]));
 
-  const { data: langues } = await supabase
-    .from("contenu_langues")
-    .select("contenu_id, score, slides")
-    .eq("langue", langue)
-    .in("contenu_id", contenuIds);
+  const langues = await lireParLots<{ contenu_id: string; score: number | null }>(
+    contenuIds,
+    "Lignes ELO",
+    (lot) =>
+      supabase
+        .from("contenu_langues")
+        .select("contenu_id, score, slides")
+        .eq("langue", langue)
+        .in("contenu_id", lot),
+  );
   const scoreParContenu = new Map(
-    (langues ?? []).map((cl) => [cl.contenu_id as string, Number(cl.score ?? 50)]),
+    langues.map((cl) => [cl.contenu_id, Number(cl.score ?? 50)]),
   );
 
   // Historique passages de CE compte (hors posts test si demandé).
-  let histQuery = supabase
-    .from("passages")
-    .select("contenu_id, date_publication_prevue, posts(est_test)")
-    .eq("compte_id", compteId)
-    .in("contenu_id", contenuIds);
-  const { data: hist } = await histQuery;
+  const hist = await lireParLots<PassageHisto>(contenuIds, "Historique des passages", (lot) =>
+    supabase
+      .from("passages")
+      .select("contenu_id, date_publication_prevue, posts(est_test)")
+      .eq("compte_id", compteId)
+      .in("contenu_id", lot),
+  );
   const derniere = new Map<string, string>();
-  for (const h of hist ?? []) {
-    // deno-lint-ignore no-explicit-any
-    const estTestHisto = Boolean((h as any).posts?.est_test);
-    if (opts.exclureTestsHisto && estTestHisto) continue;
+  for (const h of hist) {
+    if (opts.exclureTestsHisto && estPassageDeTest(h.posts)) continue;
     const d = h.date_publication_prevue ?? "";
     const prev = derniere.get(h.contenu_id);
     if (!prev || d > prev) derniere.set(h.contenu_id, d);
@@ -826,16 +914,20 @@ async function choisirContenu(
   const depuis = new Date(`${jour}T00:00:00Z`);
   depuis.setUTCDate(depuis.getUTCDate() - reglages.saturation_jours);
   const seuil = depuis.toISOString().slice(0, 10);
-  const { data: recents } = await supabase
-    .from("passages")
-    .select("contenu_id, compte_id, posts(est_test)")
-    .in("contenu_id", contenuIds)
-    .gte("date_publication_prevue", seuil)
-    .in("statut", ["assigne", "valide_par_poster", "publie"]);
+  const recents = await lireParLots<PassageRecent>(
+    contenuIds,
+    "Passages récents (saturation)",
+    (lot) =>
+      supabase
+        .from("passages")
+        .select("contenu_id, compte_id, posts(est_test)")
+        .in("contenu_id", lot)
+        .gte("date_publication_prevue", seuil)
+        .in("statut", ["assigne", "valide_par_poster", "publie"]),
+  );
   const saturation = new Map<string, Set<string>>();
-  for (const r of recents ?? []) {
-    // deno-lint-ignore no-explicit-any
-    if (Boolean((r as any).posts?.est_test)) continue;
+  for (const r of recents) {
+    if (estPassageDeTest(r.posts)) continue;
     let set = saturation.get(r.contenu_id);
     if (!set) {
       set = new Set();
@@ -847,9 +939,7 @@ async function choisirContenu(
   const frais: Candidat[] = [];
   const deja: Candidat[] = [];
 
-  const idsCandidats = ignorerElo
-    ? contenuIds
-    : (langues ?? []).map((cl) => cl.contenu_id as string);
+  const idsCandidats = ignorerElo ? contenuIds : langues.map((cl) => cl.contenu_id);
 
   for (const cid of idsCandidats) {
     if (dejaCreesCetteSession.includes(cid)) continue;
