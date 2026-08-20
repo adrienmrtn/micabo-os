@@ -3129,6 +3129,32 @@ export type PapierScene = {
   duree_cible: 4 | 6 | 8;
 };
 
+export type PapierLangueStatut =
+  | "queued"
+  | "translating"
+  | "voice"
+  | "mix"
+  | "render"
+  | "karaoke"
+  | "ready"
+  | "failed";
+
+export type PapierLangue = {
+  id: string;
+  master_id: string;
+  langue: string;
+  title: string | null;
+  hook: string | null;
+  cta: string | null;
+  hashtags: string | null;
+  statut: PapierLangueStatut;
+  etape: string | null;
+  progression: number;
+  erreur: string | null;
+  video_url: string | null;
+  video_mix_url: string | null;
+};
+
 export type PapierMaster = {
   id: string;
   date_publication: string;
@@ -3144,6 +3170,7 @@ export type PapierMaster = {
   created_at: string;
   updated_at: string;
   papier_scenes?: PapierScene[];
+  papier_langues?: PapierLangue[];
 };
 
 export type PapierTickResultat = {
@@ -3161,14 +3188,20 @@ export type PapierTickResultat = {
 export async function listerPapierMasters(limite = 14): Promise<PapierMaster[]> {
   const { data, error } = await supabase
     .from("papier_masters")
-    .select("*, papier_scenes(*)")
+    .select("*, papier_scenes(*), papier_langues(*)")
     .order("date_publication", { ascending: false })
     .limit(limite);
   if (error) throw error;
   return (data ?? []).map((row) => {
     const r = row as PapierMaster;
     const scenes = [...(r.papier_scenes ?? [])].sort((a, b) => a.index - b.index);
-    return { ...r, journal: Array.isArray(r.journal) ? r.journal : [], papier_scenes: scenes };
+    const langues = [...(r.papier_langues ?? [])].sort((a, b) => a.langue.localeCompare(b.langue));
+    return {
+      ...r,
+      journal: Array.isArray(r.journal) ? r.journal : [],
+      papier_scenes: scenes,
+      papier_langues: langues,
+    };
   });
 }
 
@@ -3180,6 +3213,12 @@ export const relancerPapier = (id: string) =>
 
 export const regenererPapier = (id: string, topic?: string) =>
   invoke<PapierTickResultat>("papier-cm", { action: "regenerer", id, topic });
+
+export const lancerPapierLocales = (masterId: string) =>
+  invoke<PapierTickResultat>("papier-cm", { action: "tick_locales", masterId });
+
+export const relancerPapierLangue = (id: string) =>
+  invoke<PapierTickResultat>("papier-cm", { action: "relancer_langue", id });
 
 export const lancerScoringVnext = (compteId?: string) =>
   invoke<{ ok: boolean; contenus: number; comptes: number }>("scoring", {

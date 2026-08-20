@@ -837,7 +837,7 @@ export const en = {
     papier: {
       title: "CM paper",
       subtitle:
-        "One papercraft video per day (FR master). Nano Banana stills, Seedance clips. Translation and voice come next.",
+        "One papercraft video per day: FR master, then 14 languages (translation, ElevenLabs voice, karaoke).",
       aujourdHui: "Today — {{date}}",
       aujourdHuiAide:
         "The midnight cron starts the master. You can force a topic or retry a failure.",
@@ -859,6 +859,20 @@ export const en = {
         scripting: "Script",
         images: "Images",
         clips: "Clips",
+        ready: "Ready",
+        failed: "Failed",
+      },
+      langues: "Languages",
+      languesAide: "Same visuals, voice and captions per language.",
+      avancerLangues: "Advance languages",
+      relancerLangue: "Retry",
+      statutLangue: {
+        queued: "Queued",
+        translating: "Translation",
+        voice: "Voice",
+        mix: "Mix",
+        render: "Assemble",
+        karaoke: "Karaoke",
         ready: "Ready",
         failed: "Failed",
       },

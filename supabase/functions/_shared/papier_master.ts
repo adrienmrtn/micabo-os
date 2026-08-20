@@ -1,6 +1,6 @@
 /**
  * Pipeline master papier FR : topic → script → Nano Banana → Seedance.
- * Un tick ≤ 42 s, idempotent. Voices / trad / karaoke = phase 3.
+ * Un tick ≤ 42 s, idempotent. Quand ready : kick fan-out langues (papier_locales).
  */
 
 import { editerNanoBananaPro, genererNanoBananaPro } from "./fal_nano_banana.ts";
@@ -249,6 +249,7 @@ export async function regenererMaster(
       // best-effort
     }
   }
+  await supabase.from("papier_langues").delete().eq("master_id", id);
   await supabase.from("papier_scenes").delete().eq("master_id", id);
   await patchMaster(
     supabase,

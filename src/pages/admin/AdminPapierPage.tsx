@@ -11,12 +11,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { aujourdhuiParis } from "@/features/moteur/api";
 import {
   lancerPapierJour,
+  lancerPapierLocales,
   listerPapierMasters,
   regenererPapier,
   relancerPapier,
+  relancerPapierLangue,
+  type PapierLangue,
+  type PapierLangueStatut,
   type PapierMaster,
   type PapierStatut,
 } from "@/features/moteur/api";
+import { drapeauLangue, nomLangue } from "@/features/moteur/langues";
 
 const STATUT_VARIANT: Record<PapierStatut, "default" | "secondary" | "destructive" | "outline"> = {
   queued: "outline",
@@ -38,8 +43,12 @@ export function AdminPapierPage() {
     queryFn: () => listerPapierMasters(14),
     refetchInterval: (q) => {
       const rows = q.state.data ?? [];
-      const busy = rows.some((m) =>
-        ["queued", "scripting", "images", "clips"].includes(m.statut),
+      const busy = rows.some(
+        (m) =>
+          ["queued", "scripting", "images", "clips"].includes(m.statut) ||
+          (m.papier_langues ?? []).some((l) =>
+            ["queued", "translating", "voice", "mix", "render", "karaoke"].includes(l.statut),
+          ),
       );
       return busy ? 4000 : false;
     },
@@ -67,9 +76,21 @@ export function AdminPapierPage() {
     mutationFn: (id: string) => regenererPapier(id, topic.trim() || undefined),
     onSuccess: invalider,
   });
+  const locales = useMutation({
+    mutationFn: (masterId: string) => lancerPapierLocales(masterId),
+    onSuccess: invalider,
+  });
+  const relancerLangue = useMutation({
+    mutationFn: (id: string) => relancerPapierLangue(id),
+    onSuccess: invalider,
+  });
 
   const busy =
-    lancer.isPending || relancer.isPending || regenerer.isPending;
+    lancer.isPending ||
+    relancer.isPending ||
+    regenerer.isPending ||
+    locales.isPending ||
+    relancerLangue.isPending;
 
   return (
     <div className="space-y-6">
@@ -118,15 +139,28 @@ export function AdminPapierPage() {
               </Button>
             ) : null}
           </div>
-          {lancer.error || relancer.error || regenerer.error ? (
+          {today?.statut === "ready" ? (
+            <Button variant="outline" onClick={() => locales.mutate(today.id)} disabled={busy}>
+              {locales.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {t("papier.avancerLangues")}
+            </Button>
+          ) : null}
+          {lancer.error || relancer.error || regenerer.error || locales.error ? (
             <p className="text-sm text-destructive">
-              {(lancer.error ?? relancer.error ?? regenerer.error)?.message}
+              {(lancer.error ?? relancer.error ?? regenerer.error ?? locales.error)?.message}
             </p>
           ) : null}
         </CardContent>
       </Card>
 
       {today ? <CartesScenes master={today} /> : null}
+      {today ? (
+        <CartesLangues
+          master={today}
+          onRelancer={(id) => relancerLangue.mutate(id)}
+          busy={busy}
+        />
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -181,6 +215,90 @@ function ResumeMaster({ master }: { master: PapierMaster }) {
         <p className="text-sm font-medium">{master.script.title}</p>
       ) : null}
       {master.erreur ? <p className="text-sm text-destructive">{master.erreur}</p> : null}
+    </div>
+  );
+}
+
+const LANGUE_VARIANT: Record<
+  PapierLangueStatut,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  queued: "outline",
+  translating: "secondary",
+  voice: "secondary",
+  mix: "secondary",
+  render: "secondary",
+  karaoke: "secondary",
+  ready: "default",
+  failed: "destructive",
+};
+
+function CartesLangues({
+  master,
+  onRelancer,
+  busy,
+}: {
+  master: PapierMaster;
+  onRelancer: (id: string) => void;
+  busy: boolean;
+}) {
+  const { t } = useTranslation();
+  const langues = master.papier_langues ?? [];
+  if (!langues.length && master.statut !== "ready") return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("papier.langues")}</CardTitle>
+        <CardDescription>{t("papier.languesAide")}</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {langues.map((l) => (
+          <CarteLangue key={l.id} langue={l} onRelancer={onRelancer} busy={busy} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CarteLangue({
+  langue,
+  onRelancer,
+  busy,
+}: {
+  langue: PapierLangue;
+  onRelancer: (id: string) => void;
+  busy: boolean;
+}) {
+  const { t } = useTranslation();
+  const video = langue.video_url || langue.video_mix_url;
+  return (
+    <div className="overflow-hidden rounded-md border">
+      <div className="aspect-[9/16] bg-muted">
+        {video ? (
+          <video src={video} className="h-full w-full object-cover" controls playsInline />
+        ) : (
+          <div className="flex h-full items-center justify-center px-3 text-center text-xs text-muted-foreground">
+            {t(`papier.statutLangue.${langue.statut}`)}
+          </div>
+        )}
+      </div>
+      <div className="space-y-2 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium">
+            {drapeauLangue(langue.langue)} {nomLangue(langue.langue)}
+          </span>
+          <Badge variant={LANGUE_VARIANT[langue.statut]}>
+            {t(`papier.statutLangue.${langue.statut}`)}
+          </Badge>
+        </div>
+        {langue.title ? <p className="text-xs text-muted-foreground">{langue.title}</p> : null}
+        {langue.erreur ? <p className="text-xs text-destructive">{langue.erreur}</p> : null}
+        {langue.statut === "failed" ? (
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => onRelancer(langue.id)}>
+            {t("papier.relancerLangue")}
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
