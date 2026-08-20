@@ -11,6 +11,7 @@ import {
   dureeCibleClipReglee,
   estErreurQuotaFal,
   reserverFalPapier,
+  voixPourLangue,
 } from "./papier_reglages.ts";
 import {
   masterClipsComplets,
@@ -52,6 +53,7 @@ export type PapierMasterRow = {
   busy: boolean;
   video_url?: string | null;
   video_path?: string | null;
+  voice?: string | null;
   journal: Array<{ at: string; etape: string; detail: string }>;
   updated_at?: string;
 };
@@ -206,10 +208,12 @@ async function sujetsRecents(supabase: Supabase): Promise<string[]> {
 
 export async function creerMasterBibliotheque(
   supabase: Supabase,
-  opts?: { topic?: string; date?: string },
+  opts?: { topic?: string; date?: string; voice?: string },
 ): Promise<PapierMasterRow> {
   const jour = opts?.date ?? aujourdhuiParis();
   const topic = opts?.topic?.trim() || null;
+  const reglages = await chargerReglagesPapier(supabase);
+  const voice = opts?.voice?.trim() || voixPourLangue(reglages, "fr");
   const { data, error } = await supabase
     .from("papier_masters")
     .insert({
@@ -217,6 +221,7 @@ export async function creerMasterBibliotheque(
       topic,
       kind: "culture",
       narration_style: "revelation",
+      voice,
       statut: "queued",
       etape: "topic",
       progression: 0,
@@ -230,7 +235,7 @@ export async function creerMasterBibliotheque(
 /** Reprend le master en cours, sinon en crée un nouveau (bibliothèque). */
 export async function masterEnCoursOuNouveau(
   supabase: Supabase,
-  opts?: { date?: string; topic?: string },
+  opts?: { date?: string; topic?: string; voice?: string },
 ): Promise<PapierMasterRow> {
   const { data: enCours, error } = await supabase
     .from("papier_masters")
@@ -255,7 +260,7 @@ export async function masterEnCoursOuNouveau(
 /** @deprecated préfère masterEnCoursOuNouveau — plus un master unique par jour. */
 export async function assurerMasterJour(
   supabase: Supabase,
-  opts?: { date?: string; topic?: string },
+  opts?: { date?: string; topic?: string; voice?: string },
 ): Promise<PapierMasterRow> {
   return masterEnCoursOuNouveau(supabase, opts);
 }
@@ -639,11 +644,15 @@ function resumer(
 
 export async function tickPapierJour(
   supabase: Supabase,
-  opts?: { date?: string; topic?: string; masterId?: string },
+  opts?: { date?: string; topic?: string; masterId?: string; voice?: string },
 ): Promise<PapierTickResultat> {
   const master = opts?.masterId
     ? await chargerMaster(supabase, opts.masterId)
-    : await masterEnCoursOuNouveau(supabase, { date: opts?.date, topic: opts?.topic });
+    : await masterEnCoursOuNouveau(supabase, {
+        date: opts?.date,
+        topic: opts?.topic,
+        voice: opts?.voice,
+      });
   if (!master) {
     return { ok: true, idle: true, done: true, detail: "aucun master" };
   }

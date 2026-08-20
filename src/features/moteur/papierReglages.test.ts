@@ -8,6 +8,7 @@ import {
   peutReserverFal,
   REGLAGES_PAPIER_DEFAUT,
   usageFalDuJour,
+  voixEffectiveMaster,
   voixPourLangue,
 } from "./papierReglages";
 
@@ -42,6 +43,17 @@ describe("voix / durée clip", () => {
     });
     expect(voixPourLangue(r, "de")).toBe("Lily");
     expect(voixPourLangue(r, "fr")).toBe("George");
+  });
+
+  it("le master impose la voix FR ; DE garde sa surcharge", () => {
+    const r = normaliserReglagesPapier({
+      voix: "George",
+      voix_par_langue: { de: "Lily" },
+    });
+    expect(voixEffectiveMaster("Alice", r, "fr")).toBe("Alice");
+    expect(voixEffectiveMaster("Alice", r, "de")).toBe("Lily");
+    expect(voixEffectiveMaster("Alice", r, "en")).toBe("Alice");
+    expect(voixEffectiveMaster(null, r, "fr")).toBe("George");
   });
 
   it("force 4/6/8 ou reste en auto", () => {

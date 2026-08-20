@@ -861,6 +861,8 @@ export const fr = {
       aucunAujourdhui: "Rien en fabrication. Tu peux en lancer un pour la bibliothèque.",
       topic: "Sujet (optionnel)",
       topicPh: "Laisser vide : un sujet est proposé tout seul.",
+      voix: "Voix",
+      voixAide: "Voix ElevenLabs de ce master (FR). Changer relance voix + karaoké FR, pas les autres langues.",
       generer: "Avancer le pipeline",
       avancer: "Avancer le pipeline",
       relancer: "Relancer (garder les assets)",

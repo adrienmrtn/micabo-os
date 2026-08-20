@@ -2,7 +2,7 @@
  * Bibliothèque de masters papier FR + localisation à l'assignation.
  * Auth : JWT admin ou x-cron-secret.
  *
- *   tick | assurer | relancer | regenerer
+ *   tick | assurer | relancer | regenerer | voix
  *   tick_locales (FR, ou une langue demandée) | relancer_langue
  *   assigner | annuler_test
  */
@@ -13,7 +13,12 @@ import {
   supprimerPapierPostsTest,
 } from "../_shared/papier_assignation.ts";
 import { papierEstActif } from "../_shared/papier_reglages.ts";
-import { assurerLangueMaster, avancerLangue, relancerLangue } from "../_shared/papier_locales.ts";
+import {
+  assurerLangueMaster,
+  avancerLangue,
+  changerVoixMaster,
+  relancerLangue,
+} from "../_shared/papier_locales.ts";
 import {
   avancerMaster,
   kickPapierCm,
@@ -123,10 +128,23 @@ Deno.serve(async (request) => {
       return json(enchainer(request, tick, row.master_id));
     }
 
+    if (action === "voix") {
+      const id = String(body?.id ?? "");
+      const voice = String(body?.voice ?? "");
+      if (!id) return json({ ok: false, error: "id requis" }, 400);
+      const out = await changerVoixMaster(supabase, id, voice);
+      if (out.rebuildFr && out.langueId) {
+        kickPapierCm(request, { action: "tick_locales", manuel: true, langueId: out.langueId });
+        return json({ ...out, kick: true });
+      }
+      return json(out);
+    }
+
     if (action === "assurer") {
       const master = await masterEnCoursOuNouveau(supabase, {
         date: typeof body?.date === "string" ? body.date : undefined,
         topic: typeof body?.topic === "string" ? body.topic : undefined,
+        voice: typeof body?.voice === "string" ? body.voice : undefined,
       });
       const tick = await avancerMaster(supabase, master.id);
       return json({ ok: true, masterId: master.id, ...enchainer(request, tick, master.id) });
@@ -159,6 +177,7 @@ Deno.serve(async (request) => {
       date: typeof body?.date === "string" ? body.date : undefined,
       topic: typeof body?.topic === "string" ? body.topic : undefined,
       masterId: typeof body?.masterId === "string" ? body.masterId : undefined,
+      voice: typeof body?.voice === "string" ? body.voice : undefined,
     });
     return json(enchainer(request, tick, tick.masterId));
   } catch (error) {

@@ -3201,6 +3201,7 @@ export type PapierLangue = {
   erreur: string | null;
   video_url: string | null;
   video_mix_url: string | null;
+  voice?: string | null;
 };
 
 export type PapierMaster = {
@@ -3219,6 +3220,7 @@ export type PapierMaster = {
   updated_at: string;
   video_url?: string | null;
   video_path?: string | null;
+  voice?: string | null;
   papier_scenes?: PapierScene[];
   papier_langues?: PapierLangue[];
   papier_posts?: Array<{ id: string; compte_id: string; langue: string; est_test?: boolean }>;
@@ -3297,8 +3299,16 @@ export async function listerPapierMasters(limite = 60): Promise<PapierMaster[]> 
   });
 }
 
-export const lancerPapierJour = (body: { date?: string; topic?: string } = {}) =>
+export const lancerPapierJour = (body: { date?: string; topic?: string; voice?: string } = {}) =>
   invoke<PapierTickResultat>("papier-cm", { action: "assurer", manuel: true, ...body });
+
+export const changerVoixPapier = (id: string, voice: string) =>
+  invoke<PapierTickResultat & { voix?: string; rebuildFr?: boolean }>("papier-cm", {
+    action: "voix",
+    manuel: true,
+    id,
+    voice,
+  });
 
 export const relancerPapier = (id: string) =>
   invoke<PapierTickResultat>("papier-cm", { action: "relancer", manuel: true, id });

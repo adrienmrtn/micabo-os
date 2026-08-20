@@ -93,6 +93,17 @@ export function voixPourLangue(reglages: ReglagesPapier, langue: string): string
   return reglages.voix_par_langue[langue]?.trim() || reglages.voix || VOIX_PAPIER_DEFAUT;
 }
 
+/** FR = voix du master. Autres langues : surcharge réglages, sinon voix du master. */
+export function voixEffectiveMaster(
+  masterVoice: string | null | undefined,
+  reglages: ReglagesPapier,
+  langue: string,
+): string {
+  const duMaster = String(masterVoice ?? "").trim();
+  if (langue === "fr") return duMaster || reglages.voix || VOIX_PAPIER_DEFAUT;
+  return reglages.voix_par_langue[langue]?.trim() || duMaster || reglages.voix || VOIX_PAPIER_DEFAUT;
+}
+
 export function dureeCibleClipReglee(texte: string, clip: DureeClipReglage): DureeCibleClip {
   if (clip === 4 || clip === 6 || clip === 8) return clip;
   return dureeCibleClip(texte);
