@@ -268,9 +268,9 @@ export const fr = {
       annuler: "Annuler le test",
       annulerEnCours: "Annulation…",
       annulerConfirm: "Supprimer l’assignation papier test de ce compte pour aujourd’hui ?",
-      aide: "La langue du compte doit avoir une vidéo ready. Ça n’écrit pas sur l’assignation réelle du jour.",
+      aide: "La langue du compte doit avoir sa vidéo assemblée (voix + karaoké). Un master clips suffit pour lancer cette langue — ça n’écrit pas sur l’assignation réelle du jour.",
       ok: "{{count}} assignation(s) test créée(s).",
-      aucun: "Rien à assigner — langue pas prête, ou pas de compte CM.",
+      aucun: "Rien à assigner — la vidéo de cette langue n’est pas encore assemblée.",
       annuleOk: "Rollback OK — {{count}} ligne(s) test supprimée(s).",
     },
     simUgcVideo: {

@@ -24,6 +24,7 @@ import {
   type PapierStatut,
 } from "@/features/moteur/api";
 import { drapeauLangue, nomLangue } from "@/features/moteur/langues";
+import { masterClipsComplets } from "@/features/moteur/papierAssignation";
 import { REGLAGES_PAPIER_DEFAUT } from "@/features/moteur/papierReglages";
 import { TesterAssignationPapierCard } from "@/features/moteur/TesterAssignationPapierCard";
 
@@ -60,6 +61,7 @@ export function AdminPapierPage() {
 
   const reglages = useQuery({ queryKey: ["reglages"], queryFn: lireReglages });
   const today = (liste.data ?? []).find((m) => m.date_publication === jour) ?? null;
+  const todayClipsOk = Boolean(today && masterClipsComplets(today.papier_scenes ?? []));
   const papier = reglages.data?.papier;
   const falUsage =
     reglages.data?.papier_fal_usage.date === jour ? reglages.data.papier_fal_usage.appels : 0;
@@ -186,7 +188,7 @@ export function AdminPapierPage() {
               </Button>
             ) : null}
           </div>
-          {today?.statut === "ready" ? (
+          {today && (today.statut === "ready" || todayClipsOk) ? (
             <Button variant="outline" onClick={() => locales.mutate(today.id)} disabled={busy}>
               {locales.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {t("papier.avancerLangues")}
