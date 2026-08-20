@@ -140,6 +140,14 @@ export interface Media {
   texte_restant: boolean;
   /** Date du dernier upscale Real-ESRGAN (null = jamais). */
   upscale_le: string | null;
+  /** Caption visuelle courte (Florence / Moondream). */
+  caption: string | null;
+  /** ok | aucune | null (pas encore tenté). */
+  caption_statut: "ok" | "aucune" | null;
+  caption_modele: "florence" | "moondream" | "none" | null;
+  caption_le: string | null;
+  /** Première slide d'un slideshow. */
+  est_hook: boolean;
   used_count: number;
   created_at: string;
 }

@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { Check, ImageUp, RefreshCw, Sparkles, Trash2, X } from "lucide-react";
+import { Check, ImageUp, RefreshCw, ScanText, Sparkles, Trash2, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import { NettoyageEtapes } from "@/components/moteur/NettoyageEtapes";
 import { UpscaleMediaControl } from "@/components/moteur/UpscaleMediaControl";
 import { LabelEditor } from "@/features/moteur/LabelPicker";
 import {
+  captionnerMediaBiblio,
   collecterMediaIdsContenus,
   idsContenusParLabel,
   labelsDuContenu,
@@ -497,6 +498,8 @@ const VisuelsContenu = React.memo(function VisuelsContenu({
   const [enCours, setEnCours] = React.useState<Set<number>>(() => new Set());
   const [erreurs, setErreurs] = React.useState<Record<number, string>>({});
   const [erreursVisage, setErreursVisage] = React.useState<Record<string, string>>({});
+  const [captionBusy, setCaptionBusy] = React.useState<Set<string>>(() => new Set());
+  const [erreursCaption, setErreursCaption] = React.useState<Record<string, string>>({});
   const [visagesLocaux, setVisagesLocaux] = React.useState<Record<string, boolean | null>>(
     () => ugcVisages.overlayVisages(contenu.mediaVisages),
   );
@@ -573,6 +576,31 @@ const VisuelsContenu = React.memo(function VisuelsContenu({
     },
   });
 
+  async function captionnerSlide(mediaId: string, forcer: boolean) {
+    setCaptionBusy((prev) => new Set(prev).add(mediaId));
+    setErreursCaption((prev) => {
+      if (!(mediaId in prev)) return prev;
+      const n = { ...prev };
+      delete n[mediaId];
+      return n;
+    });
+    try {
+      await captionnerMediaBiblio(mediaId, { forcer });
+      rafraichir();
+    } catch (err) {
+      setErreursCaption((prev) => ({
+        ...prev,
+        [mediaId]: err instanceof Error ? err.message : String(err),
+      }));
+    } finally {
+      setCaptionBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(mediaId);
+        return next;
+      });
+    }
+  }
+
   function cliquerVisage(mediaId: string, valeur: boolean | null) {
     setVisagesLocaux((prev) => ({ ...prev, [mediaId]: valeur }));
     setErreursVisage((prev) => {
@@ -610,6 +638,7 @@ const VisuelsContenu = React.memo(function VisuelsContenu({
             s.media_id != null
               ? (visagesLocaux[s.media_id] ?? contenu.mediaVisages?.[s.media_id] ?? null)
               : null;
+          const metaCap = s.media_id ? contenu.mediaCaptions?.[s.media_id] : undefined;
           return (
             <div key={s.position} className="rounded border p-2">
               <div className="flex gap-2">
@@ -629,7 +658,21 @@ const VisuelsContenu = React.memo(function VisuelsContenu({
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <p className="text-xs font-medium">
                     {t("slideshows.slideN", { n: s.position })}
+                    {metaCap?.est_hook || s.position === 1 ? (
+                      <Badge variant="secondary" className="ml-1.5 align-middle">
+                        {t("slideshows.captionHook")}
+                      </Badge>
+                    ) : null}
                   </p>
+                  {metaCap?.caption ? (
+                    <p className="text-[11px] leading-snug text-muted-foreground">
+                      {metaCap.caption}
+                    </p>
+                  ) : metaCap?.caption_statut === "aucune" ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      {t("slideshows.captionAucune")}
+                    </p>
+                  ) : null}
                   <div className="flex flex-wrap gap-1.5">
                     <Button
                       size="sm"
@@ -662,6 +705,22 @@ const VisuelsContenu = React.memo(function VisuelsContenu({
                         disabled={slideEnCours}
                         onSuccess={rafraichir}
                       />
+                    )}
+                    {s.media_id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        disabled={captionBusy.has(s.media_id)}
+                        onClick={() =>
+                          void captionnerSlide(s.media_id!, Boolean(metaCap?.caption_statut))
+                        }
+                      >
+                        <ScanText className="size-3" />
+                        {captionBusy.has(s.media_id)
+                          ? t("slideshows.captionEnCours")
+                          : t("slideshows.captionUne")}
+                      </Button>
                     )}
                   </div>
                   {contenu.ugc_compatible && s.media_id && (
@@ -699,6 +758,11 @@ const VisuelsContenu = React.memo(function VisuelsContenu({
                   {s.media_id && erreursVisage[s.media_id] ? (
                     <p className="text-[11px] text-destructive">
                       {erreursVisage[s.media_id]}
+                    </p>
+                  ) : null}
+                  {s.media_id && erreursCaption[s.media_id] ? (
+                    <p className="text-[11px] text-destructive">
+                      {erreursCaption[s.media_id]}
                     </p>
                   ) : null}
                   {etapes && (slideEnCours || erreur) ? (

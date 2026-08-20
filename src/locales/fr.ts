@@ -1173,6 +1173,24 @@ export const fr = {
       upscaleFin: "Terminé — ok={{ok}} · déjà faits={{sautes}} · échecs={{echecs}}",
       upscaleConfirm:
         "Lancer l'upscale {{modele}} sur {{count}} photo(s) ?",
+      captionHook: "Hook",
+      captionAucune: "Pas de caption reconnue",
+      captionEnCours: "Caption…",
+      captionUne: "Captionner",
+      captionEncore: "Re-captionner",
+      rattraper: "Rattraper",
+      rattraperAide:
+        "Repasse sur les photos déjà importées (hors ligne, sans TikTok) : Florence-2 puis Moondream. Parallélisé, logs ci-dessous. Tu peux aussi le faire photo par photo.",
+      rattraperEnCours: "Rattrapage… {{fait}}/{{total}}",
+      rattraperDebut: "Rattrapage captions sur {{count}} photo(s)…",
+      rattraperFin:
+        "Terminé — ok={{ok}} · aucune={{aucune}} · hooks={{hooks}} · échecs={{echecs}}",
+      rattraperVide: "Rien à rattraper — toutes les photos ont déjà une caption (ou un statut).",
+      captionModele: {
+        florence: "Florence-2",
+        moondream: "Moondream",
+        none: "Aucune",
+      },
       paginationResume:
         "{{total}} photo(s) · page {{page}}/{{pages}} ({{size}} / page)",
       pageSur: "{{page}} / {{pages}}",
@@ -1275,6 +1293,10 @@ export const fr = {
       visuelsEdit: "Visuels nettoyés",
       visuelsEditAide:
         "Re-nettoyer une slide, ou la remplacer par un autre visuel du même compte / label.",
+      captionUne: "Captionner",
+      captionEnCours: "Caption…",
+      captionHook: "Hook",
+      captionAucune: "Pas de caption reconnue",
       slideN: "Slide {{n}}",
       renettoyer: "Re-nettoyer",
       remplacer: "Remplacer",

@@ -1170,6 +1170,24 @@ export const en = {
       upscaleFin: "Done — ok={{ok}} · already done={{sautes}} · failed={{echecs}}",
       upscaleConfirm:
         "Run {{modele}} upscale on {{count}} photo(s)?",
+      captionHook: "Hook",
+      captionAucune: "No caption recognized",
+      captionEnCours: "Captioning…",
+      captionUne: "Caption",
+      captionEncore: "Re-caption",
+      rattraper: "Backfill",
+      rattraperAide:
+        "Re-runs already imported photos offline (no TikTok): Florence-2 then Moondream. Parallel, logs below. You can also do them one by one.",
+      rattraperEnCours: "Backfill… {{fait}}/{{total}}",
+      rattraperDebut: "Caption backfill on {{count}} photo(s)…",
+      rattraperFin:
+        "Done — ok={{ok}} · none={{aucune}} · hooks={{hooks}} · failed={{echecs}}",
+      rattraperVide: "Nothing to backfill — every photo already has a caption (or a status).",
+      captionModele: {
+        florence: "Florence-2",
+        moondream: "Moondream",
+        none: "None",
+      },
       paginationResume:
         "{{total}} photo(s) · page {{page}}/{{pages}} ({{size}} / page)",
       pageSur: "{{page}} / {{pages}}",
@@ -1272,6 +1290,10 @@ export const en = {
       visuelsEdit: "Cleaned visuals",
       visuelsEditAide:
         "Re-clean a slide, or replace it with another visual from the same account / label.",
+      captionUne: "Caption",
+      captionEnCours: "Captioning…",
+      captionHook: "Hook",
+      captionAucune: "No caption recognized",
       slideN: "Slide {{n}}",
       renettoyer: "Re-clean",
       remplacer: "Replace",

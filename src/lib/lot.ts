@@ -15,6 +15,9 @@ export const AGENTS_UPSCALE_SEEDVR = 1;
 /** Pool scan vision UGC (Fal openrouter) — léger, bon parallélisme. */
 export const AGENTS_VISION_UGC = 8;
 
+/** Captions Florence / Moondream — appels Fal courts, bon parallélisme. */
+export const AGENTS_CAPTION = 6;
+
 /**
  * Exécute `tache` sur chaque élément avec un pool borné de workers parallèles.
  * Un échec isolé ne stoppe pas le lot (on nettoie le maximum). `onProgres` est
