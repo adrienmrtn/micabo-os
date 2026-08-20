@@ -17,6 +17,8 @@ type Supabase = ReturnType<typeof serviceClient>;
 export {
   dureeCibleClipReglee,
   estErreurQuotaFal,
+  estVoixPapier,
+  voixEffectiveMaster,
   voixPourLangue,
   type ReglagesPapier,
 } from "./papier_reglages_core.ts";

@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { aujourdhuiParis, ecrireReglage, lireReglages } from "@/features/moteur/api";
 import {
   assignerPapierCm,
+  changerVoixPapier,
   lancerPapierJour,
   listerPapierMasters,
   regenererPapier,
@@ -33,7 +34,7 @@ import {
   type PapierStatut,
 } from "@/features/moteur/api";
 import { drapeauLangue, nomLangue } from "@/features/moteur/langues";
-import { REGLAGES_PAPIER_DEFAUT } from "@/features/moteur/papierReglages";
+import { REGLAGES_PAPIER_DEFAUT, VOIX_PAPIER } from "@/features/moteur/papierReglages";
 import { TesterAssignationPapierCard } from "@/features/moteur/TesterAssignationPapierCard";
 import { cn } from "@/lib/utils";
 
@@ -76,6 +77,7 @@ export function AdminPapierPage() {
   const queryClient = useQueryClient();
   const jour = aujourdhuiParis();
   const [topic, setTopic] = React.useState("");
+  const [voix, setVoix] = React.useState("");
   const [selectionId, setSelectionId] = React.useState<string | null>(null);
 
   const liste = useQuery({
@@ -107,13 +109,27 @@ export function AdminPapierPage() {
     if (enCours?.topic && !topic) setTopic(enCours.topic);
   }, [enCours?.topic, topic]);
 
+  React.useEffect(() => {
+    if (enCours?.voice) setVoix(enCours.voice);
+    else if (papier?.voix && !voix) setVoix(papier.voix);
+  }, [enCours?.voice, papier?.voix, voix]);
+
   function invalider() {
     void queryClient.invalidateQueries({ queryKey: ["papier-masters"] });
     void queryClient.invalidateQueries({ queryKey: ["reglages"] });
   }
 
   const lancer = useMutation({
-    mutationFn: () => lancerPapierJour({ date: jour, topic: topic.trim() || undefined }),
+    mutationFn: () =>
+      lancerPapierJour({
+        date: jour,
+        topic: topic.trim() || undefined,
+        voice: voix || undefined,
+      }),
+    onSuccess: invalider,
+  });
+  const changerVoix = useMutation({
+    mutationFn: ({ id, voice }: { id: string; voice: string }) => changerVoixPapier(id, voice),
     onSuccess: invalider,
   });
   const relancer = useMutation({
@@ -143,9 +159,10 @@ export function AdminPapierPage() {
     relancer.isPending ||
     regenerer.isPending ||
     relancerLangue.isPending ||
-    assigner.isPending;
+    assigner.isPending ||
+    changerVoix.isPending;
 
-  const erreur = lancer.error ?? relancer.error ?? regenerer.error ?? assigner.error;
+  const erreur = lancer.error ?? relancer.error ?? regenerer.error ?? assigner.error ?? changerVoix.error;
 
   return (
     <div className="space-y-6">
@@ -215,6 +232,7 @@ export function AdminPapierPage() {
                 ouvert={selectionId === m.id}
                 onToggle={() => setSelectionId((id) => (id === m.id ? null : m.id))}
                 onRelancerLangue={(id) => relancerLangue.mutate(id)}
+                onVoix={(voice) => changerVoix.mutate({ id: m.id, voice })}
                 busy={busy}
               />
             ))}
@@ -236,6 +254,11 @@ export function AdminPapierPage() {
           <FormulairePipeline
             topic={topic}
             onTopic={setTopic}
+            voix={enCours.voice || voix}
+            onVoix={(v) => {
+              setVoix(v);
+              changerVoix.mutate({ id: enCours.id, voice: v });
+            }}
             onAvancer={() => lancer.mutate()}
             onRelancer={enCours.statut === "failed" ? () => relancer.mutate(enCours.id) : undefined}
             onRegenerer={() => regenerer.mutate(enCours.id)}
@@ -265,6 +288,8 @@ export function AdminPapierPage() {
           <FormulairePipeline
             topic={topic}
             onTopic={setTopic}
+            voix={voix || papier?.voix || "George"}
+            onVoix={setVoix}
             onAvancer={() => lancer.mutate()}
             busy={busy}
             lancerPending={lancer.isPending}
@@ -405,9 +430,44 @@ function SousBloc({
   );
 }
 
+function SelectVoix({
+  id,
+  value,
+  onChange,
+  disabled,
+}: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-2 sm:max-w-xs">
+      <Label htmlFor={id}>{t("papier.voix")}</Label>
+      <select
+        id={id}
+        className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {VOIX_PAPIER.map((v) => (
+          <option key={v} value={v}>
+            {v}
+          </option>
+        ))}
+      </select>
+      <p className="text-xs text-muted-foreground">{t("papier.voixAide")}</p>
+    </div>
+  );
+}
+
 function FormulairePipeline({
   topic,
   onTopic,
+  voix,
+  onVoix,
   onAvancer,
   onRelancer,
   onRegenerer,
@@ -416,6 +476,8 @@ function FormulairePipeline({
 }: {
   topic: string;
   onTopic: (v: string) => void;
+  voix: string;
+  onVoix: (v: string) => void;
   onAvancer: () => void;
   onRelancer?: () => void;
   onRegenerer?: () => void;
@@ -435,6 +497,7 @@ function FormulairePipeline({
           rows={2}
         />
       </div>
+      <SelectVoix id="papier-voix" value={voix} onChange={onVoix} disabled={busy} />
       <div className="flex flex-wrap gap-2">
         <Button onClick={onAvancer} disabled={busy}>
           {lancerPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
@@ -462,12 +525,14 @@ function CarteBiblio({
   ouvert,
   onToggle,
   onRelancerLangue,
+  onVoix,
   busy,
 }: {
   master: PapierMaster;
   ouvert: boolean;
   onToggle: () => void;
   onRelancerLangue: (id: string) => void;
+  onVoix: (voice: string) => void;
   busy: boolean;
 }) {
   const { t } = useTranslation();
@@ -488,7 +553,10 @@ function CarteBiblio({
         </div>
         <span className="min-w-0 flex-1 space-y-1.5">
           <span className="block truncate font-medium leading-snug">{titre}</span>
-          <span className="block text-xs text-muted-foreground">{master.date_publication}</span>
+          <span className="block text-xs text-muted-foreground">
+            {master.date_publication}
+            {master.voice ? ` · ${master.voice}` : ""}
+          </span>
           <span className="flex flex-wrap items-center gap-1">
             {conso.length === 0 ? (
               <Badge variant="outline">{t("papier.libre")}</Badge>
@@ -511,6 +579,12 @@ function CarteBiblio({
       {ouvert ? (
         <div className="space-y-3 border-t p-3">
           <ResumeMaster master={master} />
+          <SelectVoix
+            id={`papier-voix-${master.id}`}
+            value={master.voice || "George"}
+            onChange={onVoix}
+            disabled={busy}
+          />
           <SousBloc titre={t("papier.voirPlans")} compte={master.papier_scenes?.length ?? 0}>
             <CartesScenes master={master} />
           </SousBloc>

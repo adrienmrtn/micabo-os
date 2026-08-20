@@ -11,8 +11,9 @@ import { assurerMasterPretSiClips, publierVideoFrMaster } from "./papier_master.
 import {
   chargerReglagesPapier,
   estErreurQuotaFal,
+  estVoixPapier,
   reserverFalPapier,
-  voixPourLangue,
+  voixEffectiveMaster,
 } from "./papier_reglages.ts";
 import { mergerAudioVideoFal } from "./fal_merge_audio.ts";
 import { mergerVideosFal } from "./fal_merge_videos.ts";
@@ -226,12 +227,17 @@ export async function assurerLangueMaster(
   if (error) throw error;
   if (existant) return existant as PapierLangueRow;
   const reglages = await chargerReglagesPapier(supabase);
+  const { data: master } = await supabase
+    .from("papier_masters")
+    .select("voice")
+    .eq("id", masterId)
+    .maybeSingle();
   const { data: inserted, error: insErr } = await supabase
     .from("papier_langues")
     .insert({
       master_id: masterId,
       langue: code,
-      voice: voixPourLangue(reglages, code),
+      voice: voixEffectiveMaster((master as { voice?: string } | null)?.voice, reglages, code),
       statut: "queued",
       etape: "traduction",
     })
@@ -646,4 +652,124 @@ export async function relancerLangue(
   const next = await chargerLangue(supabase, id);
   if (!next) throw new Error("Langue introuvable après relance");
   return next;
+}
+
+export async function reinitialiserVoixLangue(
+  supabase: Supabase,
+  langueId: string,
+  voice: string,
+): Promise<PapierLangueRow> {
+  const row = await chargerLangue(supabase, langueId);
+  if (!row) throw new Error("Langue papier introuvable");
+  const scenes = await chargerScenesLangue(supabase, langueId);
+  const paths = [
+    ...scenes.flatMap((s) => [s.audio_path, s.mix_path]),
+    row.video_path,
+    row.video_mix_path,
+  ].filter((p): p is string => Boolean(p));
+  if (paths.length) {
+    try {
+      await supabase.storage.from(BUCKET).remove(paths);
+    } catch {
+      // best-effort
+    }
+  }
+  for (const scene of scenes) {
+    await patchSceneLangue(supabase, scene.id, {
+      audio_path: null,
+      audio_url: null,
+      words: null,
+      duree_sec: null,
+      mix_path: null,
+      mix_url: null,
+    });
+  }
+  await patchLangue(
+    supabase,
+    langueId,
+    {
+      voice,
+      video_path: null,
+      video_url: null,
+      video_mix_path: null,
+      video_mix_url: null,
+      statut: "voice",
+      etape: "voix",
+      progression: 0.15,
+      erreur: null,
+      busy: false,
+    },
+    { etape: "voix", detail: `voix → ${voice}` },
+  );
+  const next = await chargerLangue(supabase, langueId);
+  if (!next) throw new Error("Langue introuvable après reset voix");
+  return next;
+}
+
+export type PapierVoixResultat = {
+  ok: true;
+  masterId: string;
+  voix: string;
+  rebuildFr: boolean;
+  langueId?: string;
+};
+
+/** Change la voix du master. Si le FR a déjà une voix, on la refait. */
+export async function changerVoixMaster(
+  supabase: Supabase,
+  masterId: string,
+  voiceBrut: string,
+): Promise<PapierVoixResultat> {
+  const voice = voiceBrut.trim();
+  if (!estVoixPapier(voice)) throw new Error("Voix inconnue");
+
+  const { data: master, error } = await supabase
+    .from("papier_masters")
+    .select("id, voice, statut")
+    .eq("id", masterId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!master) throw new Error("Master papier introuvable");
+
+  const { data: fr } = await supabase
+    .from("papier_langues")
+    .select("id, voice")
+    .eq("master_id", masterId)
+    .eq("langue", "fr")
+    .maybeSingle();
+
+  if ((master as { voice?: string }).voice === voice && (!fr || (fr as { voice?: string }).voice === voice)) {
+    return { ok: true, masterId, voix: voice, rebuildFr: false, langueId: fr?.id };
+  }
+
+  const { error: errM } = await supabase
+    .from("papier_masters")
+    .update({ voice, updated_at: new Date().toISOString() })
+    .eq("id", masterId);
+  if (errM) throw errM;
+
+  if (!fr) return { ok: true, masterId, voix: voice, rebuildFr: false };
+
+  const scenes = await chargerScenesLangue(supabase, fr.id);
+  const dejaVoix = scenes.some((s) => Boolean(s.audio_url));
+  if (!dejaVoix) {
+    await patchLangue(supabase, fr.id, { voice }, { etape: "voix", detail: voice });
+    return { ok: true, masterId, voix: voice, rebuildFr: false, langueId: fr.id };
+  }
+
+  await reinitialiserVoixLangue(supabase, fr.id, voice);
+  const { error: errReady } = await supabase
+    .from("papier_masters")
+    .update({
+      video_url: null,
+      video_path: null,
+      statut: "clips",
+      etape: "fr",
+      progression: 0.72,
+      erreur: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", masterId);
+  if (errReady) throw errReady;
+  return { ok: true, masterId, voix: voice, rebuildFr: true, langueId: fr.id };
 }

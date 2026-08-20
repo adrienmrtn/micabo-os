@@ -860,6 +860,8 @@ export const en = {
       aucunAujourdhui: "Nothing building. Start one for the library.",
       topic: "Topic (optional)",
       topicPh: "Leave empty: a topic is proposed automatically.",
+      voix: "Voice",
+      voixAide: "ElevenLabs voice for this master (FR). Changing it rebuilds FR voice + karaoke, not other languages.",
       generer: "Advance pipeline",
       avancer: "Advance pipeline",
       relancer: "Retry (keep assets)",
