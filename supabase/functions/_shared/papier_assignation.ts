@@ -1,17 +1,16 @@
 /**
- * Assigne les vidéos papier prêtes aux comptes CM (même langue = même vidéo).
- * Idempotent : upsert sur (compte_id, date_publication_prevue).
+ * Assigne depuis la bibliothèque de masters FR.
+ * Chaque CM pioche un master pas encore utilisé dans sa langue.
+ * La voix / vidéo de la langue se crée à la demande (pas au pipeline).
  */
 
 import {
   captionDepuisLangue,
-  datesFenetreParis,
   estLanguePapierPrete,
   hashtagsDepuisLangue,
-  pairesAssignationPapier,
+  piocherMasterInutilise,
 } from "./papier_assignation_core.ts";
-import { assurerLanguesMaster } from "./papier_locales.ts";
-import { assurerMasterPretSiClips } from "./papier_master.ts";
+import { assurerLangueMaster } from "./papier_locales.ts";
 import { aujourdhuiParis, serviceClient } from "./supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
@@ -29,9 +28,10 @@ type LangueRow = {
   video_path: string | null;
 };
 
-type MasterRow = {
+type MasterBiblio = {
   id: string;
   date_publication: string;
+  video_url: string | null;
 };
 
 export type PapierAssignOpts = {
@@ -64,93 +64,97 @@ export type PapierAssignResultat = {
   detail: string;
   test?: boolean;
   posts?: PapierAssignPost[];
+  besoinOriginal?: boolean;
+  kicksLangue?: string[];
 };
 
 export async function assignerPapierComptes(
   supabase: Supabase,
   opts: PapierAssignOpts = {},
 ): Promise<PapierAssignResultat> {
-  const masters = await resoudreMasters(supabase, opts);
+  const jour = opts.date ?? aujourdhuiParis();
+  const test = Boolean(opts.test);
+  const masters = await chargerBibliotheque(supabase, opts.masterId);
   if (!masters.length) {
     return {
       ok: true,
       assigns: 0,
       comptes: 0,
       langues: 0,
-      dates: [],
-      detail: "aucun master dans la fenêtre",
-      test: Boolean(opts.test),
+      dates: [jour],
+      detail: "bibliothèque vide — aucun master FR prêt",
+      test,
+      besoinOriginal: !test,
     };
   }
 
-  const masterIds = masters.map((m) => m.id);
-  const dateParMaster = new Map(masters.map((m) => [m.id, m.date_publication]));
-
-  let qLangues = supabase.from("papier_langues").select(
-    "id, master_id, langue, title, hook, cta, hashtags, statut, video_url, video_path",
-  ).in("master_id", masterIds);
-  if (opts.langueId) qLangues = qLangues.eq("id", opts.langueId);
-  const { data: languesBrutes, error: errL } = await qLangues;
-  if (errL) throw errL;
-  const langues = ((languesBrutes ?? []) as LangueRow[]).filter(estLanguePapierPrete);
-  if (!langues.length) {
-    return {
-      ok: true,
-      assigns: 0,
-      comptes: 0,
-      langues: 0,
-      dates: masters.map((m) => m.date_publication),
-      detail: opts.test
-        ? "master prêt — vidéo de la langue pas encore assemblée (voix + karaoké)"
-        : "aucune langue prête",
-      test: Boolean(opts.test),
-    };
-  }
+  const { data: postsConso, error: errP } = await supabase
+    .from("papier_posts")
+    .select("master_id, langue, compte_id, date_publication_prevue, est_test")
+    .eq("est_test", false);
+  if (errP) throw errP;
+  const pris: Array<{
+    master_id: string;
+    langue: string;
+    compte_id?: string;
+    date_publication_prevue?: string;
+    est_test?: boolean | null;
+  }> = [...(postsConso ?? [])];
 
   let qComptes = supabase
     .from("comptes")
     .select("id, langue, type_compte, is_active")
     .eq("type_compte", "cm");
   if (opts.compteId) qComptes = qComptes.eq("id", opts.compteId);
-  else if (!opts.test) qComptes = qComptes.eq("is_active", true);
+  else if (!test) qComptes = qComptes.eq("is_active", true);
   const { data: comptesBruts, error: errC } = await qComptes;
   if (errC) throw errC;
-  const comptes = comptesBruts ?? [];
+  const comptes = (comptesBruts ?? []).filter((c) => test || c.is_active !== false);
 
-  const parMaster = new Map<string, LangueRow[]>();
-  for (const langue of langues) {
-    const list = parMaster.get(langue.master_id) ?? [];
-    list.push(langue);
-    parMaster.set(langue.master_id, list);
-  }
-
-  const langueParId = new Map(langues.map((l) => [l.id, l]));
   const rows: Array<Record<string, unknown>> = [];
-  for (const [masterId, langs] of parMaster) {
-    const jour = dateParMaster.get(masterId);
-    if (!jour) continue;
-    const paires = pairesAssignationPapier(comptes, langs, {
-      inclureInactifs: Boolean(opts.test),
-    });
-    for (const paire of paires) {
-      const langue = langueParId.get(paire.langueId);
-      if (!langue?.video_url) continue;
-      rows.push({
-        compte_id: paire.compteId,
-        date_publication_prevue: jour,
-        master_id: masterId,
-        langue_id: langue.id,
-        langue: langue.langue,
-        title: langue.title,
-        caption: captionDepuisLangue(langue),
-        hashtags: hashtagsDepuisLangue(langue.hashtags),
-        video_url: langue.video_url,
-        video_path: langue.video_path,
-        statut: "assigne",
-        est_test: Boolean(opts.test),
-        updated_at: new Date().toISOString(),
-      });
+  const kicksLangue: string[] = [];
+  let besoinOriginal = false;
+
+  for (const compte of comptes) {
+    const dejaAuj = pris.some(
+      (p) => p.compte_id === compte.id && p.date_publication_prevue === jour && !p.est_test,
+    );
+    if (dejaAuj && !test) continue;
+
+    const masterId = piocherMasterInutilise(masters, pris, compte.langue);
+    if (!masterId) {
+      besoinOriginal = true;
+      continue;
     }
+
+    const langue = await assurerLangueMaster(supabase, masterId, compte.langue);
+    pris.push({
+      master_id: masterId,
+      langue: compte.langue,
+      compte_id: compte.id,
+      date_publication_prevue: jour,
+      est_test: false,
+    });
+    if (!estLanguePapierPrete(langue)) {
+      kicksLangue.push(langue.id);
+      continue;
+    }
+
+    rows.push({
+      compte_id: compte.id,
+      date_publication_prevue: jour,
+      master_id: masterId,
+      langue_id: langue.id,
+      langue: langue.langue,
+      title: langue.title,
+      caption: captionDepuisLangue(langue),
+      hashtags: hashtagsDepuisLangue(langue.hashtags),
+      video_url: langue.video_url,
+      video_path: langue.video_path,
+      statut: "assigne",
+      est_test: test,
+      updated_at: new Date().toISOString(),
+    });
   }
 
   let posts: PapierAssignPost[] = [];
@@ -165,20 +169,23 @@ export async function assignerPapierComptes(
     posts = (upserted ?? []) as PapierAssignPost[];
   }
 
-  const dates = [...new Set(masters.map((m) => m.date_publication))];
   return {
     ok: true,
     assigns: rows.length,
     comptes: new Set(rows.map((r) => r.compte_id as string)).size,
-    langues: new Set(langues.map((l) => l.id)).size,
-    dates,
-    test: Boolean(opts.test),
+    langues: new Set(rows.map((r) => r.langue as string)).size,
+    dates: [jour],
+    test,
     posts,
+    besoinOriginal: besoinOriginal && !test,
+    kicksLangue,
     detail: rows.length
-      ? `${rows.length} assignation(s) CM${opts.test ? " (test)" : ""}`
-      : opts.compteId
-        ? "aucune langue prête pour ce compte CM"
-        : "aucun compte CM à assigner",
+      ? `${rows.length} assignation(s) CM${test ? " (test)" : ""}`
+      : kicksLangue.length
+        ? "langue en cours d'assemblage (voix + karaoké)"
+        : besoinOriginal
+          ? "bibliothèque épuisée pour cette langue — original manquant"
+          : "aucun compte CM à assigner",
   };
 }
 
@@ -197,7 +204,7 @@ export async function supprimerPapierPostsTest(
   return { ok: true, supprimes: (data ?? []).length };
 }
 
-/** Test : soigne un master coincé à clips, crée la ligne langue, dit s'il faut kick. */
+/** Test : pioche un master, crée la ligne langue du compte, dit s'il faut kick. */
 export async function preparerAssignationPapierTest(
   supabase: Supabase,
   opts: PapierAssignOpts,
@@ -208,15 +215,7 @@ export async function preparerAssignationPapierTest(
   ready: boolean;
   soigne: boolean;
 }> {
-  const masters = await resoudreMasters(supabase, opts);
-  let soigne = false;
-  for (const master of masters) {
-    if (await assurerMasterPretSiClips(supabase, master.id)) soigne = true;
-  }
-  const masterId = masters[0]?.id;
-  if (!masterId || !opts.compteId) {
-    return { masterId, ready: false, soigne };
-  }
+  if (!opts.compteId) return { ready: false, soigne: false };
   const { data: compte, error } = await supabase
     .from("comptes")
     .select("langue")
@@ -224,49 +223,41 @@ export async function preparerAssignationPapierTest(
     .maybeSingle();
   if (error) throw error;
   const langue = String((compte as { langue?: string } | null)?.langue ?? "").trim();
-  if (!langue || !soigne) return { masterId, langue, ready: false, soigne };
+  if (!langue) return { ready: false, soigne: false };
 
-  const rows = await assurerLanguesMaster(supabase, masterId);
-  const row = rows.find((l) => l.langue === langue);
+  const masters = await chargerBibliotheque(supabase, opts.masterId);
+  const { data: posts } = await supabase
+    .from("papier_posts")
+    .select("master_id, langue, est_test")
+    .eq("est_test", false);
+  const masterId =
+    piocherMasterInutilise(masters, posts ?? [], langue) ?? masters[0]?.id;
+  if (!masterId) return { langue, ready: false, soigne: false };
+
+  const row = await assurerLangueMaster(supabase, masterId, langue);
   return {
     masterId,
     langue,
-    langueId: row?.id,
-    ready: Boolean(row && estLanguePapierPrete(row)),
-    soigne,
+    langueId: row.id,
+    ready: estLanguePapierPrete(row),
+    soigne: true,
   };
 }
 
-async function resoudreMasters(
+async function chargerBibliotheque(
   supabase: Supabase,
-  opts: PapierAssignOpts,
-): Promise<MasterRow[]> {
-  if (opts.langueId) {
-    const { data, error } = await supabase
-      .from("papier_langues")
-      .select("master_id")
-      .eq("id", opts.langueId)
-      .maybeSingle();
-    if (error) throw error;
-    if (!data?.master_id) return [];
-    return chargerMasters(supabase, { ids: [data.master_id as string] });
-  }
-  if (opts.masterId) {
-    return chargerMasters(supabase, { ids: [opts.masterId] });
-  }
-  const jour = opts.date ?? aujourdhuiParis();
-  const fenetre = Math.max(1, opts.fenetreJours ?? (opts.date ? 1 : 2));
-  return chargerMasters(supabase, { dates: datesFenetreParis(jour, fenetre) });
-}
-
-async function chargerMasters(
-  supabase: Supabase,
-  filtre: { ids?: string[]; dates?: string[] },
-): Promise<MasterRow[]> {
-  let q = supabase.from("papier_masters").select("id, date_publication");
-  if (filtre.ids?.length) q = q.in("id", filtre.ids);
-  if (filtre.dates?.length) q = q.in("date_publication", filtre.dates);
+  masterId?: string,
+): Promise<MasterBiblio[]> {
+  let q = supabase
+    .from("papier_masters")
+    .select("id, date_publication, video_url")
+    .eq("statut", "ready")
+    .not("video_url", "is", null)
+    .order("created_at", { ascending: true });
+  if (masterId) q = q.eq("id", masterId);
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []) as MasterRow[];
+  return (data ?? []) as MasterBiblio[];
 }
+
+export type { LangueRow };

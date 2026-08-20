@@ -2,7 +2,7 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Loader2, RefreshCw, RotateCcw, Scissors, Settings2, Sparkles } from "lucide-react";
+import { Library, Loader2, RefreshCw, RotateCcw, Scissors, Settings2, Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ import { aujourdhuiParis, ecrireReglage, lireReglages } from "@/features/moteur/
 import {
   assignerPapierCm,
   lancerPapierJour,
-  lancerPapierLocales,
   listerPapierMasters,
   regenererPapier,
   relancerPapier,
@@ -24,7 +23,6 @@ import {
   type PapierStatut,
 } from "@/features/moteur/api";
 import { drapeauLangue, nomLangue } from "@/features/moteur/langues";
-import { masterClipsComplets } from "@/features/moteur/papierAssignation";
 import { REGLAGES_PAPIER_DEFAUT } from "@/features/moteur/papierReglages";
 import { TesterAssignationPapierCard } from "@/features/moteur/TesterAssignationPapierCard";
 
@@ -37,15 +35,24 @@ const STATUT_VARIANT: Record<PapierStatut, "default" | "secondary" | "destructiv
   failed: "destructive",
 };
 
+function masterEnCours(m: PapierMaster): boolean {
+  return !["ready", "failed"].includes(m.statut);
+}
+
+function languesConsommees(master: PapierMaster): string[] {
+  return [...new Set((master.papier_posts ?? []).map((p) => p.langue))].sort();
+}
+
 export function AdminPapierPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const jour = aujourdhuiParis();
   const [topic, setTopic] = React.useState("");
+  const [selectionId, setSelectionId] = React.useState<string | null>(null);
 
   const liste = useQuery({
     queryKey: ["papier-masters"],
-    queryFn: () => listerPapierMasters(14),
+    queryFn: () => listerPapierMasters(60),
     refetchInterval: (q) => {
       const rows = q.state.data ?? [];
       const busy = rows.some(
@@ -60,15 +67,19 @@ export function AdminPapierPage() {
   });
 
   const reglages = useQuery({ queryKey: ["reglages"], queryFn: lireReglages });
-  const today = (liste.data ?? []).find((m) => m.date_publication === jour) ?? null;
-  const todayClipsOk = Boolean(today && masterClipsComplets(today.papier_scenes ?? []));
+  const rows = liste.data ?? [];
+  const enCours = rows.find(masterEnCours) ?? null;
+  const biblio = rows.filter((m) => m.statut === "ready" && Boolean(m.video_url));
+  const failed = rows.filter((m) => m.statut === "failed");
+  const selection =
+    rows.find((m) => m.id === selectionId) ?? enCours ?? biblio[0] ?? failed[0] ?? null;
   const papier = reglages.data?.papier;
   const falUsage =
     reglages.data?.papier_fal_usage.date === jour ? reglages.data.papier_fal_usage.appels : 0;
 
   React.useEffect(() => {
-    if (today?.topic && !topic) setTopic(today.topic);
-  }, [today?.topic, topic]);
+    if (enCours?.topic && !topic) setTopic(enCours.topic);
+  }, [enCours?.topic, topic]);
 
   function invalider() {
     void queryClient.invalidateQueries({ queryKey: ["papier-masters"] });
@@ -87,16 +98,12 @@ export function AdminPapierPage() {
     mutationFn: (id: string) => regenererPapier(id, topic.trim() || undefined),
     onSuccess: invalider,
   });
-  const locales = useMutation({
-    mutationFn: (masterId: string) => lancerPapierLocales(masterId),
-    onSuccess: invalider,
-  });
   const relancerLangue = useMutation({
     mutationFn: (id: string) => relancerPapierLangue(id),
     onSuccess: invalider,
   });
   const assigner = useMutation({
-    mutationFn: (masterId: string) => assignerPapierCm({ masterId }),
+    mutationFn: () => assignerPapierCm({}),
     onSuccess: invalider,
   });
   const pause = useMutation({
@@ -109,7 +116,6 @@ export function AdminPapierPage() {
     lancer.isPending ||
     relancer.isPending ||
     regenerer.isPending ||
-    locales.isPending ||
     relancerLangue.isPending ||
     assigner.isPending;
 
@@ -157,7 +163,7 @@ export function AdminPapierPage() {
           <CardDescription>{t("papier.aujourdHuiAide")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {today ? <ResumeMaster master={today} /> : (
+          {enCours ? <ResumeMaster master={enCours} /> : (
             <p className="text-sm text-muted-foreground">{t("papier.aucunAujourdhui")}</p>
           )}
           <div className="space-y-2">
@@ -173,53 +179,43 @@ export function AdminPapierPage() {
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => lancer.mutate()} disabled={busy}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {today ? t("papier.avancer") : t("papier.generer")}
+              {t("papier.avancer")}
             </Button>
-            {today && today.statut === "failed" ? (
-              <Button variant="outline" onClick={() => relancer.mutate(today.id)} disabled={busy}>
+            {enCours && enCours.statut === "failed" ? (
+              <Button variant="outline" onClick={() => relancer.mutate(enCours.id)} disabled={busy}>
                 <RefreshCw className="h-4 w-4" />
                 {t("papier.relancer")}
               </Button>
             ) : null}
-            {today ? (
-              <Button variant="outline" onClick={() => regenerer.mutate(today.id)} disabled={busy}>
+            {enCours ? (
+              <Button variant="outline" onClick={() => regenerer.mutate(enCours.id)} disabled={busy}>
                 <RotateCcw className="h-4 w-4" />
                 {t("papier.regenerer")}
               </Button>
             ) : null}
           </div>
-          {today && (today.statut === "ready" || todayClipsOk) ? (
-            <Button variant="outline" onClick={() => locales.mutate(today.id)} disabled={busy}>
-              {locales.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {t("papier.avancerLangues")}
+          <div className="space-y-1">
+            <Button variant="outline" onClick={() => assigner.mutate()} disabled={busy}>
+              {assigner.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {t("papier.assigner")}
             </Button>
+            <p className="text-xs text-muted-foreground">{t("papier.assignerAide")}</p>
+          </div>
+          {assigner.isSuccess && assigner.data.detail ? (
+            <p className="text-sm text-muted-foreground">{assigner.data.detail}</p>
           ) : null}
-          {today && (today.papier_langues ?? []).some((l) => l.statut === "ready") ? (
-            <div className="space-y-1">
-              <Button variant="outline" onClick={() => assigner.mutate(today.id)} disabled={busy}>
-                {assigner.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {t("papier.assigner")}
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                {t("papier.assignerAide")}
-                {today.papier_posts?.length
-                  ? ` · ${t("papier.assignes", { count: today.papier_posts.length })}`
-                  : ""}
-              </p>
-            </div>
-          ) : null}
-          {lancer.error || relancer.error || regenerer.error || locales.error || assigner.error ? (
+          {lancer.error || relancer.error || regenerer.error || assigner.error ? (
             <p className="text-sm text-destructive">
-              {(lancer.error ?? relancer.error ?? regenerer.error ?? locales.error ?? assigner.error)?.message}
+              {(lancer.error ?? relancer.error ?? regenerer.error ?? assigner.error)?.message}
             </p>
           ) : null}
         </CardContent>
       </Card>
 
-      {today ? <CartesScenes master={today} /> : null}
-      {today ? (
+      {enCours ? <CartesScenes master={enCours} /> : null}
+      {enCours ? (
         <CartesLangues
-          master={today}
+          master={enCours}
           onRelancer={(id) => relancerLangue.mutate(id)}
           busy={busy}
         />
@@ -229,34 +225,76 @@ export function AdminPapierPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{t("papier.historique")}</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Library className="h-4 w-4" />
+            {t("papier.historique")}
+          </CardTitle>
+          <CardDescription>{t("papier.biblioAide")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {liste.isLoading ? (
             <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
-          ) : (liste.data ?? []).length === 0 ? (
+          ) : biblio.length === 0 && failed.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("papier.vide")}</p>
           ) : (
-            (liste.data ?? []).map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                className="flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm"
-                onClick={() => {
-                  if (m.topic) setTopic(m.topic);
-                }}
-              >
-                <span className="min-w-0 truncate">
-                  <span className="font-medium">{m.date_publication}</span>
-                  {" — "}
-                  <span className="text-muted-foreground">{m.topic || t("papier.sansTopic")}</span>
-                </span>
-                <Badge variant={STATUT_VARIANT[m.statut]}>{t(`papier.statut.${m.statut}`)}</Badge>
-              </button>
-            ))
+            [...biblio, ...failed].map((m) => {
+              const conso = languesConsommees(m);
+              const actif = selection?.id === m.id;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm ${
+                    actif ? "border-primary bg-primary/5" : ""
+                  }`}
+                  onClick={() => {
+                    setSelectionId(m.id);
+                    if (m.topic) setTopic(m.topic);
+                  }}
+                >
+                  <span className="min-w-0 truncate">
+                    <span className="font-medium">{m.date_publication}</span>
+                    {" — "}
+                    <span className="text-muted-foreground">{m.topic || t("papier.sansTopic")}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {conso.length
+                        ? t("papier.consommees", {
+                            langues: conso.map((l) => `${drapeauLangue(l)} ${nomLangue(l)}`).join(", "),
+                          })
+                        : t("papier.aucuneConso")}
+                    </span>
+                  </span>
+                  <Badge variant={STATUT_VARIANT[m.statut]}>{t(`papier.statut.${m.statut}`)}</Badge>
+                </button>
+              );
+            })
           )}
         </CardContent>
       </Card>
+
+      {selection && selection.id !== enCours?.id ? (
+        <>
+          <ResumeMaster master={selection} />
+          {selection.statut === "failed" ? (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => relancer.mutate(selection.id)} disabled={busy}>
+                <RefreshCw className="h-4 w-4" />
+                {t("papier.relancer")}
+              </Button>
+              <Button variant="outline" onClick={() => regenerer.mutate(selection.id)} disabled={busy}>
+                <RotateCcw className="h-4 w-4" />
+                {t("papier.regenerer")}
+              </Button>
+            </div>
+          ) : null}
+          <CartesScenes master={selection} />
+          <CartesLangues
+            master={selection}
+            onRelancer={(id) => relancerLangue.mutate(id)}
+            busy={busy}
+          />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -265,6 +303,10 @@ function ResumeMaster({ master }: { master: PapierMaster }) {
   const { t } = useTranslation();
   const pct = Math.round((master.progression ?? 0) * 100);
   const scenes = master.papier_scenes ?? [];
+  const videoFr =
+    master.video_url ||
+    master.papier_langues?.find((l) => l.langue === "fr" && l.video_url)?.video_url ||
+    null;
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -278,6 +320,12 @@ function ResumeMaster({ master }: { master: PapierMaster }) {
       </div>
       {master.script?.title ? (
         <p className="text-sm font-medium">{master.script.title}</p>
+      ) : null}
+      {videoFr ? (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">{t("papier.videoFr")}</p>
+          <video src={videoFr} className="max-h-80 w-full rounded-md bg-muted" controls playsInline />
+        </div>
       ) : null}
       {master.erreur ? <p className="text-sm text-destructive">{master.erreur}</p> : null}
     </div>
@@ -309,7 +357,7 @@ function CartesLangues({
 }) {
   const { t } = useTranslation();
   const langues = master.papier_langues ?? [];
-  if (!langues.length && master.statut !== "ready") return null;
+  if (!langues.length) return null;
   return (
     <Card>
       <CardHeader>

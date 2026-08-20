@@ -20,7 +20,7 @@ const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
 /**
- * Assigne la vidéo papier prête (même langue) à UN compte CM en `est_test`.
+ * Pioche un master FR inutilisé dans la langue d'UN compte CM, en `est_test`.
  * Invisible sur les calendriers. Annuler retire uniquement les lignes test.
  */
 export function TesterAssignationPapierCard() {

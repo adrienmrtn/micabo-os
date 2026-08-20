@@ -7,6 +7,7 @@ import {
   hashtagsDepuisLangue,
   masterClipsComplets,
   pairesAssignationPapier,
+  piocherMasterInutilise,
   statutMasterDepuisAssets,
 } from "./papierAssignation";
 
@@ -77,20 +78,68 @@ describe("pairesAssignationPapier", () => {
 });
 
 describe("master clips → ready", () => {
-  it("un master avec tous ses clips est prêt, même si le statut DB dit encore clips", () => {
+  it("clips complets sans vidéo FR restent en clips ; video_url = bibliothèque", () => {
     expect(masterClipsComplets([{ clip_url: "a" }, { clip_url: "b" }])).toBe(true);
     expect(masterClipsComplets([{ clip_url: "a" }, { clip_url: null }])).toBe(false);
     expect(masterClipsComplets([])).toBe(false);
+    const scenes = [{ image_url: "i", clip_url: "c" }];
+    expect(statutMasterDepuisAssets({ topic: "carottes", script: { title: "x" } }, scenes)).toBe(
+      "clips",
+    );
     expect(
-      statutMasterDepuisAssets({ topic: "carottes", script: { title: "x" } }, [
-        { image_url: "i", clip_url: "c" },
-      ]),
+      statutMasterDepuisAssets(
+        { topic: "carottes", script: { title: "x" }, video_url: "https://v/fr.mp4" },
+        scenes,
+      ),
     ).toBe("ready");
     expect(
       statutMasterDepuisAssets({ topic: "carottes", script: { title: "x" } }, [
         { image_url: "i", clip_url: null },
       ]),
     ).toBe("clips");
+  });
+});
+
+describe("piocherMasterInutilise", () => {
+  const a = { id: "m-a" };
+  const b = { id: "m-b" };
+
+  it("prend le plus ancien master pas encore servi dans cette langue", () => {
+    expect(piocherMasterInutilise([a, b], [], "de")).toBe("m-a");
+    expect(
+      piocherMasterInutilise(
+        [a, b],
+        [{ master_id: "m-a", langue: "de", est_test: false }],
+        "de",
+      ),
+    ).toBe("m-b");
+  });
+
+  it("un usage FR n'empêche pas de piocher le même master en DE", () => {
+    expect(
+      piocherMasterInutilise([a], [{ master_id: "m-a", langue: "fr", est_test: false }], "de"),
+    ).toBe("m-a");
+  });
+
+  it("ignore les assignations test", () => {
+    expect(
+      piocherMasterInutilise([a], [{ master_id: "m-a", langue: "de", est_test: true }], "de"),
+    ).toBe("m-a");
+  });
+
+  it("null si plus rien de libre dans cette langue", () => {
+    expect(
+      piocherMasterInutilise([a], [{ master_id: "m-a", langue: "de", est_test: false }], "de"),
+    ).toBeNull();
+  });
+
+  it("deux CM de la même langue piochent deux masters distincts", () => {
+    const pris: Array<{ master_id: string; langue: string; est_test: boolean }> = [];
+    const premier = piocherMasterInutilise([a, b], pris, "en");
+    expect(premier).toBe("m-a");
+    pris.push({ master_id: premier!, langue: "en", est_test: false });
+    const second = piocherMasterInutilise([a, b], pris, "en");
+    expect(second).toBe("m-b");
   });
 });
 

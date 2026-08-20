@@ -1,11 +1,13 @@
 /**
- * Fan-out papier : 14 langues, ticks 42 s.
+ * Localisation papier à la demande : une langue, ticks 42 s.
+ * FR se fait à la fin du pipeline master (bibliothèque).
+ * Les autres langues naissent à l'assignation s'il existe un CM.
  * traduire → TTS Fal → mix clip+voix → concat → karaoke.
  */
 
 import { incrusterKaraokeFal } from "./fal_auto_subtitle.ts";
 import { synthetiserVoixFal } from "./fal_elevenlabs_tts.ts";
-import { assurerMasterPretSiClips } from "./papier_master.ts";
+import { assurerMasterPretSiClips, publierVideoFrMaster } from "./papier_master.ts";
 import {
   chargerReglagesPapier,
   estErreurQuotaFal,
@@ -14,11 +16,7 @@ import {
 } from "./papier_reglages.ts";
 import { mergerAudioVideoFal } from "./fal_merge_audio.ts";
 import { mergerVideosFal } from "./fal_merge_videos.ts";
-import {
-  LANGUES_PAPIER,
-  statutDepuisLocaleAssets,
-  type PapierScriptTraduit,
-} from "./papier_locales_core.ts";
+import { statutDepuisLocaleAssets, type PapierScriptTraduit } from "./papier_locales_core.ts";
 import { traduireScriptPapier } from "./papier_traduction.ts";
 import type { PapierScript } from "./papier_script_core.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
@@ -145,15 +143,11 @@ async function chargerScriptMaster(
 ): Promise<PapierScript | null> {
   const { data, error } = await supabase
     .from("papier_masters")
-    .select("script, statut")
+    .select("script")
     .eq("id", masterId)
     .maybeSingle();
   if (error) throw error;
-  let statut = (data as { statut?: string } | null)?.statut;
-  if (statut !== "ready") {
-    if (!(await assurerMasterPretSiClips(supabase, masterId))) return null;
-    statut = "ready";
-  }
+  if (!(await assurerMasterPretSiClips(supabase, masterId))) return null;
   return ((data as { script?: PapierScript } | null)?.script ?? null) as PapierScript | null;
 }
 
@@ -217,6 +211,37 @@ async function releaseLangue(supabase: Supabase, id: string): Promise<void> {
     .eq("id", id);
 }
 
+export async function assurerLangueMaster(
+  supabase: Supabase,
+  masterId: string,
+  langue: string,
+): Promise<PapierLangueRow> {
+  const code = langue.trim().toLowerCase();
+  const { data: existant, error } = await supabase
+    .from("papier_langues")
+    .select("*")
+    .eq("master_id", masterId)
+    .eq("langue", code)
+    .maybeSingle();
+  if (error) throw error;
+  if (existant) return existant as PapierLangueRow;
+  const reglages = await chargerReglagesPapier(supabase);
+  const { data: inserted, error: insErr } = await supabase
+    .from("papier_langues")
+    .insert({
+      master_id: masterId,
+      langue: code,
+      voice: voixPourLangue(reglages, code),
+      statut: "queued",
+      etape: "traduction",
+    })
+    .select("*")
+    .single();
+  if (insErr) throw insErr;
+  return inserted as PapierLangueRow;
+}
+
+/** @deprecated ne crée plus les 14 langues — préfère assurerLangueMaster. */
 export async function assurerLanguesMaster(
   supabase: Supabase,
   masterId: string,
@@ -226,35 +251,7 @@ export async function assurerLanguesMaster(
     .select("*")
     .eq("master_id", masterId);
   if (error) throw error;
-  const byLang = new Map(
-    ((existants ?? []) as PapierLangueRow[]).map((r) => [r.langue, r]),
-  );
-  const reglages = await chargerReglagesPapier(supabase);
-  for (const row of byLang.values()) {
-    if (row.statut !== "queued" && row.statut !== "translating") continue;
-    const voice = voixPourLangue(reglages, row.langue);
-    if (voice === row.voice) continue;
-    await supabase.from("papier_langues").update({ voice }).eq("id", row.id);
-    row.voice = voice;
-  }
-  const manquantes = LANGUES_PAPIER.filter((l) => !byLang.has(l));
-  if (manquantes.length) {
-    const { data: inserted, error: insErr } = await supabase
-      .from("papier_langues")
-      .insert(
-        manquantes.map((langue) => ({
-          master_id: masterId,
-          langue,
-          voice: voixPourLangue(reglages, langue),
-          statut: "queued",
-          etape: "traduction",
-        })),
-      )
-      .select("*");
-    if (insErr) throw insErr;
-    for (const row of (inserted ?? []) as PapierLangueRow[]) byLang.set(row.langue, row);
-  }
-  return LANGUES_PAPIER.map((l) => byLang.get(l)!).filter(Boolean);
+  return (existants ?? []) as PapierLangueRow[];
 }
 
 function scriptDepuisFr(master: PapierScript): PapierScriptTraduit {
@@ -543,6 +540,12 @@ export async function avancerLangue(
 
     await etapeKaraoke(supabase, row);
     row = (await chargerLangue(supabase, langueId))!;
+    if (row.langue === "fr" && row.video_url) {
+      await publierVideoFrMaster(supabase, row.master_id, {
+        video_url: row.video_url,
+        video_path: row.video_path,
+      });
+    }
     return resumerLangue(row, true, "langue prête");
   } catch (error) {
     if (estErreurQuotaFal(error)) {
@@ -606,18 +609,19 @@ export async function tickLocalesMaster(
   if (!script) {
     return { ok: true, idle: true, done: true, masterId, detail: "master pas prêt" };
   }
-  const langues = await assurerLanguesMaster(supabase, masterId);
-  const suivante = langues.find((l) => l.statut !== "ready" && l.statut !== "failed");
-  if (!suivante) {
-    const failed = langues.filter((l) => l.statut === "failed").length;
+  const fr = await assurerLangueMaster(supabase, masterId, "fr");
+  if (fr.statut === "ready") {
     return {
       ok: true,
       done: true,
       masterId,
-      detail: failed ? `${failed} langue(s) en échec` : "toutes les langues prêtes",
+      langueId: fr.id,
+      langue: "fr",
+      statut: "ready",
+      detail: "FR déjà en bibliothèque",
     };
   }
-  return avancerLangue(supabase, suivante.id);
+  return avancerLangue(supabase, fr.id);
 }
 
 export async function relancerLangue(

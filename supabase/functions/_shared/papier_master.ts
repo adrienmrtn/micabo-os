@@ -1,6 +1,6 @@
 /**
- * Pipeline master papier FR : topic → script → Nano Banana → Seedance.
- * Un tick ≤ 42 s, idempotent. Quand ready : kick fan-out langues (papier_locales).
+ * Pipeline master papier FR : topic → script → images → clips → voix FR + karaoké.
+ * Un tick ≤ 42 s. Ready = vidéo FR en bibliothèque. Pas de fan-out 14 langues.
  */
 
 import { editerNanoBananaPro, genererNanoBananaPro } from "./fal_nano_banana.ts";
@@ -50,6 +50,8 @@ export type PapierMasterRow = {
   progression: number;
   erreur: string | null;
   busy: boolean;
+  video_url?: string | null;
+  video_path?: string | null;
   journal: Array<{ at: string; etape: string; detail: string }>;
   updated_at?: string;
 };
@@ -150,7 +152,7 @@ function statutDepuisAssets(master: PapierMasterRow, scenes: PapierSceneRow[]): 
   return statutMasterDepuisAssets(master, scenes);
 }
 
-/** Si tous les clips sont là, passe le master en ready (débloque le fan-out langues). */
+/** Clips Seedance tous là — on peut assembler la voix FR (pas encore bibliothèque). */
 export async function assurerMasterPretSiClips(
   supabase: Supabase,
   masterId: string,
@@ -158,16 +160,27 @@ export async function assurerMasterPretSiClips(
   const master = await chargerMaster(supabase, masterId);
   if (!master || master.statut === "failed") return false;
   const scenes = await chargerScenes(supabase, masterId);
-  if (!master.script || !masterClipsComplets(scenes)) return false;
-  if (master.statut !== "ready") {
-    await patchMaster(
-      supabase,
-      masterId,
-      { statut: "ready", etape: "ready", progression: 1, erreur: null, busy: false },
-      { etape: "clips", detail: `${scenes.length} clips` },
-    );
-  }
-  return true;
+  return Boolean(master.script && masterClipsComplets(scenes));
+}
+
+export async function publierVideoFrMaster(
+  supabase: Supabase,
+  masterId: string,
+  video: { video_url: string; video_path?: string | null },
+): Promise<void> {
+  await patchMaster(
+    supabase,
+    masterId,
+    {
+      statut: "ready",
+      etape: "ready",
+      progression: 1,
+      erreur: null,
+      video_url: video.video_url,
+      video_path: video.video_path ?? null,
+    },
+    { etape: "fr", detail: "vidéo FR en bibliothèque" },
+  );
 }
 
 function progressionDepuis(statut: PapierStatut, scenes: PapierSceneRow[]): number {
@@ -191,28 +204,13 @@ async function sujetsRecents(supabase: Supabase): Promise<string[]> {
   return (data ?? []).map((r) => String((r as { topic?: string }).topic ?? "").trim()).filter(Boolean);
 }
 
-export async function assurerMasterJour(
+export async function creerMasterBibliotheque(
   supabase: Supabase,
-  opts?: { date?: string; topic?: string },
+  opts?: { topic?: string; date?: string },
 ): Promise<PapierMasterRow> {
   const jour = opts?.date ?? aujourdhuiParis();
-  const { data: existant, error } = await supabase
-    .from("papier_masters")
-    .select("*")
-    .eq("date_publication", jour)
-    .maybeSingle();
-  if (error) throw error;
-  if (existant) {
-    const row = existant as PapierMasterRow;
-    const topic = opts?.topic?.trim();
-    if (topic && !row.topic) {
-      await patchMaster(supabase, row.id, { topic }, { etape: "topic", detail: topic });
-      row.topic = topic;
-    }
-    return row;
-  }
   const topic = opts?.topic?.trim() || null;
-  const { data, error: insErr } = await supabase
+  const { data, error } = await supabase
     .from("papier_masters")
     .insert({
       date_publication: jour,
@@ -225,18 +223,41 @@ export async function assurerMasterJour(
     })
     .select("*")
     .single();
-  if (insErr) {
-    if (insErr.code === "23505") {
-      const { data: again } = await supabase
-        .from("papier_masters")
-        .select("*")
-        .eq("date_publication", jour)
-        .maybeSingle();
-      if (again) return again as PapierMasterRow;
-    }
-    throw insErr;
-  }
+  if (error) throw error;
   return data as PapierMasterRow;
+}
+
+/** Reprend le master en cours, sinon en crée un nouveau (bibliothèque). */
+export async function masterEnCoursOuNouveau(
+  supabase: Supabase,
+  opts?: { date?: string; topic?: string },
+): Promise<PapierMasterRow> {
+  const { data: enCours, error } = await supabase
+    .from("papier_masters")
+    .select("*")
+    .not("statut", "in", "(ready,failed)")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (enCours) {
+    const row = enCours as PapierMasterRow;
+    const topic = opts?.topic?.trim();
+    if (topic && !row.topic) {
+      await patchMaster(supabase, row.id, { topic }, { etape: "topic", detail: topic });
+      row.topic = topic;
+    }
+    return row;
+  }
+  return creerMasterBibliotheque(supabase, opts);
+}
+
+/** @deprecated préfère masterEnCoursOuNouveau — plus un master unique par jour. */
+export async function assurerMasterJour(
+  supabase: Supabase,
+  opts?: { date?: string; topic?: string },
+): Promise<PapierMasterRow> {
+  return masterEnCoursOuNouveau(supabase, opts);
 }
 
 export async function relancerMaster(supabase: Supabase, id: string): Promise<PapierMasterRow> {
@@ -286,6 +307,8 @@ export async function regenererMaster(
       progression: 0,
       erreur: null,
       busy: false,
+      video_url: null,
+      video_path: null,
     },
     { etape: "regenerer", detail: topic?.trim() || "reset" },
   );
@@ -483,8 +506,8 @@ async function etapeClips(
   await patchMaster(
     supabase,
     master.id,
-    { statut: "ready", etape: "ready", progression: 1, erreur: null },
-    { etape: "clips", detail: `${scenes.length} clips` },
+    { statut: "clips", etape: "fr", progression: 0.72, erreur: null },
+    { etape: "clips", detail: `${scenes.length} clips — FR à assembler` },
   );
   return true;
 }
@@ -558,14 +581,9 @@ export async function avancerMaster(
     const clipsOk = await etapeClips(supabase, master, scenes, t0);
     master = (await chargerMaster(supabase, masterId))!;
     scenes = await chargerScenes(supabase, masterId);
-    if (!clipsOk) {
-      if (await assurerMasterPretSiClips(supabase, masterId)) {
-        master = (await chargerMaster(supabase, masterId))!;
-        return resumer(master, true, "master prêt", scenes);
-      }
-      return resumer(master, false, "clips en cours", scenes);
-    }
-    return resumer(master, true, "master prêt", scenes);
+    if (!clipsOk) return resumer(master, false, "clips en cours", scenes);
+    if (master.video_url) return resumer(master, true, "déjà en bibliothèque", scenes);
+    return resumer(master, true, "clips ok — FR à assembler", scenes);
   } catch (error) {
     if (estErreurQuotaFal(error)) {
       const msg = messageErreur(error);
@@ -625,7 +643,7 @@ export async function tickPapierJour(
 ): Promise<PapierTickResultat> {
   const master = opts?.masterId
     ? await chargerMaster(supabase, opts.masterId)
-    : await assurerMasterJour(supabase, { date: opts?.date, topic: opts?.topic });
+    : await masterEnCoursOuNouveau(supabase, { date: opts?.date, topic: opts?.topic });
   if (!master) {
     return { ok: true, idle: true, done: true, detail: "aucun master" };
   }
