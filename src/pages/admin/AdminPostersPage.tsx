@@ -20,6 +20,7 @@ import { CompteursPhases, ListeCreateursSuivi } from "@/features/hiring/SuiviCre
 import { equipesParDm, hmsDuDm, hmsSansDm, nomProfil, resumeHm } from "@/features/hiring/suiviEquipe";
 import { CompteEditor, PostsParJourCompte } from "@/features/moteur/CompteEditor";
 import { estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
+import { ChampsPremierCompte, type PremierCompte } from "@/features/moteur/ChampsPremierCompte";
 import { FormulaireAjouterCompte } from "@/features/moteur/FormulaireCompteCm";
 import { EnteteCompte } from "@/features/moteur/VignetteCompte";
 import {
@@ -453,17 +454,44 @@ export function AdminPostersPage() {
   const [prenom, setPrenom] = React.useState("");
   const [nom, setNom] = React.useState("");
   const [langue, setLangue] = React.useState("");
+  const [premierCompte, setPremierCompte] = React.useState<PremierCompte>("perso");
+  const [postsParJour, setPostsParJour] = React.useState<1 | 2 | 3>(2);
+  const [handleTiktok, setHandleTiktok] = React.useState("");
+  const [cmEmail, setCmEmail] = React.useState("");
+  const [cmPassword, setCmPassword] = React.useState("");
+  const [cmDeuxFa, setCmDeuxFa] = React.useState("");
   const [password, setPassword] = React.useState(MOT_DE_PASSE_INITIAL);
-  const [cree, setCree] = React.useState<{ email: string; password: string } | null>(null);
+  const [cree, setCree] = React.useState<{
+    email: string;
+    password: string;
+    type: PremierCompte;
+  } | null>(null);
 
   const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["posters"] });
 
   const creer = useMutation({
-    mutationFn: () => creerPoster({ prenom, nom, password, langue: langue || undefined }),
+    mutationFn: () =>
+      creerPoster({
+        prenom,
+        nom,
+        password,
+        langue: premierCompte === "aucun" ? undefined : langue || undefined,
+        type_compte: premierCompte,
+        posts_par_jour: premierCompte === "perso" ? postsParJour : undefined,
+        handle_tiktok: handleTiktok,
+        tiktok_email: cmEmail,
+        tiktok_password: cmPassword,
+        tiktok_2fa_note: cmDeuxFa,
+      }),
     onSuccess: (r) => {
-      setCree({ email: r.email, password });
+      setCree({ email: r.email, password, type: premierCompte });
       setPrenom("");
       setNom("");
+      setHandleTiktok("");
+      setCmEmail("");
+      setCmPassword("");
+      setCmDeuxFa("");
+      setPostsParJour(2);
       setPassword(MOT_DE_PASSE_INITIAL);
       rafraichir();
       void queryClient.invalidateQueries({ queryKey: ["comptes"] });
@@ -588,23 +616,27 @@ export function AdminPostersPage() {
             <Label htmlFor="nom">{t("posters.nom")}</Label>
             <Input id="nom" value={nom} onChange={(e) => setNom(e.target.value)} />
           </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="langue">{t("hiring.langue")}</Label>
-            <select
-              id="langue"
-              className={selectClass}
-              value={langue}
-              onChange={(e) => setLangue(e.target.value)}
-            >
-              <option value="">{t("posters.sansCompte")}</option>
-              {langues.data?.map((l) => (
-                <option key={l} value={l}>
-                  {nomLangue(l)}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-muted-foreground">{t("posters.langueAide")}</p>
-          </div>
+          <ChampsPremierCompte
+            allowAucun
+            typeCompte={premierCompte}
+            onType={(type) => {
+              setPremierCompte(type);
+              if (type !== "aucun" && !langue) setLangue(langues.data?.[0] ?? "");
+            }}
+            langues={langues.data ?? []}
+            langue={langue}
+            onLangue={setLangue}
+            postsParJour={postsParJour}
+            onPostsParJour={setPostsParJour}
+            handle={handleTiktok}
+            onHandle={setHandleTiktok}
+            email={cmEmail}
+            onEmail={setCmEmail}
+            password={cmPassword}
+            onPassword={setCmPassword}
+            deuxFa={cmDeuxFa}
+            onDeuxFa={setCmDeuxFa}
+          />
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="mdp">{t("posters.password")}</Label>
             <div className="flex gap-2">
@@ -625,7 +657,14 @@ export function AdminPostersPage() {
             </div>
           </div>
           <div className="sm:col-span-2">
-            <Button type="submit" disabled={creer.isPending}>
+            <Button
+              type="submit"
+              disabled={
+                creer.isPending ||
+                (premierCompte !== "aucun" && !langue) ||
+                (premierCompte === "cm" && (!cmEmail.trim() || !cmPassword))
+              }
+            >
               {creer.isPending ? t("common.saving") : t("posters.create")}
             </Button>
             {creer.isError && (
@@ -656,7 +695,13 @@ export function AdminPostersPage() {
               <code className="rounded bg-muted px-1">{cree.password}</code>
             </p>
             <p className="pt-1 text-xs text-muted-foreground">{t("posters.transmit")}</p>
-            <p className="text-xs text-muted-foreground">{t("warmup.apresCreation")}</p>
+            <p className="text-xs text-muted-foreground">
+              {cree.type === "cm"
+                ? t("posters.creeCm")
+                : cree.type === "aucun"
+                  ? t("posters.creeAucun")
+                  : t("warmup.apresCreation")}
+            </p>
           </div>
         )}
       </CardContent>

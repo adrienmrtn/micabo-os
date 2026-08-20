@@ -808,24 +808,40 @@ export function creerPoster(input: {
   nom: string;
   password: string;
   langue?: string;
+  /** perso (défaut si langue) | cm | aucun */
+  type_compte?: TypeCompte | "aucun";
   /** Quota d'assignation journalier (1–3). Défaut 2 côté Edge. */
   posts_par_jour?: number;
+  handle_tiktok?: string;
+  tiktok_email?: string;
+  tiktok_password?: string;
+  tiktok_2fa_note?: string;
 }) {
   return invoke<{
     userId: string;
     email: string;
+    type_compte?: TypeCompte | null;
     compte: {
       id: string;
+      type_compte?: string;
       reference: string | null;
       persona: boolean;
       labelId: string | null;
     } | null;
   }>("manage-users", {
     action: "create",
-    ...input,
+    prenom: input.prenom,
+    nom: input.nom,
+    password: input.password,
+    langue: input.type_compte === "aucun" ? "" : (input.langue ?? ""),
+    type_compte: input.type_compte ?? (input.langue ? "perso" : "aucun"),
     ...(input.posts_par_jour != null
       ? { posts_par_jour: normaliserPostsParJour(Number(input.posts_par_jour)) }
       : {}),
+    handle_tiktok: input.handle_tiktok ?? "",
+    tiktok_email: input.tiktok_email ?? "",
+    tiktok_password: input.tiktok_password ?? "",
+    tiktok_2fa_note: input.tiktok_2fa_note ?? "",
   });
 }
 

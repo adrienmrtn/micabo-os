@@ -940,7 +940,8 @@ export const fr = {
     posters: {
       title: "Posters",
       subtitle: "Créateurs (logins) et leurs comptes TikTok.",
-      creerPosterDesc: "Crée un accès créateur (email généré + mot de passe).",
+      creerPosterDesc:
+        "Crée un login créateur. Le premier compte TikTok peut être perso, CM, ou aucun (à ajouter plus tard).",
       aideTitre: "Aide",
       aideAcces:
         "Un créateur = un login. Il peut avoir plusieurs comptes TikTok (perso ou CM). Identifiants : email généré + mot de passe affiché à la création.",
@@ -966,6 +967,12 @@ export const fr = {
       gererCompte: "Gérer le compte",
       gererComptes: "Comptes TikTok",
       ficheComptes: "Comptes TikTok",
+      premierCompte: "Premier compte",
+      premierCompteAucun: "Aucun pour l’instant",
+      premierCompteAucunAide:
+        "Crée seulement le login créateur. Tu pourras ajouter un perso ou un CM plus tard.",
+      creeCm: "Créateur créé avec un compte CM. Les identifiants TikTok sont enregistrés.",
+      creeAucun: "Login créateur créé, sans compte TikTok. Ajoute un perso ou un CM depuis la fiche.",
       nbComptes: "{{n}} compte(s)",
       aucunCompte: "Aucun compte TikTok",
       compteSansHandle: "Pas encore de @",
@@ -1035,7 +1042,7 @@ export const fr = {
     hiring: {
       title: "Créer un poster",
       subtitle:
-        "Un créateur = un login. Tu lui ajoutes ensuite un ou plusieurs comptes TikTok (perso ou CM). L’identité du premier compte se génère automatiquement.",
+        "Un créateur = un login. Choisis le premier compte : perso (publication, warmup) ou CM (boîte, identifiants déjà existants).",
       subtitleUgcAiVideo:
         "Mode UGC AI VIDEO : chaque créateur reçoit la marque UGC AI VIDEO, tes labels UGC VIDEO, et un persona unique.",
       langue: "Langue du poster",

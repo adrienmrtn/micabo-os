@@ -24,6 +24,7 @@ import {
   majCompte,
   supprimerPoster,
 } from "@/features/moteur/api";
+import { ChampsPremierCompte, type PremierCompte } from "@/features/moteur/ChampsPremierCompte";
 import { comptePrincipal, estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
 import { FormulaireAjouterCompte } from "@/features/moteur/FormulaireCompteCm";
 import { EnteteCompte } from "@/features/moteur/VignetteCompte";
@@ -32,9 +33,6 @@ import type { PosterProfil } from "@/features/moteur/types";
 
 /** Mot de passe commun à tous les posters (dicté de vive voix). */
 const MOT_DE_PASSE = "12345678";
-
-const selectClass =
-  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
 /**
  * Une ligne créateur côté HM : identité TikTok (avatar, @, nom, source, bio),
@@ -224,9 +222,8 @@ function LignePoster({ poster: p }: { poster: PosterProfil }) {
 }
 
 /**
- * Écran unique du hiring manager : créer un poster. Il saisit prénom, nom et
- * choisit la LANGUE ; la persona (pseudo, bio, avatar)
- * sont générés automatiquement par l'IA côté serveur.
+ * Écran unique du hiring manager : créer un login créateur, puis le premier
+ * compte TikTok (perso = identité générée, ou CM = identifiants existants).
  */
 export function HiringPosterPage() {
   const { t } = useTranslation();
@@ -239,8 +236,17 @@ export function HiringPosterPage() {
   const [prenom, setPrenom] = React.useState("");
   const [nom, setNom] = React.useState("");
   const [langue, setLangue] = React.useState("");
+  const [premierCompte, setPremierCompte] = React.useState<PremierCompte>("perso");
   const [postsParJour, setPostsParJour] = React.useState<1 | 2 | 3>(2);
-  const [cree, setCree] = React.useState<{ email: string; persona: boolean } | null>(null);
+  const [handleTiktok, setHandleTiktok] = React.useState("");
+  const [cmEmail, setCmEmail] = React.useState("");
+  const [cmPassword, setCmPassword] = React.useState("");
+  const [cmDeuxFa, setCmDeuxFa] = React.useState("");
+  const [cree, setCree] = React.useState<{
+    email: string;
+    persona: boolean;
+    type: PremierCompte;
+  } | null>(null);
 
   // Langues gérées par le recruteur : un créateur = une langue, choisie à
   // chaque embauche. Plusieurs langues gérées → créateurs de langues différentes.
@@ -262,13 +268,26 @@ export function HiringPosterPage() {
         nom,
         password: MOT_DE_PASSE,
         langue,
-        posts_par_jour: postsParJour,
+        type_compte: premierCompte,
+        posts_par_jour: premierCompte === "perso" ? postsParJour : undefined,
+        handle_tiktok: handleTiktok,
+        tiktok_email: cmEmail,
+        tiktok_password: cmPassword,
+        tiktok_2fa_note: cmDeuxFa,
       }),
     onSuccess: (r) => {
-      setCree({ email: r.email, persona: Boolean(r.compte?.persona) });
+      setCree({
+        email: r.email,
+        persona: Boolean(r.compte?.persona),
+        type: premierCompte,
+      });
       setPrenom("");
       setNom("");
       setPostsParJour(2);
+      setHandleTiktok("");
+      setCmEmail("");
+      setCmPassword("");
+      setCmDeuxFa("");
       queryClient.invalidateQueries({ queryKey: ["posters"] });
     },
   });
@@ -302,57 +321,41 @@ export function HiringPosterPage() {
               <Label htmlFor="nom">{t("posters.nom")}</Label>
               <Input id="nom" value={nom} onChange={(e) => setNom(e.target.value)} />
             </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="langue">{t("hiring.langue")}</Label>
-              <select
-                id="langue"
-                className={selectClass}
-                value={langue}
-                onChange={(e) => setLangue(e.target.value)}
-                required
-              >
-                {languesChoix.length === 0 && (
-                  <option value="">{t("hiring.aucuneLangue")}</option>
-                )}
-                {languesChoix.map((l) => (
-                  <option key={l} value={l}>
-                    {l.toUpperCase()}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">{t("hiring.langueAide")}</p>
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label>{t("hiring.postsParJour")}</Label>
-              <div className="inline-flex rounded-md border p-0.5">
-                {([1, 2, 3] as const).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setPostsParJour(n)}
-                    className={
-                      postsParJour === n
-                        ? "rounded px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground"
-                        : "rounded px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
-                    }
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">{t("hiring.postsParJourAide")}</p>
-            </div>
+            <ChampsPremierCompte
+              typeCompte={premierCompte}
+              onType={setPremierCompte}
+              langues={languesChoix}
+              langue={langue}
+              onLangue={setLangue}
+              postsParJour={postsParJour}
+              onPostsParJour={setPostsParJour}
+              handle={handleTiktok}
+              onHandle={setHandleTiktok}
+              email={cmEmail}
+              onEmail={setCmEmail}
+              password={cmPassword}
+              onPassword={setCmPassword}
+              deuxFa={cmDeuxFa}
+              onDeuxFa={setCmDeuxFa}
+            />
             <div className="sm:col-span-2 space-y-3">
-              <Button type="submit" disabled={creer.isPending || !langue}>
+              <Button
+                type="submit"
+                disabled={
+                  creer.isPending ||
+                  !langue ||
+                  (premierCompte === "cm" && (!cmEmail.trim() || !cmPassword))
+                }
+              >
                 {creer.isPending ? t("hiring.enCours") : t("hiring.create")}
               </Button>
-              {/* L'identité (pseudo + bio + avatar) se génère en ~10-12 s : une
-                  barre pour suivre l'attente, plutôt qu'un simple « en cours ». */}
-              <BarreChargement
-                actif={creer.isPending}
-                dureeMs={13_000}
-                label={t("hiring.progressIdentite")}
-              />
+              {premierCompte === "perso" && (
+                <BarreChargement
+                  actif={creer.isPending}
+                  dureeMs={13_000}
+                  label={t("hiring.progressIdentite")}
+                />
+              )}
               {creer.isError && (
                 <p className="mt-2 text-sm text-destructive">
                   {(creer.error as Error).message === "NO_FREE_REFERENCE"
@@ -380,10 +383,16 @@ export function HiringPosterPage() {
                 <span className="text-muted-foreground">{t("posters.password")} : </span>
                 <code className="rounded bg-muted px-1">{MOT_DE_PASSE}</code>
               </p>
-              <p className="pt-1 text-xs text-muted-foreground">
-                {cree.persona ? t("hiring.personaOk") : t("hiring.personaPlusTard")}
-              </p>
-              <p className="text-xs text-muted-foreground">{t("warmup.apresCreation")}</p>
+              {cree.type === "cm" ? (
+                <p className="pt-1 text-xs text-muted-foreground">{t("posters.creeCm")}</p>
+              ) : (
+                <>
+                  <p className="pt-1 text-xs text-muted-foreground">
+                    {cree.persona ? t("hiring.personaOk") : t("hiring.personaPlusTard")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{t("warmup.apresCreation")}</p>
+                </>
+              )}
             </div>
           )}
         </CardContent>
