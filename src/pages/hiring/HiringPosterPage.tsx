@@ -24,17 +24,15 @@ import {
   majCompte,
   supprimerPoster,
 } from "@/features/moteur/api";
-import { comptesCm, languesCmPrises } from "@/features/moteur/comptesCm";
-import { FormulaireCompteCm } from "@/features/moteur/FormulaireCompteCm";
-import { drapeauLangue } from "@/features/moteur/langues";
+import { ChampsPremierCompte, type PremierCompte } from "@/features/moteur/ChampsPremierCompte";
+import { comptePrincipal, estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
+import { FormulaireAjouterCompte } from "@/features/moteur/FormulaireCompteCm";
+import { EnteteCompte } from "@/features/moteur/VignetteCompte";
 import { WarmupBadge } from "@/features/moteur/WarmupBadge";
 import type { PosterProfil } from "@/features/moteur/types";
 
 /** Mot de passe commun à tous les posters (dicté de vive voix). */
 const MOT_DE_PASSE = "12345678";
-
-const selectClass =
-  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
 /**
  * Une ligne créateur côté HM : identité TikTok (avatar, @, nom, source, bio),
@@ -45,14 +43,32 @@ const selectClass =
 function LignePoster({ poster: p }: { poster: PosterProfil }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
+  const comptes = p.comptes ?? [];
+  const [compteId, setCompteId] = React.useState(
+    () => comptePrincipal(comptes)?.id ?? p.compte_id ?? "",
+  );
+  const compteActif = comptes.find((c) => c.id === compteId) ?? comptePrincipal(comptes);
   const [edite, setEdite] = React.useState(false);
-  const [nom, setNom] = React.useState(p.persona_nom ?? "");
-  const [handle, setHandle] = React.useState(p.handle_tiktok ?? "");
-  const [bio, setBio] = React.useState(p.persona_bio ?? "");
+  const [nom, setNom] = React.useState(compteActif?.persona_nom ?? p.persona_nom ?? "");
+  const [handle, setHandle] = React.useState(compteActif?.handle_tiktok ?? p.handle_tiktok ?? "");
+  const [bio, setBio] = React.useState(compteActif?.persona_bio ?? p.persona_bio ?? "");
+
+  React.useEffect(() => {
+    if (compteId && comptes.some((c) => c.id === compteId)) return;
+    setCompteId(comptePrincipal(comptes)?.id ?? p.compte_id ?? "");
+  }, [comptes, compteId, p.compte_id]);
+
+  React.useEffect(() => {
+    setNom(compteActif?.persona_nom ?? "");
+    setHandle(compteActif?.handle_tiktok ?? "");
+    setBio(compteActif?.persona_bio ?? "");
+    setEdite(false);
+  }, [compteActif?.id, compteActif?.persona_nom, compteActif?.handle_tiktok, compteActif?.persona_bio]);
 
   const enregistrer = useMutation({
     mutationFn: () =>
-      majCompte(p.compte_id!, {
+      majCompte(compteActif!.id, {
         persona_nom: nom.trim() || null,
         handle_tiktok: handle.trim().replace(/^@/, "") || null,
         persona_bio: bio.trim() || null,
@@ -68,152 +84,146 @@ function LignePoster({ poster: p }: { poster: PosterProfil }) {
   });
 
   return (
-    <div className="flex items-start gap-3 rounded-lg border p-3">
-      {p.avatar_url ? (
-        <img src={p.avatar_url} alt="" className="size-11 shrink-0 rounded-full border object-cover" />
-      ) : (
-        <div className="size-11 shrink-0 rounded-full border bg-muted" />
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium">
-            {[p.prenom, p.nom].filter(Boolean).join(" ") || p.email}
-          </span>
-          {!p.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
-          <WarmupBadge
-            compteId={p.compte_id}
-            startedAt={p.warmup_started_at}
-            endsAt={p.warmup_ends_at}
-          />
-          {!edite && (
-            <span className="ml-auto flex items-center gap-3">
-              {p.compte_id && (
-                <button
-                  type="button"
-                  onClick={() => setEdite(true)}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-primary"
-                >
-                  <Pencil className="size-3" />
-                  {t("common.edit")}
-                </button>
-              )}
-              <button
-                type="button"
-                disabled={supprimer.isPending}
-                onClick={() => {
-                  if (window.confirm(t("hiring.confirmSuppr", { nom: [p.prenom, p.nom].filter(Boolean).join(" ") || p.email })))
-                    supprimer.mutate();
-                }}
-                className="inline-flex items-center gap-1 text-xs font-medium text-destructive"
-              >
-                <Trash2 className="size-3" />
-                {t("common.delete")}
-              </button>
+    <div className="space-y-3 rounded-lg border p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">
+              {[p.prenom, p.nom].filter(Boolean).join(" ") || p.email}
             </span>
-          )}
+            {!p.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
+          </div>
+          <p className="truncate text-xs text-muted-foreground">{p.email}</p>
         </div>
-        <p className="truncate text-xs text-muted-foreground">{p.email}</p>
-
-        <div className="mt-1.5 space-y-1 border-t pt-1.5">
-          {edite ? (
-            <div className="space-y-2">
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label htmlFor={`nom-${p.id}`} className="text-xs">
-                    {t("comptes.nomAffiche")}
-                  </Label>
-                  <Input id={`nom-${p.id}`} value={nom} onChange={(e) => setNom(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor={`h-${p.id}`} className="text-xs">
-                    {t("comptes.pseudo")}
-                  </Label>
-                  <Input id={`h-${p.id}`} value={handle} onChange={(e) => setHandle(e.target.value)} />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor={`bio-${p.id}`} className="text-xs">
-                  {t("comptes.bioProposee")}
-                </Label>
-                <textarea
-                  id={`bio-${p.id}`}
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  rows={2}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" disabled={enregistrer.isPending} onClick={() => enregistrer.mutate()}>
-                  <Check className="size-4" />
-                  {enregistrer.isPending ? t("common.saving") : t("common.save")}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setEdite(false)}>
-                  <X className="size-4" />
-                  {t("common.cancel")}
-                </Button>
-              </div>
-              {enregistrer.isError && (
-                <p className="text-xs text-destructive">{(enregistrer.error as Error).message}</p>
-              )}
-            </div>
-          ) : p.handle_tiktok ? (
-            <>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-                <a
-                  href={`https://www.tiktok.com/@${p.handle_tiktok.replace(/^@/, "")}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-medium text-primary underline underline-offset-2"
-                >
-                  @{p.handle_tiktok.replace(/^@/, "")}
-                </a>
-                {p.persona_nom && <span className="text-muted-foreground">{p.persona_nom}</span>}
-              </div>
-              {p.persona_bio && (
-                <p className="whitespace-pre-wrap text-xs text-muted-foreground">{p.persona_bio}</p>
-              )}
-            </>
-          ) : (
-            <p className="text-xs text-muted-foreground">{t("hiring.identiteEnCours")}</p>
-          )}
-          <ComptesCmPoster poster={p} />
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] text-muted-foreground">
+            {t("posters.nbComptes", { n: comptes.length })}
+          </span>
+          <button
+            type="button"
+            disabled={supprimer.isPending}
+            onClick={() => {
+              if (window.confirm(t("hiring.confirmSuppr", { nom: [p.prenom, p.nom].filter(Boolean).join(" ") || p.email })))
+                supprimer.mutate();
+            }}
+            className="inline-flex items-center gap-1 text-xs font-medium text-destructive"
+          >
+            <Trash2 className="size-3" />
+            {t("common.delete")}
+          </button>
         </div>
       </div>
-    </div>
-  );
-}
 
-function ComptesCmPoster({ poster }: { poster: PosterProfil }) {
-  const { t } = useTranslation();
-  const cms = comptesCm(poster.comptes ?? []);
-  const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
-
-  return (
-    <div className="mt-2 space-y-2 border-t pt-2">
-      {cms.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {cms.map((c) => (
-            <Badge key={c.id} variant="outline">
-              {t("cm.badge")} · {drapeauLangue(c.langue)}
-              {c.handle_tiktok ? ` @${c.handle_tiktok}` : ""}
-            </Badge>
-          ))}
-        </div>
+      {comptes.length === 0 ? (
+        <p className="rounded-md border border-dashed px-2.5 py-2 text-xs text-muted-foreground">
+          {t("posters.aucunCompte")}
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {comptes.map((c) => {
+            const ouvert = compteActif?.id === c.id;
+            return (
+              <li
+                key={c.id}
+                className={
+                  ouvert
+                    ? "space-y-2 rounded-md border border-primary/40 bg-muted/20 p-2.5"
+                    : "space-y-2 rounded-md border p-2.5"
+                }
+              >
+                <div className="cursor-pointer" onClick={() => setCompteId(c.id)}>
+                  <EnteteCompte
+                    compact
+                    compte={c}
+                    extra={
+                      !estCompteCm(c) ? (
+                        <div className="mt-1">
+                          <WarmupBadge
+                            compteId={c.id}
+                            startedAt={c.warmup_started_at}
+                            endsAt={c.warmup_ends_at}
+                          />
+                        </div>
+                      ) : undefined
+                    }
+                  />
+                </div>
+                {ouvert && edite ? (
+                  <div className="space-y-2 border-t pt-2">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label htmlFor={`nom-${c.id}`} className="text-xs">
+                          {t("comptes.nomAffiche")}
+                        </Label>
+                        <Input id={`nom-${c.id}`} value={nom} onChange={(e) => setNom(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor={`h-${c.id}`} className="text-xs">
+                          {t("comptes.pseudo")}
+                        </Label>
+                        <Input id={`h-${c.id}`} value={handle} onChange={(e) => setHandle(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`bio-${c.id}`} className="text-xs">
+                        {t("comptes.bioProposee")}
+                      </Label>
+                      <textarea
+                        id={`bio-${c.id}`}
+                        value={bio}
+                        onChange={(e) => setBio(e.target.value)}
+                        rows={2}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" disabled={enregistrer.isPending} onClick={() => enregistrer.mutate()}>
+                        <Check className="size-4" />
+                        {enregistrer.isPending ? t("common.saving") : t("common.save")}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEdite(false)}>
+                        <X className="size-4" />
+                        {t("common.cancel")}
+                      </Button>
+                    </div>
+                    {enregistrer.isError && (
+                      <p className="text-xs text-destructive">{(enregistrer.error as Error).message}</p>
+                    )}
+                  </div>
+                ) : ouvert ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
+                    <p className="text-xs text-muted-foreground">
+                      {c.persona_bio ||
+                        (c.handle_tiktok ? "" : t("hiring.identiteEnCours"))}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setEdite(true)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-primary"
+                    >
+                      <Pencil className="size-3" />
+                      {t("common.edit")}
+                    </button>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
       )}
-      <FormulaireCompteCm
-        posterId={poster.id}
+
+      <FormulaireAjouterCompte
+        posterId={p.id}
         languesProposees={langues.data ?? []}
-        languesPrises={languesCmPrises(poster.comptes ?? [])}
+        languesPrisesCm={languesCmPrises(comptes)}
       />
     </div>
   );
 }
 
 /**
- * Écran unique du hiring manager : créer un poster. Il saisit prénom, nom et
- * choisit la LANGUE ; la persona (pseudo, bio, avatar)
- * sont générés automatiquement par l'IA côté serveur.
+ * Écran unique du hiring manager : créer un login créateur, puis le premier
+ * compte TikTok (perso = identité générée, ou CM = identifiants existants).
  */
 export function HiringPosterPage() {
   const { t } = useTranslation();
@@ -226,8 +236,17 @@ export function HiringPosterPage() {
   const [prenom, setPrenom] = React.useState("");
   const [nom, setNom] = React.useState("");
   const [langue, setLangue] = React.useState("");
+  const [premierCompte, setPremierCompte] = React.useState<PremierCompte>("perso");
   const [postsParJour, setPostsParJour] = React.useState<1 | 2 | 3>(2);
-  const [cree, setCree] = React.useState<{ email: string; persona: boolean } | null>(null);
+  const [handleTiktok, setHandleTiktok] = React.useState("");
+  const [cmEmail, setCmEmail] = React.useState("");
+  const [cmPassword, setCmPassword] = React.useState("");
+  const [cmDeuxFa, setCmDeuxFa] = React.useState("");
+  const [cree, setCree] = React.useState<{
+    email: string;
+    persona: boolean;
+    type: PremierCompte;
+  } | null>(null);
 
   // Langues gérées par le recruteur : un créateur = une langue, choisie à
   // chaque embauche. Plusieurs langues gérées → créateurs de langues différentes.
@@ -249,13 +268,26 @@ export function HiringPosterPage() {
         nom,
         password: MOT_DE_PASSE,
         langue,
-        posts_par_jour: postsParJour,
+        type_compte: premierCompte,
+        posts_par_jour: premierCompte === "perso" ? postsParJour : undefined,
+        handle_tiktok: handleTiktok,
+        tiktok_email: cmEmail,
+        tiktok_password: cmPassword,
+        tiktok_2fa_note: cmDeuxFa,
       }),
     onSuccess: (r) => {
-      setCree({ email: r.email, persona: Boolean(r.compte?.persona) });
+      setCree({
+        email: r.email,
+        persona: Boolean(r.compte?.persona),
+        type: premierCompte,
+      });
       setPrenom("");
       setNom("");
       setPostsParJour(2);
+      setHandleTiktok("");
+      setCmEmail("");
+      setCmPassword("");
+      setCmDeuxFa("");
       queryClient.invalidateQueries({ queryKey: ["posters"] });
     },
   });
@@ -289,57 +321,41 @@ export function HiringPosterPage() {
               <Label htmlFor="nom">{t("posters.nom")}</Label>
               <Input id="nom" value={nom} onChange={(e) => setNom(e.target.value)} />
             </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="langue">{t("hiring.langue")}</Label>
-              <select
-                id="langue"
-                className={selectClass}
-                value={langue}
-                onChange={(e) => setLangue(e.target.value)}
-                required
-              >
-                {languesChoix.length === 0 && (
-                  <option value="">{t("hiring.aucuneLangue")}</option>
-                )}
-                {languesChoix.map((l) => (
-                  <option key={l} value={l}>
-                    {l.toUpperCase()}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">{t("hiring.langueAide")}</p>
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label>{t("hiring.postsParJour")}</Label>
-              <div className="inline-flex rounded-md border p-0.5">
-                {([1, 2, 3] as const).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setPostsParJour(n)}
-                    className={
-                      postsParJour === n
-                        ? "rounded px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground"
-                        : "rounded px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
-                    }
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">{t("hiring.postsParJourAide")}</p>
-            </div>
+            <ChampsPremierCompte
+              typeCompte={premierCompte}
+              onType={setPremierCompte}
+              langues={languesChoix}
+              langue={langue}
+              onLangue={setLangue}
+              postsParJour={postsParJour}
+              onPostsParJour={setPostsParJour}
+              handle={handleTiktok}
+              onHandle={setHandleTiktok}
+              email={cmEmail}
+              onEmail={setCmEmail}
+              password={cmPassword}
+              onPassword={setCmPassword}
+              deuxFa={cmDeuxFa}
+              onDeuxFa={setCmDeuxFa}
+            />
             <div className="sm:col-span-2 space-y-3">
-              <Button type="submit" disabled={creer.isPending || !langue}>
+              <Button
+                type="submit"
+                disabled={
+                  creer.isPending ||
+                  !langue ||
+                  (premierCompte === "cm" && (!cmEmail.trim() || !cmPassword))
+                }
+              >
                 {creer.isPending ? t("hiring.enCours") : t("hiring.create")}
               </Button>
-              {/* L'identité (pseudo + bio + avatar) se génère en ~10-12 s : une
-                  barre pour suivre l'attente, plutôt qu'un simple « en cours ». */}
-              <BarreChargement
-                actif={creer.isPending}
-                dureeMs={13_000}
-                label={t("hiring.progressIdentite")}
-              />
+              {premierCompte === "perso" && (
+                <BarreChargement
+                  actif={creer.isPending}
+                  dureeMs={13_000}
+                  label={t("hiring.progressIdentite")}
+                />
+              )}
               {creer.isError && (
                 <p className="mt-2 text-sm text-destructive">
                   {(creer.error as Error).message === "NO_FREE_REFERENCE"
@@ -367,10 +383,16 @@ export function HiringPosterPage() {
                 <span className="text-muted-foreground">{t("posters.password")} : </span>
                 <code className="rounded bg-muted px-1">{MOT_DE_PASSE}</code>
               </p>
-              <p className="pt-1 text-xs text-muted-foreground">
-                {cree.persona ? t("hiring.personaOk") : t("hiring.personaPlusTard")}
-              </p>
-              <p className="text-xs text-muted-foreground">{t("warmup.apresCreation")}</p>
+              {cree.type === "cm" ? (
+                <p className="pt-1 text-xs text-muted-foreground">{t("posters.creeCm")}</p>
+              ) : (
+                <>
+                  <p className="pt-1 text-xs text-muted-foreground">
+                    {cree.persona ? t("hiring.personaOk") : t("hiring.personaPlusTard")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{t("warmup.apresCreation")}</p>
+                </>
+              )}
             </div>
           )}
         </CardContent>

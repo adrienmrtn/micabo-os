@@ -34,7 +34,7 @@ import {
   type LigneStatSlideshow,
   type StatsCompteSlideshows,
 } from "./statsSlideshowsCompte";
-import { comptePrincipal, normaliserTypeCompte } from "./comptesCm";
+import { comptePrincipal, normaliserTypeCompte, resoudrePremierCompte } from "./comptesCm";
 import { normaliserReglagesPapier } from "./papierReglages";
 import type { CompteIdentifiants, CompteResumePoster, TypeCompte } from "./types";
 
@@ -686,6 +686,39 @@ export async function majMonHandle(handle: string, compteId?: string): Promise<v
   if (error) throw error;
 }
 
+export function ajouterCompte(input: {
+  posterId: string;
+  type_compte: TypeCompte;
+  langue: string;
+  posts_par_jour?: number;
+  handle_tiktok?: string;
+  tiktok_email?: string;
+  tiktok_password?: string;
+  tiktok_2fa_note?: string;
+  notes_hm?: string;
+  persona_nom?: string;
+}) {
+  return invoke<{
+    ok: boolean;
+    compteId?: string;
+    compte?: { id: string; persona?: boolean };
+  }>("manage-users", {
+    action: "ajouter_compte",
+    userId: input.posterId,
+    type_compte: input.type_compte,
+    langue: input.langue,
+    ...(input.posts_par_jour != null
+      ? { posts_par_jour: normaliserPostsParJour(Number(input.posts_par_jour)) }
+      : {}),
+    handle_tiktok: input.handle_tiktok ?? "",
+    tiktok_email: input.tiktok_email ?? "",
+    tiktok_password: input.tiktok_password ?? "",
+    tiktok_2fa_note: input.tiktok_2fa_note ?? "",
+    notes_hm: input.notes_hm ?? "",
+    persona_nom: input.persona_nom ?? "",
+  });
+}
+
 export function ajouterCompteCm(input: {
   posterId: string;
   langue: string;
@@ -696,17 +729,7 @@ export function ajouterCompteCm(input: {
   handle_tiktok?: string;
   persona_nom?: string;
 }) {
-  return invoke<{ ok: boolean; compteId: string }>("manage-users", {
-    action: "ajouter_compte_cm",
-    userId: input.posterId,
-    langue: input.langue,
-    tiktok_email: input.tiktok_email,
-    tiktok_password: input.tiktok_password,
-    tiktok_2fa_note: input.tiktok_2fa_note ?? "",
-    notes_hm: input.notes_hm ?? "",
-    handle_tiktok: input.handle_tiktok ?? "",
-    persona_nom: input.persona_nom ?? "",
-  });
+  return ajouterCompte({ ...input, type_compte: "cm" });
 }
 
 export function majIdentifiantsCm(input: {
@@ -785,24 +808,42 @@ export function creerPoster(input: {
   nom: string;
   password: string;
   langue?: string;
+  /** perso (défaut si langue) | cm | aucun */
+  type_compte?: TypeCompte | "aucun";
   /** Quota d'assignation journalier (1–3). Défaut 2 côté Edge. */
   posts_par_jour?: number;
+  handle_tiktok?: string;
+  tiktok_email?: string;
+  tiktok_password?: string;
+  tiktok_2fa_note?: string;
 }) {
   return invoke<{
     userId: string;
     email: string;
+    type_compte?: TypeCompte | null;
     compte: {
       id: string;
+      type_compte?: string;
       reference: string | null;
       persona: boolean;
       labelId: string | null;
     } | null;
   }>("manage-users", {
     action: "create",
-    ...input,
+    prenom: input.prenom,
+    nom: input.nom,
+    password: input.password,
+    langue: resoudrePremierCompte(input.type_compte, input.langue) === "aucun"
+      ? ""
+      : (input.langue ?? ""),
+    type_compte: resoudrePremierCompte(input.type_compte, input.langue),
     ...(input.posts_par_jour != null
       ? { posts_par_jour: normaliserPostsParJour(Number(input.posts_par_jour)) }
       : {}),
+    handle_tiktok: input.handle_tiktok ?? "",
+    tiktok_email: input.tiktok_email ?? "",
+    tiktok_password: input.tiktok_password ?? "",
+    tiktok_2fa_note: input.tiktok_2fa_note ?? "",
   });
 }
 

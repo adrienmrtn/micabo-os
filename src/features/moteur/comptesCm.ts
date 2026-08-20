@@ -6,6 +6,22 @@ export function normaliserTypeCompte(valeur: unknown): TypeCompte {
   return valeur === "cm" ? "cm" : "perso";
 }
 
+/**
+ * Premier compte à la création d'un login.
+ * Un poster n'implique pas un perso : CM si demandé + langue, sinon aucun
+ * (login seul). Perso seulement si langue et type ≠ cm / aucun.
+ */
+export function resoudrePremierCompte(
+  type: string | undefined | null,
+  langue?: string | null,
+): TypeCompte | "aucun" {
+  const t = String(type ?? "").trim().toLowerCase();
+  if (t === "aucun" || t === "none") return "aucun";
+  if (!String(langue ?? "").trim()) return "aucun";
+  if (t === "cm") return "cm";
+  return "perso";
+}
+
 export function estCompteCm(compte: { type_compte?: string | null }): boolean {
   return normaliserTypeCompte(compte.type_compte) === "cm";
 }
@@ -40,6 +56,15 @@ export function languesDisponiblesPourCm(
 ): string[] {
   const occupees = new Set(prises);
   return proposees.filter((l) => !occupees.has(l));
+}
+
+/** Langues proposées à l'ajout d'un compte : CM = 1 max par langue, perso = toutes. */
+export function languesPourNouveauCompte(
+  type: TypeCompte,
+  proposees: string[],
+  prisesCm: string[],
+): string[] {
+  return type === "cm" ? languesDisponiblesPourCm(proposees, prisesCm) : proposees;
 }
 
 export function cleCompteActif(userId: string): string {

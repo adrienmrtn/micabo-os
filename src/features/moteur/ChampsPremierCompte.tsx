@@ -1,0 +1,171 @@
+import { useTranslation } from "react-i18next";
+
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { nomLangue } from "@/features/moteur/langues";
+import type { TypeCompte } from "@/features/moteur/types";
+
+const selectClass =
+  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
+export type PremierCompte = TypeCompte | "aucun";
+
+export function ChampsPremierCompte({
+  allowAucun,
+  typeCompte,
+  onType,
+  langues,
+  langue,
+  onLangue,
+  postsParJour,
+  onPostsParJour,
+  handle,
+  onHandle,
+  email,
+  onEmail,
+  password,
+  onPassword,
+  deuxFa,
+  onDeuxFa,
+}: {
+  allowAucun?: boolean;
+  typeCompte: PremierCompte;
+  onType: (type: PremierCompte) => void;
+  langues: string[];
+  langue: string;
+  onLangue: (langue: string) => void;
+  postsParJour?: 1 | 2 | 3;
+  onPostsParJour?: (n: 1 | 2 | 3) => void;
+  handle: string;
+  onHandle: (v: string) => void;
+  email: string;
+  onEmail: (v: string) => void;
+  password: string;
+  onPassword: (v: string) => void;
+  deuxFa: string;
+  onDeuxFa: (v: string) => void;
+}) {
+  const { t } = useTranslation();
+  const types: PremierCompte[] = allowAucun ? ["perso", "cm", "aucun"] : ["perso", "cm"];
+
+  return (
+    <div className="space-y-3 sm:col-span-2">
+      <div className="space-y-1.5">
+        <Label>{t("posters.premierCompte")}</Label>
+        <div className="inline-flex flex-wrap rounded-md border p-0.5">
+          {types.map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => onType(type)}
+              className={
+                typeCompte === type
+                  ? "rounded px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground"
+                  : "rounded px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+              }
+            >
+              {type === "cm"
+                ? t("cm.badge")
+                : type === "aucun"
+                  ? t("posters.premierCompteAucun")
+                  : t("cm.perso")}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {typeCompte === "cm"
+            ? t("cm.ajouterAide")
+            : typeCompte === "aucun"
+              ? t("posters.premierCompteAucunAide")
+              : t("cm.ajouterPersoAide")}
+        </p>
+      </div>
+
+      {typeCompte !== "aucun" && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <Label htmlFor="premier-langue">{t("cm.langueCompte")}</Label>
+            <select
+              id="premier-langue"
+              className={selectClass}
+              value={langue}
+              onChange={(e) => onLangue(e.target.value)}
+              required
+            >
+              {langues.length === 0 && <option value="">{t("hiring.aucuneLangue")}</option>}
+              {langues.map((l) => (
+                <option key={l} value={l}>
+                  {nomLangue(l)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="premier-handle">{t("comptes.pseudo")}</Label>
+            <Input
+              id="premier-handle"
+              value={handle}
+              placeholder="pseudo.tiktok"
+              onChange={(e) => onHandle(e.target.value)}
+            />
+          </div>
+          {typeCompte === "perso" && onPostsParJour && postsParJour != null && (
+            <div className="space-y-1 sm:col-span-2">
+              <Label>{t("hiring.postsParJour")}</Label>
+              <div className="inline-flex rounded-md border p-0.5">
+                {([1, 2, 3] as const).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => onPostsParJour(n)}
+                    className={
+                      postsParJour === n
+                        ? "rounded px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground"
+                        : "rounded px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+                    }
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {typeCompte === "cm" && (
+            <>
+              <div className="space-y-1">
+                <Label htmlFor="premier-email">{t("cm.email")}</Label>
+                <Input
+                  id="premier-email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => onEmail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="premier-pass">{t("cm.password")}</Label>
+                <Input
+                  id="premier-pass"
+                  type="text"
+                  required
+                  autoComplete="off"
+                  value={password}
+                  onChange={(e) => onPassword(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label htmlFor="premier-2fa">{t("cm.deuxFa")}</Label>
+                <Input
+                  id="premier-2fa"
+                  value={deuxFa}
+                  placeholder={t("cm.deuxFaPh")}
+                  onChange={(e) => onDeuxFa(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

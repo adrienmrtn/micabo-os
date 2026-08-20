@@ -904,10 +904,17 @@ export const fr = {
     cm: {
       badge: "CM",
       ajouter: "Ajouter un compte CM",
+      ajouterCompte: "Ajouter un compte",
+      ajouterCompteAide:
+        "Un créateur = un login. Tu peux lui rattacher plusieurs comptes TikTok : perso (publication) ou CM (boîte).",
+      ajouterPersoAide:
+        "Compte TikTok du créateur — labels, warmup et assignation slideshow, comme le premier compte.",
       ajouterAide:
         "Compte TikTok de la boîte, une langue. Les identifiants doivent déjà exister — tu les donnes au créateur.",
       creer: "Créer le compte CM",
+      creerCompte: "Créer le compte",
       langue: "Langue du compte CM",
+      langueCompte: "Langue du compte",
       email: "Email TikTok",
       password: "Mot de passe TikTok",
       deuxFa: "2FA / codes de secours",
@@ -932,11 +939,12 @@ export const fr = {
     },
     posters: {
       title: "Posters",
-      subtitle: "Créateurs et recruteurs.",
-      creerPosterDesc: "Crée un accès créateur (email généré + mot de passe).",
+      subtitle: "Créateurs (logins) et leurs comptes TikTok.",
+      creerPosterDesc:
+        "Crée un login créateur. Le premier compte TikTok peut être perso, CM, ou aucun (à ajouter plus tard).",
       aideTitre: "Aide",
       aideAcces:
-        "Crée les accès de tes freelances. Identifiants : email généré + mot de passe affiché à la création.",
+        "Un créateur = un login. Il peut avoir plusieurs comptes TikTok (perso ou CM). Identifiants : email généré + mot de passe affiché à la création.",
       prenom: "Prénom",
       nom: "Nom",
       emailGenere: "Email généré",
@@ -958,8 +966,18 @@ export const fr = {
       creationRefusee: "Création refusée pour cette langue — réessaie ou contacte un admin.",
       gererCompte: "Gérer le compte",
       gererComptes: "Comptes TikTok",
-      creerCompte: "Créer le compte de publication",
-      sansCompteCree: "Ce poster n'a pas encore de compte de publication.",
+      ficheComptes: "Comptes TikTok",
+      premierCompte: "Premier compte",
+      premierCompteAucun: "Aucun pour l’instant",
+      premierCompteAucunAide:
+        "Crée seulement le login créateur. Tu pourras ajouter un perso ou un CM plus tard.",
+      creeCm: "Créateur créé avec un compte CM. Les identifiants TikTok sont enregistrés.",
+      creeAucun: "Login créateur créé, sans compte TikTok. Ajoute un perso ou un CM depuis la fiche.",
+      nbComptes: "{{n}} compte(s)",
+      aucunCompte: "Aucun compte TikTok",
+      compteSansHandle: "Pas encore de @",
+      creerCompte: "Créer le premier compte",
+      sansCompteCree: "Ce créateur n'a pas encore de compte TikTok.",
       labelsAide:
         "Sans label sur un créateur, minuit n’assigne rien (intersection labels créateur ∩ contenus).",
       sansLabels: "Sans labels",
@@ -1024,7 +1042,7 @@ export const fr = {
     hiring: {
       title: "Créer un poster",
       subtitle:
-        "Saisis le prénom, le nom et la langue de ce créateur. Tu peux en créer dans plusieurs langues. L’identité TikTok est générée automatiquement.",
+        "Un créateur = un login. Choisis le premier compte : perso (publication, warmup) ou CM (boîte, identifiants déjà existants).",
       subtitleUgcAiVideo:
         "Mode UGC AI VIDEO : chaque créateur reçoit la marque UGC AI VIDEO, tes labels UGC VIDEO, et un persona unique.",
       langue: "Langue du poster",

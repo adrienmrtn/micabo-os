@@ -7,7 +7,9 @@ import {
   estCompteCm,
   languesCmPrises,
   languesDisponiblesPourCm,
+  languesPourNouveauCompte,
   normaliserTypeCompte,
+  resoudrePremierCompte,
 } from "./comptesCm";
 
 const persoFr = { id: "a", type_compte: "perso" as const, langue: "fr" };
@@ -25,6 +27,16 @@ describe("type_compte", () => {
     expect(estCompteCm(cmDe)).toBe(true);
     expect(estCompteCm(persoFr)).toBe(false);
     expect(estCompteCm({})).toBe(false);
+  });
+
+  it("à la création, un poster n'implique pas un perso", () => {
+    expect(resoudrePremierCompte(undefined, "fr")).toBe("perso");
+    expect(resoudrePremierCompte("perso", "fr")).toBe("perso");
+    expect(resoudrePremierCompte("cm", "de")).toBe("cm");
+    expect(resoudrePremierCompte("aucun", "fr")).toBe("aucun");
+    expect(resoudrePremierCompte("none", "en")).toBe("aucun");
+    expect(resoudrePremierCompte("cm", "")).toBe("aucun");
+    expect(resoudrePremierCompte(undefined, "")).toBe("aucun");
   });
 });
 
@@ -46,5 +58,10 @@ describe("langues CM", () => {
   it("liste les langues déjà prises et celles encore libres", () => {
     expect(languesCmPrises([persoFr, cmDe, cmEs])).toEqual(["de", "es"]);
     expect(languesDisponiblesPourCm(["fr", "de", "it"], ["de"])).toEqual(["fr", "it"]);
+  });
+
+  it("à l'ajout, un perso reste libre dans une langue déjà CM", () => {
+    expect(languesPourNouveauCompte("perso", ["fr", "de"], ["de"])).toEqual(["fr", "de"]);
+    expect(languesPourNouveauCompte("cm", ["fr", "de"], ["de"])).toEqual(["fr"]);
   });
 });

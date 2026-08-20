@@ -903,10 +903,17 @@ export const en = {
     cm: {
       badge: "CM",
       ajouter: "Add a CM account",
+      ajouterCompte: "Add an account",
+      ajouterCompteAide:
+        "One creator = one login. You can attach several TikTok accounts: personal (publishing) or CM (company).",
+      ajouterPersoAide:
+        "Creator TikTok account — labels, warmup and slideshow assignment, same as the first account.",
       ajouterAide:
         "Company TikTok account, one language. Credentials must already exist — you hand them to the creator.",
       creer: "Create CM account",
+      creerCompte: "Create account",
       langue: "CM account language",
+      langueCompte: "Account language",
       email: "TikTok email",
       password: "TikTok password",
       deuxFa: "2FA / backup codes",
@@ -931,11 +938,12 @@ export const en = {
     },
     posters: {
       title: "Posters",
-      subtitle: "Creators and recruiters.",
-      creerPosterDesc: "Create a creator login (generated email + password).",
+      subtitle: "Creators (logins) and their TikTok accounts.",
+      creerPosterDesc:
+        "Create a creator login. The first TikTok account can be personal, CM, or none (add later).",
       aideTitre: "Help",
       aideAcces:
-        "Create access for your freelancers. Credentials: generated email + password shown on creation.",
+        "One creator = one login. They can have several TikTok accounts (personal or CM). Credentials: generated email + password shown on creation.",
       prenom: "First name",
       nom: "Last name",
       emailGenere: "Generated email",
@@ -957,8 +965,18 @@ export const en = {
       creationRefusee: "Creation refused for this language — try again or contact an admin.",
       gererCompte: "Manage account",
       gererComptes: "TikTok accounts",
-      creerCompte: "Create the publishing account",
-      sansCompteCree: "This poster doesn't have a publishing account yet.",
+      ficheComptes: "TikTok accounts",
+      premierCompte: "First account",
+      premierCompteAucun: "None for now",
+      premierCompteAucunAide:
+        "Creates the creator login only. You can add a personal or CM account later.",
+      creeCm: "Creator created with a CM account. TikTok credentials are saved.",
+      creeAucun: "Creator login created, no TikTok account yet. Add a personal or CM account from the profile.",
+      nbComptes: "{{n}} account(s)",
+      aucunCompte: "No TikTok account",
+      compteSansHandle: "No @ yet",
+      creerCompte: "Create the first account",
+      sansCompteCree: "This creator has no TikTok account yet.",
       labelsAide:
         "Without a label on a creator, midnight assigns nothing (creator ∩ content label intersection).",
       sansLabels: "No labels",
@@ -1022,7 +1040,7 @@ export const en = {
     hiring: {
       title: "Create a poster",
       subtitle:
-        "Enter the first name, last name and this creator’s language. You can hire across several languages. The TikTok identity is generated automatically.",
+        "One creator = one login. Choose the first account: personal (publishing, warmup) or CM (company, existing credentials).",
       subtitleUgcAiVideo:
         "UGC AI VIDEO mode: each creator gets the UGC AI VIDEO mark, your UGC VIDEO labels, and a unique persona.",
       langue: "Poster's language",

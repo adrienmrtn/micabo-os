@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Check, HelpCircle, Plus, UserPlus, UserSquare, X } from "lucide-react";
+import { Check, HelpCircle, Plus, UserPlus, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,8 +19,10 @@ import { badgeManager, estRoleManager, useAuth } from "@/features/auth/AuthConte
 import { CompteursPhases, ListeCreateursSuivi } from "@/features/hiring/SuiviCreateurs";
 import { equipesParDm, hmsDuDm, hmsSansDm, nomProfil, resumeHm } from "@/features/hiring/suiviEquipe";
 import { CompteEditor, PostsParJourCompte } from "@/features/moteur/CompteEditor";
-import { comptePerso, comptesCm, estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
-import { FormulaireCompteCm } from "@/features/moteur/FormulaireCompteCm";
+import { estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
+import { ChampsPremierCompte, type PremierCompte } from "@/features/moteur/ChampsPremierCompte";
+import { FormulaireAjouterCompte } from "@/features/moteur/FormulaireCompteCm";
+import { EnteteCompte } from "@/features/moteur/VignetteCompte";
 import {
   assurerComptePoster,
   creerPoster,
@@ -60,19 +62,6 @@ const MOT_DE_PASSE_INITIAL = "12345678";
 
 function nomAffiche(p: PosterProfil): string {
   return [p.prenom, p.nom].filter(Boolean).join(" ") || p.email || "—";
-}
-
-/** Handle TikTok normalisé (`@foo`) + URL profil, ou null si absent. */
-function lienTikTokHandle(handle: string | null | undefined): {
-  at: string;
-  url: string;
-} | null {
-  const raw = (handle ?? "").trim().replace(/^@+/, "");
-  if (!raw) return null;
-  return {
-    at: `@${raw}`,
-    url: `https://www.tiktok.com/@${raw}`,
-  };
 }
 
 /** Petits drapeaux en haut à droite des cartes grille (aperçu rapide des langues). */
@@ -125,10 +114,12 @@ function AidePosters() {
 function ModalFiche({
   titre,
   onClose,
+  large,
   children,
 }: {
   titre: string;
   onClose: () => void;
+  large?: boolean;
   children: React.ReactNode;
 }) {
   React.useEffect(() => {
@@ -145,7 +136,11 @@ function ModalFiche({
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border bg-card p-5 shadow-lifted"
+        className={
+          large
+            ? "max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg border bg-card p-5 shadow-lifted"
+            : "max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border bg-card p-5 shadow-lifted"
+        }
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
@@ -171,20 +166,8 @@ function CreateurUpwork({
   const { t } = useTranslation();
   const [edit, setEdit] = React.useState(false);
   const [url, setUrl] = React.useState(poster.upwork_url ?? "");
-  const tiktok = lienTikTokHandle(poster.handle_tiktok);
-
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-      {tiktok && (
-        <a
-          href={tiktok.url}
-          target="_blank"
-          rel="noreferrer"
-          className="underline underline-offset-2"
-        >
-          {tiktok.at}
-        </a>
-      )}
       {!edit && poster.upwork_url && (
         <a
           href={poster.upwork_url}
@@ -451,7 +434,6 @@ export function AdminPostersPage() {
 
   const [ficheId, setFicheId] = React.useState<string | null>(null);
   const [ficheCompteId, setFicheCompteId] = React.useState<string | null>(null);
-  const [gererCompteOuvert, setGererCompteOuvert] = React.useState(false);
 
   const creerCompteVide = useMutation({
     mutationFn: (p: PosterProfil) =>
@@ -472,17 +454,44 @@ export function AdminPostersPage() {
   const [prenom, setPrenom] = React.useState("");
   const [nom, setNom] = React.useState("");
   const [langue, setLangue] = React.useState("");
+  const [premierCompte, setPremierCompte] = React.useState<PremierCompte>("perso");
+  const [postsParJour, setPostsParJour] = React.useState<1 | 2 | 3>(2);
+  const [handleTiktok, setHandleTiktok] = React.useState("");
+  const [cmEmail, setCmEmail] = React.useState("");
+  const [cmPassword, setCmPassword] = React.useState("");
+  const [cmDeuxFa, setCmDeuxFa] = React.useState("");
   const [password, setPassword] = React.useState(MOT_DE_PASSE_INITIAL);
-  const [cree, setCree] = React.useState<{ email: string; password: string } | null>(null);
+  const [cree, setCree] = React.useState<{
+    email: string;
+    password: string;
+    type: PremierCompte;
+  } | null>(null);
 
   const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["posters"] });
 
   const creer = useMutation({
-    mutationFn: () => creerPoster({ prenom, nom, password, langue: langue || undefined }),
+    mutationFn: () =>
+      creerPoster({
+        prenom,
+        nom,
+        password,
+        langue: premierCompte === "aucun" ? undefined : langue || undefined,
+        type_compte: premierCompte,
+        posts_par_jour: premierCompte === "perso" ? postsParJour : undefined,
+        handle_tiktok: handleTiktok,
+        tiktok_email: cmEmail,
+        tiktok_password: cmPassword,
+        tiktok_2fa_note: cmDeuxFa,
+      }),
     onSuccess: (r) => {
-      setCree({ email: r.email, password });
+      setCree({ email: r.email, password, type: premierCompte });
       setPrenom("");
       setNom("");
+      setHandleTiktok("");
+      setCmEmail("");
+      setCmPassword("");
+      setCmDeuxFa("");
+      setPostsParJour(2);
       setPassword(MOT_DE_PASSE_INITIAL);
       rafraichir();
       void queryClient.invalidateQueries({ queryKey: ["comptes"] });
@@ -569,10 +578,9 @@ export function AdminPostersPage() {
     onSuccess: rafraichir,
   });
 
-  const ouvrirFiche = (id: string) => {
+  const ouvrirFiche = (id: string, compteId?: string) => {
     setFicheId(id);
-    setFicheCompteId(null);
-    setGererCompteOuvert(false);
+    setFicheCompteId(compteId ?? comptesParPoster.get(id)?.[0]?.id ?? null);
     setPromoId(null);
     setPromoLangues([]);
   };
@@ -608,23 +616,27 @@ export function AdminPostersPage() {
             <Label htmlFor="nom">{t("posters.nom")}</Label>
             <Input id="nom" value={nom} onChange={(e) => setNom(e.target.value)} />
           </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="langue">{t("hiring.langue")}</Label>
-            <select
-              id="langue"
-              className={selectClass}
-              value={langue}
-              onChange={(e) => setLangue(e.target.value)}
-            >
-              <option value="">{t("posters.sansCompte")}</option>
-              {langues.data?.map((l) => (
-                <option key={l} value={l}>
-                  {nomLangue(l)}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-muted-foreground">{t("posters.langueAide")}</p>
-          </div>
+          <ChampsPremierCompte
+            allowAucun
+            typeCompte={premierCompte}
+            onType={(type) => {
+              setPremierCompte(type);
+              if (type !== "aucun" && !langue) setLangue(langues.data?.[0] ?? "");
+            }}
+            langues={langues.data ?? []}
+            langue={langue}
+            onLangue={setLangue}
+            postsParJour={postsParJour}
+            onPostsParJour={setPostsParJour}
+            handle={handleTiktok}
+            onHandle={setHandleTiktok}
+            email={cmEmail}
+            onEmail={setCmEmail}
+            password={cmPassword}
+            onPassword={setCmPassword}
+            deuxFa={cmDeuxFa}
+            onDeuxFa={setCmDeuxFa}
+          />
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="mdp">{t("posters.password")}</Label>
             <div className="flex gap-2">
@@ -645,7 +657,14 @@ export function AdminPostersPage() {
             </div>
           </div>
           <div className="sm:col-span-2">
-            <Button type="submit" disabled={creer.isPending}>
+            <Button
+              type="submit"
+              disabled={
+                creer.isPending ||
+                (premierCompte !== "aucun" && !langue) ||
+                (premierCompte === "cm" && (!cmEmail.trim() || !cmPassword))
+              }
+            >
               {creer.isPending ? t("common.saving") : t("posters.create")}
             </Button>
             {creer.isError && (
@@ -676,7 +695,13 @@ export function AdminPostersPage() {
               <code className="rounded bg-muted px-1">{cree.password}</code>
             </p>
             <p className="pt-1 text-xs text-muted-foreground">{t("posters.transmit")}</p>
-            <p className="text-xs text-muted-foreground">{t("warmup.apresCreation")}</p>
+            <p className="text-xs text-muted-foreground">
+              {cree.type === "cm"
+                ? t("posters.creeCm")
+                : cree.type === "aucun"
+                  ? t("posters.creeAucun")
+                  : t("warmup.apresCreation")}
+            </p>
           </div>
         )}
       </CardContent>
@@ -945,10 +970,6 @@ export function AdminPostersPage() {
 
   const carteCreateur = (poster: PosterProfil) => {
     const liste = comptesParPoster.get(poster.id) ?? [];
-    const compte = comptePerso(liste);
-    const cms = comptesCm(liste);
-    // Préfère le handle du compte TikTok (source de vérité), sinon profil.
-    const tiktok = lienTikTokHandle(compte?.handle_tiktok ?? poster.handle_tiktok);
     return (
       <article
         key={poster.id}
@@ -961,45 +982,59 @@ export function AdminPostersPage() {
             ouvrirFiche(poster.id);
           }
         }}
-        className="flex h-full cursor-pointer flex-col gap-2.5 rounded-lg border bg-card p-4 text-left transition-colors hover:border-primary/40 hover:bg-muted/30"
+        className="flex h-full cursor-pointer flex-col gap-3 rounded-lg border bg-card p-4 text-left transition-colors hover:border-primary/40 hover:bg-muted/30"
       >
         <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold tracking-tight">{nomAffiche(poster)}</span>
-            {compte?.ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
-            {compte?.ugc_ai && !compte.ugc_ai_video && <BadgeUgc label="UGC" />}
-            {cms.map((c) => (
-              <Badge key={c.id} variant="outline">
-                {t("cm.badge")} · {drapeauLangue(c.langue)}
-              </Badge>
-            ))}
-            {!poster.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-semibold tracking-tight">{nomAffiche(poster)}</span>
+              {!poster.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
+            </div>
+            <p className="truncate text-[11px] text-muted-foreground">{poster.email}</p>
           </div>
-          <DrapeauxLangues codes={liste.map((c) => c.langue)} />
+          <span className="shrink-0 text-[11px] text-muted-foreground">
+            {t("posters.nbComptes", { n: liste.length })}
+          </span>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {poster.score != null && (
-            <span title={t("posters.eloCompteAide")}>
-              {t("posters.eloCompte", { score: Number(poster.score).toFixed(1) })}
-            </span>
-          )}
-          {tiktok && (
-            <a
-              href={tiktok.url}
-              target="_blank"
-              rel="noreferrer"
-              className="underline underline-offset-2"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {tiktok.at}
-            </a>
-          )}
-          <WarmupBadge
-            compteId={poster.compte_id}
-            startedAt={poster.warmup_started_at}
-            endsAt={poster.warmup_ends_at}
-          />
-        </div>
+        {liste.length === 0 ? (
+          <p className="rounded-md border border-dashed px-2.5 py-2 text-xs text-muted-foreground">
+            {t("posters.aucunCompte")}
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {liste.map((c) => (
+              <li
+                key={c.id}
+                className="rounded-md border bg-muted/30 px-2.5 py-2"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  ouvrirFiche(poster.id, c.id);
+                }}
+              >
+                <EnteteCompte
+                  compact
+                  compte={c}
+                  extra={
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                      {c.ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
+                      {c.ugc_ai && !c.ugc_ai_video && <BadgeUgc label="UGC" />}
+                      {c.score != null && (
+                        <span>{t("posters.eloCompte", { score: Number(c.score).toFixed(1) })}</span>
+                      )}
+                      {!estCompteCm(c) && (
+                        <WarmupBadge
+                          compteId={c.id}
+                          startedAt={c.warmup_started_at}
+                          endsAt={c.warmup_ends_at}
+                        />
+                      )}
+                    </div>
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        )}
       </article>
     );
   };
@@ -1116,10 +1151,7 @@ export function AdminPostersPage() {
 
   const fiche = ficheId ? tous.find((p) => p.id === ficheId) : null;
   const ficheComptes = fiche ? (comptesParPoster.get(fiche.id) ?? []) : [];
-  const ficheCompte =
-    ficheComptes.find((c) => c.id === ficheCompteId) ?? comptePerso(ficheComptes);
-  const ficheLabs =
-    ficheCompte && labelsComptes.data ? (labelsComptes.data.get(ficheCompte.id) ?? []) : [];
+  const ficheCompte = ficheComptes.find((c) => c.id === ficheCompteId);
   const ficheCreateurs =
     fiche && estRoleManager(fiche.role)
       ? tousCreateurs.filter((c) => c.manager_id === fiche.id)
@@ -1177,7 +1209,11 @@ export function AdminPostersPage() {
       {liste}
 
       {fiche && (
-        <ModalFiche titre={nomAffiche(fiche)} onClose={() => setFicheId(null)}>
+        <ModalFiche
+          titre={nomAffiche(fiche)}
+          large={fiche.role === "poster"}
+          onClose={() => setFicheId(null)}
+        >
           <p className="text-sm text-muted-foreground">{fiche.email}</p>
 
           {estRoleManager(fiche.role) && (
@@ -1360,27 +1396,7 @@ export function AdminPostersPage() {
           {fiche.role === "poster" && (
             <>
               <div className="flex flex-wrap items-center gap-2">
-                {ficheCompte?.ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
-                {ficheCompte?.ugc_ai && !ficheCompte.ugc_ai_video && <BadgeUgc label="UGC" />}
                 {!fiche.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
-                {fiche.score != null && (
-                  <Badge variant="secondary">
-                    {t("posters.eloCompte", { score: Number(fiche.score).toFixed(1) })}
-                  </Badge>
-                )}
-                {ficheCompte && !estCompteCm(ficheCompte) && (
-                  <WarmupBadge
-                    compteId={ficheCompte.id}
-                    startedAt={ficheCompte.warmup_started_at}
-                    endsAt={ficheCompte.warmup_ends_at}
-                    showStart
-                    startPending={warmupStart.isPending}
-                    onStart={() => warmupStart.mutate(ficheCompte.id)}
-                    showSkip
-                    skipPending={warmupSkip.isPending}
-                    onSkip={() => warmupSkip.mutate(ficheCompte.id)}
-                  />
-                )}
               </div>
 
               <CreateurUpwork
@@ -1388,57 +1404,103 @@ export function AdminPostersPage() {
                 onSave={(url) => enregistrerUpwork.mutate({ id: fiche.id, url })}
               />
 
-              {ficheComptes.length > 1 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {ficheComptes.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setFicheCompteId(c.id)}
-                      className={
-                        ficheCompte?.id === c.id
-                          ? "rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground"
-                          : "rounded-md border px-2 py-1 text-xs"
-                      }
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {t("posters.ficheComptes")}
+                  </p>
+                  <span className="text-[11px] text-muted-foreground">
+                    {t("posters.nbComptes", { n: ficheComptes.length })}
+                  </span>
+                </div>
+
+                {ficheComptes.length === 0 ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed p-3">
+                    <p className="text-sm text-muted-foreground">{t("posters.aucunCompte")}</p>
+                    <Button
+                      size="sm"
+                      disabled={creerCompteVide.isPending}
+                      onClick={() => creerCompteVide.mutate(fiche)}
                     >
-                      {estCompteCm(c) ? t("cm.badge") : t("cm.perso")} · {drapeauLangue(c.langue)}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {ficheCompte && !estCompteCm(ficheCompte) ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <LangueCompteSelect compte={ficheCompte} />
-                  <LabelsCompteSelect compteId={ficheCompte.id} actifs={ficheLabs} />
-                  <div className="sm:col-span-2">
-                    <PostsParJourCompte compte={ficheCompte} />
+                      {creerCompteVide.isPending ? t("common.saving") : t("posters.creerCompte")}
+                    </Button>
                   </div>
-                </div>
-              ) : !ficheCompte ? (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed p-3">
-                  <p className="text-sm text-muted-foreground">{t("posters.sansCompteCree")}</p>
-                  <Button
-                    size="sm"
-                    disabled={creerCompteVide.isPending}
-                    onClick={() => creerCompteVide.mutate(fiche)}
-                  >
-                    {creerCompteVide.isPending ? t("common.saving") : t("posters.creerCompte")}
-                  </Button>
-                </div>
-              ) : null}
+                ) : (
+                  <ul className="space-y-2">
+                    {ficheComptes.map((c) => {
+                      const ouvert = ficheCompte?.id === c.id;
+                      const labs = labelsComptes.data?.get(c.id) ?? [];
+                      return (
+                        <li
+                          key={c.id}
+                          className={
+                            ouvert
+                              ? "space-y-3 rounded-lg border border-primary/40 bg-muted/20 p-3"
+                              : "space-y-2 rounded-lg border p-3"
+                          }
+                        >
+                          <div
+                            className="cursor-pointer"
+                            onClick={() => setFicheCompteId(ouvert ? null : c.id)}
+                          >
+                            <EnteteCompte
+                              compte={c}
+                              extra={
+                                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                                  {c.ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
+                                  {c.ugc_ai && !c.ugc_ai_video && <BadgeUgc label="UGC" />}
+                                  {c.score != null && (
+                                    <Badge variant="secondary">
+                                      {t("posters.eloCompte", {
+                                        score: Number(c.score).toFixed(1),
+                                      })}
+                                    </Badge>
+                                  )}
+                                  {!estCompteCm(c) && (
+                                    <span onClick={(e) => e.stopPropagation()}>
+                                      <WarmupBadge
+                                        compteId={c.id}
+                                        startedAt={c.warmup_started_at}
+                                        endsAt={c.warmup_ends_at}
+                                        showStart={ouvert}
+                                        startPending={warmupStart.isPending}
+                                        onStart={() => warmupStart.mutate(c.id)}
+                                        showSkip={ouvert}
+                                        skipPending={warmupSkip.isPending}
+                                        onSkip={() => warmupSkip.mutate(c.id)}
+                                      />
+                                    </span>
+                                  )}
+                                </div>
+                              }
+                            />
+                          </div>
+                          {ouvert && (
+                            <div className="space-y-3 border-t pt-3">
+                              {!estCompteCm(c) && (
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <LangueCompteSelect compte={c} />
+                                  <LabelsCompteSelect compteId={c.id} actifs={labs} />
+                                  <div className="sm:col-span-2">
+                                    <PostsParJourCompte compte={c} />
+                                  </div>
+                                </div>
+                              )}
+                              <CompteEditor compte={c} />
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
 
-              <FormulaireCompteCm
-                posterId={fiche.id}
-                languesProposees={langues.data ?? []}
-                languesPrises={languesCmPrises(ficheComptes)}
-              />
-
-              {gererCompteOuvert && ficheCompte && (
-                <div className="rounded-md border p-3">
-                  <CompteEditor compte={ficheCompte} />
-                </div>
-              )}
+                <FormulaireAjouterCompte
+                  posterId={fiche.id}
+                  languesProposees={langues.data ?? []}
+                  languesPrisesCm={languesCmPrises(ficheComptes)}
+                />
+              </div>
 
               {promoId === fiche.id && (
                 <div className="space-y-2 rounded-md border p-3">
@@ -1524,16 +1586,6 @@ export function AdminPostersPage() {
                       }}
                     >
                       {t("hiring.promote")}
-                    </Button>
-                  )}
-                  {ficheCompte && (
-                    <Button
-                      size="sm"
-                      variant={gererCompteOuvert ? "default" : "outline"}
-                      onClick={() => setGererCompteOuvert((v) => !v)}
-                    >
-                      <UserSquare className="size-4" />
-                      {t("posters.gererCompte")}
                     </Button>
                   )}
                   <Button
