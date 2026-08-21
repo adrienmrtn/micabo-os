@@ -3,7 +3,7 @@ import {
   type SlideStructureManuel,
 } from "./creation_manuelle.ts";
 import { assurerDeckPourLangue } from "./import_contenu.ts";
-import { decouperEnLots } from "./oubli_source_cible.ts";
+import { LOT_IDS, lireParLots } from "./lots.ts";
 import { mapPool } from "./parallel.ts";
 import { serviceClient } from "./supabase.ts";
 import {
@@ -15,42 +15,7 @@ import {
  *  trop large → 429 ; trop petit → assignation lente. */
 const LARGEUR_ASSIGNATION = 6;
 
-/**
- * Taille de lot pour les `in(...)`.
- *
- * Les ids partent dans l'URL : à ~650 uuid PostgREST répond 400. Le 20/08,
- * `alpha_male` (965 slideshows), `smart_girl` (796) et `weird_alpha` (719)
- * dépassaient tous ce seuil. Les erreurs étant ignorées, le pool paraissait
- * vide, l'assignation ne créait rien et le quota des créateurs tombait à 0 :
- * plus la bibliothèque grossissait, moins il y avait de posts.
- */
-export const LOT_IDS = 100;
-
-interface ReponseLot<T> {
-  data: T[] | null;
-  error: { message: string } | null;
-}
-
-/**
- * `in(...)` découpé en lots, avec l'erreur remontée.
- *
- * Remonter compte autant que découper : une lecture qui échoue ne doit jamais
- * être confondue avec un pool vide, sinon on dégrade la config des créateurs
- * sur la foi d'une requête ratée.
- */
-export async function lireParLots<T>(
-  ids: string[],
-  quoi: string,
-  requete: (lot: string[]) => PromiseLike<ReponseLot<T>>,
-): Promise<T[]> {
-  const out: T[] = [];
-  for (const lot of decouperEnLots(ids, LOT_IDS)) {
-    const { data, error } = await requete(lot);
-    if (error) throw new Error(`${quoi} (${lot.length} id) : ${error.message}`);
-    if (data) out.push(...data);
-  }
-  return out;
-}
+export { LOT_IDS, lireParLots };
 
 /** Par invocation drain : assez petit pour finir avant timeout Edge / cron. */
 const DRAIN_BATCH = 8;

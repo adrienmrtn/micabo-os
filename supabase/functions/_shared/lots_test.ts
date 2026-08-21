@@ -1,13 +1,20 @@
-import { assertEquals, assertRejects } from "jsr:@std/assert@1";
+import { assertEquals, assertRejects, assertThrows } from "jsr:@std/assert@1";
 
-import { LOT_IDS, lireParLots } from "./assignation_contenu.ts";
+import { IN_MAX_VALEURS, LOT_IDS, decouperEnLots, lireParLots } from "./lots.ts";
+import { verifierTailleIn } from "./supabase.ts";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `id-${i}`);
 
-Deno.test("lireParLots — aucun lot ne dépasse la borne PostgREST", async () => {
-  // Régression 20/08 : `alpha_male` (965 slideshows) partait en un seul
-  // `in(...)`, PostgREST répondait 400 dès ~650 uuid, et l'erreur ignorée
-  // faisait passer un pool plein pour un pool vide.
+Deno.test("decouperEnLots — aucun lot ne dépasse la taille demandée", () => {
+  const lots = decouperEnLots(ids(965), LOT_IDS);
+  assertEquals(Math.max(...lots.map((l) => l.length)) <= LOT_IDS, true);
+  assertEquals(lots.flat().length, 965);
+});
+
+Deno.test("lireParLots — un label de 965 slideshows passe sous la borne", async () => {
+  // Régression 20-21/08 : `alpha_male` (965) partait en un seul `in(...)`,
+  // PostgREST répondait 400 dès ~650 uuid, et l'erreur ignorée faisait passer
+  // un pool plein pour un pool vide.
   const tailles: number[] = [];
   await lireParLots(ids(965), "test", (lot) => {
     tailles.push(lot.length);
@@ -49,4 +56,21 @@ Deno.test("lireParLots — liste vide : aucune requête", async () => {
   });
   assertEquals(appels, 0);
   assertEquals(out, []);
+});
+
+Deno.test("verifierTailleIn — laisse passer les listes bornées", () => {
+  verifierTailleIn("id", ids(IN_MAX_VALEURS));
+  verifierTailleIn("statut", ["pending", "running"]);
+  verifierTailleIn("id", []);
+});
+
+Deno.test("verifierTailleIn — lève avant que PostgREST ne réponde 400", () => {
+  // Le garde-fou du client : n'importe quel appelant du dépôt qui oublie de
+  // découper échoue bruyamment, au lieu de recevoir un silencieux « vide ».
+  const e = assertThrows(
+    () => verifierTailleIn("contenu_id", ids(IN_MAX_VALEURS + 1)),
+    Error,
+    "contenu_id",
+  );
+  assertEquals(e.message.includes("lireParLots"), true);
 });
