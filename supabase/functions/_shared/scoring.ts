@@ -1,3 +1,4 @@
+import { lireParLots } from "./lots.ts";
 import { serviceClient } from "./supabase.ts";
 
 export type Supabase = ReturnType<typeof serviceClient>;
@@ -107,13 +108,18 @@ export async function majScoresDepuisPassages(
   );
 
   // Tous les passages mesurés de ces contenus (recalcul complet)
-  const { data: tous, error: errTous } = await supabase
-    .from("passages")
-    .select("contenu_id, compte_id, langue, vues")
-    .in("contenu_id", contenuIds)
-    .eq("statut", "publie")
-    .not("vues", "is", null);
-  if (errTous) throw errTous;
+  const tous = await lireParLots<{
+    contenu_id: string;
+    compte_id: string;
+    langue: string;
+    vues: number | null;
+  }>(contenuIds, "Passages mesurés", (lot) =>
+    supabase
+      .from("passages")
+      .select("contenu_id, compte_id, langue, vues")
+      .in("contenu_id", lot)
+      .eq("statut", "publie")
+      .not("vues", "is", null));
 
   type Agg = { perfs: number[] };
   const parContenuLangue = new Map<string, Agg>();

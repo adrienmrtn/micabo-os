@@ -1,5 +1,50 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+import { IN_MAX_VALEURS } from "./lots.ts";
+
+/**
+ * Rend bruyant un `in(...)` trop long.
+ *
+ * Passé ~650 ids, PostgREST répond 400 parce que l'URL déborde. Un appelant
+ * qui ne relit pas `error` interprète alors « requête ratée » comme « aucun
+ * résultat » : le 20/08 un pool de 785 slideshows est passé pour vide et
+ * minuit a baissé 41 créateurs à 0 post/jour, sans une ligne de log.
+ *
+ * On lève donc AVANT PostgREST, au call site, avec le nom de la colonne. Le
+ * seuil est volontairement sous la casse réelle et très au-dessus des listes
+ * bornées (slides d'un post, comptes d'une langue…).
+ */
+export function verifierTailleIn(colonne: string, valeurs: unknown): void {
+  if (!Array.isArray(valeurs) || valeurs.length <= IN_MAX_VALEURS) return;
+  throw new Error(
+    `in("${colonne}", …) reçoit ${valeurs.length} valeurs (max ${IN_MAX_VALEURS}) : ` +
+      `l'URL PostgREST déborderait et la requête échouerait en 400. ` +
+      `Passe par lireParLots() de _shared/lots.ts.`,
+  );
+}
+
+/** Enveloppe un builder PostgREST pour contrôler la taille des `in(...)`. */
+function surveillerBuilder<T extends object>(builder: T): T {
+  return new Proxy(builder, {
+    get(cible, prop, recepteur) {
+      const valeur = Reflect.get(cible, prop, recepteur);
+      if (typeof valeur !== "function") return valeur;
+      // `then` doit rester lié au builder : c'est lui qui déclenche la requête.
+      if (prop === "then" || prop === "catch" || prop === "finally") {
+        return valeur.bind(cible);
+      }
+      return (...args: unknown[]) => {
+        if (prop === "in") verifierTailleIn(String(args[0]), args[1]);
+        const suite = valeur.apply(cible, args);
+        // Les filtres se chaînent : on garde l'œil sur le maillon suivant.
+        return suite && typeof suite === "object" && suite !== cible
+          ? surveillerBuilder(suite as object)
+          : suite;
+      };
+    },
+  });
+}
+
 /**
  * Client service_role : contourne la RLS. Réservé aux Edge Functions, qui sont
  * le seul endroit où le pipeline a le droit d'écrire dans les tables métier.
@@ -12,8 +57,17 @@ export function serviceClient() {
     throw new Error("SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manquant");
   }
 
-  return createClient(url, key, {
+  const client = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  return new Proxy(client, {
+    get(cible, prop, recepteur) {
+      const valeur = Reflect.get(cible, prop, recepteur);
+      if (prop !== "from" || typeof valeur !== "function") return valeur;
+      return (...args: unknown[]) =>
+        surveillerBuilder(valeur.apply(cible, args) as object);
+    },
   });
 }
 

@@ -3,6 +3,7 @@ import {
   translateSlideshow,
 } from "./gemini.ts";
 import { LANGUES_CIBLES, type SlideLangue } from "./import_contenu.ts";
+import { lireParLots } from "./lots.ts";
 import { chargerPrompt, serviceClient } from "./supabase.ts";
 
 export type Supabase = ReturnType<typeof serviceClient>;
@@ -167,17 +168,23 @@ async function visuelsAlternatifsLabel(
       .filter((id) => id !== parentId);
 
     if (autresContenus.length > 0) {
-      const { data: medias } = await supabase
-        .from("media_library")
-        .select("id, url, storage_path")
-        .in("contenu_id", autresContenus)
-        .eq("texte_restant", false)
-        .like("storage_path", "propre/%")
-        .order("used_count")
-        .limit(80);
-      poolIds = (medias ?? [])
-        .map((m) => m.id as string)
-        .filter((id) => !exclus.has(id));
+      const medias = await lireParLots<{ id: string }>(
+        autresContenus,
+        "Visuels propres des contenus frères",
+        (lot) =>
+          supabase
+            .from("media_library")
+            .select("id, url, storage_path")
+            .in("contenu_id", lot)
+            .eq("texte_restant", false)
+            .like("storage_path", "propre/%")
+            .order("used_count")
+            .limit(80),
+      );
+      poolIds = medias
+        .map((m) => m.id)
+        .filter((id) => !exclus.has(id))
+        .slice(0, 80);
     }
   }
 

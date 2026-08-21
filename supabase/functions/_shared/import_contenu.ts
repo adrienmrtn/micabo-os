@@ -41,6 +41,7 @@ import {
   normaliserCreateTime,
   urlsManquantes,
 } from "./import_nouveaux.ts";
+import { lireParLots } from "./lots.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
 
 export type Supabase = ReturnType<typeof serviceClient>;
@@ -2031,11 +2032,15 @@ export async function statsImportBatch(
   let contenusPending = 0;
   let contenusDone = 0;
   if (contenuIds.length > 0) {
-    const { data: contenus } = await supabase
-      .from("contenus")
-      .select("id, import_statut, statut, import_etape")
-      .in("id", contenuIds);
-    for (const c of contenus ?? []) {
+    // Un gros rattrapage enfile plusieurs centaines d'URLs dans un même batch.
+    const contenus = await lireParLots<
+      { id: string; import_statut: string; statut: string; import_etape: string | null }
+    >(contenuIds, "Stats du batch", (lot) =>
+      supabase
+        .from("contenus")
+        .select("id, import_statut, statut, import_etape")
+        .in("id", lot));
+    for (const c of contenus) {
       if (c.import_statut === "done" || c.import_etape === "elo_insuffisant") {
         contenusDone += 1;
       } else {
