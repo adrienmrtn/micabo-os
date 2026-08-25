@@ -235,7 +235,12 @@ async function choisirReaction(
     log("Aucun label sur le compte — impossible de matcher une reaction");
     return null;
   }
-  const { data, error } = await supabase
+  const { data: compteApp } = await supabase
+    .from("comptes")
+    .select("application_id")
+    .eq("id", compteId)
+    .maybeSingle();
+  let q = supabase
     .from("ugc_reactions")
     .select(
       "id, label_id, video_source_url, video_source_path, first_frame_reference_url, video_text, titre, statut",
@@ -245,6 +250,8 @@ async function choisirReaction(
     .not("video_source_url", "is", null)
     .not("first_frame_reference_url", "is", null)
     .order("created_at", { ascending: false });
+  if (compteApp?.application_id) q = q.eq("application_id", compteApp.application_id);
+  const { data, error } = await q;
   if (error) throw error;
   const pool = (data ?? []).filter(
     (r) =>
@@ -294,12 +301,20 @@ async function choisirUtilisation(
     return pool[Math.floor(Math.random() * pool.length)] ?? null;
   };
 
-  const { data, error } = await supabase
+  const { data: compteApp } = await supabase
+    .from("ugc_reactions")
+    .select("application_id")
+    .eq("label_id", labelId)
+    .limit(1)
+    .maybeSingle();
+  let q = supabase
     .from("ugc_utilisations")
     .select("id, video_url, titre, label_id")
     .eq("label_id", labelId)
     .not("video_url", "is", null)
     .order("created_at", { ascending: false });
+  if (compteApp?.application_id) q = q.eq("application_id", compteApp.application_id);
+  const { data, error } = await q;
   if (error) throw error;
   const match = pick(data ?? []);
   if (match) {
@@ -309,11 +324,13 @@ async function choisirUtilisation(
   log(`Aucune utilisation pour label=${labelId.slice(0, 8)}`);
   if (!opts.nImporteQuelLabel) return null;
 
-  const { data: toutes, error: errToutes } = await supabase
+  let qToutes = supabase
     .from("ugc_utilisations")
     .select("id, video_url, titre, label_id")
     .not("video_url", "is", null)
     .order("created_at", { ascending: false });
+  if (compteApp?.application_id) qToutes = qToutes.eq("application_id", compteApp.application_id);
+  const { data: toutes, error: errToutes } = await qToutes;
   if (errToutes) throw errToutes;
   const fallback = pick(toutes ?? []);
   if (!fallback) {
@@ -430,6 +447,7 @@ export async function assignerUgcVideoSlot(
     .from("ugc_video_posts")
     .insert({
       compte_id: compte.id,
+      application_id: (compte as { application_id?: string }).application_id ?? null,
       date_publication_prevue: jour,
       reaction_id: reaction.id,
       utilisation_id: utilisation.id,
@@ -859,7 +877,7 @@ export async function assignerTousComptesUgcVideo(
   let q = supabase
     .from("comptes")
     .select(
-      "id, langue, ugc_persona_id, persona_nom, handle_tiktok, posts_par_jour, warmup_ends_at, ugc_ai_video, is_active",
+      "id, langue, application_id, ugc_persona_id, persona_nom, handle_tiktok, posts_par_jour, warmup_ends_at, ugc_ai_video, is_active",
     );
   if (!libre) {
     q = q.eq("is_active", true).eq("ugc_ai_video", true);

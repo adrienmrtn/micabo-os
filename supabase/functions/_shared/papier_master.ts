@@ -208,7 +208,7 @@ async function sujetsRecents(supabase: Supabase): Promise<string[]> {
 
 export async function creerMasterBibliotheque(
   supabase: Supabase,
-  opts?: { topic?: string; date?: string; voice?: string },
+  opts?: { topic?: string; date?: string; voice?: string; applicationId?: string | null },
 ): Promise<PapierMasterRow> {
   const jour = opts?.date ?? aujourdhuiParis();
   const topic = opts?.topic?.trim() || null;
@@ -225,6 +225,7 @@ export async function creerMasterBibliotheque(
       statut: "queued",
       etape: "topic",
       progression: 0,
+      ...(opts?.applicationId ? { application_id: opts.applicationId } : {}),
     })
     .select("*")
     .single();
@@ -235,15 +236,16 @@ export async function creerMasterBibliotheque(
 /** Reprend le master en cours, sinon en crée un nouveau (bibliothèque). */
 export async function masterEnCoursOuNouveau(
   supabase: Supabase,
-  opts?: { date?: string; topic?: string; voice?: string },
+  opts?: { date?: string; topic?: string; voice?: string; applicationId?: string | null },
 ): Promise<PapierMasterRow> {
-  const { data: enCours, error } = await supabase
+  let q = supabase
     .from("papier_masters")
     .select("*")
     .not("statut", "in", "(ready,failed)")
     .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+  if (opts?.applicationId) q = q.eq("application_id", opts.applicationId);
+  const { data: enCours, error } = await q.maybeSingle();
   if (error) throw error;
   if (enCours) {
     const row = enCours as PapierMasterRow;

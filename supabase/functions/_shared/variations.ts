@@ -1,4 +1,9 @@
 import {
+  applicationParId,
+  clePromptPlacement,
+  placementParDefaut,
+} from "./applications.ts";
+import {
   integrateSophia,
   translateSlideshow,
 } from "./gemini.ts";
@@ -36,25 +41,6 @@ function scoreDepartVariation(scoreParent: number, prior: number): number {
   return Math.min(Math.max(cible, prior + 5), Math.max(prior, scoreParent - 5));
 }
 
-function sophiaParDefaut(langue: string): string {
-  const par: Record<string, string> = {
-    fr: "Envie d'en apprendre plus chaque jour ? L'appli Sophia t'apprend une culture générale de dingue en quelques minutes. Teste-la 👀",
-    en: "Want to learn something new every day? The Sophia app teaches you wild general knowledge in minutes. Give it a try 👀",
-    es: "¿Quieres aprender algo nuevo cada día? La app Sophia te enseña cultura general increíble en minutos. Pruébala 👀",
-    de: "Lust, jeden Tag etwas Neues zu lernen? Die Sophia-App bringt dir in wenigen Minuten richtig gutes Allgemeinwissen bei. Probier's aus 👀",
-    it: "Vuoi imparare qualcosa di nuovo ogni giorno? L'app Sophia ti insegna una cultura generale pazzesca in pochi minuti. Provala 👀",
-    pt: "Queres aprender algo novo todos os dias? A app Sophia ensina-te cultura geral incrível em poucos minutos. Experimenta 👀",
-    cs: "Chceš se každý den naučit něco nového? Aplikace Sophia tě naučí skvělé všeobecné znalosti za pár minut. Vyzkoušej ji 👀",
-    nl: "Wil je elke dag iets nieuws leren? De Sophia-app leert je in een paar minuten waanzinnige algemene kennis. Probeer het 👀",
-    el: "Θέλεις να μαθαίνεις κάτι νέο κάθε μέρα; Η εφαρμογή Sophia σου μαθαίνει απίστευτη γενική γνώση σε λίγα λεπτά. Δοκίμασέ την 👀",
-    hu: "Szeretnél minden nap valami újat tanulni? A Sophia app perceken belül vad általános műveltséget ad. Próbáld ki 👀",
-    pl: "Chcesz codziennie uczyć się czegoś nowego? Aplikacja Sophia uczy szalonej wiedzy ogólnej w kilka minut. Wypróbuj 👀",
-    ro: "Vrei să înveți ceva nou în fiecare zi? Aplicația Sophia te învață cultură generală tare în câteva minute. Încearc-o 👀",
-    sv: "Vill du lära dig något nytt varje dag? Sophia-appen lär dig galen allmänbildning på några minuter. Testa den 👀",
-    tr: "Her gün yeni bir şey öğrenmek ister misin? Sophia uygulaması dakikalar içinde efsane genel kültür öğretir. Dene 👀",
-  };
-  return par[langue] ?? par.en;
-}
 
 interface Candidat {
   contenuId: string;
@@ -64,6 +50,7 @@ interface Candidat {
   titre: string;
   profondeur: number;
   compte_reference_id: string | null;
+  application_id: string | null;
   structure_slides: Array<{
     position: number;
     media_id: string | null;
@@ -100,7 +87,7 @@ export async function trouverCandidatVariation(
     const { data: contenu } = await supabase
       .from("contenus")
       .select(
-        "id, titre, profondeur, compte_reference_id, structure_slides, musique_url, musique_titre, musique_plateforme, created_at, statut, import_statut, parent_id",
+        "id, titre, profondeur, compte_reference_id, application_id, structure_slides, musique_url, musique_titre, musique_plateforme, created_at, statut, import_statut, parent_id",
       )
       .eq("id", cl.contenu_id)
       .eq("statut", "valide")
@@ -131,6 +118,7 @@ export async function trouverCandidatVariation(
       titre: contenu.titre,
       profondeur: contenu.profondeur ?? 0,
       compte_reference_id: contenu.compte_reference_id,
+      application_id: (contenu as { application_id?: string | null }).application_id ?? null,
       structure_slides: contenu.structure_slides ?? [],
       slides,
       musique_url: contenu.musique_url,
@@ -287,8 +275,10 @@ export async function creerVariation(
     .order("created_at", { ascending: false })
     .limit(40);
 
+  const appVar = await applicationParId(supabase, candidat.application_id);
+  const slugApp = appVar?.slug ?? "sophia";
   const placement = await integrateSophia({
-    masterPrompt: (await chargerPrompt(supabase, "placement_sophia")) ?? "",
+    masterPrompt: (await chargerPrompt(supabase, clePromptPlacement(slugApp))) ?? "",
     corrections: (corrections ?? []).map((c) => ({
       original_text: c.texte_origine,
       corrected_text: c.texte_corrige,
@@ -296,6 +286,7 @@ export async function creerVariation(
     slides: deck.map((s) => ({ position: s.position, text: s.texte_overlay ?? "" })),
     caption: candidat.titre,
     langue: candidat.langue,
+    marque: slugApp,
   });
 
   if (placement) {
@@ -310,7 +301,7 @@ export async function creerVariation(
   } else {
     const derniere = deck[deck.length - 1];
     if (derniere) {
-      derniere.texte_overlay = sophiaParDefaut(candidat.langue);
+      derniere.texte_overlay = placementParDefaut(candidat.langue, slugApp);
       derniere.position_sophia = true;
     }
   }
@@ -323,6 +314,7 @@ export async function creerVariation(
       titre: `${candidat.titre} (var. ${candidat.langue})`.slice(0, 160),
       structure_slides: structure,
       compte_reference_id: candidat.compte_reference_id,
+      application_id: candidat.application_id,
       langue_source: candidat.langue,
       musique_url: candidat.musique_url,
       musique_titre: candidat.musique_titre,

@@ -145,6 +145,7 @@ Deno.serve(async (request) => {
         labelIds: Array.isArray(body.labelIds) ? body.labelIds : [],
         batchId: body.batchId ? String(body.batchId) : null,
         langue: typeof body.langue === "string" ? body.langue : null,
+        applicationId: typeof body.application_id === "string" ? body.application_id : null,
       });
       kickWorkers(request, Math.min(AMORCE_WORKERS, Math.max(1, r.enqueued)));
       return json({ ok: true, ...r });
@@ -172,6 +173,7 @@ Deno.serve(async (request) => {
           body.compteReferenceId ?? null,
           Array.isArray(body.labelIds) ? body.labelIds : null,
           langue,
+          typeof body.application_id === "string" ? body.application_id : null,
         );
         const contenu = await prochainContenu(supabase, cree.id);
         if (!contenu) {
@@ -193,6 +195,7 @@ Deno.serve(async (request) => {
         compteReferenceId: body.compteReferenceId ?? null,
         labelIds: Array.isArray(body.labelIds) ? body.labelIds : [],
         langue,
+        applicationId: typeof body.application_id === "string" ? body.application_id : null,
       });
       if (r.invalides.length > 0) {
         return json(

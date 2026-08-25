@@ -354,6 +354,14 @@ Réponds uniquement en JSON, sans bloc de code :
  * Note la pertinence d'un slideshow pour une pub Sophia (app de culture
  * générale). Évite de payer nettoyage et traduction sur un contenu inutilisable.
  */
+export const DEFAULT_RELEVANCE_PROMPT_MICABO = `micabo est une application d'éducation IA pour les étudiants : tu déposes tes cours, tes notes ou un PDF, et micabo génère automatiquement les flashcards, puis te fait réviser au bon moment.
+
+Note de 0 à 100 la pertinence de ce slideshow pour y glisser naturellement un conseil menant à micabo.
+
+Notes hautes (70-100) : conseils d'études, révisions, rentrée, examens, SAT, langues, flashcards, prise de notes, mémoire, organisation scolaire, devenir premier de sa classe.
+
+Notes basses (0-39) : fitness, beauté, séduction, argent, ou tout sujet où une appli de flashcards pour étudiants sonnerait plaquée.`;
+
 export const DEFAULT_RELEVANCE_PROMPT = `Sophia est une application de culture
 générale : elle aide à apprendre, à enrichir ses connaissances et à devenir
 plus cultivé.
@@ -421,8 +429,10 @@ export async function integrateSophia(input: {
   corrections: Array<{ original_text: string | null; corrected_text: string }>;
   slides: Array<{ position: number; text: string }>;
   caption: string;
-  /** Langue du compte : la slide Sophia doit parler comme ses voisines. */
+  /** Langue du compte : la slide de placement doit parler comme ses voisines. */
   langue?: string;
+  /** Slug de l'application (sophia, micabo, …). */
+  marque?: string;
 }): Promise<SophiaPlacement | null> {
   // Sophia DOIT tomber dans les 2-3 dernières slides (jamais au début) : on borne
   // les positions permises aux 3 dernières (hors couverture = slide 1).
@@ -462,16 +472,18 @@ Slides du slideshow (slide 1 = couverture) :
 ${slideList}
 ${examples ? `\nCorrections passées à respecter :\n${examples}\n` : ""}
 --- SORTIE ---
-Ne remplace jamais la slide 1 (couverture). Sophia doit toujours tomber dans les
+Ne remplace jamais la slide 1 (couverture). Le placement de ${input.marque === "micabo" ? "micabo" : "Sophia"} doit toujours tomber dans les
 2-3 DERNIÈRES slides, jamais avant : choisis UNE slide parmi ces positions
 UNIQUEMENT : ${autoriseesTxt}. Écris 3 variantes qui remplacent son texte.
 Chaque variante DOIT :
-- MENTION DE SOPHIA selon le TON des slides : si elles TUTOIENT (2e personne du
+${input.marque === "micabo"
+    ? `- MENTION DE micabo (toujours en minuscules) selon le TON des slides, sans formule publicitaire.`
+    : `- MENTION DE SOPHIA selon le TON des slides : si elles TUTOIENT (2e personne du
   singulier, « tu / ton / tes / tes... »), la mention doit être INDIRECTE — n'écris
   JAMAIS « utilise l'appli Sophia » ni « télécharge Sophia » ; écris plutôt une
   formule du type « utilise une appli de micro-apprentissage comme Sophia ». Si les
   slides sont à la 1re personne (« je / j'ai / mon »), une mention directe de Sophia
-  est parfaitement acceptable (« j'utilise l'appli Sophia… »).
+  est parfaitement acceptable (« j'utilise l'appli Sophia… »).`}
 - reprendre EXACTEMENT le préfixe de la slide remplacée : si son texte commence
   par un numéro ("5.", "3)"), une puce ou un emoji, la variante commence par le
   MÊME. Ne change jamais le numéro, ne saute pas de numéro.

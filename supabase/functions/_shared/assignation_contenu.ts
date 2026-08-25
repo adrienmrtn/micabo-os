@@ -818,6 +818,12 @@ async function choisirContenu(
   opts: { ignorerElo?: boolean; exclureTestsHisto?: boolean } = {},
 ): Promise<Candidat | null> {
   const ignorerElo = Boolean(opts.ignorerElo);
+  const { data: compteApp } = await supabase
+    .from("comptes")
+    .select("application_id")
+    .eq("id", compteId)
+    .maybeSingle();
+  const applicationId = (compteApp?.application_id as string | undefined) ?? null;
   // Contenu IDs portant au moins un label du compte
   const liens = await lireParLots<{ contenu_id: string }>(
     labelIds,
@@ -831,14 +837,17 @@ async function choisirContenu(
   const contenus = await lireParLots<ContenuCandidat>(
     contenusLabel,
     "Slideshows prêts",
-    (lot) =>
-      supabase
+    (lot) => {
+      let q = supabase
         .from("contenus")
         .select("id, musique_url, musique_titre, musique_plateforme, ugc_compatible")
         .eq("statut", "valide")
         .eq("import_statut", "done")
         .eq("ugc_compatible", ugcAi)
-        .in("id", lot),
+        .in("id", lot);
+      if (applicationId) q = q.eq("application_id", applicationId);
+      return q;
+    },
   );
   if (contenus.length === 0) return null;
 

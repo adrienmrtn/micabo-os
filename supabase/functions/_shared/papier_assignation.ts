@@ -32,6 +32,7 @@ type MasterBiblio = {
   id: string;
   date_publication: string;
   video_url: string | null;
+  application_id?: string | null;
 };
 
 export type PapierAssignOpts = {
@@ -103,7 +104,7 @@ export async function assignerPapierComptes(
 
   let qComptes = supabase
     .from("comptes")
-    .select("id, langue, type_compte, is_active")
+    .select("id, langue, type_compte, is_active, application_id")
     .eq("type_compte", "cm");
   if (opts.compteId) qComptes = qComptes.eq("id", opts.compteId);
   else if (!test) qComptes = qComptes.eq("is_active", true);
@@ -121,7 +122,13 @@ export async function assignerPapierComptes(
     );
     if (dejaAuj && !test) continue;
 
-    const masterId = piocherMasterInutilise(masters, pris, compte.langue);
+    const mastersApp = masters.filter(
+      (m) =>
+        !compte.application_id ||
+        !m.application_id ||
+        m.application_id === compte.application_id,
+    );
+    const masterId = piocherMasterInutilise(mastersApp, pris, compte.langue);
     if (!masterId) {
       besoinOriginal = true;
       continue;
@@ -250,7 +257,7 @@ async function chargerBibliotheque(
 ): Promise<MasterBiblio[]> {
   let q = supabase
     .from("papier_masters")
-    .select("id, date_publication, video_url")
+    .select("id, date_publication, video_url, application_id")
     .eq("statut", "ready")
     .not("video_url", "is", null)
     .order("created_at", { ascending: true });

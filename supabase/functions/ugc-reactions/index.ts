@@ -19,6 +19,7 @@ import {
 import { trimmerVideoFal } from "../_shared/fal_trim_video.ts";
 import { ocrFrame } from "../_shared/gemini.ts";
 import { reponseNdjson, veutStream } from "../_shared/nettoyage_etapes.ts";
+import { resoudreApplication } from "../_shared/applications.ts";
 import {
   assertAuthorised,
   corsHeaders,
@@ -173,9 +174,11 @@ Deno.serve(async (request) => {
 
   try {
     if (action === "list") {
+      const app = await resoudreApplication(supabase, body);
       const { data, error } = await supabase
         .from("ugc_reactions")
         .select("*")
+        .eq("application_id", app.id)
         .order("created_at", { ascending: false });
       if (error) return json({ error: error.message }, 400);
       return json({ ok: true, reactions: data ?? [] });
@@ -191,9 +194,11 @@ Deno.serve(async (request) => {
     }
 
     if (action === "list_utilisations") {
+      const app = await resoudreApplication(supabase, body);
       const { data, error } = await supabase
         .from("ugc_utilisations")
         .select("*")
+        .eq("application_id", app.id)
         .order("created_at", { ascending: false });
       if (error) return json({ error: error.message }, 400);
       return json({ ok: true, utilisations: data ?? [] });
@@ -211,6 +216,7 @@ Deno.serve(async (request) => {
         String(body.titre ?? "").trim() ||
         String(body.nomFichier ?? "").trim() ||
         "Utilisation";
+      const app = await resoudreApplication(supabase, body);
       const { data, error } = await supabase
         .from("ugc_utilisations")
         .insert({
@@ -218,6 +224,7 @@ Deno.serve(async (request) => {
           video_path: videoPath,
           video_url: videoUrl,
           label_id: labelId,
+          application_id: app.id,
           nom_fichier: body.nomFichier ? String(body.nomFichier) : null,
           duree_ms:
             typeof body.dureeMs === "number" && Number.isFinite(body.dureeMs)
@@ -346,8 +353,10 @@ Deno.serve(async (request) => {
           const titre =
             scraped.text.trim().slice(0, 80) ||
             `Reaction ${scraped.postId.slice(0, 8)}`;
+          const app = await resoudreApplication(supabase, body);
           const champs = {
             titre,
+            application_id: app.id,
             source_url: sourceUrl,
             tiktok_post_id: scraped.postId,
             caption_source: scraped.text || null,
