@@ -51,15 +51,22 @@ export function AppShell({
   navLabel,
   groups,
   children,
+  sidebarExtra,
 }: {
   navLabel: string;
   groups: NavGroup[];
   children: React.ReactNode;
+  sidebarExtra?: React.ReactNode;
 }) {
   const { t, i18n } = useTranslation();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
 
-  const footer = <UserBlock />;
+  const footer = (
+    <div className="space-y-3">
+      {sidebarExtra}
+      <UserBlock />
+    </div>
+  );
 
   return (
     <div className="flex min-h-screen">

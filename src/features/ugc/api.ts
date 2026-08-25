@@ -111,8 +111,11 @@ export function ugcPersonaDefaults() {
   return invokeUgc<UgcPersonaDefaults & { ok: boolean }>({ action: "defaults" });
 }
 
-export function listerUgcPersonas() {
-  return invokeUgc<{ ok: boolean; personas: UgcPersona[] }>({ action: "list" });
+export function listerUgcPersonas(applicationId?: string | null) {
+  return invokeUgc<{ ok: boolean; personas: UgcPersona[] }>({
+    action: "list",
+    application_id: applicationId ?? null,
+  });
 }
 
 /** Comptes liés à un persona UGC (pour la liste admin). */
@@ -125,14 +128,18 @@ export interface AffectationPersonaUgc {
   posterNom: string | null;
 }
 
-export async function listerAffectationsPersonasUgc(): Promise<AffectationPersonaUgc[]> {
-  const { data, error } = await supabase
+export async function listerAffectationsPersonasUgc(
+  applicationId?: string | null,
+): Promise<AffectationPersonaUgc[]> {
+  let q = supabase
     .from("comptes")
     .select(
       "id, ugc_persona_id, persona_nom, handle_tiktok, profiles(prenom, nom)",
     )
     .not("ugc_persona_id", "is", null)
     .eq("is_active", true);
+  if (applicationId) q = q.eq("application_id", applicationId);
+  const { data, error } = await q;
   if (error) throw error;
   // deno-lint-ignore no-explicit-any
   return (data ?? []).map((c: any) => ({
@@ -298,6 +305,7 @@ export function sauverUgcPersona(input: {
   promptRight?: string;
   promptDown?: string;
   promptProfile?: string;
+  application_id?: string | null;
 }) {
   return invokeUgc<{ ok: boolean; persona: UgcPersona }>({ action: "save", ...input });
 }
@@ -399,9 +407,10 @@ async function invokeReactionsStream(
   return dernier;
 }
 
-export function listerUgcReactions() {
+export function listerUgcReactions(applicationId?: string | null) {
   return invokeReactions<{ ok: boolean; reactions: UgcReaction[] }>({
     action: "list",
+    application_id: applicationId ?? null,
   });
 }
 
@@ -412,9 +421,10 @@ export function supprimerUgcReaction(id: string) {
 export async function importerReactionTikTok(
   url: string,
   onProgress?: (detail: string) => void,
+  applicationId?: string | null,
 ): Promise<UgcReaction> {
   const r = await invokeReactionsStream(
-    { action: "import_tiktok", url },
+    { action: "import_tiktok", url, application_id: applicationId ?? null },
     onProgress,
   );
   const reaction = r.reaction as UgcReaction | undefined;
@@ -481,9 +491,10 @@ export async function uploadUgcReactionFichier(
   return { path, url: `${pub}?v=${Date.now()}` };
 }
 
-export function listerUgcUtilisations() {
+export function listerUgcUtilisations(applicationId?: string | null) {
   return invokeReactions<{ ok: boolean; utilisations: UgcUtilisation[] }>({
     action: "list_utilisations",
+    application_id: applicationId ?? null,
   });
 }
 
@@ -499,6 +510,7 @@ export async function enregistrerUgcUtilisation(input: {
   dureeMs?: number;
   /** Label UGC AI VIDEO requis. */
   labelId: string;
+  application_id?: string | null;
 }): Promise<UgcUtilisation> {
   const r = await invokeReactions<{ ok: boolean; utilisation: UgcUtilisation }>({
     action: "register_utilisation",
@@ -513,6 +525,7 @@ export async function importerUtilisationFichier(
   file: File,
   titre: string | undefined,
   labelId: string,
+  applicationId?: string | null,
 ): Promise<UgcUtilisation> {
   const id = crypto.randomUUID();
   const ext =
@@ -526,5 +539,6 @@ export async function importerUtilisationFichier(
     videoUrl: up.url,
     nomFichier: file.name,
     labelId,
+    application_id: applicationId ?? null,
   });
 }

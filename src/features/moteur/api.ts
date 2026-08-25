@@ -34,6 +34,11 @@ import {
   type LigneStatSlideshow,
   type StatsCompteSlideshows,
 } from "./statsSlideshowsCompte";
+import {
+  estSlugApplicationValide,
+  normaliserSlugApplication,
+  type ApplicationOs,
+} from "./applications";
 import { comptePrincipal, normaliserTypeCompte, resoudrePremierCompte } from "./comptesCm";
 import { estLabelSysteme, SLUG_HOOK } from "./mediaCaption";
 import {
@@ -46,6 +51,74 @@ import { normaliserReglagesPapier } from "./papierReglages";
 import type { CompteIdentifiants, CompteResumePoster, TypeCompte } from "./types";
 
 export type { EloImportRapport };
+export type { ApplicationOs };
+
+export async function listerApplications(): Promise<ApplicationOs[]> {
+  const { data, error } = await supabase
+    .from("applications")
+    .select("id, slug, nom, created_at")
+    .order("created_at");
+  if (error) throw error;
+  return (data ?? []) as ApplicationOs[];
+}
+
+export async function creerApplication(input: {
+  slug: string;
+  nom: string;
+}): Promise<ApplicationOs> {
+  const slug = normaliserSlugApplication(input.slug);
+  const nom = input.nom.trim() || slug;
+  if (!estSlugApplicationValide(slug)) throw new Error("SLUG_APPLICATION_INVALIDE");
+  const { data, error } = await supabase
+    .from("applications")
+    .insert({ slug, nom })
+    .select("id, slug, nom, created_at")
+    .single();
+  if (error) throw error;
+  const app = data as ApplicationOs;
+  const { data: sophia } = await supabase
+    .from("applications")
+    .select("id")
+    .eq("slug", "sophia")
+    .maybeSingle();
+  if (sophia?.id) {
+    const { data: systeme } = await supabase
+      .from("labels")
+      .select("nom, slug, couleur, genre, ugc_ai_video")
+      .eq("application_id", sophia.id)
+      .in("slug", ["hook", "ugc-ai-video"]);
+    if ((systeme ?? []).length > 0) {
+      await supabase.from("labels").insert(
+        (systeme ?? []).map((l) => ({
+          nom: l.nom,
+          slug: l.slug,
+          couleur: l.couleur,
+          genre: l.genre ?? null,
+          ugc_ai_video: Boolean(l.ugc_ai_video),
+          application_id: app.id,
+        })),
+      );
+    }
+    const { data: pertinence } = await supabase
+      .from("prompts")
+      .select("contenu")
+      .eq("cle", "pertinence")
+      .maybeSingle();
+    const { data: placement } = await supabase
+      .from("prompts")
+      .select("contenu")
+      .eq("cle", "placement_sophia")
+      .maybeSingle();
+    await supabase.from("prompts").upsert(
+      [
+        { cle: `pertinence_${slug}`, contenu: pertinence?.contenu ?? "" },
+        { cle: `placement_${slug}`, contenu: placement?.contenu ?? "" },
+      ],
+      { onConflict: "cle" },
+    );
+  }
+  return app;
+}
 
 /** Date du jour en YYYY-MM-DD, en heure locale — le poster raisonne sur sa
  *  journée, pas sur celle de Greenwich. */
@@ -186,11 +259,10 @@ async function invokeNettoyageStream(
 
 // --- Comptes de référence ---------------------------------------------------
 
-export async function listerSources(): Promise<CompteReference[]> {
-  const { data, error } = await supabase
-    .from("comptes_reference")
-    .select("*")
-    .order("handle_tiktok");
+export async function listerSources(applicationId?: string | null): Promise<CompteReference[]> {
+  let q = supabase.from("comptes_reference").select("*").order("handle_tiktok");
+  if (applicationId) q = q.eq("application_id", applicationId);
+  const { data, error } = await q;
   if (error) throw error;
   return data as CompteReference[];
 }
@@ -199,6 +271,7 @@ export async function creerSource(input: {
   handle: string;
   niche: string;
   langue: string;
+  application_id?: string | null;
   /** Rattache la source à un compte principal (source « conjointe »). */
   parent_id?: string | null;
   /** Genre hérité du principal (les conjoints partagent le même genre). */
@@ -211,6 +284,7 @@ export async function creerSource(input: {
       niche: input.niche.trim() || null,
       langue: input.langue,
       parent_id: input.parent_id ?? null,
+      ...(input.application_id ? { application_id: input.application_id } : {}),
       ...(input.genre ? { genre: input.genre } : {}),
     })
     .select()
@@ -371,16 +445,20 @@ export async function listerSujets(): Promise<Sujet[]> {
 export async function listerComptes(): Promise<CompteAvecDetails[]> {
   const { data, error } = await supabase
     .from("comptes")
-    .select("*, profiles(prenom, nom, upwork_url), comptes_reference(handle_tiktok)")
+    .select("*, profiles(prenom, nom, upwork_url), comptes_reference(handle_tiktok), applications(slug)")
     // Comptes ACTIFS uniquement : un compte désactivé (doublon retiré, ancienne
     // identité…) ne doit plus apparaître ni dans l'éditeur ni dans les tests.
     .eq("is_active", true)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return ((data ?? []) as CompteAvecDetails[]).map((c) => ({
-    ...c,
-    type_compte: normaliserTypeCompte(c.type_compte),
-  }));
+  return ((data ?? []) as CompteAvecDetails[]).map((c) => {
+    const app = (c as { applications?: { slug?: string } }).applications;
+    return {
+      ...c,
+      type_compte: normaliserTypeCompte(c.type_compte),
+      application_slug: app?.slug ?? null,
+    };
+  });
 }
 
 /**
@@ -423,6 +501,7 @@ export function assurerComptePoster(input: {
   userId: string;
   langue: string;
   posts_par_jour?: number;
+  application_slug?: string;
 }) {
   return invoke<{
     ok: boolean;
@@ -439,6 +518,7 @@ export function assurerComptePoster(input: {
     action: "ensure_compte",
     userId: input.userId,
     langue: input.langue,
+    application_slug: input.application_slug ?? "",
     ...(input.posts_par_jour != null
       ? { posts_par_jour: normaliserPostsParJour(Number(input.posts_par_jour)) }
       : {}),
@@ -486,17 +566,20 @@ export async function listerPosters(): Promise<PosterProfil[]> {
   const { data: comptes } = await supabase
     .from("comptes")
     .select(
-      "id, poster_id, type_compte, langue, handle_tiktok, persona_nom, persona_bio, avatar_url, score, score_maj_at, warmup_started_at, warmup_ends_at, comptes_reference(handle_tiktok)",
+      "id, poster_id, type_compte, langue, application_id, handle_tiktok, persona_nom, persona_bio, avatar_url, score, score_maj_at, warmup_started_at, warmup_ends_at, comptes_reference(handle_tiktok), applications(slug)",
     )
     .eq("is_active", true)
     .order("created_at", { ascending: false });
   const comptesParPoster = new Map<string, CompteResumePoster[]>();
   for (const c of comptes ?? []) {
     const ref = (c as { comptes_reference?: { handle_tiktok?: string } }).comptes_reference;
+    const appJoin = (c as { applications?: { slug?: string } }).applications;
     const resume: CompteResumePoster = {
       id: c.id,
       type_compte: normaliserTypeCompte(c.type_compte),
       langue: c.langue,
+      application_id: (c.application_id as string | null) ?? null,
+      application_slug: appJoin?.slug ?? null,
       handle_tiktok: c.handle_tiktok,
       persona_nom: c.persona_nom,
       persona_bio: c.persona_bio,
@@ -697,6 +780,7 @@ export function ajouterCompte(input: {
   posterId: string;
   type_compte: TypeCompte;
   langue: string;
+  application_slug?: string;
   posts_par_jour?: number;
   handle_tiktok?: string;
   tiktok_email?: string;
@@ -714,6 +798,7 @@ export function ajouterCompte(input: {
     userId: input.posterId,
     type_compte: input.type_compte,
     langue: input.langue,
+    application_slug: input.application_slug ?? "",
     ...(input.posts_par_jour != null
       ? { posts_par_jour: normaliserPostsParJour(Number(input.posts_par_jour)) }
       : {}),
@@ -819,6 +904,7 @@ export function creerPoster(input: {
   type_compte?: TypeCompte | "aucun";
   /** Quota d'assignation journalier (1–3). Défaut 2 côté Edge. */
   posts_par_jour?: number;
+  application_slug?: string;
   handle_tiktok?: string;
   tiktok_email?: string;
   tiktok_password?: string;
@@ -844,6 +930,7 @@ export function creerPoster(input: {
       ? ""
       : (input.langue ?? ""),
     type_compte: resoudrePremierCompte(input.type_compte, input.langue),
+    application_slug: input.application_slug ?? "",
     ...(input.posts_par_jour != null
       ? { posts_par_jour: normaliserPostsParJour(Number(input.posts_par_jour)) }
       : {}),
@@ -1190,6 +1277,7 @@ export async function listerBibliothequePage(opts?: {
   labelId?: string;
   page?: number;
   pageSize?: number;
+  applicationId?: string | null;
 }): Promise<PageBiblio> {
   const pageSize = opts?.pageSize ?? BIBLIO_PAGE_SIZE;
   const page = Math.max(1, opts?.page ?? 1);
@@ -1200,24 +1288,28 @@ export async function listerBibliothequePage(opts?: {
   let total = 0;
 
   if (opts?.labelId) {
-    const { data, error, count } = await supabase
+    let q = supabase
       .from("media_library")
       .select("*, media_labels!inner(label_id)", { count: "exact" })
       .eq("media_labels.label_id", opts.labelId)
       .like("storage_path", "propre/%")
       .order("created_at", { ascending: false })
       .range(from, to);
+    if (opts?.applicationId) q = q.eq("application_id", opts.applicationId);
+    const { data, error, count } = await q;
     if (error) throw error;
     // deno-lint-ignore no-explicit-any
     medias = ((data ?? []) as any[]).map(({ media_labels: _ml, ...m }) => m as Media);
     total = count ?? 0;
   } else {
-    const { data, error, count } = await supabase
+    let q = supabase
       .from("media_library")
       .select("*", { count: "exact" })
       .like("storage_path", "propre/%")
       .order("created_at", { ascending: false })
       .range(from, to);
+    if (opts?.applicationId) q = q.eq("application_id", opts.applicationId);
+    const { data, error, count } = await q;
     if (error) throw error;
     medias = (data ?? []) as Media[];
     total = count ?? 0;
@@ -1235,11 +1327,13 @@ export async function listerBibliothequePage(opts?: {
  */
 export async function listerBibliothequeParLabels(
   labelId?: string,
+  applicationId?: string | null,
 ): Promise<GroupeBiblio[]> {
   const page = await listerBibliothequePage({
     labelId,
     page: 1,
     pageSize: 10_000,
+    applicationId,
   });
   return page.groupes;
 }
@@ -2709,6 +2803,7 @@ export function normaliserFileLabels(raw: unknown): Reglages["file_labels_compte
     items?: Array<{ label_id?: string; ugc?: boolean }>;
     label_ids?: string[];
     par_langue?: Record<string, unknown>;
+    par_application?: Record<string, unknown>;
   };
 
   let items = normaliserFileLabelItems(v.items);
@@ -2727,7 +2822,20 @@ export function normaliserFileLabels(raw: unknown): Reglages["file_labels_compte
     }
   }
 
-  return { items, par_langue };
+  const par_application: Record<
+    string,
+    { items: Reglages["file_labels_comptes"]["items"]; par_langue: Record<string, Reglages["file_labels_comptes"]["items"]> }
+  > = {};
+  if (v.par_application && typeof v.par_application === "object" && !Array.isArray(v.par_application)) {
+    for (const [slug, slice] of Object.entries(v.par_application)) {
+      const cle = String(slug ?? "").trim().toLowerCase();
+      if (!cle) continue;
+      const inner = normaliserFileLabels(slice);
+      par_application[cle] = { items: inner.items, par_langue: inner.par_langue };
+    }
+  }
+
+  return { items, par_langue, par_application };
 }
 
 export async function lireReglages(): Promise<Reglages> {
@@ -2996,6 +3104,7 @@ export const enqueueImportUrls = (opts: {
   batchId?: string;
   /** Langue d'origine du TikTok (boost ELO). */
   langue?: string | null;
+  application_id?: string | null;
 }) =>
   invoke<{
     ok: boolean;
@@ -3011,6 +3120,7 @@ export const enqueueImportUrls = (opts: {
     labelIds: opts.labelIds ?? [],
     batchId: opts.batchId ?? null,
     langue: opts.langue ?? null,
+    application_id: opts.application_id ?? null,
   });
 
 export interface StatsImportBatch {
@@ -3366,12 +3476,17 @@ export type PapierTickResultat = {
   error?: string;
 };
 
-export async function listerPapierMasters(limite = 60): Promise<PapierMaster[]> {
-  const { data, error } = await supabase
+export async function listerPapierMasters(
+  limite = 60,
+  applicationId?: string | null,
+): Promise<PapierMaster[]> {
+  let q = supabase
     .from("papier_masters")
     .select("*, papier_scenes(*), papier_langues(*), papier_posts(id, compte_id, langue, est_test)")
     .order("created_at", { ascending: false })
     .limit(limite);
+  if (applicationId) q = q.eq("application_id", applicationId);
+  const { data, error } = await q;
   if (error) throw error;
   return (data ?? []).map((row) => {
     const r = row as PapierMaster;
@@ -3388,8 +3503,9 @@ export async function listerPapierMasters(limite = 60): Promise<PapierMaster[]> 
   });
 }
 
-export const lancerPapierJour = (body: { date?: string; topic?: string; voice?: string } = {}) =>
-  invoke<PapierTickResultat>("papier-cm", { action: "assurer", manuel: true, ...body });
+export const lancerPapierJour = (
+  body: { date?: string; topic?: string; voice?: string; application_id?: string | null } = {},
+) => invoke<PapierTickResultat>("papier-cm", { action: "assurer", manuel: true, ...body });
 
 export const changerVoixPapier = (id: string, voice: string) =>
   invoke<PapierTickResultat & { voix?: string; rebuildFr?: boolean }>("papier-cm", {
@@ -4861,25 +4977,31 @@ export function estMarqueUgcAiVideo(lab: { slug?: string | null }): boolean {
 }
 
 /** Labels thématiques (hors marques système `ugc-ai-video` / `hook`). */
-export async function listerLabels(): Promise<Label[]> {
-  const { data, error } = await supabase.from("labels").select("*").order("nom");
+export async function listerLabels(applicationId?: string | null): Promise<Label[]> {
+  let q = supabase.from("labels").select("*").order("nom");
+  if (applicationId) q = q.eq("application_id", applicationId);
+  const { data, error } = await q;
   if (error) throw error;
   return ((data ?? []) as Label[]).filter((l) => !estLabelSysteme(l));
 }
 
 /** Labels affichés en bibliothèque (inclut Hook, exclut la marque UGC). */
-export async function listerLabelsBiblio(): Promise<Label[]> {
-  const { data, error } = await supabase.from("labels").select("*").order("nom");
+export async function listerLabelsBiblio(applicationId?: string | null): Promise<Label[]> {
+  let q = supabase.from("labels").select("*").order("nom");
+  if (applicationId) q = q.eq("application_id", applicationId);
+  const { data, error } = await q;
   if (error) throw error;
   return ((data ?? []) as Label[]).filter((l) => !estMarqueUgcAiVideo(l));
 }
 
 /** Labels qui ont au moins un slideshow `ugc_compatible` (file UGC admin). */
-export async function listerLabelIdsAvecUgc(): Promise<string[]> {
-  const { data, error } = await supabase
+export async function listerLabelIdsAvecUgc(applicationId?: string | null): Promise<string[]> {
+  let q = supabase
     .from("contenu_labels")
-    .select("label_id, contenus!inner(ugc_compatible)")
+    .select("label_id, contenus!inner(ugc_compatible, application_id)")
     .eq("contenus.ugc_compatible", true);
+  if (applicationId) q = q.eq("contenus.application_id", applicationId);
+  const { data, error } = await q;
   if (error) throw error;
   return [...new Set((data ?? []).map((r) => r.label_id as string).filter(Boolean))];
 }
@@ -4887,7 +5009,7 @@ export async function listerLabelIdsAvecUgc(): Promise<string[]> {
 export async function creerLabel(
   nom: string,
   couleur?: string | null,
-  opts?: { ugc_ai_video?: boolean; genre?: "homme" | "femme" },
+  opts?: { ugc_ai_video?: boolean; genre?: "homme" | "femme"; application_id?: string | null },
 ): Promise<Label> {
   const base = slugify(nom);
   if (base === "ugc-ai-video" || base === SLUG_HOOK) {
@@ -4904,6 +5026,7 @@ export async function creerLabel(
         couleur: couleur ?? null,
         ugc_ai_video: Boolean(opts?.ugc_ai_video),
         genre,
+        ...(opts?.application_id ? { application_id: opts.application_id } : {}),
       })
       .select()
       .single();
@@ -5164,11 +5287,12 @@ export async function supprimerLabel(id: string): Promise<void> {
 }
 
 /** Labels thématiques du pool UGC AI VIDEO (jamais la marque système). */
-export async function listerLabelsUgcAiVideo(_opts?: {
+export async function listerLabelsUgcAiVideo(opts?: {
   /** @deprecated la marque n’est plus listée */
   inclureMarque?: boolean;
+  applicationId?: string | null;
 }): Promise<Label[]> {
-  const tous = await listerLabels();
+  const tous = await listerLabels(opts?.applicationId);
   return tous.filter((l) => l.ugc_ai_video);
 }
 
@@ -5435,6 +5559,7 @@ export async function listerContenus(opts?: {
   compteReferenceId?: string | null;
   /** Slideshows dont la source a déjà été oubliée (FK nulle). */
   sansCompte?: boolean;
+  applicationId?: string | null;
 }): Promise<ContenuListe[]> {
   const limit = opts?.limit ?? 80;
   let idsFiltres: string[] | null = null;
@@ -5456,6 +5581,7 @@ export async function listerContenus(opts?: {
       .limit(2000);
     if (opts.compteReferenceId) qTous = qTous.eq("compte_reference_id", opts.compteReferenceId);
     if (opts.sansCompte) qTous = qTous.is("compte_reference_id", null);
+    if (opts.applicationId) qTous = qTous.eq("application_id", opts.applicationId);
     const [{ data: tous }, { data: avecLabel }] = await Promise.all([
       qTous,
       supabase.from("contenu_labels").select("contenu_id"),
@@ -5476,6 +5602,7 @@ export async function listerContenus(opts?: {
   if (opts?.statut) q = q.eq("statut", opts.statut);
   if (opts?.compteReferenceId) q = q.eq("compte_reference_id", opts.compteReferenceId);
   if (opts?.sansCompte) q = q.is("compte_reference_id", null);
+  if (opts?.applicationId) q = q.eq("application_id", opts.applicationId);
   if (idsFiltres) {
     // Chunk .in() pour rester sous la limite URL PostgREST.
     const chunk = 80;
@@ -5490,6 +5617,7 @@ export async function listerContenus(opts?: {
       if (opts?.statut) qChunk = qChunk.eq("statut", opts.statut);
       if (opts?.compteReferenceId) qChunk = qChunk.eq("compte_reference_id", opts.compteReferenceId);
       if (opts?.sansCompte) qChunk = qChunk.is("compte_reference_id", null);
+      if (opts?.applicationId) qChunk = qChunk.eq("application_id", opts.applicationId);
       const { data, error } = await qChunk;
       if (error) throw error;
       contenus.push(...((data ?? []) as Contenu[]));

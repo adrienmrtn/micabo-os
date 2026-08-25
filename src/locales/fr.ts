@@ -3,6 +3,17 @@ export const fr = {
     app: {
       name: "Sophia",
     },
+    applications: {
+      switcher: "Application",
+      contexte: "Bibliothèque, sources, labels et UGC de {{nom}}.",
+      compte: "Application du compte",
+      filtre: "Application",
+      filtreTous: "Sophia et micabo",
+      slug: "Slug",
+      nom: "Nom",
+      creer: "Créer l'application",
+      liste: "Applications : {{noms}}. Actuelle : {{actuelle}}.",
+    },
     auth: {
       loginTitle: "Connexion",
       loginSubtitle: "Accède à ton espace",
@@ -1583,8 +1594,12 @@ export const fr = {
     prompts: {
       pertinenceTitle: "Prompt — Pertinence",
       pertinenceDesc: "Décide quels sujets méritent un placement Sophia.",
+      pertinenceDescApp: "Décide quels sujets méritent un placement {{nom}}.",
       placementTitle: "Prompt — Placement de Sophia",
+      placementTitleApp: "Prompt — Placement de {{nom}}",
       placementDesc: "Comment l'appli Sophia s'intègre dans une slide existante.",
+      placementDescApp: "Comment l'appli {{nom}} s'intègre dans une slide existante.",
+      application: "Pertinence et placement pour {{slug}}.",
       traductionTitle: "Prompt — Traduction (Français)",
       traductionDesc: "Le ton des textes traduits en français, lisibles sur TikTok.",
       ugcFaceSwapTitle: "Prompt — Identité UGC (corps entier, Nano Banana)",

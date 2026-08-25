@@ -3,6 +3,17 @@ export const en = {
     app: {
       name: "Sophia",
     },
+    applications: {
+      switcher: "Application",
+      contexte: "Library, sources, labels and UGC for {{nom}}.",
+      compte: "Account application",
+      filtre: "Application",
+      filtreTous: "Sophia and micabo",
+      slug: "Slug",
+      nom: "Name",
+      creer: "Create application",
+      liste: "Applications: {{noms}}. Current: {{actuelle}}.",
+    },
     auth: {
       loginTitle: "Sign in",
       loginSubtitle: "Access your workspace",
@@ -1580,8 +1591,12 @@ export const en = {
     prompts: {
       pertinenceTitle: "Prompt — Relevance",
       pertinenceDesc: "Decides which topics deserve a Sophia placement.",
+      pertinenceDescApp: "Decides which topics deserve a {{nom}} placement.",
       placementTitle: "Prompt — Sophia placement",
+      placementTitleApp: "Prompt — {{nom}} placement",
       placementDesc: "How the Sophia app fits into an existing slide.",
+      placementDescApp: "How the {{nom}} app fits into an existing slide.",
+      application: "Relevance and placement prompts for {{slug}}.",
       traductionTitle: "Prompt — Translation (French)",
       traductionDesc: "The tone of texts translated to French, readable on TikTok.",
       ugcFaceSwapTitle: "Prompt — UGC full-identity transfer (Nano Banana)",

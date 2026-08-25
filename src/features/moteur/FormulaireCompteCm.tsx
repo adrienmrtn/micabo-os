@@ -11,6 +11,7 @@ import {
   majIdentifiantsCm,
 } from "@/features/moteur/api";
 import { languesDisponiblesPourCm, languesPourNouveauCompte } from "@/features/moteur/comptesCm";
+import { nomApplication, type ApplicationOs } from "@/features/moteur/applications";
 import { nomLangue } from "@/features/moteur/langues";
 import type { TypeCompte } from "@/features/moteur/types";
 
@@ -21,11 +22,13 @@ export function FormulaireAjouterCompte({
   posterId,
   languesProposees,
   languesPrisesCm,
+  applications,
   onCree,
 }: {
   posterId: string;
   languesProposees: string[];
   languesPrisesCm: string[];
+  applications?: ApplicationOs[];
   onCree?: () => void;
 }) {
   const { t } = useTranslation();
@@ -40,6 +43,13 @@ export function FormulaireAjouterCompte({
   const [deuxFa, setDeuxFa] = React.useState("");
   const [handle, setHandle] = React.useState("");
   const [postsParJour, setPostsParJour] = React.useState<1 | 2 | 3>(2);
+  const [applicationSlug, setApplicationSlug] = React.useState(applications?.[0]?.slug ?? "sophia");
+
+  React.useEffect(() => {
+    if (!applications?.length) return;
+    if (applicationSlug && applications.some((a) => a.slug === applicationSlug)) return;
+    setApplicationSlug(applications[0]!.slug);
+  }, [applications, applicationSlug]);
 
   React.useEffect(() => {
     if (langue && languesType.includes(langue)) return;
@@ -52,6 +62,7 @@ export function FormulaireAjouterCompte({
         posterId,
         type_compte: typeCompte,
         langue,
+        application_slug: applicationSlug,
         posts_par_jour: typeCompte === "perso" ? postsParJour : 1,
         handle_tiktok: handle,
         tiktok_email: email,
@@ -115,6 +126,24 @@ export function FormulaireAjouterCompte({
         <p className="text-xs text-muted-foreground">{t("cm.toutesLanguesPrises")}</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
+          {(applications ?? []).length > 0 && (
+            <div className="space-y-1">
+              <Label htmlFor={`compte-app-${posterId}`}>{t("applications.compte")}</Label>
+              <select
+                id={`compte-app-${posterId}`}
+                className={selectClass}
+                value={applicationSlug}
+                onChange={(e) => setApplicationSlug(e.target.value)}
+                required
+              >
+                {(applications ?? []).map((app) => (
+                  <option key={app.id} value={app.slug}>
+                    {nomApplication(app)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="space-y-1">
             <Label htmlFor={`compte-langue-${posterId}`}>{t("cm.langueCompte")}</Label>
             <select

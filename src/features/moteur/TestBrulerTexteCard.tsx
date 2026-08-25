@@ -22,6 +22,7 @@ import {
   type BurnTexteEvent,
   type ContenuListe,
 } from "@/features/moteur/api";
+import { useApplication } from "@/features/moteur/ApplicationContext";
 import {
   affinerZonesDepuisBrut,
   assurerPoliceTikTok,
@@ -114,6 +115,7 @@ function vignette(c: ContenuListe): string | null {
  */
 export function TestBrulerTexteCard() {
   const { t } = useTranslation();
+  const { applicationId } = useApplication();
   const [langue, setLangue] = React.useState("en");
   const [contenuId, setContenuId] = React.useState("");
   const [filtreLabel, setFiltreLabel] = React.useState<FiltreLabel>(null);
@@ -124,17 +126,19 @@ export function TestBrulerTexteCard() {
   const [erreur, setErreur] = React.useState<string | null>(null);
 
   const labelsTous = useQuery({
-    queryKey: ["labels"],
-    queryFn: listerLabels,
+    queryKey: ["labels", applicationId],
+    queryFn: () => listerLabels(applicationId),
     staleTime: 60_000,
+    enabled: Boolean(applicationId),
   });
 
   const slideshows = useQuery({
-    queryKey: ["slideshows-bruler-test", filtreLabel],
+    queryKey: ["slideshows-bruler-test", applicationId, filtreLabel],
     queryFn: () =>
       listerContenus({
         statut: "valide",
         limit: 200,
+        applicationId,
         labelId:
           filtreLabel && filtreLabel !== "__none__" ? filtreLabel : undefined,
         sansLabel: filtreLabel === "__none__",

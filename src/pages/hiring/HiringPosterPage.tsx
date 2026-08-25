@@ -19,11 +19,13 @@ import {
 import { useAuth } from "@/features/auth/AuthContext";
 import {
   creerPoster,
+  listerApplications,
   listerLanguesReference,
   listerPosters,
   majCompte,
   supprimerPoster,
 } from "@/features/moteur/api";
+import { SLUG_SOPHIA } from "@/features/moteur/applications";
 import { ChampsPremierCompte, type PremierCompte } from "@/features/moteur/ChampsPremierCompte";
 import { comptePrincipal, estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
 import { FormulaireAjouterCompte } from "@/features/moteur/FormulaireCompteCm";
@@ -44,6 +46,7 @@ function LignePoster({ poster: p }: { poster: PosterProfil }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
+  const applications = useQuery({ queryKey: ["applications"], queryFn: listerApplications });
   const comptes = p.comptes ?? [];
   const [compteId, setCompteId] = React.useState(
     () => comptePrincipal(comptes)?.id ?? p.compte_id ?? "",
@@ -216,6 +219,7 @@ function LignePoster({ poster: p }: { poster: PosterProfil }) {
         posterId={p.id}
         languesProposees={langues.data ?? []}
         languesPrisesCm={languesCmPrises(comptes)}
+        applications={applications.data ?? []}
       />
     </div>
   );
@@ -231,11 +235,13 @@ export function HiringPosterPage() {
   const queryClient = useQueryClient();
 
   const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
+  const applications = useQuery({ queryKey: ["applications"], queryFn: listerApplications });
   const posters = useQuery({ queryKey: ["posters"], queryFn: listerPosters });
 
   const [prenom, setPrenom] = React.useState("");
   const [nom, setNom] = React.useState("");
   const [langue, setLangue] = React.useState("");
+  const [applicationSlug, setApplicationSlug] = React.useState(SLUG_SOPHIA);
   const [premierCompte, setPremierCompte] = React.useState<PremierCompte>("perso");
   const [postsParJour, setPostsParJour] = React.useState<1 | 2 | 3>(2);
   const [handleTiktok, setHandleTiktok] = React.useState("");
@@ -268,6 +274,7 @@ export function HiringPosterPage() {
         nom,
         password: MOT_DE_PASSE,
         langue,
+        application_slug: applicationSlug,
         type_compte: premierCompte,
         posts_par_jour: premierCompte === "perso" ? postsParJour : undefined,
         handle_tiktok: handleTiktok,
@@ -327,6 +334,9 @@ export function HiringPosterPage() {
               langues={languesChoix}
               langue={langue}
               onLangue={setLangue}
+              applications={applications.data ?? []}
+              applicationSlug={applicationSlug}
+              onApplication={setApplicationSlug}
               postsParJour={postsParJour}
               onPostsParJour={setPostsParJour}
               handle={handleTiktok}
