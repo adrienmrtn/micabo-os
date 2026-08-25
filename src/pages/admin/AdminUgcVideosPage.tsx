@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useApplication } from "@/features/moteur/ApplicationContext";
 import { listerLabelsUgcAiVideo } from "@/features/moteur/api";
 import {
   finaliserUgcReaction,
@@ -42,18 +43,22 @@ function fmtSec(s: number) {
 export function AdminUgcVideosPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { applicationId } = useApplication();
 
   const liste = useQuery({
-    queryKey: ["ugc-reactions"],
-    queryFn: async () => (await listerUgcReactions()).reactions,
+    queryKey: ["ugc-reactions", applicationId],
+    queryFn: async () => (await listerUgcReactions(applicationId)).reactions,
+    enabled: Boolean(applicationId),
   });
   const utilisations = useQuery({
-    queryKey: ["ugc-utilisations"],
-    queryFn: async () => (await listerUgcUtilisations()).utilisations,
+    queryKey: ["ugc-utilisations", applicationId],
+    queryFn: async () => (await listerUgcUtilisations(applicationId)).utilisations,
+    enabled: Boolean(applicationId),
   });
   const labelsUgc = useQuery({
-    queryKey: ["labels-ugc-ai-video"],
-    queryFn: () => listerLabelsUgcAiVideo(),
+    queryKey: ["labels-ugc-ai-video", applicationId],
+    queryFn: () => listerLabelsUgcAiVideo({ applicationId }),
+    enabled: Boolean(applicationId),
   });
   const labelNom = React.useMemo(() => {
     const m = new Map<string, string>();
@@ -94,7 +99,7 @@ export function AdminUgcVideosPage() {
   }
 
   const importer = useMutation({
-    mutationFn: () => importerReactionTikTok(lien.trim(), setProgress),
+    mutationFn: () => importerReactionTikTok(lien.trim(), setProgress, applicationId),
     onMutate: () => {
       setErreur(null);
       setProgress(t("ugc.videos.importEnCours"));
@@ -199,7 +204,7 @@ export function AdminUgcVideosPage() {
     mutationFn: () => {
       if (!fichierUtil) throw new Error(t("ugc.videos.utilFichierRequis"));
       if (!labelUtil) throw new Error(t("ugc.videos.labelRequis"));
-      return importerUtilisationFichier(fichierUtil, titreUtil, labelUtil);
+      return importerUtilisationFichier(fichierUtil, titreUtil, labelUtil, applicationId);
     },
     onMutate: () => {
       setErreur(null);

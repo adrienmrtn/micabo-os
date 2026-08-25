@@ -41,6 +41,13 @@ import {
   normaliserCreateTime,
   urlsManquantes,
 } from "./import_nouveaux.ts";
+import {
+  applicationParId,
+  applicationSophia,
+  clePromptPertinence,
+  clePromptPlacement,
+  placementParDefaut,
+} from "./applications.ts";
 import { lireParLots } from "./lots.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
 
@@ -94,25 +101,6 @@ export interface SlideLangue {
   position_sophia: boolean;
 }
 
-function sophiaParDefaut(langue: string): string {
-  const par: Record<string, string> = {
-    fr: "Envie d'en apprendre plus chaque jour ? L'appli Sophia t'apprend une culture générale de dingue en quelques minutes. Teste-la 👀",
-    en: "Want to learn something new every day? The Sophia app teaches you wild general knowledge in minutes. Give it a try 👀",
-    es: "¿Quieres aprender algo nuevo cada día? La app Sophia te enseña cultura general increíble en minutos. Pruébala 👀",
-    de: "Lust, jeden Tag etwas Neues zu lernen? Die Sophia-App bringt dir in wenigen Minuten richtig gutes Allgemeinwissen bei. Probier's aus 👀",
-    it: "Vuoi imparare qualcosa di nuovo ogni giorno? L'app Sophia ti insegna una cultura generale pazzesca in pochi minuti. Provala 👀",
-    pt: "Queres aprender algo novo todos os dias? A app Sophia ensina-te cultura geral incrível em poucos minutos. Experimenta 👀",
-    cs: "Chceš se každý den naučit něco nového? Aplikace Sophia tě naučí skvělé všeobecné znalosti za pár minut. Vyzkoušej ji 👀",
-    nl: "Wil je elke dag iets nieuws leren? De Sophia-app leert je in een paar minuten waanzinnige algemene kennis. Probeer het 👀",
-    el: "Θέλεις να μαθαίνεις κάτι νέο κάθε μέρα; Η εφαρμογή Sophia σου μαθαίνει απίστευτη γενική γνώση σε λίγα λεπτά. Δοκίμασέ την 👀",
-    hu: "Szeretnél minden nap valami újat tanulni? A Sophia app perceken belül vad általános műveltséget ad. Próbáld ki 👀",
-    pl: "Chcesz codziennie uczyć się czegoś nowego? Aplikacja Sophia uczy szalonej wiedzy ogólnej w kilka minut. Wypróbuj 👀",
-    ro: "Vrei să înveți ceva nou în fiecare zi? Aplicația Sophia te învață cultură generală tare în câteva minute. Încearc-o 👀",
-    sv: "Vill du lära dig något nytt varje dag? Sophia-appen lär dig galen allmänbildning på några minuter. Testa den 👀",
-    tr: "Her gün yeni bir şey öğrenmek ister misin? Sophia uygulaması dakikalar içinde efsane genel kültür öğretir. Dene 👀",
-  };
-  return par[langue] ?? par.en;
-}
 
 const idDe = (url: string) => idPostTiktok(url);
 
@@ -332,23 +320,23 @@ async function stockerVisuelBrut(
 async function trouverContenuParUrl(
   supabase: Supabase,
   postUrl: string,
+  applicationId?: string | null,
 ): Promise<{ id: string } | null> {
-  const { data: exact } = await supabase
-    .from("contenus")
-    .select("id")
-    .eq("source_url", postUrl)
-    .maybeSingle();
+  let exactQ = supabase.from("contenus").select("id").eq("source_url", postUrl);
+  if (applicationId) exactQ = exactQ.eq("application_id", applicationId);
+  const { data: exact } = await exactQ.maybeSingle();
   if (exact) return exact;
 
   const pid = idDe(postUrl);
   if (!pid || pid === postUrl) return null;
   // Variantes /photo/ vs /video/ : match sur l'id TikTok.
-  const { data: approx } = await supabase
+  let approxQ = supabase
     .from("contenus")
     .select("id, source_url")
     .or(`source_url.ilike.%/photo/${pid}%,source_url.ilike.%/video/${pid}%`)
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+  if (applicationId) approxQ = approxQ.eq("application_id", applicationId);
+  const { data: approx } = await approxQ.maybeSingle();
   return approx ? { id: approx.id } : null;
 }
 
@@ -412,6 +400,29 @@ async function reouvrirContenuPourReimport(
   await attacherLabels(supabase, contenuId, compteReferenceId, labelIds);
 }
 
+async function applicationIdDeSource(
+  supabase: Supabase,
+  compteReferenceId: string | null,
+): Promise<string | null> {
+  if (!compteReferenceId) return null;
+  const { data } = await supabase
+    .from("comptes_reference")
+    .select("application_id")
+    .eq("id", compteReferenceId)
+    .maybeSingle();
+  return (data?.application_id as string | undefined) ?? null;
+}
+
+async function slugApplicationDeContenu(
+  supabase: Supabase,
+  contenu: { application_id?: string | null; compte_reference_id?: string | null },
+): Promise<string> {
+  const id = contenu.application_id
+    ?? await applicationIdDeSource(supabase, contenu.compte_reference_id ?? null);
+  const app = await applicationParId(supabase, id);
+  return app?.slug ?? "sophia";
+}
+
 /** Crée un contenu depuis un post scrapé (idempotent sur source_url). */
 export async function creerContenuDepuisPost(
   supabase: Supabase,
@@ -419,8 +430,13 @@ export async function creerContenuDepuisPost(
   compteReferenceId: string | null,
   labelIds: string[] | null = null,
   langueSource = "fr",
+  applicationIdExplicit: string | null = null,
 ): Promise<{ id: string; reused: boolean }> {
-  const existant = await trouverContenuParUrl(supabase, post.webVideoUrl);
+  const applicationId =
+    (await applicationIdDeSource(supabase, compteReferenceId)) ??
+    applicationIdExplicit ??
+    (await applicationSophia(supabase)).id;
+  const existant = await trouverContenuParUrl(supabase, post.webVideoUrl, applicationId);
   if (existant) {
     await reouvrirContenuPourReimport(
       supabase,
@@ -443,6 +459,7 @@ export async function creerContenuDepuisPost(
       compte_reference_id: compteReferenceId,
       source_url: post.webVideoUrl,
       langue_source: langueSource,
+      ...(applicationId ? { application_id: applicationId } : {}),
       musique_url: post.musicUrl,
       musique_titre: post.musicTitle,
       vues_source: post.stats?.vues ?? null,
@@ -538,6 +555,7 @@ export async function importerLien(
   compteReferenceId: string | null,
   labelIds: string[] | null,
   langueExplicit: string | null = null,
+  applicationIdExplicit: string | null = null,
 ): Promise<{ id: string; reused: boolean }> {
   const [post] = await scrapePost(postUrl);
   if (!post) throw new Error("Post introuvable ou non scrapable");
@@ -557,7 +575,14 @@ export async function importerLien(
       "Langue d'origine du TikTok requise (précise-la à l'import)",
     );
   }
-  return creerContenuDepuisPost(supabase, post, compteReferenceId, labelIds, langue);
+  return creerContenuDepuisPost(
+    supabase,
+    post,
+    compteReferenceId,
+    labelIds,
+    langue,
+    applicationIdExplicit,
+  );
 }
 
 /**
@@ -572,14 +597,17 @@ async function idsTiktokConnus(
   supabase: Supabase,
   compteReferenceId: string,
 ): Promise<{ tous: Set<string>; deCetteSource: string[] }> {
+  const applicationId = await applicationIdDeSource(supabase, compteReferenceId);
   const tous = new Set<string>();
   const deCetteSource: string[] = [];
   for (let from = 0; ; from += PAGE_POSTGREST) {
-    const { data, error } = await supabase
+    let q = supabase
       .from("contenus")
       .select("source_url, compte_reference_id")
       .not("source_url", "is", null)
       .range(from, from + PAGE_POSTGREST - 1);
+    if (applicationId) q = q.eq("application_id", applicationId);
+    const { data, error } = await q;
     if (error) throw error;
     const lot = data ?? [];
     for (const row of lot) {
@@ -890,10 +918,11 @@ async function executerPasImport(
 
     // 2 — Pertinence (métrique ELO ; pas de rejet dur ici)
     if (contenu.pertinence_score === null || contenu.pertinence_score === undefined) {
+      const slugApp = await slugApplicationDeContenu(supabase, contenu);
       const { score, reason } = await scoreRelevance({
         caption: contenu.titre ?? "",
         hookText: slides[0]?.texte_original ?? "",
-        instructions: await chargerPrompt(supabase, "pertinence"),
+        instructions: await chargerPrompt(supabase, clePromptPertinence(slugApp)),
       });
       await marquer(supabase, contenu.id, {
         pertinence_score: score,
@@ -1201,8 +1230,9 @@ async function placerSophiaSurDeck(
     .order("created_at", { ascending: false })
     .limit(40);
 
+  const slugApp = await slugApplicationDeContenu(supabase, contenu);
   const placement = await integrateSophia({
-    masterPrompt: (await chargerPrompt(supabase, "placement_sophia")) ?? "",
+    masterPrompt: (await chargerPrompt(supabase, clePromptPlacement(slugApp))) ?? "",
     corrections: (corrections ?? []).map((c) => ({
       original_text: c.texte_origine,
       corrected_text: c.texte_corrige,
@@ -1210,6 +1240,7 @@ async function placerSophiaSurDeck(
     slides: deck.map((s) => ({ position: s.position, text: s.texte_overlay ?? "" })),
     caption: contenu.titre ?? "",
     langue,
+    marque: slugApp,
   });
 
   if (placement) {
@@ -1316,7 +1347,10 @@ export async function assurerDeckPourLangue(
     if (r === "retry") {
       const derniere = deck[deck.length - 1];
       if (derniere) {
-        derniere.texte_overlay = sophiaParDefaut(langue);
+        derniere.texte_overlay = placementParDefaut(
+          langue,
+          await slugApplicationDeContenu(supabase, contenu),
+        );
         derniere.position_sophia = true;
         await supabase.from("contenu_langues").update({ slides: deck }).eq("id", cl.id);
       }
@@ -1487,6 +1521,7 @@ async function nettoyerSlide(
         {
           compte_reference_id: contenu.compte_reference_id,
           contenu_id: contenu.id,
+          application_id: contenu.application_id ?? undefined,
           storage_path: path,
           url,
           source: "nettoye_reference",
@@ -1585,6 +1620,7 @@ async function stockerBrut(
       {
         compte_reference_id: contenu.compte_reference_id,
         contenu_id: contenu.id,
+        application_id: contenu.application_id ?? undefined,
         storage_path: `brut/${contenu.id}/${slide.position}`,
         url: slide.raw_url,
         source: "nettoye_reference",
@@ -1716,6 +1752,7 @@ export interface ImportFileRow {
   label_ids: string[];
   /** Langue d'origine du TikTok (boost ELO). */
   langue: string | null;
+  application_id?: string | null;
   batch_id: string | null;
   statut: string;
   contenu_id: string | null;
@@ -1741,10 +1778,15 @@ export async function enqueueImportUrls(
     batchId?: string | null;
     /** Langue d'origine — stockée sur chaque ligne import_file. */
     langue?: string | null;
+    applicationId?: string | null;
   },
 ): Promise<{ batchId: string; enqueued: number; skipped: number; invalides: string[] }> {
   const batchId = opts.batchId ?? crypto.randomUUID();
   const langue = normaliserLangue(opts.langue ?? null);
+  const applicationId =
+    opts.applicationId ??
+    (await applicationIdDeSource(supabase, opts.compteReferenceId)) ??
+    (await applicationSophia(supabase)).id;
   let enqueued = 0;
   let skipped = 0;
   const invalides: string[] = [];
@@ -1763,6 +1805,7 @@ export async function enqueueImportUrls(
     label_ids: opts.labelIds ?? [],
     batch_id: batchId,
     langue,
+    application_id: applicationId,
     statut: "pending",
   });
 
@@ -1858,6 +1901,7 @@ export async function traiterImportFile(
       row.compte_reference_id,
       row.label_ids?.length ? row.label_ids : null,
       row.langue ?? null,
+      row.application_id ?? null,
     );
     await supabase
       .from("import_file")

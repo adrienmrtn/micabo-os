@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { nomApplication, type ApplicationOs } from "@/features/moteur/applications";
 import { nomLangue } from "@/features/moteur/langues";
 import type { TypeCompte } from "@/features/moteur/types";
 
@@ -27,6 +28,9 @@ export function ChampsPremierCompte({
   onPassword,
   deuxFa,
   onDeuxFa,
+  applications,
+  applicationSlug,
+  onApplication,
 }: {
   allowAucun?: boolean;
   typeCompte: PremierCompte;
@@ -44,6 +48,9 @@ export function ChampsPremierCompte({
   onPassword: (v: string) => void;
   deuxFa: string;
   onDeuxFa: (v: string) => void;
+  applications?: ApplicationOs[];
+  applicationSlug?: string;
+  onApplication?: (slug: string) => void;
 }) {
   const { t } = useTranslation();
   const types: PremierCompte[] = allowAucun ? ["perso", "cm", "aucun"] : ["perso", "cm"];
@@ -83,6 +90,24 @@ export function ChampsPremierCompte({
 
       {typeCompte !== "aucun" && (
         <div className="grid gap-3 sm:grid-cols-2">
+          {applications && onApplication && (
+            <div className="space-y-1">
+              <Label htmlFor="premier-app">{t("applications.compte")}</Label>
+              <select
+                id="premier-app"
+                className={selectClass}
+                value={applicationSlug ?? ""}
+                onChange={(e) => onApplication(e.target.value)}
+                required
+              >
+                {applications.map((app) => (
+                  <option key={app.id} value={app.slug}>
+                    {nomApplication(app)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="space-y-1">
             <Label htmlFor="premier-langue">{t("cm.langueCompte")}</Label>
             <select

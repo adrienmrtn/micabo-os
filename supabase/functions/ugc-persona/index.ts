@@ -6,6 +6,7 @@ import { retirerContentCredentialsBytes } from "../_shared/c2pa.ts";
 import { editerNanoBananaPro, genererNanoBananaPro } from "../_shared/fal_nano_banana.ts";
 import { reponseNdjson, veutStream } from "../_shared/nettoyage_etapes.ts";
 import { mapPool } from "../_shared/parallel.ts";
+import { resoudreApplication } from "../_shared/applications.ts";
 import {
   assertAuthorised,
   chargerPrompt,
@@ -218,9 +219,11 @@ Deno.serve(async (request) => {
     }
 
     if (action === "list") {
+      const app = await resoudreApplication(supabase, body);
       const { data, error } = await supabase
         .from("ugc_personas")
         .select("*")
+        .eq("application_id", app.id)
         .order("created_at", { ascending: false });
       if (error) return json({ error: error.message }, 400);
       return json({ ok: true, personas: data ?? [] });
@@ -709,6 +712,7 @@ Deno.serve(async (request) => {
         return json({ error: "photo de profil (1:1) requise" }, 400);
       }
 
+      const app = await resoudreApplication(supabase, body);
       const { data, error } = await supabase
         .from("ugc_personas")
         .insert({
@@ -724,6 +728,7 @@ Deno.serve(async (request) => {
           image_down_url: downUrl,
           image_profile_url: profileUrl,
           storage_prefix: body.draftId ? `ugc/personas/draft/${body.draftId}` : null,
+          application_id: app.id,
         })
         .select("*")
         .single();

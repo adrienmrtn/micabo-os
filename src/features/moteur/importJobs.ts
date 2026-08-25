@@ -242,6 +242,7 @@ export function demarrerImportLien(opts: {
   /** Langue d'origine du TikTok (requis pour le boost ELO). */
   langue: string;
   titre?: string;
+  application_id?: string | null;
 }): string {
   const jobId = newJob(opts.titre ?? opts.url);
   void (async () => {
@@ -257,6 +258,7 @@ export function demarrerImportLien(opts: {
         compteReferenceId: opts.compteReferenceId,
         labelIds: opts.labelIds,
         langue: opts.langue,
+        application_id: opts.application_id ?? null,
       });
       const cur = jobs.find((j) => j.id === jobId);
       if (cur) upsertJob({ ...cur, batchId: r.batchId });

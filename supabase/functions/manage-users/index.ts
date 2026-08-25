@@ -1,3 +1,7 @@
+import {
+  resoudreApplication,
+  type ApplicationRow,
+} from "../_shared/applications.ts";
 import { retirerContentCredentialsBytes } from "../_shared/c2pa.ts";
 import { appliquerIdentiteInstantanee } from "../_shared/persona.ts";
 import { estRoleManager } from "../_shared/roles.ts";
@@ -23,11 +27,18 @@ interface FileLabelQueued {
   item: FileLabelItem;
   /** `"general"` ou code langue (`fr`, `de`, …). */
   queueKey: string;
+  applicationSlug?: string;
+}
+
+interface FileLabelsSlice {
+  items: FileLabelItem[];
+  par_langue: Record<string, FileLabelItem[]>;
 }
 
 interface FileLabelsValeur {
   items: FileLabelItem[];
   par_langue: Record<string, FileLabelItem[]>;
+  par_application?: Record<string, FileLabelsSlice>;
 }
 
 interface PersonaUgcLibre {
@@ -241,6 +252,7 @@ async function gererRequete(request: Request): Promise<Response> {
 
     // HM UGC AI VIDEO : ses créateurs naissent sans file labels / sans labels.
     const hmUgcAiVideo = await estHmUgcAiVideo(supabase, acces);
+    const application = await resoudreApplication(supabase, body);
 
     // File admin uniquement pour un premier compte perso (pas CM, pas login seul).
     let fileItem: FileLabelItem | null = null;
@@ -250,10 +262,10 @@ async function gererRequete(request: Request): Promise<Response> {
     if (creerPerso) {
       if (hmUgcAiVideo) {
         modeUgcAiVideo = true;
-        personaUgc = await personaUgcLibre(supabase);
+        personaUgc = await personaUgcLibre(supabase, application.id);
         if (!personaUgc) return json({ error: "NO_UGC_PERSONA" }, 409);
       } else {
-        const prep = await preparerFileEtPersona(supabase, langue);
+        const prep = await preparerFileEtPersona(supabase, langue, application);
         if (!prep.ok) return json({ error: prep.error }, 409);
         fileItem = prep.fileItem;
         fileItemQueue = prep.fileItemQueue;
@@ -264,7 +276,7 @@ async function gererRequete(request: Request): Promise<Response> {
     // Référence source : best-effort (plus bloquant).
     let referenceId: string | null = null;
     if (creerPerso) {
-      referenceId = await referenceLibre(supabase, langue);
+      referenceId = await referenceLibre(supabase, langue, application.id);
     }
 
     const email = await emailDisponible(supabase, prenom, nom);
@@ -339,7 +351,7 @@ async function gererRequete(request: Request): Promise<Response> {
           postsParJour,
           personaUgc,
           fileItemQueue,
-          { ugcAiVideo: modeUgcAiVideo },
+          { ugcAiVideo: modeUgcAiVideo, application },
         )),
         type_compte: "perso",
       };
@@ -416,7 +428,16 @@ async function gererRequete(request: Request): Promise<Response> {
       return json({ ok: true, deja: true, compteId: deja.id });
     }
 
-    return await creerComptePersoPourPoster(supabase, acces, userId, langue, body.posts_par_jour);
+    const application = await resoudreApplication(supabase, body);
+    return await creerComptePersoPourPoster(
+      supabase,
+      acces,
+      userId,
+      langue,
+      body.posts_par_jour,
+      "",
+      application,
+    );
   }
 
   if (body.action === "ajouter_compte" || body.action === "ajouter_compte_perso") {
@@ -436,6 +457,7 @@ async function gererRequete(request: Request): Promise<Response> {
       return await creerCompteCmPourPoster(supabase, acces, userId, langue, body);
     }
 
+    const application = await resoudreApplication(supabase, body);
     return await creerComptePersoPourPoster(
       supabase,
       acces,
@@ -443,6 +465,7 @@ async function gererRequete(request: Request): Promise<Response> {
       langue,
       body.posts_par_jour,
       String(body.handle_tiktok ?? "").trim().replace(/^@+/, ""),
+      application,
     );
   }
 
@@ -596,6 +619,7 @@ async function creerComptePersoPourPoster(
   langue: string,
   postsParJourBrut: unknown,
   handleTiktok = "",
+  application?: ApplicationRow | null,
 ): Promise<Response> {
   const modeUgcAiVideo = await modeUgcAiVideoPourPoster(supabase, acces, userId);
   let fileItem: FileLabelItem | null = null;
@@ -603,17 +627,17 @@ async function creerComptePersoPourPoster(
   let personaUgc: PersonaUgcLibre | null = null;
 
   if (modeUgcAiVideo) {
-    personaUgc = await personaUgcLibre(supabase);
+    personaUgc = await personaUgcLibre(supabase, application?.id ?? null);
     if (!personaUgc) return json({ error: "NO_UGC_PERSONA" }, 409);
   } else {
-    const prep = await preparerFileEtPersona(supabase, langue);
+    const prep = await preparerFileEtPersona(supabase, langue, application);
     if (!prep.ok) return json({ error: prep.error }, 409);
     fileItem = prep.fileItem;
     fileItemQueue = prep.fileItemQueue;
     personaUgc = prep.personaUgc;
   }
 
-  const referenceId = await referenceLibre(supabase, langue);
+  const referenceId = await referenceLibre(supabase, langue, application?.id ?? null);
   const postsParJour = normaliserPostsParJour(postsParJourBrut);
   const compte = await preparerCompte(
     supabase,
@@ -624,7 +648,7 @@ async function creerComptePersoPourPoster(
     postsParJour,
     personaUgc,
     fileItemQueue,
-    { ugcAiVideo: modeUgcAiVideo },
+    { ugcAiVideo: modeUgcAiVideo, application },
   );
   if (!compte.id) return json({ error: "CREATION_COMPTE_ECHOUEE" }, 500);
   if (handleTiktok) {
@@ -670,6 +694,11 @@ async function creerCompteCmPourPoster(
       poster_id: userId,
       type_compte: "cm",
       langue,
+      ...(body.application_id || body.application_slug
+        ? {
+          application_id: (await resoudreApplication(supabase, body)).id,
+        }
+        : {}),
       posts_par_jour: 1,
       warmup_started_at: null,
       warmup_ends_at: null,
@@ -816,6 +845,26 @@ function normaliserFileLabelsValeur(valeur: unknown): FileLabelsValeur {
   return { items, par_langue };
 }
 
+function sliceFileLabels(file: FileLabelsValeur, slug: string): FileLabelsSlice {
+  const inner = file.par_application?.[slug];
+  if (inner) return { items: inner.items ?? [], par_langue: inner.par_langue ?? {} };
+  if (slug === "sophia") return { items: file.items, par_langue: file.par_langue };
+  return { items: [], par_langue: {} };
+}
+
+function avecSliceApplication(
+  file: FileLabelsValeur,
+  slug: string,
+  slice: FileLabelsSlice,
+): FileLabelsValeur {
+  const par_application = { ...(file.par_application ?? {}) };
+  par_application[slug] = slice;
+  if (slug === "sophia") {
+    return { items: slice.items, par_langue: slice.par_langue, par_application };
+  }
+  return { items: file.items, par_langue: file.par_langue, par_application };
+}
+
 async function ecrireFileLabels(
   supabase: Supabase,
   file: FileLabelsValeur,
@@ -824,10 +873,17 @@ async function ecrireFileLabels(
   for (const [code, liste] of Object.entries(file.par_langue)) {
     if (liste.length > 0) par_langue[code] = liste;
   }
+  const par_application: Record<string, FileLabelsSlice> = {};
+  for (const [slug, slice] of Object.entries(file.par_application ?? {})) {
+    par_application[slug] = {
+      items: slice.items ?? [],
+      par_langue: slice.par_langue ?? {},
+    };
+  }
   await supabase.from("reglages").upsert(
     {
       cle: "file_labels_comptes",
-      valeur: { items: file.items, par_langue },
+      valeur: { items: file.items, par_langue, par_application },
       updated_at: new Date().toISOString(),
     },
     { onConflict: "cle" },
@@ -843,6 +899,7 @@ async function ecrireFileLabels(
 async function popLabelFile(
   supabase: Supabase,
   langue: string,
+  application?: ApplicationRow | null,
 ): Promise<
   | { ok: true; item: FileLabelItem; fromQueue: false }
   | { ok: true; item: FileLabelItem; fromQueue: true; queueKey: string }
@@ -854,30 +911,38 @@ async function popLabelFile(
     .eq("cle", "file_labels_comptes")
     .maybeSingle();
   const file = normaliserFileLabelsValeur(data?.valeur);
+  const slug = application?.slug ?? "sophia";
+  const slice = sliceFileLabels(file, slug);
   const lang = String(langue ?? "").trim().toLowerCase();
 
-  const fileLangue = lang ? (file.par_langue[lang] ?? []) : [];
+  const fileLangue = lang ? (slice.par_langue[lang] ?? []) : [];
   if (fileLangue.length > 0) {
     const [first, ...rest] = fileLangue;
     if (!first) return { ok: false, error: "NO_LABELS" };
-    await ecrireFileLabels(supabase, {
-      items: file.items,
-      par_langue: { ...file.par_langue, [lang]: rest },
-    });
+    await ecrireFileLabels(
+      supabase,
+      avecSliceApplication(file, slug, {
+        items: slice.items,
+        par_langue: { ...slice.par_langue, [lang]: rest },
+      }),
+    );
     return { ok: true, item: first, fromQueue: true, queueKey: lang };
   }
 
-  if (file.items.length > 0) {
-    const [first, ...rest] = file.items;
+  if (slice.items.length > 0) {
+    const [first, ...rest] = slice.items;
     if (!first) return { ok: false, error: "NO_LABELS" };
-    await ecrireFileLabels(supabase, {
-      items: rest,
-      par_langue: file.par_langue,
-    });
+    await ecrireFileLabels(
+      supabase,
+      avecSliceApplication(file, slug, { items: rest, par_langue: slice.par_langue }),
+    );
     return { ok: true, item: first, fromQueue: true, queueKey: "general" };
   }
 
-  const labelId = await labelMoinsUtiliseParLangue(supabase, langue, { ugcOnly: false });
+  const labelId = await labelMoinsUtiliseParLangue(supabase, langue, {
+    ugcOnly: false,
+    applicationId: application?.id ?? null,
+  });
   if (!labelId) return { ok: false, error: "NO_LABELS" };
   return { ok: true, item: { label_id: labelId, ugc: false }, fromQueue: false };
 }
@@ -960,6 +1025,7 @@ async function labelsPourCreateurUgcVideo(
 async function preparerFileEtPersona(
   supabase: Supabase,
   langue: string,
+  application?: ApplicationRow | null,
 ): Promise<
   | {
     ok: true;
@@ -969,12 +1035,16 @@ async function preparerFileEtPersona(
   }
   | { ok: false; error: string }
 > {
-  const popped = await popLabelFile(supabase, langue);
+  const popped = await popLabelFile(supabase, langue, application);
   if (!popped.ok) return { ok: false, error: popped.error };
 
   let fileItem = popped.item;
   const fileItemQueue: FileLabelQueued | null = popped.fromQueue
-    ? { item: { ...popped.item }, queueKey: popped.queueKey }
+    ? {
+      item: { ...popped.item },
+      queueKey: popped.queueKey,
+      applicationSlug: application?.slug,
+    }
     : null;
   let personaUgc: PersonaUgcLibre | null = null;
 
@@ -983,6 +1053,7 @@ async function preparerFileEtPersona(
     if (!labelOk) {
       const fallback = await labelMoinsUtiliseParLangue(supabase, langue, {
         ugcOnly: true,
+        applicationId: application?.id ?? null,
       });
       if (!fallback) {
         if (fileItemQueue) await unshiftLabelFile(supabase, fileItemQueue);
@@ -1004,13 +1075,15 @@ async function preparerFileEtPersona(
 async function labelMoinsUtiliseParLangue(
   supabase: Supabase,
   langue: string,
-  opts: { ugcOnly: boolean },
+  opts: { ugcOnly: boolean; applicationId?: string | null },
 ): Promise<string | null> {
   let pool: string[] = [];
   if (opts.ugcOnly) {
-    pool = await labelIdsAvecContenusUgc(supabase);
+    pool = await labelIdsAvecContenusUgc(supabase, opts.applicationId);
   } else {
-    const { data: tous } = await supabase.from("labels").select("id");
+    let q = supabase.from("labels").select("id");
+    if (opts.applicationId) q = q.eq("application_id", opts.applicationId);
+    const { data: tous } = await q;
     pool = (tous ?? []).map((l) => l.id as string).filter(Boolean);
   }
   if (pool.length === 0) return null;
@@ -1044,11 +1117,16 @@ async function labelMoinsUtiliseParLangue(
   return candidats[Math.floor(Math.random() * candidats.length)] ?? null;
 }
 
-async function labelIdsAvecContenusUgc(supabase: Supabase): Promise<string[]> {
-  const { data } = await supabase
+async function labelIdsAvecContenusUgc(
+  supabase: Supabase,
+  applicationId?: string | null,
+): Promise<string[]> {
+  let q = supabase
     .from("contenu_labels")
-    .select("label_id, contenus!inner(ugc_compatible)")
+    .select("label_id, contenus!inner(ugc_compatible, application_id)")
     .eq("contenus.ugc_compatible", true);
+  if (applicationId) q = q.eq("contenus.application_id", applicationId);
+  const { data } = await q;
   return [...new Set((data ?? []).map((r) => r.label_id as string).filter(Boolean))];
 }
 
@@ -1073,27 +1151,26 @@ async function unshiftLabelFile(
     .eq("cle", "file_labels_comptes")
     .maybeSingle();
   const file = normaliserFileLabelsValeur(data?.valeur);
+  const slug = queued.applicationSlug ?? "sophia";
+  const slice = sliceFileLabels(file, slug);
   const key = String(queued.queueKey ?? "general").trim().toLowerCase() || "general";
 
-  if (key === "general") {
-    await ecrireFileLabels(supabase, {
-      items: [queued.item, ...file.items],
-      par_langue: file.par_langue,
-    });
-    return;
-  }
-
-  const liste = file.par_langue[key] ?? [];
-  await ecrireFileLabels(supabase, {
-    items: file.items,
-    par_langue: { ...file.par_langue, [key]: [queued.item, ...liste] },
-  });
+  const next: FileLabelsSlice = key === "general"
+    ? { items: [queued.item, ...slice.items], par_langue: slice.par_langue }
+    : {
+      items: slice.items,
+      par_langue: { ...slice.par_langue, [key]: [queued.item, ...(slice.par_langue[key] ?? [])] },
+    };
+  await ecrireFileLabels(supabase, avecSliceApplication(file, slug, next));
 }
 
-async function personaUgcLibre(supabase: Supabase): Promise<PersonaUgcLibre | null> {
-  const { data: personas } = await supabase
-    .from("ugc_personas")
-    .select("id, nom, image_face_url, image_profile_url");
+async function personaUgcLibre(
+  supabase: Supabase,
+  applicationId?: string | null,
+): Promise<PersonaUgcLibre | null> {
+  let q = supabase.from("ugc_personas").select("id, nom, image_face_url, image_profile_url");
+  if (applicationId) q = q.eq("application_id", applicationId);
+  const { data: personas } = await q;
   if (!personas?.length) return null;
 
   const { data: pris } = await supabase
@@ -1171,7 +1248,7 @@ async function preparerCompte(
   personaUgc: PersonaUgcLibre | null,
   /** Entrée admin à restaurer si l'insert échoue (pas le fallback label). */
   fileItemQueue: FileLabelQueued | null = null,
-  opts: { ugcAiVideo?: boolean } = {},
+  opts: { ugcAiVideo?: boolean; application?: ApplicationRow | null } = {},
 ): Promise<{
   id: string;
   reference: string | null;
@@ -1199,6 +1276,7 @@ async function preparerCompte(
       type_compte: "perso",
       compte_reference_id: referenceId,
       langue,
+      ...(opts.application ? { application_id: opts.application.id } : {}),
       posts_par_jour: postsParJour,
       warmup_started_at: null,
       warmup_ends_at: null,
@@ -1299,12 +1377,15 @@ async function preparerCompte(
 async function referenceLibre(
   supabase: Supabase,
   langue: string,
+  applicationId?: string | null,
 ): Promise<string | null> {
-  const { data: refs } = await supabase
+  let q = supabase
     .from("comptes_reference")
     .select("id, langue, ordre_assignation, ordre_par_langue, created_at")
     .eq("is_active", true)
     .is("parent_id", null);
+  if (applicationId) q = q.eq("application_id", applicationId);
+  const { data: refs } = await q;
   if (!refs || refs.length === 0) return null;
 
   const { data: comptes } = await supabase

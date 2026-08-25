@@ -9,6 +9,8 @@ export type CompteVignette = {
   id: string;
   type_compte?: string | null;
   langue: string;
+  application_id?: string | null;
+  application_slug?: string | null;
   handle_tiktok?: string | null;
   persona_nom?: string | null;
   avatar_url?: string | null;
@@ -73,6 +75,9 @@ export function EnteteCompte({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <BadgeTypeCompte compte={compte} />
+          {(compte.application_slug || compte.application_id) && (
+            <Badge variant="secondary">{compte.application_slug ?? "app"}</Badge>
+          )}
           <span className="text-sm leading-none" title={compte.langue}>
             {drapeauLangue(compte.langue)}
           </span>

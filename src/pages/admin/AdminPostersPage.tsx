@@ -27,6 +27,7 @@ import {
   assurerComptePoster,
   creerPoster,
   creerRecruteur,
+  listerApplications,
   definirRole,
   demarrerWarmup,
   skipWarmup,
@@ -45,6 +46,8 @@ import {
   supprimerPoster,
 } from "@/features/moteur/api";
 import { LabelPicker } from "@/features/moteur/LabelPicker";
+import { posterMatcheApplication, SLUG_SOPHIA } from "@/features/moteur/applications";
+import { SelectApplication } from "@/features/moteur/SelectApplication";
 import { drapeauLangue, nomLangue } from "@/features/moteur/langues";
 import { WarmupBadge } from "@/features/moteur/WarmupBadge";
 import { phaseCreateur, type PhaseCreateur } from "@/features/moteur/warmup";
@@ -299,7 +302,7 @@ function LabelsCompteSelect({
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const labels = useQuery({ queryKey: ["labels"], queryFn: listerLabels });
+  const labels = useQuery({ queryKey: ["labels"], queryFn: () => listerLabels() });
   const ids = actifs.map((l) => l.id);
   const maj = useMutation({
     mutationFn: (next: string[]) => setLabelsCompte(compteId, next),
@@ -410,7 +413,8 @@ export function AdminPostersPage() {
   const posters = useQuery({ queryKey: ["posters"], queryFn: listerPosters });
   const comptes = useQuery({ queryKey: ["comptes"], queryFn: listerComptes });
   const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
-  const labels = useQuery({ queryKey: ["labels"], queryFn: listerLabels });
+  const applications = useQuery({ queryKey: ["applications"], queryFn: listerApplications });
+  const labels = useQuery({ queryKey: ["labels"], queryFn: () => listerLabels() });
   const labelsComptes = useQuery({
     queryKey: ["compte-labels-all", (comptes.data ?? []).map((c) => c.id).join(",")],
     queryFn: () => labelsDesComptes((comptes.data ?? []).map((c) => c.id)),
@@ -421,6 +425,8 @@ export function AdminPostersPage() {
   const [filtrePhase, setFiltrePhase] = React.useState<"tous" | PhaseCreateur>("tous");
   const [filtreLangue, setFiltreLangue] = React.useState("");
   const [filtreLabel, setFiltreLabel] = React.useState("");
+  const [filtreApp, setFiltreApp] = React.useState("tous");
+  const [applicationSlug, setApplicationSlug] = React.useState(SLUG_SOPHIA);
 
   const comptesParPoster = React.useMemo(() => {
     const m = new Map<string, CompteAvecDetails[]>();
@@ -476,6 +482,7 @@ export function AdminPostersPage() {
         nom,
         password,
         langue: premierCompte === "aucun" ? undefined : langue || undefined,
+        application_slug: applicationSlug,
         type_compte: premierCompte,
         posts_par_jour: premierCompte === "perso" ? postsParJour : undefined,
         handle_tiktok: handleTiktok,
@@ -626,6 +633,9 @@ export function AdminPostersPage() {
             langues={langues.data ?? []}
             langue={langue}
             onLangue={setLangue}
+            applications={applications.data ?? []}
+            applicationSlug={applicationSlug}
+            onApplication={setApplicationSlug}
             postsParJour={postsParJour}
             onPostsParJour={setPostsParJour}
             handle={handleTiktok}
@@ -837,6 +847,18 @@ export function AdminPostersPage() {
       const labs = liste.flatMap((c) => labelsComptes.data?.get(c.id) ?? []);
       if (!labs.some((l) => l.id === filtreLabel)) return false;
     }
+    if (
+      !posterMatcheApplication(
+        liste.map((c) => ({
+          application_id: c.application_id,
+          application_slug: null,
+        })),
+        filtreApp,
+        applications.data ?? [],
+      )
+    ) {
+      return false;
+    }
     return true;
   };
 
@@ -860,7 +882,7 @@ export function AdminPostersPage() {
   const filtresActifs = Boolean(filtreLangue) || Boolean(filtreLabel);
 
   const barreFiltres = (
-    <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3">
+    <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-2 lg:grid-cols-4">
       <div className="space-y-1">
         <Label htmlFor="filtrePhase">{t("posters.filtrePhase")}</Label>
         <select
@@ -906,6 +928,16 @@ export function AdminPostersPage() {
             </option>
           ))}
         </select>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="filtreApp">{t("applications.filtre")}</Label>
+        <SelectApplication
+          id="filtreApp"
+          applications={applications.data ?? []}
+          value={filtreApp}
+          onChange={setFiltreApp}
+          allowTous
+        />
       </div>
     </div>
   );
@@ -1534,6 +1566,7 @@ export function AdminPostersPage() {
                   posterId={fiche.id}
                   languesProposees={langues.data ?? []}
                   languesPrisesCm={languesCmPrises(ficheComptes)}
+                  applications={applications.data ?? []}
                 />
               </div>
 

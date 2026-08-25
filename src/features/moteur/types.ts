@@ -15,6 +15,8 @@ export interface CompteReference {
   handle_tiktok: string;
   niche: string | null;
   langue: string;
+  /** Application OS (sophia, micabo, …). */
+  application_id: string;
   /** Prompt adapté (voix / ton de traduction) propre à cette source. */
   style_profile: string | null;
   /** Genre des identités des posters qui reprennent cette source (prénom H/F). */
@@ -46,6 +48,8 @@ export interface CompteResumePoster {
   id: string;
   type_compte: TypeCompte;
   langue: string;
+  application_id: string | null;
+  application_slug: string | null;
   handle_tiktok: string | null;
   persona_nom: string | null;
   persona_bio: string | null;
@@ -63,6 +67,9 @@ export interface Compte {
   compte_reference_id: string | null;
   type_compte: TypeCompte;
   langue: string;
+  /** Application associée à ce compte TikTok. */
+  application_id: string;
+  application_slug?: string | null;
   persona_nom: string | null;
   persona_bio: string | null;
   avatar_url: string | null;
@@ -124,6 +131,7 @@ export interface Media {
   id: string;
   compte_id: string | null;
   compte_reference_id: string | null;
+  application_id?: string | null;
   /** Lien optionnel vers un contenu v-next (biblio partagée). */
   contenu_id: string | null;
   storage_path: string;
@@ -271,11 +279,18 @@ export interface FileLabelCompteItem {
  * `par_langue[code]` surpasse `items` (file générale) pour cette langue ;
  * si la file langue est vide → file générale ; si les deux sont vides → least-used.
  */
+export interface FileLabelsApplication {
+  items: FileLabelCompteItem[];
+  par_langue: Record<string, FileLabelCompteItem[]>;
+}
+
 export interface ReglagesFileLabels {
-  /** File générale (fallback). */
+  /** File générale (fallback, app courante / Sophia legacy). */
   items: FileLabelCompteItem[];
   /** Files prioritaires par code langue (`fr`, `de`, …). */
   par_langue: Record<string, FileLabelCompteItem[]>;
+  /** Files séparées par slug d'application. */
+  par_application?: Record<string, FileLabelsApplication>;
 }
 
 export interface ReglagesWarmup {
@@ -358,6 +373,7 @@ export interface Label {
   slug: string;
   couleur: string | null;
   created_at: string;
+  application_id: string;
   /** Pool UGC AI VIDEO (HM vidéo + reactions/utilisations). */
   ugc_ai_video: boolean;
   /** Genre imposé pour les prénoms TikTok des créateurs de ce label. */
@@ -420,6 +436,7 @@ export interface Contenu {
   titre: string;
   structure_slides: ContenuSlide[];
   compte_reference_id: string | null;
+  application_id: string;
   sujet_id: string | null;
   source_url: string | null;
   langue_source: string;

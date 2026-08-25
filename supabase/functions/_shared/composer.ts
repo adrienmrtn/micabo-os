@@ -1,3 +1,8 @@
+import {
+  applicationParId,
+  clePromptPlacement,
+  placementParDefaut,
+} from "./applications.ts";
 import { integrateSophia, translateSlideshow } from "./gemini.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
 
@@ -15,25 +20,6 @@ const MAX_TENTATIVES_SOPHIA = 15;
  * mention par défaut, présente et modifiable, que pas de Sophia du tout. Repli
  * anglais pour toute langue non prévue.
  */
-function sophiaParDefaut(langue: string): string {
-  const par: Record<string, string> = {
-    fr: "Envie d'en apprendre plus chaque jour ? L'appli Sophia t'apprend une culture générale de dingue en quelques minutes. Teste-la 👀",
-    en: "Want to learn something new every day? The Sophia app teaches you wild general knowledge in minutes. Give it a try 👀",
-    es: "¿Quieres aprender algo nuevo cada día? La app Sophia te enseña cultura general increíble en minutos. Pruébala 👀",
-    de: "Lust, jeden Tag etwas Neues zu lernen? Die Sophia-App bringt dir in wenigen Minuten richtig gutes Allgemeinwissen bei. Probier's aus 👀",
-    it: "Vuoi imparare qualcosa di nuovo ogni giorno? L'app Sophia ti insegna una cultura generale pazzesca in pochi minuti. Provala 👀",
-    pt: "Queres aprender algo novo todos os dias? A app Sophia ensina-te cultura geral incrível em poucos minutos. Experimenta 👀",
-    cs: "Chceš se každý den naučit něco nového? Aplikace Sophia tě naučí skvělé všeobecné znalosti za pár minut. Vyzkoušej ji 👀",
-    nl: "Wil je elke dag iets nieuws leren? De Sophia-app leert je in een paar minuten waanzinnige algemene kennis. Probeer het 👀",
-    el: "Θέλεις να μαθαίνεις κάτι νέο κάθε μέρα; Η εφαρμογή Sophia σου μαθαίνει απίστευτη γενική γνώση σε λίγα λεπτά. Δοκίμασέ την 👀",
-    hu: "Szeretnél minden nap valami újat tanulni? A Sophia app perceken belül vad általános műveltséget ad. Próbáld ki 👀",
-    pl: "Chcesz codziennie uczyć się czegoś nowego? Aplikacja Sophia uczy szalonej wiedzy ogólnej w kilka minut. Wypróbuj 👀",
-    ro: "Vrei să înveți ceva nou în fiecare zi? Aplicația Sophia te învață cultură generală tare în câteva minute. Încearc-o 👀",
-    sv: "Vill du lära dig något nytt varje dag? Sophia-appen lär dig galen allmänbildning på några minuter. Testa den 👀",
-    tr: "Her gün yeni bir şey öğrenmek ister misin? Sophia uygulaması dakikalar içinde efsane genel kültür öğretir. Dene 👀",
-  };
-  return par[langue] ?? par.en;
-}
 
 interface Slide {
   position: number;
@@ -271,9 +257,14 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
     // texte. Aucune alternative propre → on garde le brut, qui reste signalé.
     await garantirVisuelsPropres(supabase, compte, post.id);
 
-    // 2 — placement de l'appli Sophia sur l'une des slides.
+    // 2 — placement de l'appli (Sophia / micabo / …) sur l'une des slides.
     if (!existantes.some((s) => s.position_sophia)) {
       await marquer(supabase, post.id, "placement_sophia");
+      const appCompte = await applicationParId(
+        supabase,
+        compte.application_id as string | undefined,
+      );
+      const slugApp = appCompte?.slug ?? "sophia";
 
       const { data: corrections } = await supabase
         .from("corrections")
@@ -282,7 +273,7 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
         .limit(40);
 
       const placement = await integrateSophia({
-        masterPrompt: (await chargerPrompt(supabase, "placement_sophia")) ?? "",
+        masterPrompt: (await chargerPrompt(supabase, clePromptPlacement(slugApp))) ?? "",
         corrections: (corrections ?? []).map((c) => ({
           original_text: c.texte_origine,
           corrected_text: c.texte_corrige,
@@ -293,6 +284,7 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
         })),
         caption: sujet.titre ?? "",
         langue: compte.langue,
+        marque: slugApp,
       });
 
       const cible = placement
@@ -333,7 +325,10 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
         if (derniere) {
           await supabase
             .from("post_slides")
-            .update({ texte_overlay: sophiaParDefaut(compte.langue), position_sophia: true })
+            .update({
+              texte_overlay: placementParDefaut(compte.langue, slugApp),
+              position_sophia: true,
+            })
             .eq("id", derniere.id);
           sophiaRepli = true;
         } else {

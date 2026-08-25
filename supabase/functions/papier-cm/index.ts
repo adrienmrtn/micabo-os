@@ -27,6 +27,7 @@ import {
   relancerMaster,
   tickPapierJour,
 } from "../_shared/papier_master.ts";
+import { resoudreApplication } from "../_shared/applications.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type Tick = {
@@ -141,10 +142,12 @@ Deno.serve(async (request) => {
     }
 
     if (action === "assurer") {
+      const app = await resoudreApplication(supabase, body ?? {});
       const master = await masterEnCoursOuNouveau(supabase, {
         date: typeof body?.date === "string" ? body.date : undefined,
         topic: typeof body?.topic === "string" ? body.topic : undefined,
         voice: typeof body?.voice === "string" ? body.voice : undefined,
+        applicationId: app.id,
       });
       const tick = await avancerMaster(supabase, master.id);
       return json({ ok: true, masterId: master.id, ...enchainer(request, tick, master.id) });

@@ -31,6 +31,7 @@ import {
   type MediaBiblioLabel,
   type SlideBrouillonManuel,
 } from "@/features/moteur/api";
+import { useApplication } from "@/features/moteur/ApplicationContext";
 import { cn } from "@/lib/utils";
 
 const selectClass =
@@ -77,6 +78,7 @@ function GrilleImages({
 export function AdminCreationPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const { applicationId } = useApplication();
   const [params, setParams] = useSearchParams();
   const labelFromUrl = params.get("label") ?? "";
 
@@ -91,7 +93,11 @@ export function AdminCreationPage() {
   const [pickerPos, setPickerPos] = React.useState<number | null>(null);
   const [contenuId, setContenuId] = React.useState<string | null>(null);
 
-  const labels = useQuery({ queryKey: ["labels"], queryFn: listerLabels });
+  const labels = useQuery({
+    queryKey: ["labels", applicationId],
+    queryFn: () => listerLabels(applicationId),
+    enabled: Boolean(applicationId),
+  });
   const label = (labels.data ?? []).find((l) => l.id === labelId) ?? null;
 
   const hooks = useQuery({

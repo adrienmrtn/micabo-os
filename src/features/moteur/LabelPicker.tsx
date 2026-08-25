@@ -2,6 +2,7 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
+import { useApplication } from "@/features/moteur/ApplicationContext";
 import { listerLabels } from "@/features/moteur/api";
 
 /**
@@ -21,7 +22,11 @@ export function LabelPicker({
   filter?: (lab: { id: string; slug: string; ugc_ai_video: boolean }) => boolean;
 }) {
   const { t } = useTranslation();
-  const labels = useQuery({ queryKey: ["labels"], queryFn: listerLabels });
+  const { applicationId } = useApplication();
+  const labels = useQuery({
+    queryKey: ["labels", applicationId],
+    queryFn: () => listerLabels(applicationId),
+  });
   const set = new Set(selected);
   const liste = (labels.data ?? []).filter((lab) => (filter ? filter(lab) : true));
 

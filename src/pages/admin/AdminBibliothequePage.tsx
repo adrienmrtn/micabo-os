@@ -51,6 +51,7 @@ import {
   type EvenementEtape,
   type ProviderNettoyage,
 } from "@/features/moteur/nettoyageEtapes";
+import { useApplication } from "@/features/moteur/ApplicationContext";
 import type { Media } from "@/features/moteur/types";
 
 const selectClass =
@@ -245,6 +246,7 @@ function VignetteMedia({
 
 export function AdminBibliothequePage() {
   const { t } = useTranslation();
+  const { applicationId } = useApplication();
   const queryClient = useQueryClient();
   const [labelId, setLabelId] = React.useState("");
   const [page, setPage] = React.useState(1);
@@ -271,15 +273,21 @@ export function AdminBibliothequePage() {
       ? { fait: captionRun.fait, total: captionRun.total }
       : null;
 
-  const labels = useQuery({ queryKey: ["labels-biblio"], queryFn: listerLabelsBiblio });
+  const labels = useQuery({
+    queryKey: ["labels-biblio", applicationId],
+    queryFn: () => listerLabelsBiblio(applicationId),
+    enabled: Boolean(applicationId),
+  });
   const biblio = useQuery({
-    queryKey: ["medias-biblio", labelId || "tous", page, BIBLIO_PAGE_SIZE],
+    queryKey: ["medias-biblio", applicationId, labelId || "tous", page, BIBLIO_PAGE_SIZE],
     queryFn: () =>
       listerBibliothequePage({
         labelId: labelId || undefined,
         page,
         pageSize: BIBLIO_PAGE_SIZE,
+        applicationId,
       }),
+    enabled: Boolean(applicationId),
   });
   const { data: reglages } = useQuery({
     queryKey: ["reglages"],

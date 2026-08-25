@@ -38,6 +38,7 @@ import { demarrerImportCompte, demarrerImportLien, syncMajJobDepuisRun } from "@
 import { etatDepuisRun } from "@/features/moteur/majSequentielle";
 import { ImportHistoriquePanel } from "@/features/moteur/ImportHistoriquePanel";
 import { ImportJobsPanel } from "@/features/moteur/ImportJobsPanel";
+import { useApplication } from "@/features/moteur/ApplicationContext";
 import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
 import type { CompteReference, Label as NicheLabel } from "@/features/moteur/types";
 import { cn } from "@/lib/utils";
@@ -795,6 +796,7 @@ function GroupeSource({
 function FormAjoutSource({ niches }: { niches: NicheLabel[] }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { applicationId } = useApplication();
   const [mode, setMode] = React.useState<"compte" | "lien">("compte");
   const [handle, setHandle] = React.useState("");
   const [url, setUrl] = React.useState("");
@@ -815,6 +817,7 @@ function FormAjoutSource({ niches }: { niches: NicheLabel[] }) {
           handle,
           niche: nicheNom,
           langue,
+          application_id: applicationId,
         });
         await setLabelsSource(cree.id, [nicheId]);
         // Scrape + pipeline en arrière-plan — la page reste utilisable.
@@ -834,6 +837,7 @@ function FormAjoutSource({ niches }: { niches: NicheLabel[] }) {
         labelIds: [nicheId],
         langue,
         titre: lien,
+        application_id: applicationId,
       });
       return { kind: "lien" as const };
     },
@@ -1064,10 +1068,19 @@ function BarreUpdateSources({ sources }: { sources: CompteReference[] }) {
 
 export function AdminSourcesPage() {
   const { t } = useTranslation();
+  const { applicationId } = useApplication();
   const [bilanOubli, setBilanOubli] = React.useState<BilanOubli | null>(null);
-  const sources = useQuery({ queryKey: ["sources"], queryFn: listerSources });
+  const sources = useQuery({
+    queryKey: ["sources", applicationId],
+    queryFn: () => listerSources(applicationId),
+    enabled: Boolean(applicationId),
+  });
   const stock = useQuery({ queryKey: ["stock-sources"], queryFn: stockParSource });
-  const niches = useQuery({ queryKey: ["labels"], queryFn: listerLabels });
+  const niches = useQuery({
+    queryKey: ["labels", applicationId],
+    queryFn: () => listerLabels(applicationId),
+    enabled: Boolean(applicationId),
+  });
 
   const toutes = sources.data ?? [];
   const principaux = toutes.filter((s) => !s.parent_id);

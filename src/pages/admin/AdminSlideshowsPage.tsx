@@ -56,6 +56,7 @@ import {
   type EvenementEtape,
   type ProviderNettoyage,
 } from "@/features/moteur/nettoyageEtapes";
+import { useApplication } from "@/features/moteur/ApplicationContext";
 import { nomLangue } from "@/features/moteur/langues";
 import type { ContenuLangue, ContenuSlide, Media } from "@/features/moteur/types";
 import { ugcVisages } from "@/features/moteur/ugcVisages";
@@ -814,6 +815,7 @@ function DetailSlideshow({
   onFermer: () => void;
 }) {
   const { t, i18n } = useTranslation();
+  const { applicationId } = useApplication();
   const queryClient = useQueryClient();
   const detail = useQuery({
     queryKey: ["slideshow", id],
@@ -853,9 +855,10 @@ function DetailSlideshow({
   const [labelUgcId, setLabelUgcId] = React.useState("");
 
   const labelsTous = useQuery({
-    queryKey: ["labels"],
-    queryFn: listerLabels,
+    queryKey: ["labels", applicationId],
+    queryFn: () => listerLabels(applicationId),
     staleTime: 60_000,
+    enabled: Boolean(applicationId),
   });
 
   /** Patch cache détail + listes — pas de refetch lourd. */
@@ -1546,6 +1549,7 @@ function DetailSlideshow({
 
 export function AdminSlideshowsPage() {
   const { t } = useTranslation();
+  const { applicationId } = useApplication();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [filtre, setFiltre] = React.useState<"tous" | "valide" | "rejete">("tous");
@@ -1568,7 +1572,7 @@ export function AdminSlideshowsPage() {
   }, [searchParams]);
 
   const contenus = useQuery({
-    queryKey: ["slideshows", filtre, filtreLabel, filtreCompte],
+    queryKey: ["slideshows", applicationId, filtre, filtreLabel, filtreCompte],
     queryFn: () =>
       listerContenus({
         statut: filtre === "tous" ? undefined : filtre,
@@ -1579,13 +1583,16 @@ export function AdminSlideshowsPage() {
         compteReferenceId:
           filtreCompte && filtreCompte !== "__none__" ? filtreCompte : undefined,
         sansCompte: filtreCompte === "__none__",
+        applicationId,
       }),
+    enabled: Boolean(applicationId),
   });
 
   const sources = useQuery({
-    queryKey: ["sources"],
-    queryFn: listerSources,
+    queryKey: ["sources", applicationId],
+    queryFn: () => listerSources(applicationId),
     staleTime: 60_000,
+    enabled: Boolean(applicationId),
   });
 
   const statsComptes = useQuery({
@@ -1595,9 +1602,10 @@ export function AdminSlideshowsPage() {
   });
 
   const labelsTous = useQuery({
-    queryKey: ["labels"],
-    queryFn: listerLabels,
+    queryKey: ["labels", applicationId],
+    queryFn: () => listerLabels(applicationId),
     staleTime: 60_000,
+    enabled: Boolean(applicationId),
   });
 
   const labelsDisponibles = React.useMemo(() => {

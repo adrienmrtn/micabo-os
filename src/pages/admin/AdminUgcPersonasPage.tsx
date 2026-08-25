@@ -26,6 +26,7 @@ import {
   type AffectationPersonaUgc,
   type UgcAngle,
 } from "@/features/ugc/api";
+import { useApplication } from "@/features/moteur/ApplicationContext";
 import type { UgcPersona, UgcProfileRef } from "@/features/ugc/types";
 
 type Etape = "prompt" | "face" | "angles" | "profile" | "save";
@@ -35,6 +36,7 @@ const ANGLES: UgcAngle[] = ["left", "right", "down"];
 export function AdminUgcPersonasPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { applicationId } = useApplication();
 
   const defaults = useQuery({
     queryKey: ["ugc-persona-defaults"],
@@ -42,12 +44,14 @@ export function AdminUgcPersonasPage() {
     staleTime: 60_000,
   });
   const liste = useQuery({
-    queryKey: ["ugc-personas"],
-    queryFn: async () => (await listerUgcPersonas()).personas,
+    queryKey: ["ugc-personas", applicationId],
+    queryFn: async () => (await listerUgcPersonas(applicationId)).personas,
+    enabled: Boolean(applicationId),
   });
   const affectations = useQuery({
-    queryKey: ["ugc-persona-comptes"],
-    queryFn: listerAffectationsPersonasUgc,
+    queryKey: ["ugc-persona-comptes", applicationId],
+    queryFn: () => listerAffectationsPersonasUgc(applicationId),
+    enabled: Boolean(applicationId),
     staleTime: 30_000,
   });
   const refsQuery = useQuery({
@@ -331,6 +335,7 @@ export function AdminUgcPersonasPage() {
         promptRight,
         promptDown,
         promptProfile,
+        application_id: applicationId,
       });
     },
     onSuccess: () => {

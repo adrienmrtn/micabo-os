@@ -33,6 +33,7 @@ import {
   type PapierMaster,
   type PapierStatut,
 } from "@/features/moteur/api";
+import { useApplication } from "@/features/moteur/ApplicationContext";
 import { drapeauLangue, nomLangue } from "@/features/moteur/langues";
 import { REGLAGES_PAPIER_DEFAUT, VOIX_PAPIER } from "@/features/moteur/papierReglages";
 import { TesterAssignationPapierCard } from "@/features/moteur/TesterAssignationPapierCard";
@@ -75,14 +76,16 @@ function vignetteMaster(master: PapierMaster): string | null {
 export function AdminPapierPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { applicationId } = useApplication();
   const jour = aujourdhuiParis();
   const [topic, setTopic] = React.useState("");
   const [voix, setVoix] = React.useState("");
   const [selectionId, setSelectionId] = React.useState<string | null>(null);
 
   const liste = useQuery({
-    queryKey: ["papier-masters"],
-    queryFn: () => listerPapierMasters(60),
+    queryKey: ["papier-masters", applicationId],
+    queryFn: () => listerPapierMasters(60, applicationId),
+    enabled: Boolean(applicationId),
     refetchInterval: (q) => {
       const rows = q.state.data ?? [];
       const busy = rows.some(
@@ -125,6 +128,7 @@ export function AdminPapierPage() {
         date: jour,
         topic: topic.trim() || undefined,
         voice: voix || undefined,
+        application_id: applicationId,
       }),
     onSuccess: invalider,
   });

@@ -7,6 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useApplication } from "@/features/moteur/ApplicationContext";
+import {
+  avecFileLabelsApplication,
+  fileLabelsDeLApplication,
+} from "@/features/moteur/applications";
 import {
   aujourdhuiParis,
   ecrireReglage,
@@ -213,12 +218,18 @@ function SchemaPipeline({ action }: { action: PipelineAction }) {
 export function AdminReglagesPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { applicationId, slug } = useApplication();
   const { data, isPending } = useQuery({ queryKey: ["reglages"], queryFn: lireReglages });
-  const labels = useQuery({ queryKey: ["labels"], queryFn: listerLabels });
+  const labels = useQuery({
+    queryKey: ["labels", applicationId],
+    queryFn: () => listerLabels(applicationId),
+    enabled: Boolean(applicationId),
+  });
   const labelsUgc = useQuery({
-    queryKey: ["labels-avec-ugc"],
-    queryFn: listerLabelIdsAvecUgc,
+    queryKey: ["labels-avec-ugc", applicationId],
+    queryFn: () => listerLabelIdsAvecUgc(applicationId),
     staleTime: 30_000,
+    enabled: Boolean(applicationId),
   });
 
   const [brouillon, setBrouillon] = React.useState<Reglages | null>(null);
@@ -266,8 +277,10 @@ export function AdminReglagesPage() {
   }
 
   const maj = (patch: Partial<Reglages>) => setBrouillon({ ...reglages, ...patch });
+  const fileApp = fileLabelsDeLApplication(reglages.file_labels_comptes, slug);
   const majFile = (items: FileLabelCompteItem[]) => {
-    const file = avecItemsFile(reglages.file_labels_comptes, fileQueueKey, items);
+    const slice = avecItemsFile(fileApp, fileQueueKey, items);
+    const file = avecFileLabelsApplication(reglages.file_labels_comptes, slug, slice);
     setBrouillon({ ...reglages, file_labels_comptes: file });
     persisterFile.mutate(file);
   };
@@ -276,7 +289,7 @@ export function AdminReglagesPage() {
   const total =
     reglages.repartition.recycle + reglages.repartition.remanie + reglages.repartition.nouveau;
   const totalValide = total === 100;
-  const fileActive = itemsDeLaFile(reglages.file_labels_comptes, fileQueueKey);
+  const fileActive = itemsDeLaFile(fileApp, fileQueueKey);
   const cleaningSchema = schemaCleaning(reglages.nettoyage.provider_principal);
 
   return (
@@ -700,10 +713,10 @@ export function AdminReglagesPage() {
                 }}
               >
                 <option value="general">
-                  {t("warmup.fileGenerale")} ({reglages.file_labels_comptes.items.length})
+                  {t("warmup.fileGenerale")} ({fileApp.items.length})
                 </option>
                 {LANGUES_CIBLES.map((code) => {
-                  const n = (reglages.file_labels_comptes.par_langue[code] ?? []).length;
+                  const n = (fileApp.par_langue[code] ?? []).length;
                   return (
                     <option key={code} value={code}>
                       {nomLangue(code)} ({n})
