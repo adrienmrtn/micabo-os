@@ -25,8 +25,10 @@ import {
   majCompte,
   supprimerPoster,
 } from "@/features/moteur/api";
+import { useApplication } from "@/features/moteur/ApplicationContext";
 import { SLUG_SOPHIA } from "@/features/moteur/applications";
 import { ChampsPremierCompte, type PremierCompte } from "@/features/moteur/ChampsPremierCompte";
+import { langueInitiale } from "@/features/moteur/langues";
 import { comptePrincipal, estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
 import { FormulaireAjouterCompte } from "@/features/moteur/FormulaireCompteCm";
 import { EnteteCompte } from "@/features/moteur/VignetteCompte";
@@ -241,7 +243,8 @@ export function HiringPosterPage() {
   const [prenom, setPrenom] = React.useState("");
   const [nom, setNom] = React.useState("");
   const [langue, setLangue] = React.useState("");
-  const [applicationSlug, setApplicationSlug] = React.useState(SLUG_SOPHIA);
+  const { slug: slugContexte } = useApplication();
+  const [applicationSlug, setApplicationSlug] = React.useState(slugContexte || SLUG_SOPHIA);
   const [premierCompte, setPremierCompte] = React.useState<PremierCompte>("perso");
   const [postsParJour, setPostsParJour] = React.useState<1 | 2 | 3>(2);
   const [handleTiktok, setHandleTiktok] = React.useState("");
@@ -262,10 +265,13 @@ export function HiringPosterPage() {
   const languesChoix = mesLangues.length > 0 ? mesLangues : (langues.data ?? []);
 
   React.useEffect(() => {
+    if (slugContexte) setApplicationSlug(slugContexte);
+  }, [slugContexte]);
+
+  React.useEffect(() => {
     if (!languesChoix.length) return;
-    if (langue && languesChoix.includes(langue)) return;
-    setLangue(languesChoix[0]!);
-  }, [languesChoix, langue]);
+    setLangue((actuel) => langueInitiale(languesChoix, actuel));
+  }, [languesChoix]);
 
   const creer = useMutation({
     mutationFn: () =>

@@ -20,7 +20,7 @@ async function urlsDejaPrises(supabase: Supabase): Promise<Set<string>> {
 
 async function chercherVisuels(
   supabase: Supabase,
-  opts: { labelIds?: string[]; sourceId?: string | null },
+  opts: { labelIds?: string[]; sourceId?: string | null; applicationId?: string | null },
 ): Promise<VisuelAvatar[]> {
   const labelIds = (opts.labelIds ?? []).filter(Boolean);
   let q = supabase
@@ -35,6 +35,7 @@ async function chercherVisuels(
     .order("visage_identifiable", { ascending: true, nullsFirst: false })
     .order("used_count")
     .limit(80);
+  if (opts.applicationId) q = q.eq("application_id", opts.applicationId);
   if (labelIds.length === 1) q = q.eq("media_labels.label_id", labelIds[0]!);
   else if (labelIds.length > 1) q = q.in("media_labels.label_id", labelIds);
   if (opts.sourceId) q = q.eq("compte_reference_id", opts.sourceId);
@@ -51,11 +52,14 @@ async function labelIdsDuTheme(
   supabase: Supabase,
   labelId: string | null | undefined,
   labelNom: string | null | undefined,
+  applicationId?: string | null,
 ): Promise<string[]> {
   const theme: ThemeLabel = themeDuLabel(labelNom);
   if (theme === "default" && !labelId) return [];
 
-  const { data: tous } = await supabase.from("labels").select("id, nom, slug");
+  let q = supabase.from("labels").select("id, nom, slug");
+  if (applicationId) q = q.eq("application_id", applicationId);
+  const { data: tous } = await q;
   const ids: string[] = [];
   for (const l of tous ?? []) {
     const nom = (l.nom as string) ?? (l.slug as string) ?? "";
@@ -78,32 +82,40 @@ export async function choisirVisuelSansVisage(
   compteReferenceId: string | null,
   labelId?: string | null,
   labelNom?: string | null,
+  applicationId?: string | null,
 ): Promise<VisuelAvatar | null> {
   const pris = await urlsDejaPrises(supabase);
+  const scope = { applicationId };
 
-  const themeIds = await labelIdsDuTheme(supabase, labelId, labelNom);
+  const themeIds = await labelIdsDuTheme(supabase, labelId, labelNom, applicationId);
   if (themeIds.length > 0) {
     // 1) label exact
     if (labelId) {
-      const exact = premierLibre(await chercherVisuels(supabase, { labelIds: [labelId] }), pris);
+      const exact = premierLibre(
+        await chercherVisuels(supabase, { ...scope, labelIds: [labelId] }),
+        pris,
+      );
       if (exact) return exact;
     }
     // 2) autres labels du même thème (même « genre » visuel)
     const autres = themeIds.filter((id) => id !== labelId);
     if (autres.length > 0) {
-      const parTheme = premierLibre(await chercherVisuels(supabase, { labelIds: autres }), pris);
+      const parTheme = premierLibre(
+        await chercherVisuels(supabase, { ...scope, labelIds: autres }),
+        pris,
+      );
       if (parTheme) return parTheme;
     }
   }
 
   if (compteReferenceId) {
     const parSource = premierLibre(
-      await chercherVisuels(supabase, { sourceId: compteReferenceId }),
+      await chercherVisuels(supabase, { ...scope, sourceId: compteReferenceId }),
       pris,
     );
     if (parSource) return parSource;
   }
-  return premierLibre(await chercherVisuels(supabase, {}), pris);
+  return premierLibre(await chercherVisuels(supabase, scope), pris);
 }
 
 /**
@@ -119,42 +131,56 @@ export async function avatarPourCompte(
     compteReferenceId: string | null;
     labelId?: string | null;
     labelNom?: string | null;
+    applicationId?: string | null;
   },
 ): Promise<VisuelAvatar | null> {
   const pris = await urlsDejaPrises(supabase);
-  const themeIds = await labelIdsDuTheme(supabase, opts.labelId, opts.labelNom);
+  const scope = { applicationId: opts.applicationId };
+  const themeIds = await labelIdsDuTheme(
+    supabase,
+    opts.labelId,
+    opts.labelNom,
+    opts.applicationId,
+  );
 
   if (opts.labelId) {
     const exact = premierLibre(
-      await chercherVisuels(supabase, { labelIds: [opts.labelId] }),
+      await chercherVisuels(supabase, { ...scope, labelIds: [opts.labelId] }),
       pris,
     );
     if (exact) return exact;
   }
   const autres = themeIds.filter((id) => id !== opts.labelId);
   if (autres.length > 0) {
-    const parTheme = premierLibre(await chercherVisuels(supabase, { labelIds: autres }), pris);
+    const parTheme = premierLibre(
+      await chercherVisuels(supabase, { ...scope, labelIds: autres }),
+      pris,
+    );
     if (parTheme) return parTheme;
   }
 
   if (opts.compteReferenceId) {
     const { data: ref } = await supabase
       .from("comptes_reference")
-      .select("avatar_url, avatar_media_id")
+      .select("avatar_url, avatar_media_id, application_id")
       .eq("id", opts.compteReferenceId)
       .maybeSingle();
-    if (ref?.avatar_url && !pris.has(ref.avatar_url)) {
+    const memeApp =
+      !opts.applicationId ||
+      !ref?.application_id ||
+      ref.application_id === opts.applicationId;
+    if (memeApp && ref?.avatar_url && !pris.has(ref.avatar_url)) {
       return { id: ref.avatar_media_id ?? "", url: ref.avatar_url, used_count: 0 };
     }
 
     const parSource = premierLibre(
-      await chercherVisuels(supabase, { sourceId: opts.compteReferenceId }),
+      await chercherVisuels(supabase, { ...scope, sourceId: opts.compteReferenceId }),
       pris,
     );
     if (parSource) return parSource;
   }
 
-  return premierLibre(await chercherVisuels(supabase, {}), pris);
+  return premierLibre(await chercherVisuels(supabase, scope), pris);
 }
 
 /** @deprecated préférer avatarPourCompte — conservé pour maintenance. */

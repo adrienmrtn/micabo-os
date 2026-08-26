@@ -7,13 +7,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ecrirePrompt, lirePrompt } from "@/features/moteur/api";
 import { useApplication } from "@/features/moteur/ApplicationContext";
-import { clePromptPertinence, clePromptPlacement, estSlugSophia } from "@/features/moteur/applications";
 import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
 
 /** Les prompts qui pilotent le moteur, modifiables sans redéploiement. */
 const PROMPTS = [
   { cle: "pertinence", titre: "prompts.pertinenceTitle", desc: "prompts.pertinenceDesc" },
+  { cle: "pertinence_micabo", titre: "prompts.pertinenceMicaboTitle", desc: "prompts.pertinenceMicaboDesc" },
   { cle: "placement_sophia", titre: "prompts.placementTitle", desc: "prompts.placementDesc" },
+  { cle: "placement_micabo", titre: "prompts.placementMicaboTitle", desc: "prompts.placementMicaboDesc" },
   { cle: "traduction", titre: "prompts.traductionTitle", desc: "prompts.traductionDesc" },
   { cle: "ugc_face_swap", titre: "prompts.ugcFaceSwapTitle", desc: "prompts.ugcFaceSwapDesc" },
   { cle: "ugc_video_face_ref", titre: "prompts.ugcVideoFaceTitle", desc: "prompts.ugcVideoFaceDesc" },
@@ -96,38 +97,15 @@ function EditeurPrompt({ cle, titre, desc }: { cle: string; titre: string; desc:
 export function AdminPromptsPage() {
   const { t } = useTranslation();
   const { slug } = useApplication();
-  const pertinenceCle = clePromptPertinence(slug);
-  const placementCle = clePromptPlacement(slug);
-  const nomApp = slug === "sophia" ? "Sophia" : slug;
-  const prompts = PROMPTS.map((p) => {
-    if (p.cle === "pertinence") {
-      return {
-        ...p,
-        cle: pertinenceCle,
-        desc: estSlugSophia(slug) ? p.desc : "prompts.pertinenceDescApp",
-      };
-    }
-    if (p.cle === "placement_sophia") {
-      return {
-        ...p,
-        cle: placementCle,
-        titre: estSlugSophia(slug) ? p.titre : "prompts.placementTitleApp",
-        desc: estSlugSophia(slug) ? p.desc : "prompts.placementDescApp",
-      };
-    }
-    return p;
-  });
   return (
     <div className="space-y-6">
-      {!estSlugSophia(slug) && (
-        <p className="text-sm text-muted-foreground">{t("prompts.application", { slug })}</p>
-      )}
-      {prompts.map((p) => (
+      <p className="text-sm text-muted-foreground">{t("prompts.application", { slug })}</p>
+      {PROMPTS.map((p) => (
         <EditeurPrompt
           key={p.cle}
           cle={p.cle}
-          titre={t(p.titre, { nom: nomApp })}
-          desc={t(p.desc, { nom: nomApp })}
+          titre={t(p.titre)}
+          desc={t(p.desc)}
         />
       ))}
 

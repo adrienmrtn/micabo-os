@@ -687,6 +687,9 @@ export function AdminReglagesPage() {
 
           <section className="space-y-3">
             <h3 className="text-sm font-medium">{t("warmup.fileTitre")}</h3>
+            <p className="text-xs font-medium text-foreground">
+              {t("warmup.fileApp", { nom: slug === "sophia" ? "Sophia" : slug })}
+            </p>
             <p className="text-xs text-muted-foreground">{t("warmup.fileDesc")}</p>
             <p className="text-xs text-muted-foreground">
               {t("warmup.fileAutosave")}

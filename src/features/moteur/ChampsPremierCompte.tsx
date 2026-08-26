@@ -130,9 +130,10 @@ export function ChampsPremierCompte({
             <Input
               id="premier-handle"
               value={handle}
-              placeholder="pseudo.tiktok"
+              placeholder={t("comptes.pseudoPlaceholder")}
               onChange={(e) => onHandle(e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">{t("comptes.pseudoFacultatif")}</p>
           </div>
           {typeCompte === "perso" && onPostsParJour && postsParJour != null && (
             <div className="space-y-1 sm:col-span-2">

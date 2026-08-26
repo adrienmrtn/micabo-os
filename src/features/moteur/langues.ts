@@ -61,6 +61,13 @@ export function nomLangue(code: string): string {
   return NOM_LANGUE[code] ?? code.toUpperCase();
 }
 
+/** Valeur initiale d'un sélecteur de langue : garde l'actuelle, sinon fr, sinon la 1ʳᵉ. */
+export function langueInitiale(disponibles: string[], actuelle?: string): string {
+  if (actuelle && disponibles.includes(actuelle)) return actuelle;
+  if (disponibles.includes("fr")) return "fr";
+  return disponibles[0] ?? "";
+}
+
 /** Drapeau emoji d'une langue (« 🇩🇪 »), ou le code en majuscules si inconnu. */
 export function drapeauLangue(code: string): string {
   return DRAPEAU_LANGUE[code] ?? code.toUpperCase();

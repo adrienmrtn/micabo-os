@@ -11,6 +11,7 @@ import {
   majIdentifiantsCm,
 } from "@/features/moteur/api";
 import { languesDisponiblesPourCm, languesPourNouveauCompte } from "@/features/moteur/comptesCm";
+import { useApplication } from "@/features/moteur/ApplicationContext";
 import { nomApplication, type ApplicationOs } from "@/features/moteur/applications";
 import { nomLangue } from "@/features/moteur/langues";
 import type { TypeCompte } from "@/features/moteur/types";
@@ -43,13 +44,20 @@ export function FormulaireAjouterCompte({
   const [deuxFa, setDeuxFa] = React.useState("");
   const [handle, setHandle] = React.useState("");
   const [postsParJour, setPostsParJour] = React.useState<1 | 2 | 3>(2);
-  const [applicationSlug, setApplicationSlug] = React.useState(applications?.[0]?.slug ?? "sophia");
+  const { slug: slugContexte } = useApplication();
+  const [applicationSlug, setApplicationSlug] = React.useState(
+    slugContexte || applications?.[0]?.slug || "sophia",
+  );
 
   React.useEffect(() => {
+    if (slugContexte && (!applications?.length || applications.some((a) => a.slug === slugContexte))) {
+      setApplicationSlug(slugContexte);
+      return;
+    }
     if (!applications?.length) return;
     if (applicationSlug && applications.some((a) => a.slug === applicationSlug)) return;
     setApplicationSlug(applications[0]!.slug);
-  }, [applications, applicationSlug]);
+  }, [applications, applicationSlug, slugContexte]);
 
   React.useEffect(() => {
     if (langue && languesType.includes(langue)) return;
@@ -165,9 +173,10 @@ export function FormulaireAjouterCompte({
             <Input
               id={`compte-handle-${posterId}`}
               value={handle}
-              placeholder="pseudo.tiktok"
+              placeholder={t("comptes.pseudoPlaceholder")}
               onChange={(e) => setHandle(e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">{t("comptes.pseudoFacultatif")}</p>
           </div>
           {typeCompte === "perso" && (
             <div className="space-y-1 sm:col-span-2">

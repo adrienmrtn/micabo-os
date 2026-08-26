@@ -471,6 +471,7 @@ export async function appliquerIdentiteInstantanee(
     compteReferenceId: compte.compte_reference_id,
     labelId,
     labelNom,
+    applicationId: (compte.application_id as string | null) ?? null,
   });
 
   await supabase
