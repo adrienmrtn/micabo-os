@@ -47,6 +47,7 @@ import {
   clePromptPertinence,
   clePromptPlacement,
   placementParDefaut,
+  resoudreApplicationImport,
 } from "./applications.ts";
 import { lireParLots } from "./lots.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
@@ -371,6 +372,7 @@ async function reouvrirContenuPourReimport(
   compteReferenceId: string | null,
   labelIds: string[] | null,
   langueSource: string,
+  applicationId: string,
 ): Promise<void> {
   const slides = await slidesBrutesDepuisPost(supabase, post);
   const { error } = await supabase
@@ -381,6 +383,7 @@ async function reouvrirContenuPourReimport(
       compte_reference_id: compteReferenceId,
       source_url: post.webVideoUrl,
       langue_source: langueSource,
+      application_id: applicationId,
       musique_url: post.musicUrl,
       musique_titre: post.musicTitle,
       vues_source: post.stats?.vues ?? null,
@@ -405,12 +408,34 @@ async function applicationIdDeSource(
   compteReferenceId: string | null,
 ): Promise<string | null> {
   if (!compteReferenceId) return null;
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("comptes_reference")
     .select("application_id")
     .eq("id", compteReferenceId)
     .maybeSingle();
+  if (error) throw error;
   return (data?.application_id as string | undefined) ?? null;
+}
+
+/** Source > id explicite > Sophia. Une source sans app refuse l'import. */
+async function applicationIdPourImport(
+  supabase: Supabase,
+  compteReferenceId: string | null,
+  explicit: string | null,
+): Promise<string> {
+  if (compteReferenceId) {
+    const fromSource = await applicationIdDeSource(supabase, compteReferenceId);
+    if (!fromSource) {
+      throw new Error(
+        `Source ${compteReferenceId} sans application — import refusé (évite le fallback Sophia)`,
+      );
+    }
+    return fromSource;
+  }
+  return resoudreApplicationImport({
+    explicitApplicationId: explicit,
+    fallbackId: (await applicationSophia(supabase)).id,
+  });
 }
 
 async function slugApplicationDeContenu(
@@ -432,10 +457,11 @@ export async function creerContenuDepuisPost(
   langueSource = "fr",
   applicationIdExplicit: string | null = null,
 ): Promise<{ id: string; reused: boolean }> {
-  const applicationId =
-    (await applicationIdDeSource(supabase, compteReferenceId)) ??
-    applicationIdExplicit ??
-    (await applicationSophia(supabase)).id;
+  const applicationId = await applicationIdPourImport(
+    supabase,
+    compteReferenceId,
+    applicationIdExplicit,
+  );
   const existant = await trouverContenuParUrl(supabase, post.webVideoUrl, applicationId);
   if (existant) {
     await reouvrirContenuPourReimport(
@@ -445,6 +471,7 @@ export async function creerContenuDepuisPost(
       compteReferenceId,
       labelIds,
       langueSource,
+      applicationId,
     );
     return { id: existant.id, reused: true };
   }
@@ -459,7 +486,7 @@ export async function creerContenuDepuisPost(
       compte_reference_id: compteReferenceId,
       source_url: post.webVideoUrl,
       langue_source: langueSource,
-      ...(applicationId ? { application_id: applicationId } : {}),
+      application_id: applicationId,
       musique_url: post.musicUrl,
       musique_titre: post.musicTitle,
       vues_source: post.stats?.vues ?? null,
@@ -1783,10 +1810,11 @@ export async function enqueueImportUrls(
 ): Promise<{ batchId: string; enqueued: number; skipped: number; invalides: string[] }> {
   const batchId = opts.batchId ?? crypto.randomUUID();
   const langue = normaliserLangue(opts.langue ?? null);
-  const applicationId =
-    opts.applicationId ??
-    (await applicationIdDeSource(supabase, opts.compteReferenceId)) ??
-    (await applicationSophia(supabase)).id;
+  const applicationId = await applicationIdPourImport(
+    supabase,
+    opts.compteReferenceId,
+    opts.applicationId ?? null,
+  );
   let enqueued = 0;
   let skipped = 0;
   const invalides: string[] = [];

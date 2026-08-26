@@ -637,6 +637,7 @@ export const en = {
       niche: "Niche",
       nicheChoisir: "Pick a niche…",
       nicheRequis: "Pick a niche.",
+      applicationRequis: "Pick the application (Sophia or micabo) in the switcher first.",
       nicheAucune: "No niche yet —",
       creerNiche: "create one in Pilotage",
       modeCompte: "TikTok account",

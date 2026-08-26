@@ -637,6 +637,7 @@ export const fr = {
       niche: "Niche",
       nicheChoisir: "Choisir une niche…",
       nicheRequis: "Choisis une niche.",
+      applicationRequis: "Choisis d'abord l'application (Sophia ou micabo) dans le sélecteur.",
       nicheAucune: "Aucune niche pour l'instant —",
       creerNiche: "crée-en dans Pilotage",
       modeCompte: "Compte TikTok",

@@ -17,6 +17,7 @@ import {
   fileLabelsDeLApplication,
   normaliserSlugApplication,
   posterMatcheApplication,
+  resoudreApplicationImport,
 } from "./applications";
 
 describe("identite micabo", () => {
@@ -58,6 +59,30 @@ describe("applications", () => {
     expect(estSlugApplicationValide("micabo")).toBe(true);
     expect(estSlugApplicationValide("1bad")).toBe(false);
     expect(estSlugMicabo("micabo")).toBe(true);
+  });
+
+  it("hérite l'application de la source, jamais Sophia par défaut", () => {
+    expect(
+      resoudreApplicationImport({
+        sourceApplicationId: "micabo-id",
+        explicitApplicationId: "sophia-id",
+        fallbackId: "sophia-id",
+      }),
+    ).toBe("micabo-id");
+    expect(
+      resoudreApplicationImport({
+        sourceApplicationId: null,
+        explicitApplicationId: "micabo-id",
+        fallbackId: "sophia-id",
+      }),
+    ).toBe("micabo-id");
+    expect(
+      resoudreApplicationImport({
+        sourceApplicationId: "  ",
+        explicitApplicationId: null,
+        fallbackId: "sophia-id",
+      }),
+    ).toBe("sophia-id");
   });
 
   it("résout les clés de prompts", () => {

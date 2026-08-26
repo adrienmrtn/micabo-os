@@ -22,6 +22,22 @@ export function estSlugSophia(slug: string | null | undefined): boolean {
   return (slug ?? SLUG_SOPHIA) === SLUG_SOPHIA;
 }
 
+/**
+ * Application d'un import : la source l'emporte toujours, puis l'id explicite
+ * (lien isolé), puis Sophia. Un compte Micabo ne doit jamais retomber sur Sophia.
+ */
+export function resoudreApplicationImport(opts: {
+  sourceApplicationId?: string | null;
+  explicitApplicationId?: string | null;
+  fallbackId: string;
+}): string {
+  const source = String(opts.sourceApplicationId ?? "").trim();
+  if (source) return source;
+  const explicit = String(opts.explicitApplicationId ?? "").trim();
+  if (explicit) return explicit;
+  return opts.fallbackId;
+}
+
 export function clePromptPertinence(slug: string | null | undefined): string {
   return estSlugSophia(slug) ? "pertinence" : `pertinence_${normaliserSlug(slug)}`;
 }
