@@ -7,6 +7,7 @@ export const fr = {
       switcher: "Application",
       contexte: "Bibliothèque, sources, labels et UGC de {{nom}}.",
       compte: "Application du compte",
+      fileLabels: "File des créateurs {{nom}}",
       filtre: "Application",
       filtreTous: "Sophia et micabo",
       slug: "Slug",
@@ -637,6 +638,7 @@ export const fr = {
       niche: "Niche",
       nicheChoisir: "Choisir une niche…",
       nicheRequis: "Choisis une niche.",
+      applicationRequis: "Choisis d'abord l'application (Sophia ou micabo) dans le sélecteur.",
       nicheAucune: "Aucune niche pour l'instant —",
       creerNiche: "crée-en dans Pilotage",
       modeCompte: "Compte TikTok",
@@ -816,7 +818,10 @@ export const fr = {
       title: "Comptes de publication",
       subtitle: "Les comptes TikTok tenus par tes posters.",
       nomAffiche: "Nom affiché",
-      pseudo: "Pseudo TikTok (@)",
+      pseudo: "Handle TikTok (@)",
+      pseudoPlaceholder: "laissé vide → généré automatiquement",
+      pseudoFacultatif:
+        "Facultatif. Si tu le laisses vide, le handle TikTok est généré automatiquement.",
       upwork: "Lien Upwork",
       sansSource: "Aucune source liée.",
       supprimerCompte: "Supprimer le compte",
@@ -1592,9 +1597,14 @@ export const fr = {
       cout: "Un test complet prend 1 à 3 minutes et consomme du crédit Gemini.",
     },
     prompts: {
-      pertinenceTitle: "Prompt — Pertinence",
+      pertinenceTitle: "Prompt — Pertinence Sophia",
       pertinenceDesc: "Décide quels sujets méritent un placement Sophia.",
       pertinenceDescApp: "Décide quels sujets méritent un placement {{nom}}.",
+      pertinenceMicaboTitle: "Prompt — Pertinence micabo",
+      pertinenceMicaboDesc:
+        "Note les slideshows micabo : uniquement ceux où un CTA flashcards / cours IA convertit vraiment. Modifiable ici — c’est ce prompt que le moteur utilise.",
+      placementMicaboTitle: "Prompt — Placement micabo",
+      placementMicaboDesc: "Comment micabo (éducation IA / flashcards) s’insère dans une slide.",
       placementTitle: "Prompt — Placement de Sophia",
       placementTitleApp: "Prompt — Placement de {{nom}}",
       placementDesc: "Comment l'appli Sophia s'intègre dans une slide existante.",
@@ -1987,6 +1997,7 @@ export const fr = {
       heuresAide:
         "Timer lancé quand le créateur clique « Commencer le warmup » dans son calendrier (défaut 24 h).",
       fileTitre: "File des prochains comptes (label + UGC)",
+      fileApp: "File {{nom}} — un créateur {{nom}} prend un label {{nom}} à la création.",
       fileDesc:
         "À la création d’un poster : file de SA langue d’abord (prioritaire), sinon file générale, sinon label classique le moins utilisé dans la langue. FIFO : la 1ʳᵉ entrée décide le label et si le compte est UGC.",
       fileChoisir: "File à éditer",

@@ -300,6 +300,7 @@ export function demarrerImportCompte(opts: {
   largeur?: number;
   /** Uniquement les TikToks publiés depuis le dernier import (pas les anciens). */
   nouveauxSeulement?: boolean;
+  application_id?: string | null;
 }): string {
   const handle = handleTiktokDepuisSaisie(opts.handle);
   const prefixe = opts.nouveauxSeulement ? "MAJ @" : "@";
@@ -323,7 +324,10 @@ export function demarrerImportCompte(opts: {
         opts.compteReferenceId,
         undefined,
         opts.langue,
-        { nouveauxSeulement: opts.nouveauxSeulement },
+        {
+          nouveauxSeulement: opts.nouveauxSeulement,
+          application_id: opts.application_id ?? null,
+        },
       );
       const cur = jobs.find((j) => j.id === jobId);
       if (cur) upsertJob({ ...cur, batchId: r.batchId });

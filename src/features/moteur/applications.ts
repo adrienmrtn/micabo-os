@@ -31,6 +31,22 @@ export function estSlugMicabo(slug: string | null | undefined): boolean {
   return slug === SLUG_MICABO;
 }
 
+/**
+ * Application d'un import : la source l'emporte toujours, puis l'id explicite
+ * (lien isolé), puis Sophia. Un compte Micabo ne doit jamais retomber sur Sophia.
+ */
+export function resoudreApplicationImport(opts: {
+  sourceApplicationId?: string | null;
+  explicitApplicationId?: string | null;
+  fallbackId: string;
+}): string {
+  const source = String(opts.sourceApplicationId ?? "").trim();
+  if (source) return source;
+  const explicit = String(opts.explicitApplicationId ?? "").trim();
+  if (explicit) return explicit;
+  return opts.fallbackId;
+}
+
 export function nomApplication(app: { nom?: string | null; slug?: string | null }): string {
   const nom = String(app.nom ?? "").trim();
   if (nom) return nom;

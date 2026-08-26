@@ -155,10 +155,12 @@ function BoutonExtraire({
   sourceId,
   handle,
   langue,
+  applicationId,
 }: {
   sourceId: string;
   handle: string;
   langue: string;
+  applicationId: string;
 }) {
   const { t } = useTranslation();
   const [resultat, setResultat] = React.useState<string | null>(null);
@@ -171,7 +173,12 @@ function BoutonExtraire({
         title={t("sources.extraireAide")}
         disabled={!langue}
         onClick={() => {
-          demarrerImportCompte({ compteReferenceId: sourceId, handle, langue });
+          demarrerImportCompte({
+            compteReferenceId: sourceId,
+            handle,
+            langue,
+            application_id: applicationId,
+          });
           setResultat(t("sources.importJobLance"));
         }}
       >
@@ -188,11 +195,13 @@ function BoutonUpdateSource({
   handle,
   langue,
   dejaImportee,
+  applicationId,
 }: {
   sourceId: string;
   handle: string;
   langue: string;
   dejaImportee: boolean;
+  applicationId: string;
 }) {
   const { t } = useTranslation();
   const [resultat, setResultat] = React.useState<string | null>(null);
@@ -211,6 +220,7 @@ function BoutonUpdateSource({
             handle,
             langue,
             nouveauxSeulement: true,
+            application_id: applicationId,
           });
           setResultat(t("sources.updateLance"));
         }}
@@ -227,9 +237,11 @@ function BoutonUpdateSource({
 function ImportLienSource({
   sourceId,
   langueSource,
+  applicationId,
 }: {
   sourceId: string;
   langueSource: string;
+  applicationId: string;
 }) {
   const { t } = useTranslation();
   const [url, setUrl] = React.useState("");
@@ -259,6 +271,7 @@ function ImportLienSource({
         labelIds,
         langue,
         titre: lien,
+        application_id: applicationId,
       });
       setMessage(t("sources.importJobLance"));
       setUrl("");
@@ -640,11 +653,13 @@ function LigneSource({
             handle={source.handle_tiktok}
             langue={source.langue}
             dejaImportee={Boolean(source.dernier_scrape_at)}
+            applicationId={source.application_id}
           />
           <BoutonExtraire
             sourceId={source.id}
             handle={source.handle_tiktok}
             langue={source.langue}
+            applicationId={source.application_id}
           />
           <Button size="sm" variant="outline" onClick={() => basculer.mutate()}>
             {source.is_active ? t("sources.deactivate") : t("sources.activate")}
@@ -662,7 +677,11 @@ function LigneSource({
         </div>
       </div>
 
-      <ImportLienSource sourceId={source.id} langueSource={source.langue} />
+      <ImportLienSource
+        sourceId={source.id}
+        langueSource={source.langue}
+        applicationId={source.application_id}
+      />
       <OublierSource source={source} onFini={onOubli} />
 
       <div className="border-t pt-3">
@@ -711,6 +730,7 @@ function GroupeSource({
         langue: primary.langue,
         genre: primary.genre,
         parent_id: primary.id,
+        application_id: primary.application_id,
       });
       const labels = nicheId
         ? [nicheId]
@@ -796,7 +816,7 @@ function GroupeSource({
 function FormAjoutSource({ niches }: { niches: NicheLabel[] }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { applicationId } = useApplication();
+  const { applicationId, isPending: appPending } = useApplication();
   const [mode, setMode] = React.useState<"compte" | "lien">("compte");
   const [handle, setHandle] = React.useState("");
   const [url, setUrl] = React.useState("");
@@ -808,6 +828,7 @@ function FormAjoutSource({ niches }: { niches: NicheLabel[] }) {
 
   const ajouter = useMutation({
     mutationFn: async () => {
+      if (!applicationId) throw new Error(t("sources.applicationRequis"));
       if (!nicheId) throw new Error(t("sources.nicheRequis"));
       if (!langue) throw new Error(t("sources.langueRequis"));
 
@@ -825,6 +846,7 @@ function FormAjoutSource({ niches }: { niches: NicheLabel[] }) {
           compteReferenceId: cree.id,
           handle: cree.handle_tiktok,
           langue,
+          application_id: applicationId,
         });
         return { kind: "compte" as const, handle: cree.handle_tiktok };
       }
@@ -952,7 +974,7 @@ function FormAjoutSource({ niches }: { niches: NicheLabel[] }) {
             <Button
               type="submit"
               className="w-full"
-              disabled={ajouter.isPending || !nicheId || !langue}
+              disabled={ajouter.isPending || appPending || !applicationId || !nicheId || !langue}
             >
               {ajouter.isPending
                 ? mode === "lien"

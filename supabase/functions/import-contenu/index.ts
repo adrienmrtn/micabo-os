@@ -118,6 +118,7 @@ Deno.serve(async (request) => {
         labelIds: Array.isArray(body.labelIds) ? body.labelIds : [],
         batchId: body.batchId ? String(body.batchId) : null,
         langue,
+        applicationId: typeof body.application_id === "string" ? body.application_id : null,
       });
       // Kick immédiat de workers (ne dépend pas du cron pour démarrer).
       kickWorkers(request, AMORCE_WORKERS);

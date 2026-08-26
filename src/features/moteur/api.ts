@@ -277,6 +277,9 @@ export async function creerSource(input: {
   /** Genre hérité du principal (les conjoints partagent le même genre). */
   genre?: "homme" | "femme";
 }): Promise<CompteReference> {
+  if (!input.application_id) {
+    throw new Error("Application requise pour créer une source");
+  }
   const { data, error } = await supabase
     .from("comptes_reference")
     .insert({
@@ -284,7 +287,7 @@ export async function creerSource(input: {
       niche: input.niche.trim() || null,
       langue: input.langue,
       parent_id: input.parent_id ?? null,
-      ...(input.application_id ? { application_id: input.application_id } : {}),
+      application_id: input.application_id,
       ...(input.genre ? { genre: input.genre } : {}),
     })
     .select()
@@ -3069,7 +3072,7 @@ export const enqueueImportCompte = (
   compteReferenceId: string,
   labelIds?: string[],
   langue?: string | null,
-  opts?: { nouveauxSeulement?: boolean },
+  opts?: { nouveauxSeulement?: boolean; application_id?: string | null },
 ) =>
   invoke<{
     ok: boolean;
@@ -3094,6 +3097,7 @@ export const enqueueImportCompte = (
     labelIds: labelIds ?? [],
     langue: langue ?? null,
     nouveauxSeulement: opts?.nouveauxSeulement ?? false,
+    application_id: opts?.application_id ?? null,
   });
 
 /** Enfile une liste d'URLs pour scrape+pipeline serveur. */

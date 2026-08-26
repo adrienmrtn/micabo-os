@@ -46,9 +46,10 @@ import {
   supprimerPoster,
 } from "@/features/moteur/api";
 import { LabelPicker } from "@/features/moteur/LabelPicker";
+import { useApplication } from "@/features/moteur/ApplicationContext";
 import { posterMatcheApplication, SLUG_SOPHIA } from "@/features/moteur/applications";
 import { SelectApplication } from "@/features/moteur/SelectApplication";
-import { drapeauLangue, nomLangue } from "@/features/moteur/langues";
+import { drapeauLangue, langueInitiale, nomLangue } from "@/features/moteur/langues";
 import { WarmupBadge } from "@/features/moteur/WarmupBadge";
 import { phaseCreateur, type PhaseCreateur } from "@/features/moteur/warmup";
 import type { CompteAvecDetails, Label as LabelType, PosterProfil } from "@/features/moteur/types";
@@ -296,13 +297,18 @@ function LangueCompteSelect({ compte }: { compte: CompteAvecDetails }) {
 function LabelsCompteSelect({
   compteId,
   actifs,
+  applicationId,
 }: {
   compteId: string;
   actifs: LabelType[];
+  applicationId?: string | null;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const labels = useQuery({ queryKey: ["labels"], queryFn: () => listerLabels() });
+  const labels = useQuery({
+    queryKey: ["labels", applicationId ?? "all"],
+    queryFn: () => listerLabels(applicationId),
+  });
   const ids = actifs.map((l) => l.id);
   const maj = useMutation({
     mutationFn: (next: string[]) => setLabelsCompte(compteId, next),
@@ -414,7 +420,7 @@ export function AdminPostersPage() {
   const comptes = useQuery({ queryKey: ["comptes"], queryFn: listerComptes });
   const langues = useQuery({ queryKey: ["langues-reference"], queryFn: listerLanguesReference });
   const applications = useQuery({ queryKey: ["applications"], queryFn: listerApplications });
-  const labels = useQuery({ queryKey: ["labels"], queryFn: () => listerLabels() });
+  const { slug: slugContexte } = useApplication();
   const labelsComptes = useQuery({
     queryKey: ["compte-labels-all", (comptes.data ?? []).map((c) => c.id).join(",")],
     queryFn: () => labelsDesComptes((comptes.data ?? []).map((c) => c.id)),
@@ -426,7 +432,21 @@ export function AdminPostersPage() {
   const [filtreLangue, setFiltreLangue] = React.useState("");
   const [filtreLabel, setFiltreLabel] = React.useState("");
   const [filtreApp, setFiltreApp] = React.useState("tous");
-  const [applicationSlug, setApplicationSlug] = React.useState(SLUG_SOPHIA);
+  const [applicationSlug, setApplicationSlug] = React.useState(slugContexte || SLUG_SOPHIA);
+  const labels = useQuery({
+    queryKey: ["labels", filtreApp, applications.data?.map((a) => a.id).join(",")],
+    queryFn: () => {
+      if (filtreApp && filtreApp !== "tous") {
+        const app = (applications.data ?? []).find((a) => a.slug === filtreApp);
+        return listerLabels(app?.id);
+      }
+      return listerLabels();
+    },
+  });
+
+  React.useEffect(() => {
+    if (slugContexte) setApplicationSlug(slugContexte);
+  }, [slugContexte]);
 
   const comptesParPoster = React.useMemo(() => {
     const m = new Map<string, CompteAvecDetails[]>();
@@ -446,6 +466,7 @@ export function AdminPostersPage() {
       assurerComptePoster({
         userId: p.id,
         langue: p.langues[0] ?? "fr",
+        application_slug: applicationSlug,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["comptes"] });
@@ -460,6 +481,11 @@ export function AdminPostersPage() {
   const [prenom, setPrenom] = React.useState("");
   const [nom, setNom] = React.useState("");
   const [langue, setLangue] = React.useState("");
+  React.useEffect(() => {
+    const liste = langues.data ?? [];
+    if (!liste.length) return;
+    setLangue((actuel) => langueInitiale(liste, actuel));
+  }, [langues.data]);
   const [premierCompte, setPremierCompte] = React.useState<PremierCompte>("perso");
   const [postsParJour, setPostsParJour] = React.useState<1 | 2 | 3>(2);
   const [handleTiktok, setHandleTiktok] = React.useState("");
@@ -628,7 +654,7 @@ export function AdminPostersPage() {
             typeCompte={premierCompte}
             onType={(type) => {
               setPremierCompte(type);
-              if (type !== "aucun" && !langue) setLangue(langues.data?.[0] ?? "");
+              if (type !== "aucun") setLangue(langueInitiale(langues.data ?? [], langue));
             }}
             langues={langues.data ?? []}
             langue={langue}
@@ -851,7 +877,7 @@ export function AdminPostersPage() {
       !posterMatcheApplication(
         liste.map((c) => ({
           application_id: c.application_id,
-          application_slug: null,
+          application_slug: c.application_slug,
         })),
         filtreApp,
         applications.data ?? [],
@@ -1547,7 +1573,11 @@ export function AdminPostersPage() {
                               {!estCompteCm(c) && (
                                 <div className="grid gap-3 sm:grid-cols-2">
                                   <LangueCompteSelect compte={c} />
-                                  <LabelsCompteSelect compteId={c.id} actifs={labs} />
+                                  <LabelsCompteSelect
+                                    compteId={c.id}
+                                    actifs={labs}
+                                    applicationId={c.application_id}
+                                  />
                                   <div className="sm:col-span-2">
                                     <PostsParJourCompte compte={c} />
                                   </div>

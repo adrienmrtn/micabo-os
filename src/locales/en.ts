@@ -7,6 +7,7 @@ export const en = {
       switcher: "Application",
       contexte: "Library, sources, labels and UGC for {{nom}}.",
       compte: "Account application",
+      fileLabels: "{{nom}} creator queue",
       filtre: "Application",
       filtreTous: "Sophia and micabo",
       slug: "Slug",
@@ -637,6 +638,7 @@ export const en = {
       niche: "Niche",
       nicheChoisir: "Pick a niche…",
       nicheRequis: "Pick a niche.",
+      applicationRequis: "Pick the application (Sophia or micabo) in the switcher first.",
       nicheAucune: "No niche yet —",
       creerNiche: "create one in Pilotage",
       modeCompte: "TikTok account",
@@ -816,6 +818,9 @@ export const en = {
       subtitle: "The TikTok accounts run by your posters.",
       nomAffiche: "Display name",
       pseudo: "TikTok handle (@)",
+      pseudoPlaceholder: "leave empty → generated automatically",
+      pseudoFacultatif:
+        "Optional. Leave empty and the TikTok handle is generated automatically.",
       upwork: "Upwork link",
       sansSource: "No source linked.",
       supprimerCompte: "Delete account",
@@ -1589,9 +1594,14 @@ export const en = {
       cout: "A full test takes 1 to 3 minutes and consumes Gemini credit.",
     },
     prompts: {
-      pertinenceTitle: "Prompt — Relevance",
+      pertinenceTitle: "Prompt — Sophia relevance",
       pertinenceDesc: "Decides which topics deserve a Sophia placement.",
       pertinenceDescApp: "Decides which topics deserve a {{nom}} placement.",
+      pertinenceMicaboTitle: "Prompt — micabo relevance",
+      pertinenceMicaboDesc:
+        "Scores micabo slideshows: keep only posts where a flashcards / AI-study CTA actually converts. Editable here — this is the prompt the engine uses.",
+      placementMicaboTitle: "Prompt — micabo placement",
+      placementMicaboDesc: "How micabo (AI education / flashcards) fits into a slide.",
       placementTitle: "Prompt — Sophia placement",
       placementTitleApp: "Prompt — {{nom}} placement",
       placementDesc: "How the Sophia app fits into an existing slide.",
@@ -1988,6 +1998,7 @@ export const en = {
       heuresAide:
         "Timer starts when the creator clicks “Start warmup” in their calendar (default 24 h).",
       fileTitre: "Next accounts queue (label + UGC)",
+      fileApp: "{{nom}} queue — a {{nom}} creator gets a {{nom}} label at creation.",
       fileDesc:
         "On poster creation: that language’s queue first (priority), else the general queue, else the classic least-used label in the language. FIFO: the first entry sets the label and whether the account is UGC.",
       fileChoisir: "Queue to edit",
