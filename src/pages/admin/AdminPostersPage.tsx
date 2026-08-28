@@ -430,16 +430,13 @@ export function AdminPostersPage() {
   const [filtrePhase, setFiltrePhase] = React.useState<"tous" | PhaseCreateur>("tous");
   const [filtreLangue, setFiltreLangue] = React.useState("");
   const [filtreLabel, setFiltreLabel] = React.useState("");
-  const [filtreApp, setFiltreApp] = React.useState("tous");
+  const filtreApp = SLUG_MICABO;
   const [applicationSlug, setApplicationSlug] = React.useState(slugContexte || SLUG_MICABO);
   const labels = useQuery({
     queryKey: ["labels", filtreApp, applications.data?.map((a) => a.id).join(",")],
     queryFn: () => {
-      if (filtreApp && filtreApp !== "tous") {
-        const app = (applications.data ?? []).find((a) => a.slug === filtreApp);
-        return listerLabels(app?.id);
-      }
-      return listerLabels();
+      const app = (applications.data ?? []).find((a) => a.slug === SLUG_MICABO);
+      return listerLabels(app?.id);
     },
   });
 
