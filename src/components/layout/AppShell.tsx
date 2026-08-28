@@ -2,7 +2,15 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { LogOut, Menu } from "lucide-react";
 
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/features/auth/AuthContext";
 import { signOut } from "@/features/auth/api";
 import { SUPPORTED_LANGUAGES } from "@/locales";
@@ -36,11 +44,13 @@ function initiales(profil: ProfilAffiche | null): string {
 function UserBlock() {
   const { profil } = useAuth();
   return (
-    <div className="flex items-center gap-2.5 px-2 py-1">
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sidebar-active/30 text-xs font-semibold text-white">
-        {initiales(profil)}
-      </div>
-      <span className="min-w-0 flex-1 truncate text-sm text-sidebar-foreground">
+    <div className="flex items-center gap-2.5 px-1 py-1">
+      <Avatar className="size-8">
+        <AvatarFallback className="bg-sidebar-accent text-[11px] font-semibold text-sidebar-accent-foreground">
+          {initiales(profil)}
+        </AvatarFallback>
+      </Avatar>
+      <span className="min-w-0 flex-1 truncate text-sm text-sidebar-accent-foreground">
         {nomAffiche(profil) ?? "—"}
       </span>
     </div>
@@ -60,6 +70,7 @@ export function AppShell({
 }) {
   const { t, i18n } = useTranslation();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const langue = i18n.resolvedLanguage ?? "fr";
 
   const footer = (
     <div className="space-y-3">
@@ -69,7 +80,7 @@ export function AppShell({
   );
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-svh bg-background">
       <Sidebar title={t("app.name")} groups={groups} footer={footer} />
       <MobileDrawer
         open={drawerOpen}
@@ -80,8 +91,8 @@ export function AppShell({
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 border-b border-border/60 bg-[hsl(var(--background)/0.85)] backdrop-blur-md">
-          <div className="flex h-14 items-center justify-between gap-3 px-5 lg:px-10">
+        <header className="sticky top-0 z-30 border-b border-border/80 bg-background/85 backdrop-blur-md">
+          <div className="flex h-14 items-center justify-between gap-3 px-4 lg:px-8">
             <div className="flex min-w-0 items-center gap-2">
               <Button
                 variant="ghost"
@@ -92,25 +103,34 @@ export function AppShell({
               >
                 <Menu />
               </Button>
-              <span className="font-display truncate text-base font-semibold tracking-tight">
+              <span className="font-heading truncate text-sm font-semibold tracking-tight">
                 {navLabel}
               </span>
             </div>
 
             <div className="flex items-center gap-2">
               {SUPPORTED_LANGUAGES.length > 1 && (
-                <select
-                  aria-label="langue"
-                  className="h-8 rounded-md border border-input bg-card px-2 text-sm"
-                  value={i18n.resolvedLanguage}
-                  onChange={(e) => i18n.changeLanguage(e.target.value)}
+                <Select
+                  value={langue}
+                  onValueChange={(value) => {
+                    if (typeof value === "string") void i18n.changeLanguage(value);
+                  }}
                 >
-                  {SUPPORTED_LANGUAGES.map((lang) => (
-                    <option key={lang} value={lang}>
-                      {lang.toUpperCase()}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger
+                    size="sm"
+                    aria-label="langue"
+                    className="min-w-16 w-20"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectPopup alignItemWithTrigger={false}>
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                      <SelectItem key={lang} value={lang}>
+                        {lang.toUpperCase()}
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
               )}
               <Button variant="ghost" size="sm" onClick={() => signOut()}>
                 <LogOut />
@@ -120,7 +140,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex-1 animate-fade-in px-5 py-7 lg:px-10 lg:py-9">
+        <main className="flex-1 animate-fade-in px-4 py-6 lg:px-8 lg:py-8">
           <div className="mx-auto w-full max-w-6xl space-y-6">{children}</div>
         </main>
       </div>

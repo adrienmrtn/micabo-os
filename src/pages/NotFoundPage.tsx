@@ -1,12 +1,25 @@
 import { useTranslation } from "react-i18next";
 
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+
 export function NotFoundPage() {
   const { t } = useTranslation();
   return (
-    <div className="surface-atelier flex min-h-screen flex-col items-center justify-center gap-2 px-6 text-center">
-      <p className="font-display text-3xl font-semibold tracking-tight">Sophia</p>
-      <h1 className="text-lg font-semibold">{t("common.notFoundTitle")}</h1>
-      <p className="text-sm text-muted-foreground">{t("common.notFoundBody")}</p>
+    <div className="flex min-h-svh flex-col items-center justify-center bg-background px-6">
+      <Empty>
+        <EmptyHeader>
+          <span className="brand-mark mb-6" aria-hidden>
+            S
+          </span>
+          <EmptyTitle>{t("common.notFoundTitle")}</EmptyTitle>
+          <EmptyDescription>{t("common.notFoundBody")}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     </div>
   );
 }

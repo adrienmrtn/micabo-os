@@ -1,8 +1,15 @@
 import * as React from "react";
 import { NavLink } from "react-router-dom";
-import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Separator } from "@/components/ui/separator";
+import {
+  Sheet,
+  SheetHeader,
+  SheetPanel,
+  SheetPopup,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 export interface NavItem {
   to: string;
@@ -24,7 +31,7 @@ function NavList({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () =
       {groups.map((groupe, i) => (
         <div key={groupe.title ?? i} className="flex flex-col gap-0.5">
           {groupe.title && (
-            <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+            <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/70">
               {groupe.title}
             </p>
           )}
@@ -37,10 +44,10 @@ function NavList({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () =
               title={description}
               className={({ isActive }) =>
                 cn(
-                  "group flex items-center gap-3 border-l-2 border-transparent px-3 py-2 text-sm transition-colors",
+                  "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
                   isActive
-                    ? "border-sidebar-active bg-white/[0.06] font-medium text-white"
-                    : "text-sidebar-foreground/85 hover:bg-white/[0.04] hover:text-white",
+                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
                 )
               }
             >
@@ -48,8 +55,10 @@ function NavList({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () =
                 <>
                   <Icon
                     className={cn(
-                      "size-[18px] shrink-0 transition-colors",
-                      isActive ? "text-white" : "text-sidebar-foreground/60 group-hover:text-white",
+                      "size-4 shrink-0 transition-colors",
+                      isActive
+                        ? "text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/70 group-hover:text-sidebar-accent-foreground",
                     )}
                   />
                   <span className="truncate">{label}</span>
@@ -63,18 +72,18 @@ function NavList({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () =
   );
 }
 
-function Brand(_props: { title: string }) {
+function Brand({ title }: { title: string }) {
   return (
-    <div className="flex items-center gap-3 px-5 py-6">
+    <div className="flex items-center gap-3 px-4 py-5" aria-label={title}>
       <span className="brand-mark shrink-0" aria-hidden>
         S
       </span>
       <div className="min-w-0">
-        <p className="font-display truncate text-lg font-semibold tracking-tight text-white">
+        <p className="font-heading truncate text-base font-semibold tracking-tight text-sidebar-accent-foreground">
           Sophia
         </p>
-        <p className="truncate text-[10px] uppercase tracking-[0.16em] text-sidebar-foreground/45">
-          Atelier
+        <p className="truncate text-[10px] uppercase tracking-[0.16em] text-sidebar-foreground">
+          OS
         </p>
       </div>
     </div>
@@ -91,18 +100,20 @@ export function Sidebar({
   footer?: React.ReactNode;
 }) {
   return (
-    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col self-start border-r border-white/5 bg-sidebar lg:flex">
+    <aside className="sticky top-0 hidden h-svh w-64 shrink-0 flex-col self-start border-r border-sidebar-border bg-sidebar lg:flex">
       <Brand title={title} />
+      <Separator className="mx-3 w-auto bg-sidebar-border" />
       <div className="flex-1 overflow-y-auto scrollbar-slim">
         <NavList groups={groups} />
       </div>
-      {footer && <div className="border-t border-white/10 p-3">{footer}</div>}
+      {footer && (
+        <div className="border-t border-sidebar-border p-3">{footer}</div>
+      )}
     </aside>
   );
 }
 
-/** Tiroir mobile : un simple overlay suffit ici et évite une dépendance de
- *  plus pour une seule surface. */
+/** Tiroir mobile : Sheet coss, même contenu que la sidebar desktop. */
 export function MobileDrawer({
   open,
   onClose,
@@ -116,44 +127,24 @@ export function MobileDrawer({
   groups: NavGroup[];
   footer?: React.ReactNode;
 }) {
-  React.useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 lg:hidden">
-      <button
-        aria-label="Fermer le menu"
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="absolute inset-y-0 left-0 flex w-64 animate-slide-in flex-col bg-sidebar">
-        <div className="flex items-center justify-between pr-3">
+    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
+      <SheetPopup
+        side="left"
+        showCloseButton
+        className="w-72 max-w-[calc(100vw-2rem)] bg-sidebar"
+      >
+        <SheetHeader className="p-0">
+          <SheetTitle className="sr-only">{title}</SheetTitle>
           <Brand title={title} />
-          <button
-            onClick={onClose}
-            className="rounded-md p-2 text-sidebar-foreground hover:bg-white/10 hover:text-white"
-            aria-label="Fermer"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto scrollbar-slim">
+        </SheetHeader>
+        <SheetPanel className="p-0" scrollFade={false}>
           <NavList groups={groups} onNavigate={onClose} />
-        </div>
-        {footer && <div className="border-t border-white/10 p-3">{footer}</div>}
-      </div>
-    </div>
+        </SheetPanel>
+        {footer && (
+          <div className="border-t border-sidebar-border p-3">{footer}</div>
+        )}
+      </SheetPopup>
+    </Sheet>
   );
 }

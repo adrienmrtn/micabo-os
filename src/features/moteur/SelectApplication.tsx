@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { nomApplication, type ApplicationOs } from "./applications";
 
 const selectClass =
-  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+  "h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm shadow-xs/5 outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/24";
 
 export function SelectApplication({
   id,
