@@ -22,36 +22,13 @@ import {
   Video,
 } from "lucide-react";
 
-import { useApplication } from "@/features/moteur/ApplicationContext";
-import { nomApplication } from "@/features/moteur/applications";
-import { SelectApplication } from "@/features/moteur/SelectApplication";
 import { AppShell } from "./AppShell";
 
 export function AdminLayout() {
   const { t } = useTranslation();
-  const { applications, slug, setSlug, application } = useApplication();
   return (
     <AppShell
       navLabel={t("nav.admin")}
-      sidebarExtra={
-        applications.length > 0 ? (
-          <div className="space-y-1.5">
-            <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/70">
-              {t("applications.switcher")}
-            </p>
-            <SelectApplication
-              applications={applications}
-              value={slug}
-              onChange={setSlug}
-            />
-            {application && (
-              <p className="px-1 text-[10px] text-sidebar-foreground">
-                {t("applications.contexte", { nom: nomApplication(application) })}
-              </p>
-            )}
-          </div>
-        ) : undefined
-      }
       groups={[
         {
           items: [

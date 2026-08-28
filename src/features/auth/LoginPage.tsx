@@ -61,10 +61,10 @@ export function LoginPage() {
       {!choisi ? (
         <div className="w-full max-w-2xl animate-brand-in text-center">
           <span className="brand-mark mx-auto" aria-hidden>
-            S
+            m
           </span>
           <p className="font-heading mt-5 text-5xl font-semibold tracking-tight text-foreground sm:text-6xl">
-            Sophia
+            micabo
           </p>
           <p className="mt-3 text-base text-muted-foreground sm:text-lg">{t("auth.tagline")}</p>
 
@@ -95,9 +95,9 @@ export function LoginPage() {
         <div className="w-full max-w-sm animate-fade-in">
           <div className="mb-8 text-center">
             <span className="brand-mark mx-auto" aria-hidden>
-              S
+              m
             </span>
-            <p className="font-heading mt-4 text-3xl font-semibold tracking-tight">Sophia</p>
+            <p className="font-heading mt-4 text-3xl font-semibold tracking-tight">micabo</p>
             <p className="mt-1 text-sm text-muted-foreground">{t("auth.tagline")}</p>
           </div>
 

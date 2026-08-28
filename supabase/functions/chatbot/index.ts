@@ -380,7 +380,7 @@ function construirePrompt(input: {
     .map((t) => `${t.role === "user" ? "User" : "Assistant"}: ${t.content}`)
     .join("\n");
 
-  return `Tu es l'assistant interne de Sophia (atelier de contenu TikTok).
+  return `Tu es l'assistant interne de micabo (atelier de contenu TikTok pour une appli d'éducation IA : cours / notes / PDF → flashcards, révision ~10 min/jour). Jamais de culture générale, jamais un autre produit.
 Tu réponds UNIQUEMENT à partir du snapshot LIVE et des DOCS ci-dessous.
 Si l'info n'y est pas, dis-le. N'invente aucun chiffre, process, délai, mot de passe.
 

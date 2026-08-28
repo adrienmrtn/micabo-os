@@ -349,7 +349,7 @@ const DeckLangue = React.memo(function DeckLangue({
                   <span className="text-[10px] text-muted-foreground">#{s.position}</span>
                   {sophia && (
                     <Badge variant="success" className="text-[10px]">
-                      Sophia
+                      micabo
                     </Badge>
                   )}
                   {montrerOriginel && (

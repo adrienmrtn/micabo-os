@@ -76,11 +76,11 @@ function Brand({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-3 px-4 py-5" aria-label={title}>
       <span className="brand-mark shrink-0" aria-hidden>
-        S
+        m
       </span>
       <div className="min-w-0">
         <p className="font-heading truncate text-base font-semibold tracking-tight text-sidebar-accent-foreground">
-          Sophia
+          micabo
         </p>
         <p className="truncate text-[10px] uppercase tracking-[0.16em] text-sidebar-foreground">
           OS

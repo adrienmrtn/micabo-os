@@ -11,9 +11,7 @@ import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
 
 /** Les prompts qui pilotent le moteur, modifiables sans redéploiement. */
 const PROMPTS = [
-  { cle: "pertinence", titre: "prompts.pertinenceTitle", desc: "prompts.pertinenceDesc" },
   { cle: "pertinence_micabo", titre: "prompts.pertinenceMicaboTitle", desc: "prompts.pertinenceMicaboDesc" },
-  { cle: "placement_sophia", titre: "prompts.placementTitle", desc: "prompts.placementDesc" },
   { cle: "placement_micabo", titre: "prompts.placementMicaboTitle", desc: "prompts.placementMicaboDesc" },
   { cle: "traduction", titre: "prompts.traductionTitle", desc: "prompts.traductionDesc" },
   { cle: "ugc_face_swap", titre: "prompts.ugcFaceSwapTitle", desc: "prompts.ugcFaceSwapDesc" },

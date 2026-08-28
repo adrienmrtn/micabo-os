@@ -46,7 +46,7 @@ export function FormulaireAjouterCompte({
   const [postsParJour, setPostsParJour] = React.useState<1 | 2 | 3>(2);
   const { slug: slugContexte } = useApplication();
   const [applicationSlug, setApplicationSlug] = React.useState(
-    slugContexte || applications?.[0]?.slug || "sophia",
+    slugContexte || applications?.[0]?.slug || "micabo",
   );
 
   React.useEffect(() => {
@@ -134,7 +134,7 @@ export function FormulaireAjouterCompte({
         <p className="text-xs text-muted-foreground">{t("cm.toutesLanguesPrises")}</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {(applications ?? []).length > 0 && (
+          {(applications ?? []).length > 1 && (
             <div className="space-y-1">
               <Label htmlFor={`compte-app-${posterId}`}>{t("applications.compte")}</Label>
               <select

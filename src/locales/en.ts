@@ -1,7 +1,7 @@
 export const en = {
   translation: {
     app: {
-      name: "Sophia",
+      name: "micabo",
     },
     applications: {
       switcher: "Application",
@@ -9,7 +9,7 @@ export const en = {
       compte: "Account application",
       fileLabels: "{{nom}} creator queue",
       filtre: "Application",
-      filtreTous: "Sophia and micabo",
+      filtreTous: "micabo and micabo",
       slug: "Slug",
       nom: "Name",
       creer: "Create application",
@@ -18,7 +18,7 @@ export const en = {
     auth: {
       loginTitle: "Sign in",
       loginSubtitle: "Access your workspace",
-      tagline: "The editorial engine that composes, scores and publishes — without friction.",
+      tagline: "Courses and notes → flashcards. Review ~10 min/day.",
       welcome: "Welcome",
       chooseAccess: "Choose your access type to continue",
       accessAdmin: "Admin access",
@@ -117,7 +117,7 @@ export const en = {
       bibliotheque: "Cleaned photos, by label",
       testNettoyage: "Test cleaning without changing anything",
       reglages: "Engine actions — cleaning, ELO, assignment",
-      prompts: "Edit the AI prompts (translation, Sophia…)",
+      prompts: "Edit the AI prompts (translation, micabo placement…)",
       reviews: "Feedback to creators (pop-up on their login)",
       tests: "Test a TikTok or the full chain",
       embauche: "Create posters, the AI does the rest",
@@ -250,7 +250,7 @@ export const en = {
         running: "In progress",
         attente_preparation: "Cleaning in progress",
       },
-      cout: "Translation + Sophia at assignment time (Gemini credit). \"Test\" posts (link) aren't counted.",
+      cout: "Translation + micabo placement at assignment time (Gemini credit). \"Test\" posts (link) aren't counted.",
     },
     simMinuitCompte: {
       title: "Test assignment (1 creator)",
@@ -365,13 +365,13 @@ export const en = {
       choisirPlaceholder: "— Choose a test —",
       completTitre: "Full test (one post per account)",
       completDesc:
-        "Simulates the full pipeline on each account: import → cleaning → translation → Sophia. Outputs one test post per account, without assigning or publishing anything.",
+        "Simulates the full pipeline on each account: import → cleaning → translation → micabo placement. Outputs one test post per account, without assigning or publishing anything.",
       scrapeTitre: "Test the scrape",
       scrapeDesc:
-        "See what the engine sees on a reference account, sorted by views, with the Sophia score. Checks that it picks TikToks that perform AND where Sophia fits. Creates nothing.",
+        "See what the engine sees on a reference account, sorted by views, with the relevance score. Checks that it picks TikToks that perform AND where a flashcards CTA fits. Creates nothing.",
       tiktokTitre: "Test a specific TikTok",
       tiktokDesc:
-        "Paste a TikTok link: we clean it, integrate Sophia, and output a downloadable post (QR). It appears on no calendar.",
+        "Paste a TikTok link: we clean it, place micabo, and output a downloadable post (QR). It appears on no calendar.",
       langueVia: "Language / style (via an account)",
       langue: "Language",
       style: "Style",
@@ -423,11 +423,11 @@ export const en = {
       lancer: "Analyze",
       enCours: "Analyzing…",
       vide: "No post found on this account.",
-      aide: "Sorted by views. The engine picks photo posts that get views AND where Sophia fits (green badge). Off-topic is dropped even if viral.",
+      aide: "Sorted by views. The engine picks photo posts that get views AND where a flashcards CTA fits (green badge). Off-topic is dropped even if viral.",
       sansTexte: "(no text)",
       pasPhoto: "Video",
       dejaVu: "Already used",
-      sophiaOk: "Sophia ✓ {{score}}",
+      sophiaOk: "micabo ✓ {{score}}",
       sophiaNon: "Off-topic {{score}}",
       sophiaIndispo: "Theme: retry",
     },
@@ -463,7 +463,7 @@ export const en = {
     },
     minuit: {
       titre: "Midnight assignment",
-      desc: "Picks from the slideshow library (account labels ∩ language score), translates + Sophia, then assigns — no more Recycled / Reworked / New types.",
+      desc: "Picks from the slideshow library (account labels ∩ language score), translates + micabo, then assigns — no more Recycled / Reworked / New types.",
       jour: "Day",
       relancer: "Re-run (ELO → assignment)",
       relancerAide:
@@ -471,7 +471,7 @@ export const en = {
       enCours: "Assigning…",
       assignProgress: "Assignment {{i}}/{{n}} — {{nom}}",
       assignErreur: "Assignment failed",
-      lance: "ELO then assignment: {{crees}} passage(s) created. Decks already translated + Sophia — the tracker refreshes on its own.",
+      lance: "ELO then assignment: {{crees}} passage(s) created. Decks already translated + micabo — the tracker refreshes on its own.",
       lanceZero:
         "No passage created — empty pool (labels / slideshows / language ELO). See detail below.",
       quotasBaisses:
@@ -638,7 +638,7 @@ export const en = {
       niche: "Niche",
       nicheChoisir: "Pick a niche…",
       nicheRequis: "Pick a niche.",
-      applicationRequis: "Pick the application (Sophia or micabo) in the switcher first.",
+      applicationRequis: "Pick the application in the switcher first.",
       nicheAucune: "No niche yet —",
       creerNiche: "create one in Pilotage",
       modeCompte: "TikTok account",
@@ -1321,7 +1321,7 @@ export const en = {
     slideshows: {
       title: "Slideshows",
       subtitle:
-        "Imported TikToks: visuals + OCR text at import. Translation and Sophia ad at midnight assignment (per language).",
+        "Imported TikToks: visuals + OCR text at import. Translation and micabo placement at midnight assignment (per language).",
       empty: "No imported slideshow yet.",
       emptyFiltre: "No slideshow for this filter (account / label / status / UGC).",
       filtreCompte: "Source account",
@@ -1348,7 +1348,7 @@ export const en = {
       decksVide: "No language retained (ELO below threshold or still importing).",
       deckVide: "No slides for this language yet.",
       deckLazy:
-        "Not translated yet — translation + Sophia happen at midnight if a creator in this language is assigned.",
+        "Not translated yet — translation + placement happen at midnight if a creator in this language is assigned.",
       deckSourceAide: "Cleaned visuals + original text (source language).",
       deckTradAide: "Cleaned visuals + translated text for this language.",
       sansTexte: "No text on this slide",
@@ -1362,7 +1362,7 @@ export const en = {
       modifierLien: "edit",
       lienPlaceholder: "https://www.tiktok.com/@…/photo/…",
       pasEncorePassage:
-        "No passage in {{langue}} yet — showing original OCR text. Translation + Sophia happen at midnight assignment.",
+        "No passage in {{langue}} yet — showing original OCR text. Translation + placement happen at midnight assignment.",
       texteOriginel: "original",
       visuelsEdit: "Cleaned visuals",
       visuelsEditAide:
@@ -1594,17 +1594,17 @@ export const en = {
       cout: "A full test takes 1 to 3 minutes and consumes Gemini credit.",
     },
     prompts: {
-      pertinenceTitle: "Prompt — Sophia relevance",
-      pertinenceDesc: "Decides which topics deserve a Sophia placement.",
+      pertinenceTitle: "Prompt — Relevance",
+      pertinenceDesc: "Decides which topics deserve a micabo placement.",
       pertinenceDescApp: "Decides which topics deserve a {{nom}} placement.",
       pertinenceMicaboTitle: "Prompt — micabo relevance",
       pertinenceMicaboDesc:
         "Scores micabo slideshows: keep only posts where a flashcards / AI-study CTA actually converts. Editable here — this is the prompt the engine uses.",
       placementMicaboTitle: "Prompt — micabo placement",
       placementMicaboDesc: "How micabo (AI education / flashcards) fits into a slide.",
-      placementTitle: "Prompt — Sophia placement",
+      placementTitle: "Prompt — Placement",
       placementTitleApp: "Prompt — {{nom}} placement",
-      placementDesc: "How the Sophia app fits into an existing slide.",
+      placementDesc: "How micabo fits into an existing slide.",
       placementDescApp: "How the {{nom}} app fits into an existing slide.",
       application: "Relevance and placement prompts for {{slug}}.",
       traductionTitle: "Prompt — Translation (French)",
@@ -1621,7 +1621,7 @@ export const en = {
       ugcVideoKlingNegDesc: "Kling negative prompt (identity, morphing, studio look…).",
       ugcVideoCaptionTitle: "Prompt — UGC AI VIDEO caption",
       ugcVideoCaptionDesc:
-        "TikTok caption in the creator’s language — never “Sophia”, steer toward the app (utilisation part).",
+        "TikTok caption in the creator’s language — never “micabo”, steer toward the app (utilisation part).",
       traductionsLanguesTitre: "Translations by language",
       traductionsLanguesDesc:
         "The tone specific to each target language. Without a prompt here, that language is translated with neutral rules — write one to refine it (register, phrasings to avoid).",
@@ -1644,7 +1644,7 @@ export const en = {
       voirOrigine: "View original images (with text)",
       voirNettoyees: "View cleaned images",
       slide: "Slide {{position}}",
-      sophia: "Sophia",
+      sophia: "micabo",
       hashtagsTitre: "Caption to add (hashtags)",
       musique: "Music",
       copier: "Copy",
@@ -1706,10 +1706,10 @@ export const en = {
       creeAttente: "Post created. Building finishes on the next cron run.",
       assignerTikTok: "Assign a TikTok to a creator",
       assignerTikTokDesc:
-        "Paste a TikTok photo post link, pick a creator and a date: we import it, clean it, translate it and integrate Sophia — the post appears in their space on the chosen date.",
+        "Paste a TikTok photo post link, pick a creator and a date: we import it, clean it, translate it and place micabo — the post appears in their space on the chosen date.",
       assigner: "Assign",
       assignerEnCours: "Assigning…",
-      assignerOk: "TikTok assigned. It's being built in the background (cleaning + translation + Sophia).",
+      assignerOk: "TikTok assigned. It's being built in the background (cleaning + translation + placement).",
       tester: "Test",
       modeTest: "Test mode: just preview (won't appear on the creator's calendar)",
       testerOk: "Test started. It's being built in the background — open it for the QR and the download.",
@@ -1895,16 +1895,16 @@ export const en = {
       mode_nouveau:
         "Legacy New mode — midnight assignment no longer uses it.",
       mode_contenu:
-        "Library slideshow: picked by account labels ∩ language score, cleaned images, translated text + Sophia — ready to post.",
+        "Library slideshow: picked by account labels ∩ language score, cleaned images, translated text + micabo — ready to post.",
       revoquerAide:
-        "If this slideshow makes no sense for Sophia (theme can't be integrated), revoke it: we reject THIS slideshow (not the hook — another post can start the same way and still be good) and build a new one for this creator on this date.",
+        "If this slideshow makes no sense for a flashcards CTA (theme can't be integrated), revoke it: we reject THIS slideshow (not the hook — another post can start the same way and still be good) and build a new one for this creator on this date.",
       revoquerEnCours: "Revoking and building…",
       confirmRevoquer:
         "Revoke this post and build another for this creator on this date? This slideshow won't be picked again.",
       revoquerAucun: "No other topic available right now — try later (the pipeline prepares new slideshows every night).",
       buildNettoyage: "Cleaning the photos…",
       buildNettoyageCompte: "Cleaning the photos ({{propres}}/{{total}})",
-      buildSophia: "Integrating Sophia…",
+      buildmicabo: "Placing micabo…",
       buildEchec: "Build failed. Try another link or restart from the Tests page.",
       buildAide: "It happens here, live. You can leave and come back — it resumes on its own. The QR and download appear once ready.",
       buildNettoyee: "cleaned",
@@ -1936,10 +1936,10 @@ export const en = {
       pageTitle: "Assistant",
       pageSubtitle:
         "Feed the assistant with your explanations. Every question asked shows up here — add context whenever an answer is missing.",
-      widgetTitle: "Sophia assistant",
+      widgetTitle: "micabo assistant",
       widgetSous: "Docs + data from your workspace",
       ouvrir: "Help",
-      greeting: "Ask your question. I use the docs and what's happening on Sophia, within your scope.",
+      greeting: "Ask your question. I use the docs and what's happening on micabo, within your scope.",
       audience: "Visible to",
       audienceTous: "All roles",
       placeholder: "Your question…",
@@ -2046,7 +2046,7 @@ export const en = {
     referral: {
       title: "Refer a creator",
       subtitle:
-        "Recommend someone to join Sophia as a creator. Each proposal is reviewed by admin.",
+        "Recommend someone to join micabo as a creator. Each proposal is reviewed by admin.",
       bonusTitre: "Referral bonus",
       bonusCorps:
         "If the person you recruit publishes at least {{posts}} posts, you receive ${{bonus}}. Refer 10 people who each hit {{posts}} posts and you receive ${{dizaine}}.",

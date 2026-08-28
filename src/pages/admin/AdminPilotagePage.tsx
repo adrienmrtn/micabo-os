@@ -19,14 +19,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   chargerPilotageDashboard,
-  creerApplication,
   creerLabel,
   listerLabels,
   majLabel,
   supprimerLabel,
 } from "@/features/moteur/api";
 import { useApplication } from "@/features/moteur/ApplicationContext";
-import { estSlugApplicationValide, nomApplication } from "@/features/moteur/applications";
 import {
   exemplesFeedDepuisTexte,
   exemplesFeedVersTexte,
@@ -46,14 +44,12 @@ function abrege(n: number): string {
 function LabelsPilotageCard() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const { applicationId, application, applications, setSlug } = useApplication();
+  const { applicationId } = useApplication();
   const labels = useQuery({
     queryKey: ["labels", applicationId],
     queryFn: () => listerLabels(applicationId),
     enabled: Boolean(applicationId),
   });
-  const [nouveauSlug, setNouveauSlug] = React.useState("");
-  const [nouveauNom, setNouveauNom] = React.useState("");
   const [nom, setNom] = React.useState("");
   const [couleur, setCouleur] = React.useState("#2f6f4e");
   const [genre, setGenre] = React.useState<LabelGenre>("femme");
@@ -71,15 +67,6 @@ function LabelsPilotageCard() {
       setGenre("femme");
       setUgcAiVideo(false);
       qc.invalidateQueries({ queryKey: ["labels"] });
-    },
-  });
-  const creerApp = useMutation({
-    mutationFn: () => creerApplication({ slug: nouveauSlug, nom: nouveauNom }),
-    onSuccess: (app) => {
-      setNouveauSlug("");
-      setNouveauNom("");
-      setSlug(app.slug);
-      qc.invalidateQueries({ queryKey: ["applications"] });
     },
   });
   const changerGenre = useMutation({
@@ -101,47 +88,6 @@ function LabelsPilotageCard() {
         <CardDescription>{t("labels.gestionDesc")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <form
-          className="flex flex-wrap items-end gap-2 rounded-md border bg-muted/20 p-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (estSlugApplicationValide(nouveauSlug.trim().toLowerCase())) creerApp.mutate();
-          }}
-        >
-          <div className="space-y-1">
-            <Label htmlFor="appSlug">{t("applications.slug")}</Label>
-            <Input
-              id="appSlug"
-              value={nouveauSlug}
-              placeholder="micabo"
-              onChange={(e) => setNouveauSlug(e.target.value)}
-              required
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="appNom">{t("applications.nom")}</Label>
-            <Input
-              id="appNom"
-              value={nouveauNom}
-              placeholder="micabo"
-              onChange={(e) => setNouveauNom(e.target.value)}
-            />
-          </div>
-          <Button type="submit" size="sm" disabled={creerApp.isPending}>
-            {t("applications.creer")}
-          </Button>
-          <p className="w-full text-xs text-muted-foreground">
-            {t("applications.liste", {
-              noms: applications.map((a) => nomApplication(a)).join(", "),
-              actuelle: application ? nomApplication(application) : "—",
-            })}
-          </p>
-          {creerApp.isError && (
-            <p className="w-full text-xs text-destructive">
-              {(creerApp.error as Error).message}
-            </p>
-          )}
-        </form>
         <form
           className="flex flex-wrap items-end gap-2"
           onSubmit={(e) => {

@@ -264,7 +264,7 @@ export async function avancerPost(supabase: Supabase, post: any): Promise<string
         supabase,
         compte.application_id as string | undefined,
       );
-      const slugApp = appCompte?.slug ?? "sophia";
+      const slugApp = appCompte?.slug ?? "micabo";
 
       const { data: corrections } = await supabase
         .from("corrections")
