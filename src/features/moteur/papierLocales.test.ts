@@ -56,7 +56,7 @@ describe("timings", () => {
 });
 
 describe("traduction CTA", () => {
-  it("retire Sophia des scènes et n'en garde qu'une dans le CTA", () => {
+  it("retire tout produit tiers des scènes et garde un seul micabo dans le CTA", () => {
     const t = finaliserTraductionPapier(
       {
         title: "T",
@@ -72,8 +72,9 @@ describe("traduction CTA", () => {
       3,
     );
     expect(t.scenes[0]?.narration).toBe("Hook l'appli");
-    expect(t.scenes[2]?.narration).toMatch(/Sophia/);
-    expect((t.cta.match(/\bSophia\b/gi) ?? []).length).toBe(1);
+    expect(t.scenes[2]?.narration).toMatch(/micabo/);
+    expect((t.cta.match(/\bSophia\b/gi) ?? []).length).toBe(0);
+    expect((t.cta.match(/\bmicabo\b/gi) ?? []).length).toBe(1);
     expect(t.hashtags).toEqual(["#learn", "#fyp", "#x"]);
   });
 });

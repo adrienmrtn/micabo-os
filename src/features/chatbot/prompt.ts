@@ -40,20 +40,20 @@ const NOM_LANGUE_CHAT: Record<string, string> = {
 };
 
 export const SALUTATION_CHAT: Record<string, string> = {
-  fr: "Pose ta question. Je m'appuie sur les docs et sur ce qui se passe sur Sophia, dans ton périmètre.",
-  en: "Ask your question. I use the docs and what's happening on Sophia, within your scope.",
-  de: "Stell deine Frage. Ich nutze die Docs und das, was auf Sophia in deinem Bereich passiert.",
-  it: "Fai la tua domanda. Uso i documenti e ciò che succede su Sophia, nel tuo perimetro.",
-  es: "Haz tu pregunta. Uso los docs y lo que pasa en Sophia, en tu perímetro.",
-  pt: "Faz a tua pergunta. Uso os docs e o que se passa na Sophia, no teu perímetro.",
-  cs: "Polož otázku. Vycházím z dokumentů a z toho, co se děje na Sophii v tvém rozsahu.",
-  nl: "Stel je vraag. Ik gebruik de docs en wat er op Sophia gebeurt, binnen jouw bereik.",
-  el: "Κάνε την ερώτησή σου. Βασίζομαι στα docs και σε ό,τι γίνεται στη Sophia, στο δικό σου πεδίο.",
-  hu: "Tedd fel a kérdésed. A dokumentumokra és arra támaszkodom, ami a Sophián a te körödben történik.",
-  pl: "Zadaj pytanie. Korzystam z dokumentów i z tego, co dzieje się na Sophii w twoim zakresie.",
-  ro: "Pune întrebarea. Folosesc documentele și ce se întâmplă pe Sophia, în perimetrul tău.",
-  sv: "Ställ din fråga. Jag utgår från docs och det som händer på Sophia, inom ditt område.",
-  tr: "Sorunu sor. Dokümanlara ve Sophia'da senin kapsamındaki duruma dayanıyorum.",
+  fr: "Pose ta question. Je m'appuie sur les docs et sur ce qui se passe sur micabo, dans ton périmètre.",
+  en: "Ask your question. I use the docs and what's happening on micabo, within your scope.",
+  de: "Stell deine Frage. Ich nutze die Docs und das, was auf micabo in deinem Bereich passiert.",
+  it: "Fai la tua domanda. Uso i documenti e ciò che succede su micabo, nel tuo perimetro.",
+  es: "Haz tu pregunta. Uso los docs y lo que pasa en micabo, en tu perímetro.",
+  pt: "Faz a tua pergunta. Uso os docs e o que se passa no micabo, no teu perímetro.",
+  cs: "Polož otázku. Vycházím z dokumentů a z toho, co se děje na micabo v tvém rozsahu.",
+  nl: "Stel je vraag. Ik gebruik de docs en wat er op micabo gebeurt, binnen jouw bereik.",
+  el: "Κάνε την ερώτησή σου. Βασίζομαι στα docs και σε ό,τι γίνεται στο micabo, στο δικό σου πεδίο.",
+  hu: "Tedd fel a kérdésed. A dokumentumokra és arra támaszkodom, ami a micabón a te körödben történik.",
+  pl: "Zadaj pytanie. Korzystam z dokumentów i z tego, co dzieje się na micabo w twoim zakresie.",
+  ro: "Pune întrebarea. Folosesc documentele și ce se întâmplă pe micabo, în perimetrul tău.",
+  sv: "Ställ din fråga. Jag utgår från docs och det som händer på micabo, inom ditt område.",
+  tr: "Sorunu sor. Dokümanlara ve micabo'da senin kapsamındaki duruma dayanıyorum.",
 };
 
 export const PLACEHOLDER_CHAT: Record<string, string> = {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   budgetScript,
+  compterMicabo,
   compterMots,
   compterSophia,
   coverPromptPapier,
@@ -9,10 +10,10 @@ import {
   estimerSecondesParole,
   extraireJson,
   finaliserScript,
+  MICABO_OUTRO,
   motionPromptPapier,
-  normaliserCtaSophiaUnique,
+  normaliserCtaMicaboUnique,
   remplacerSophiaParAppli,
-  SOPHIA_OUTRO,
 } from "./papierScript";
 
 describe("durée de clip", () => {
@@ -51,17 +52,18 @@ describe("JSON modèle", () => {
   });
 });
 
-describe("CTA Sophia unique", () => {
-  it("remplace Sophia hors CTA par l'appli", () => {
+describe("CTA micabo unique", () => {
+  it("retire tout nom de produit tiers hors CTA", () => {
     expect(remplacerSophiaParAppli("Ouvre Sophia puis lis")).toBe("Ouvre l'appli puis lis");
   });
 
-  it("ne garde Sophia qu'une fois dans le CTA", () => {
-    const cta = normaliserCtaSophiaUnique("Sophia t'aide. Télécharge Sophia maintenant.");
-    expect(compterSophia(cta)).toBe(1);
+  it("convertit un CTA tiers en un seul micabo", () => {
+    const cta = normaliserCtaMicaboUnique("Sophia t'aide. Télécharge Sophia maintenant.");
+    expect(compterSophia(cta)).toBe(0);
+    expect(compterMicabo(cta)).toBe(1);
   });
 
-  it("finalise le script : strip pub, CTA collé, Sophia hors scènes", () => {
+  it("finalise le script : strip pub, CTA collé, micabo hors scènes hors outro", () => {
     const script = finaliserScript(
       {
         title: "Test",
@@ -77,14 +79,16 @@ describe("CTA Sophia unique", () => {
     );
     expect(script.scenes.length).toBe(3);
     expect(script.scenes[0]?.narration).toBe("Hook choc ici");
-    expect(script.scenes[2]?.narration).toContain("Sophia");
-    expect(compterSophia(script.scenes.slice(0, -1).map((s) => s.narration).join(" "))).toBe(0);
-    expect(compterSophia(script.cta)).toBe(1);
-    expect(script.scenes[2]?.overlay).toBe("Télécharge Sophia");
+    expect(script.scenes[2]?.narration).toContain("micabo");
+    expect(compterSophia(script.cta)).toBe(0);
+    expect(compterSophia(script.scenes.map((s) => s.narration).join(" "))).toBe(0);
+    expect(compterMicabo(script.cta)).toBe(1);
+    expect(script.scenes[2]?.overlay).toBe("Ouvre micabo");
   });
 
-  it("l'outro par défaut ne dit Sophia qu'une fois", () => {
-    expect(compterSophia(SOPHIA_OUTRO)).toBe(1);
+  it("l'outro par défaut dit micabo une seule fois", () => {
+    expect(compterMicabo(MICABO_OUTRO)).toBe(1);
+    expect(compterSophia(MICABO_OUTRO)).toBe(0);
   });
 
   it("utilise l'outro par défaut si CTA vide", () => {
@@ -97,8 +101,9 @@ describe("CTA Sophia unique", () => {
       },
       2,
     );
-    expect(script.cta).toBe(SOPHIA_OUTRO);
-    expect(compterSophia(script.cta)).toBe(1);
+    expect(script.cta).toBe(MICABO_OUTRO);
+    expect(compterMicabo(script.cta)).toBe(1);
+    expect(compterSophia(script.cta)).toBe(0);
   });
 });
 

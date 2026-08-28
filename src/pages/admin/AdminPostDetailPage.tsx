@@ -542,7 +542,7 @@ export function AdminPostDetailPage() {
       )}
 
       {/* Fabrication en direct (posts de test) : nettoyage photo par photo, puis
-          Sophia, puis le QR apparaît. Reprend tout seul si l'onglet a dormi. */}
+          placement micabo, puis le QR apparaît. Reprend tout seul si l'onglet a dormi. */}
       {enBuild && (
         <Card className="border-primary/40">
           <CardHeader className="pb-3">
@@ -551,14 +551,14 @@ export function AdminPostDetailPage() {
             ) : (
               <CardTitle className="flex items-center gap-2 text-base">
                 <span className="size-2 animate-pulse rounded-full bg-primary" />
-                {build === "sophia" ? t("adminPost.buildSophia") : t("adminPost.buildNettoyage")}
+                {build === "sophia" ? t("adminPost.buildmicabo") : t("adminPost.buildNettoyage")}
               </CardTitle>
             )}
             <CardDescription>{t("adminPost.buildAide")}</CardDescription>
             {build !== "echec" &&
               (() => {
                 // Progression RÉELLE : part des slides déjà nettoyées (0-72 %),
-                // puis l'étape Sophia (90 %). Pas d'estimation au doigt mouillé.
+                // puis l'étape placement (90 %). Pas d'estimation au doigt mouillé.
                 const total = apercu.data?.length ?? 0;
                 const propres = apercu.data?.filter((s) => s.url_propre).length ?? 0;
                 const valeur =
@@ -568,7 +568,7 @@ export function AdminPostDetailPage() {
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>
                         {build === "sophia"
-                          ? t("adminPost.buildSophia")
+                          ? t("adminPost.buildmicabo")
                           : t("adminPost.buildNettoyageCompte", { propres, total })}
                       </span>
                       <span className="tabular-nums">{valeur}%</span>

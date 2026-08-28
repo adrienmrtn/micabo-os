@@ -26,8 +26,8 @@ describe("estLanguePapierPrete", () => {
 
 describe("caption / hashtags", () => {
   it("colle hook et CTA", () => {
-    expect(captionDepuisLangue({ hook: "Wow", cta: "Télécharge Sophia" })).toBe(
-      "Wow\n\nTélécharge Sophia",
+    expect(captionDepuisLangue({ hook: "Wow", cta: "Ouvre micabo" })).toBe(
+      "Wow\n\nOuvre micabo",
     );
     expect(captionDepuisLangue({ hook: "  ", cta: "Go" })).toBe("Go");
   });
