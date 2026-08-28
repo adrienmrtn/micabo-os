@@ -22,7 +22,9 @@ additional_redirect_urls = ["https://micabo-os.vercel.app", "http://localhost:51
 jwt_expiry = 3600
 enable_signup = false
 
+# enable_signup ici = provider Email ON (login). Les inscriptions
+# publiques sont coupées par [auth] enable_signup = false.
 [auth.email]
-enable_signup = false
+enable_signup = true
 double_confirm_changes = true
 enable_confirmations = false
