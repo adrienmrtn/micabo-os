@@ -287,8 +287,8 @@ export const SCHEMA_ASSIGNATION: PipelineAction = {
       rang: "⑤",
       label: "Deck lazy : traduction + Sophia",
       kind: "api",
-      api: "assurerDeckPourLangue (Gemini)",
-      env: "GEMINI_API_KEY",
+      api: "assurerDeckPourLangue (Fal OpenRouter / Gemini)",
+      env: "FAL_KEY",
       onFail: "Passage non créé pour ce slot",
     },
     {
@@ -327,7 +327,7 @@ export const SCHEMA_ASSIGNATION: PipelineAction = {
       label: "UGC AI VIDEO — assignation (EN DERNIER)",
       kind: "api",
       api: "assignation-ugc-video (kick drain streamé)",
-      env: "FAL_KEY · GEMINI_API_KEY",
+      env: "FAL_KEY",
       detail:
         "Comptes ugc_ai_video : reaction → frame10 clean → Nano Banana → Kling Pro (durée = reaction, orientation=video) → concat utilisation EN PLUS → caption",
       onFail: "Post statut=echec ; les autres comptes continuent",
