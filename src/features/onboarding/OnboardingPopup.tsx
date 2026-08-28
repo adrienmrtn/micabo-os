@@ -3,6 +3,15 @@ import { useTranslation } from "react-i18next";
 import { PlayCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { marquerOnboardingVu, onboardingVu } from "@/features/moteur/api";
 
 /** Lien de partage Loom → lien d'intégration (iframe). */
@@ -29,33 +38,35 @@ export function OnboardingPopup() {
   if (isPending || vu) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl animate-fade-in rounded-2xl border bg-card p-6 shadow-lifted">
-        <div className="flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
-            <PlayCircle className="size-5" />
-          </span>
-          <div>
-            <h2 className="text-base font-semibold tracking-tight">{t("onboarding.titre")}</h2>
-            <p className="text-xs text-muted-foreground">{t("onboarding.sous")}</p>
+    <Dialog open disablePointerDismissal>
+      <DialogPopup showCloseButton={false} className="max-w-2xl">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+              <PlayCircle className="size-5" />
+            </span>
+            <div>
+              <DialogTitle className="text-base">{t("onboarding.titre")}</DialogTitle>
+              <DialogDescription>{t("onboarding.sous")}</DialogDescription>
+            </div>
           </div>
-        </div>
-
-        <div className="mt-4 aspect-video w-full overflow-hidden rounded-xl border bg-black">
-          <iframe
-            src={LOOM_EMBED}
-            title={t("onboarding.titre")}
-            allowFullScreen
-            className="size-full"
-          />
-        </div>
-
-        <div className="mt-4 flex justify-end">
-          <Button disabled={marquer.isPending} onClick={() => marquer.mutate()}>
+        </DialogHeader>
+        <DialogPanel>
+          <div className="aspect-video w-full overflow-hidden rounded-xl border bg-black">
+            <iframe
+              src={LOOM_EMBED}
+              title={t("onboarding.titre")}
+              allowFullScreen
+              className="size-full"
+            />
+          </div>
+        </DialogPanel>
+        <DialogFooter>
+          <Button loading={marquer.isPending} onClick={() => marquer.mutate()}>
             {marquer.isPending ? t("common.saving") : t("onboarding.compris")}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
   );
 }

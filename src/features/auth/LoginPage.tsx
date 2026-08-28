@@ -2,9 +2,17 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, Briefcase, ShieldCheck, Users, type LucideIcon } from "lucide-react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardPanel,
+  CardTitle,
+} from "@/components/ui/card";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { signInWithPassword } from "./api";
 
@@ -49,10 +57,13 @@ export function LoginPage() {
   }
 
   return (
-    <div className="surface-atelier flex min-h-screen flex-col items-center justify-center px-4 py-12">
+    <div className="flex min-h-svh flex-col items-center justify-center bg-background px-4 py-12">
       {!choisi ? (
         <div className="w-full max-w-2xl animate-brand-in text-center">
-          <p className="font-display text-5xl font-semibold tracking-tight text-foreground sm:text-6xl md:text-7xl">
+          <span className="brand-mark mx-auto" aria-hidden>
+            S
+          </span>
+          <p className="font-heading mt-5 text-5xl font-semibold tracking-tight text-foreground sm:text-6xl">
             Sophia
           </p>
           <p className="mt-3 text-base text-muted-foreground sm:text-lg">{t("auth.tagline")}</p>
@@ -67,11 +78,11 @@ export function LoginPage() {
                   setChoisi(card);
                 }}
                 className={cn(
-                  "group flex flex-col items-center gap-2 border border-border/70 bg-card/70 px-4 py-5 text-center transition-all duration-200",
-                  "hover:border-primary/40 hover:bg-card",
+                  "group flex flex-col items-center gap-2 rounded-2xl border bg-card px-4 py-5 text-center shadow-xs/5 transition-colors",
+                  "hover:bg-accent/60",
                 )}
               >
-                <card.icon className="size-5 text-primary transition-transform group-hover:scale-105" />
+                <card.icon className="size-5 text-foreground transition-transform group-hover:scale-105" />
                 <span className="text-sm font-semibold tracking-tight">{t(card.labelKey)}</span>
                 <span className="text-[11px] leading-snug text-muted-foreground">
                   {t(card.descKey)}
@@ -83,60 +94,69 @@ export function LoginPage() {
       ) : (
         <div className="w-full max-w-sm animate-fade-in">
           <div className="mb-8 text-center">
-            <p className="font-display text-3xl font-semibold tracking-tight">Sophia</p>
+            <span className="brand-mark mx-auto" aria-hidden>
+              S
+            </span>
+            <p className="font-heading mt-4 text-3xl font-semibold tracking-tight">Sophia</p>
             <p className="mt-1 text-sm text-muted-foreground">{t("auth.tagline")}</p>
           </div>
 
-          <div className="border border-border/80 bg-card/90 p-6 shadow-lifted">
-            <button
-              type="button"
-              onClick={() => setChoisi(null)}
-              className="mb-5 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <ArrowLeft className="size-3.5" />
-              {t("auth.changeAccess")}
-            </button>
-
-            <div className="mb-5 flex items-center gap-3">
-              <span className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                <choisi.icon className="size-4" />
-              </span>
-              <div>
-                <h1 className="text-base font-semibold tracking-tight">{t(choisi.labelKey)}</h1>
-                <p className="text-xs text-muted-foreground">{t("auth.loginSubtitle")}</p>
+          <Card>
+            <CardHeader className="pb-0">
+              <button
+                type="button"
+                onClick={() => setChoisi(null)}
+                className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="size-3.5" />
+                {t("auth.changeAccess")}
+              </button>
+              <div className="flex items-center gap-3">
+                <span className="flex size-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+                  <choisi.icon className="size-4" />
+                </span>
+                <div>
+                  <CardTitle className="text-base">{t(choisi.labelKey)}</CardTitle>
+                  <CardDescription>{t("auth.loginSubtitle")}</CardDescription>
+                </div>
               </div>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">{t("auth.email")}</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="toi@exemple.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">{t("auth.password")}</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full" disabled={submitting}>
-                {submitting ? t("auth.submitting") : t("auth.submit")}
-              </Button>
-            </form>
-          </div>
+            </CardHeader>
+            <CardPanel>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <Field>
+                  <FieldLabel htmlFor="email">{t("auth.email")}</FieldLabel>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="toi@exemple.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="password">{t("auth.password")}</FieldLabel>
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </Field>
+                {error && (
+                  <Alert variant="error">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                <Button type="submit" className="w-full" loading={submitting}>
+                  {submitting ? t("auth.submitting") : t("auth.submit")}
+                </Button>
+              </form>
+            </CardPanel>
+          </Card>
         </div>
       )}
     </div>

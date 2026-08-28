@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { FullPageLoader } from "@/components/layout/FullPageLoader";
 import { signOut } from "./api";
@@ -11,10 +12,14 @@ import { useAuth } from "./AuthContext";
 function EnAttente() {
   const { t } = useTranslation();
   return (
-    <div className="surface-atelier flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
-      <p className="font-display text-3xl font-semibold tracking-tight">Sophia</p>
-      <h1 className="text-lg font-semibold">{t("auth.pendingTitle")}</h1>
-      <p className="max-w-sm text-sm text-muted-foreground">{t("auth.pendingBody")}</p>
+    <div className="flex min-h-svh flex-col items-center justify-center gap-5 bg-background px-6 text-center">
+      <span className="brand-mark" aria-hidden>
+        S
+      </span>
+      <Alert className="max-w-sm text-left">
+        <AlertTitle>{t("auth.pendingTitle")}</AlertTitle>
+        <AlertDescription>{t("auth.pendingBody")}</AlertDescription>
+      </Alert>
       <Button variant="outline" onClick={() => signOut()}>
         {t("auth.logout")}
       </Button>

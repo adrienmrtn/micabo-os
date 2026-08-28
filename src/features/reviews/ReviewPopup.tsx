@@ -3,6 +3,15 @@ import { useTranslation } from "react-i18next";
 import { MessageSquareQuote } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { marquerReviewVue, mesReviewsNonVues } from "@/features/moteur/api";
 
 /**
@@ -24,31 +33,35 @@ export function ReviewPopup() {
   if (!courante) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md animate-fade-in rounded-2xl border bg-card p-6 shadow-lifted">
-        <div className="flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
-            <MessageSquareQuote className="size-5" />
-          </span>
-          <div>
-            <h2 className="text-base font-semibold tracking-tight">{t("reviews.popupTitre")}</h2>
-            <p className="text-xs text-muted-foreground">{t("reviews.popupSous")}</p>
+    <Dialog open disablePointerDismissal>
+      <DialogPopup showCloseButton={false} className="max-w-md">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+              <MessageSquareQuote className="size-5" />
+            </span>
+            <div>
+              <DialogTitle className="text-base">{t("reviews.popupTitre")}</DialogTitle>
+              <DialogDescription>{t("reviews.popupSous")}</DialogDescription>
+            </div>
           </div>
-        </div>
-
-        <p className="mt-4 whitespace-pre-wrap rounded-lg bg-muted/50 p-4 text-sm leading-relaxed">
-          {courante.body}
-        </p>
-
-        <Button
-          className="mt-5 w-full"
-          size="lg"
-          disabled={marquer.isPending}
-          onClick={() => marquer.mutate(courante.id)}
-        >
-          {marquer.isPending ? t("common.saving") : t("reviews.compris")}
-        </Button>
-      </div>
-    </div>
+        </DialogHeader>
+        <DialogPanel>
+          <p className="whitespace-pre-wrap rounded-lg bg-muted/50 p-4 text-sm leading-relaxed">
+            {courante.body}
+          </p>
+        </DialogPanel>
+        <DialogFooter>
+          <Button
+            className="w-full sm:w-auto"
+            size="lg"
+            loading={marquer.isPending}
+            onClick={() => marquer.mutate(courante.id)}
+          >
+            {marquer.isPending ? t("common.saving") : t("reviews.compris")}
+          </Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
   );
 }

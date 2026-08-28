@@ -1,9 +1,10 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabase/client";
 import { AuthLayout } from "./AuthLayout";
 import { useAuth } from "./AuthContext";
@@ -47,8 +48,8 @@ export function ChangePasswordPage() {
   return (
     <AuthLayout title={t("auth.changeTitle")} description={t("auth.changeBody")}>
       <form onSubmit={soumettre} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="mdp">{t("auth.newPassword")}</Label>
+        <Field>
+          <FieldLabel htmlFor="mdp">{t("auth.newPassword")}</FieldLabel>
           <Input
             id="mdp"
             type="password"
@@ -58,9 +59,9 @@ export function ChangePasswordPage() {
             value={motDePasse}
             onChange={(e) => setMotDePasse(e.target.value)}
           />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="mdp2">{t("auth.confirmPassword")}</Label>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="mdp2">{t("auth.confirmPassword")}</FieldLabel>
           <Input
             id="mdp2"
             type="password"
@@ -70,15 +71,15 @@ export function ChangePasswordPage() {
             value={confirmation}
             onChange={(e) => setConfirmation(e.target.value)}
           />
-        </div>
+        </Field>
 
         {erreur && (
-          <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {erreur}
-          </p>
+          <Alert variant="error">
+            <AlertDescription>{erreur}</AlertDescription>
+          </Alert>
         )}
 
-        <Button type="submit" size="lg" className="w-full" disabled={enCours}>
+        <Button type="submit" size="lg" className="w-full" loading={enCours}>
           {enCours ? t("common.saving") : t("auth.save")}
         </Button>
       </form>
