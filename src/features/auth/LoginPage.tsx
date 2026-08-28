@@ -14,6 +14,7 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { signInWithPassword } from "./api";
 
 type AccessKey = "admin" | "manager" | "creator";
@@ -60,9 +61,7 @@ export function LoginPage() {
     <div className="flex min-h-svh flex-col items-center justify-center bg-background px-4 py-12">
       {!choisi ? (
         <div className="w-full max-w-2xl animate-brand-in text-center">
-          <span className="brand-mark mx-auto" aria-hidden>
-            m
-          </span>
+          <BrandLogo size="xl" className="mx-auto" />
           <p className="font-heading mt-5 text-5xl font-semibold tracking-tight text-foreground sm:text-6xl">
             micabo
           </p>
@@ -94,9 +93,7 @@ export function LoginPage() {
       ) : (
         <div className="w-full max-w-sm animate-fade-in">
           <div className="mb-8 text-center">
-            <span className="brand-mark mx-auto" aria-hidden>
-              m
-            </span>
+            <BrandLogo size="lg" className="mx-auto" />
             <p className="font-heading mt-4 text-3xl font-semibold tracking-tight">micabo</p>
             <p className="mt-1 text-sm text-muted-foreground">{t("auth.tagline")}</p>
           </div>

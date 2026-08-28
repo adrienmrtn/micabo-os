@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import {
   Empty,
   EmptyDescription,
@@ -13,9 +14,7 @@ export function NotFoundPage() {
     <div className="flex min-h-svh flex-col items-center justify-center bg-background px-6">
       <Empty>
         <EmptyHeader>
-          <span className="brand-mark mb-6" aria-hidden>
-            S
-          </span>
+          <BrandLogo size="lg" className="mb-6" />
           <EmptyTitle>{t("common.notFoundTitle")}</EmptyTitle>
           <EmptyDescription>{t("common.notFoundBody")}</EmptyDescription>
         </EmptyHeader>

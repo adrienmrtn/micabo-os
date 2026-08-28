@@ -51,7 +51,7 @@ export function assurerPoliceTikTok(): Promise<void> {
   if (fontReady) return fontReady;
   fontReady = (async () => {
     if (typeof document === "undefined") return;
-    const id = "sophia-tiktok-sans";
+    const id = "micabo-tiktok-sans";
     if (!document.getElementById(id)) {
       const link = document.createElement("link");
       link.id = id;
