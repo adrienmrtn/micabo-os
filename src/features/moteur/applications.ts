@@ -1,7 +1,7 @@
-/** Slug canonique de l'application historique. */
-export const SLUG_SOPHIA = "sophia";
-/** Slug canonique de l'application flashcards étudiants. */
+/** Slug unique de cet OS. */
 export const SLUG_MICABO = "micabo";
+/** Ancien slug d'un autre produit — ne plus l'utiliser comme défaut. */
+export const SLUG_SOPHIA = "sophia";
 
 export interface ApplicationOs {
   id: string;
@@ -24,16 +24,16 @@ export function estSlugApplicationValide(slug: string): boolean {
 }
 
 export function estSlugSophia(slug: string | null | undefined): boolean {
-  return (slug ?? SLUG_SOPHIA) === SLUG_SOPHIA;
+  return slug === SLUG_SOPHIA;
 }
 
 export function estSlugMicabo(slug: string | null | undefined): boolean {
-  return slug === SLUG_MICABO;
+  return (slug ?? SLUG_MICABO) === SLUG_MICABO;
 }
 
 /**
- * Application d'un import : la source l'emporte toujours, puis l'id explicite
- * (lien isolé), puis Sophia. Un compte Micabo ne doit jamais retomber sur Sophia.
+ * Application d'un import : la source l'emporte, puis l'id explicite,
+ * puis le fallback (micabo sur cet OS).
  */
 export function resoudreApplicationImport(opts: {
   sourceApplicationId?: string | null;
@@ -51,19 +51,20 @@ export function nomApplication(app: { nom?: string | null; slug?: string | null 
   const nom = String(app.nom ?? "").trim();
   if (nom) return nom;
   const slug = String(app.slug ?? "").trim();
-  if (slug === SLUG_SOPHIA) return "Sophia";
   if (slug === SLUG_MICABO) return "micabo";
-  return slug || "—";
+  return slug || "micabo";
 }
 
-/** Clé du prompt de pertinence (Sophia garde `pertinence` pour rétrocompat). */
+/** Clé du prompt de pertinence. */
 export function clePromptPertinence(slug: string | null | undefined): string {
-  return estSlugSophia(slug) ? "pertinence" : `pertinence_${normaliserSlugApplication(slug)}`;
+  const cle = normaliserSlugApplication(slug) || SLUG_MICABO;
+  return cle === SLUG_MICABO ? "pertinence_micabo" : `pertinence_${cle}`;
 }
 
-/** Clé du prompt de placement (Sophia garde `placement_sophia`). */
+/** Clé du prompt de placement. */
 export function clePromptPlacement(slug: string | null | undefined): string {
-  return estSlugSophia(slug) ? "placement_sophia" : `placement_${normaliserSlugApplication(slug)}`;
+  const cle = normaliserSlugApplication(slug) || SLUG_MICABO;
+  return `placement_${cle}`;
 }
 
 export type FiltreApplicationPoster = "tous" | string;
@@ -88,7 +89,7 @@ export function fileLabelsDeLApplication<T extends { items: unknown[]; par_langu
 ): { items: T["items"]; par_langue: T["par_langue"] } {
   const slice = file.par_application?.[slug];
   if (slice) return { items: slice.items ?? [], par_langue: slice.par_langue ?? {} };
-  if (estSlugSophia(slug)) return { items: file.items ?? [], par_langue: file.par_langue ?? {} };
+  if (estSlugMicabo(slug)) return { items: file.items ?? [], par_langue: file.par_langue ?? {} };
   return { items: [] as T["items"], par_langue: {} as T["par_langue"] };
 }
 
@@ -100,7 +101,7 @@ export function avecFileLabelsApplication<T extends { items: unknown[]; par_lang
 ): T & { par_application: Record<string, { items: T["items"]; par_langue: T["par_langue"] }> } {
   const par_application = { ...(file.par_application ?? {}) };
   par_application[slug] = slice;
-  if (estSlugSophia(slug)) {
+  if (estSlugMicabo(slug)) {
     return { ...file, items: slice.items, par_langue: slice.par_langue, par_application };
   }
   return { ...file, par_application };

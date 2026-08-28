@@ -76,16 +76,16 @@ export async function creerApplication(input: {
     .single();
   if (error) throw error;
   const app = data as ApplicationOs;
-  const { data: sophia } = await supabase
+  const { data: source } = await supabase
     .from("applications")
     .select("id")
-    .eq("slug", "sophia")
+    .eq("slug", "micabo")
     .maybeSingle();
-  if (sophia?.id) {
+  if (source?.id) {
     const { data: systeme } = await supabase
       .from("labels")
       .select("nom, slug, couleur, genre, ugc_ai_video")
-      .eq("application_id", sophia.id)
+      .eq("application_id", source.id)
       .in("slug", ["hook", "ugc-ai-video"]);
     if ((systeme ?? []).length > 0) {
       await supabase.from("labels").insert(
@@ -102,12 +102,12 @@ export async function creerApplication(input: {
     const { data: pertinence } = await supabase
       .from("prompts")
       .select("contenu")
-      .eq("cle", "pertinence")
+      .eq("cle", "pertinence_micabo")
       .maybeSingle();
     const { data: placement } = await supabase
       .from("prompts")
       .select("contenu")
-      .eq("cle", "placement_sophia")
+      .eq("cle", "placement_micabo")
       .maybeSingle();
     await supabase.from("prompts").upsert(
       [

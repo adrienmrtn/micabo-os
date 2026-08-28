@@ -1,17 +1,7 @@
 import * as React from "react";
 
 import { listerApplications } from "./api";
-import { SLUG_SOPHIA, type ApplicationOs } from "./applications";
-
-const STORAGE_KEY = "os-application-slug";
-
-function lireSlugSauve(): string {
-  try {
-    return localStorage.getItem(STORAGE_KEY) ?? SLUG_SOPHIA;
-  } catch {
-    return SLUG_SOPHIA;
-  }
-}
+import { SLUG_MICABO, type ApplicationOs } from "./applications";
 
 interface ApplicationContextValue {
   applications: ApplicationOs[];
@@ -26,27 +16,19 @@ const ApplicationContext = React.createContext<ApplicationContextValue | null>(n
 
 export function ApplicationProvider({ children }: { children: React.ReactNode }) {
   const [applications, setApplications] = React.useState<ApplicationOs[]>([]);
-  const [slug, setSlugState] = React.useState(lireSlugSauve);
   const [isPending, setIsPending] = React.useState(true);
 
   React.useEffect(() => {
+    try {
+      localStorage.removeItem("os-application-slug");
+    } catch {
+      /* private mode */
+    }
     let alive = true;
     void listerApplications()
       .then((liste) => {
         if (!alive) return;
-        setApplications(liste);
-        setSlugState((actuel) => {
-          if (liste.length > 0 && !liste.some((a) => a.slug === actuel)) {
-            const fallback = liste[0]!.slug;
-            try {
-              localStorage.setItem(STORAGE_KEY, fallback);
-            } catch {
-              /* private mode */
-            }
-            return fallback;
-          }
-          return actuel;
-        });
+        setApplications(liste.filter((a) => a.slug === SLUG_MICABO));
       })
       .catch(() => {
         if (!alive) return;
@@ -60,27 +42,18 @@ export function ApplicationProvider({ children }: { children: React.ReactNode })
     };
   }, []);
 
-  const setSlug = React.useCallback((suivant: string) => {
-    setSlugState(suivant);
-    try {
-      localStorage.setItem(STORAGE_KEY, suivant);
-    } catch {
-      /* private mode */
-    }
-  }, []);
-
-  const application = applications.find((a) => a.slug === slug) ?? applications[0] ?? null;
+  const application = applications.find((a) => a.slug === SLUG_MICABO) ?? applications[0] ?? null;
 
   const value = React.useMemo<ApplicationContextValue>(
     () => ({
-      applications,
+      applications: application ? [application] : [],
       application,
       applicationId: application?.id ?? null,
-      slug: application?.slug ?? slug,
-      setSlug,
+      slug: SLUG_MICABO,
+      setSlug: () => undefined,
       isPending,
     }),
-    [applications, application, slug, setSlug, isPending],
+    [application, isPending],
   );
 
   return <ApplicationContext.Provider value={value}>{children}</ApplicationContext.Provider>;
@@ -93,7 +66,7 @@ export function useApplication(): ApplicationContextValue {
       applications: [],
       application: null,
       applicationId: null,
-      slug: SLUG_SOPHIA,
+      slug: SLUG_MICABO,
       setSlug: () => undefined,
       isPending: false,
     };

@@ -90,7 +90,7 @@ export function ChampsPremierCompte({
 
       {typeCompte !== "aucun" && (
         <div className="grid gap-3 sm:grid-cols-2">
-          {applications && onApplication && (
+          {applications && applications.length > 1 && onApplication && (
             <div className="space-y-1">
               <Label htmlFor="premier-app">{t("applications.compte")}</Label>
               <select

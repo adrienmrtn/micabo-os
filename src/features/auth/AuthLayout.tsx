@@ -1,5 +1,6 @@
 import type * as React from "react";
 
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import {
   Card,
   CardDescription,
@@ -23,10 +24,8 @@ export function AuthLayout({
   return (
     <div className="flex min-h-svh flex-col items-center justify-center bg-background px-4 py-12">
       <div className="mb-8 text-center animate-brand-in">
-        <span className="brand-mark mx-auto" aria-hidden>
-          S
-        </span>
-        <p className="font-heading mt-4 text-3xl font-semibold tracking-tight">Sophia</p>
+        <BrandLogo size="lg" className="mx-auto" />
+        <p className="font-heading mt-4 text-3xl font-semibold tracking-tight">micabo</p>
       </div>
 
       <Card className="w-full max-w-sm animate-fade-in">

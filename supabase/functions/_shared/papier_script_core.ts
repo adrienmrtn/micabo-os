@@ -2,8 +2,10 @@
 /** Copie Deno de src/features/moteur/papierScript.ts — garder synchro. */
 /** Helpers purs du master papier (script, durée, CTA, prompts visuels). */
 
-export const SOPHIA_OUTRO =
-  "Ce fait vient de l'application Sophia : des cours simples et gratuits pour booster ta culture générale. Télécharge l'appli, c'est gratuit.";
+export const MICABO_OUTRO =
+  "Tes cours deviennent des flashcards : révise 10 minutes par jour avec micabo.";
+/** @deprecated Même texte que MICABO_OUTRO — plus aucun CTA produit tiers. */
+export const SOPHIA_OUTRO = MICABO_OUTRO;
 
 export const MOTS_PAR_SECONDE = 2.6;
 
@@ -69,7 +71,7 @@ export function extraireJson<T>(texte: string): T {
   return JSON.parse(raw.slice(start, end + 1)) as T;
 }
 
-const CTA_RE = /\b(sophia|t[ée]l[ée]charge|l'appli|l'application)\b/i;
+const CTA_RE = /\b(sophia|micabo|t[ée]l[ée]charge|l'appli|l'application|ouvre micabo)\b/i;
 
 export function estSceneCta(narration: string): boolean {
   return CTA_RE.test(narration);
@@ -87,24 +89,32 @@ export function remplacerSophiaParAppli(texte: string): string {
   return texte.replace(/\bSophia\b/gi, "l'appli");
 }
 
-export function normaliserCtaSophiaUnique(cta: string): string {
-  const base = (cta.trim() || SOPHIA_OUTRO).replace(/\s{2,}/g, " ").trim();
+export function normaliserCtaMicaboUnique(cta: string): string {
+  const base = (cta.trim() || MICABO_OUTRO)
+    .replace(/\bSophia\b/gi, "micabo")
+    .replace(/\s{2,}/g, " ")
+    .trim();
   let seen = false;
   return base
-    .replace(/\bSophia\b/gi, (m) => {
+    .replace(/\bmicabo\b/gi, () => {
       if (seen) return "l'appli";
       seen = true;
-      return m;
+      return "micabo";
     })
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+/** @deprecated Utiliser normaliserCtaMicaboUnique — zéro nom de produit tiers. */
+export function normaliserCtaSophiaUnique(cta: string): string {
+  return normaliserCtaMicaboUnique(cta);
 }
 
 export function sceneCta(cta: string, index: number): PapierSceneScript {
   return {
     index,
     narration: cta,
-    overlay: "Télécharge Sophia",
+    overlay: "Ouvre micabo",
     imagePrompt:
       "a hand holding a simple smartphone showing a clean study app screen, small floating book and lightbulb shapes around it, calm background",
     videoPrompt:
@@ -216,4 +226,8 @@ export function motionPromptPapier(
 
 export function compterSophia(texte: string): number {
   return (texte.match(/\bSophia\b/gi) ?? []).length;
+}
+
+export function compterMicabo(texte: string): number {
+  return (texte.match(/\bmicabo\b/gi) ?? []).length;
 }

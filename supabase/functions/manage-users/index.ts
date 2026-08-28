@@ -15,7 +15,7 @@ import {
 } from "../_shared/supabase.ts";
 
 type Supabase = ReturnType<typeof serviceClient>;
-const DOMAINE = "sophia.com";
+const DOMAINE = "micabo.app";
 const BUCKET = "medias";
 
 interface FileLabelItem {
@@ -847,7 +847,7 @@ function normaliserFileLabelsValeur(valeur: unknown): FileLabelsValeur {
 function sliceFileLabels(file: FileLabelsValeur, slug: string): FileLabelsSlice {
   const inner = file.par_application?.[slug];
   if (inner) return { items: inner.items ?? [], par_langue: inner.par_langue ?? {} };
-  if (slug === "sophia") return { items: file.items, par_langue: file.par_langue };
+  if (slug === "micabo") return { items: file.items, par_langue: file.par_langue };
   return { items: [], par_langue: {} };
 }
 
@@ -858,7 +858,7 @@ function avecSliceApplication(
 ): FileLabelsValeur {
   const par_application = { ...(file.par_application ?? {}) };
   par_application[slug] = slice;
-  if (slug === "sophia") {
+  if (slug === "micabo") {
     return { items: slice.items, par_langue: slice.par_langue, par_application };
   }
   return { items: file.items, par_langue: file.par_langue, par_application };
@@ -910,7 +910,7 @@ async function popLabelFile(
     .eq("cle", "file_labels_comptes")
     .maybeSingle();
   const file = normaliserFileLabelsValeur(data?.valeur);
-  const slug = application?.slug ?? "sophia";
+  const slug = application?.slug ?? "micabo";
   const slice = sliceFileLabels(file, slug);
   const lang = String(langue ?? "").trim().toLowerCase();
 
@@ -1080,7 +1080,7 @@ async function labelMoinsUtiliseParLangue(
   if (opts.ugcOnly) {
     pool = await labelIdsAvecContenusUgc(supabase, opts.applicationId);
   } else {
-    let q = supabase.from("labels").select("id");
+    let q = supabase.from("labels").select("id").eq("ugc_ai_video", false);
     if (opts.applicationId) q = q.eq("application_id", opts.applicationId);
     const { data: tous } = await q;
     pool = (tous ?? []).map((l) => l.id as string).filter(Boolean);
@@ -1150,7 +1150,7 @@ async function unshiftLabelFile(
     .eq("cle", "file_labels_comptes")
     .maybeSingle();
   const file = normaliserFileLabelsValeur(data?.valeur);
-  const slug = queued.applicationSlug ?? "sophia";
+  const slug = queued.applicationSlug ?? "micabo";
   const slice = sliceFileLabels(file, slug);
   const key = String(queued.queueKey ?? "general").trim().toLowerCase() || "general";
 

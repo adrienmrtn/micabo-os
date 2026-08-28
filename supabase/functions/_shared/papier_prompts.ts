@@ -6,11 +6,12 @@
 import type { PapierKind, PapierNarrationStyle } from "./papier_script_core.ts";
 
 export const CTA_BRIEF = [
-  "RÈGLE CTA : la dernière scène est TOUJOURS un appel à l'action pour l'application Sophia, mais il doit être RÉÉCRIT et ADAPTÉ au sujet de la vidéo (jamais copié-collé d'une vidéo à l'autre).",
-  "Le CTA fait 18 à 30 mots, ton oral et naturel, et suit cette logique : rebond sur le fait qu'on vient de raconter → Sophia (app gratuite de culture générale, cours simples) → invitation claire à TÉLÉCHARGER l'appli maintenant.",
-  "RÈGLE ABSOLUE : le mot « Sophia » apparaît EXACTEMENT UNE FOIS dans tout le script (CTA compris). Jamais deux fois. Dans le reste du CTA, dis « l'appli » ou « l'application », jamais à nouveau le nom.",
-  "Exemple de forme (à ne pas recopier) : « Des histoires comme ça, Sophia t'en apprend une par jour, gratuitement, en cours de deux minutes. Télécharge l'appli, c'est cadeau. »",
-  "Le CTA doit donner envie de télécharger : bénéfice concret, zéro ton publicitaire agressif, zéro emoji.",
+  "RÈGLE CTA : la dernière scène est TOUJOURS un appel à l'action pour micabo, mais il doit être RÉÉCRIT et ADAPTÉ au sujet de la vidéo (jamais copié-collé d'une vidéo à l'autre).",
+  "Le CTA fait 18 à 30 mots, ton oral et naturel, et suit cette logique : rebond sur le sujet (cours, notes, examen, révision) → micabo (appli d'éducation IA : tu déposes tes cours / notes / PDF, elle génère les flashcards, tu révises ~10 min/jour) → invitation claire à l'utiliser.",
+  "RÈGLE ABSOLUE : le mot « micabo » apparaît EXACTEMENT UNE FOIS dans tout le script (CTA compris), toujours en minuscules. Jamais deux fois. Dans le reste du CTA, dis « l'appli » ou « l'application ».",
+  "INTERDIT : culture générale, curiosité générale, le nom d'un autre produit. micabo = études, examens, notes, flashcards.",
+  "Exemple de forme (à ne pas recopier) : « au lieu de relire tes cours, transforme-les en flashcards et révise 10 minutes par jour. micabo les crée à partir de tes notes. »",
+  "Le CTA doit donner envie d'ouvrir l'appli : bénéfice concret, zéro ton publicitaire agressif, zéro emoji.",
 ].join("\n");
 
 const KIND_BRIEF: Record<PapierKind, string> = {
@@ -18,7 +19,7 @@ const KIND_BRIEF: Record<PapierKind, string> = {
     "Sujet : un fait fascinant, surprenant et vérifiable, raconté comme une petite enquête.",
   culture:
     "Sujet : culture générale par thème (histoire, science, mythologie, espace…), pédagogique mais captivant.",
-  pub: "Sujet : un fait fascinant. La marque Sophia n'est nommée qu'une seule fois dans toute la vidéo, dans l'outro finale.",
+  pub: "Sujet : une méthode d'étude ou un conseil de révision. micabo n'est nommé qu'une seule fois dans toute la vidéo, dans l'outro finale, toujours en minuscules.",
 };
 
 const STYLE_BRIEF: Record<PapierNarrationStyle, string> = {
@@ -54,7 +55,7 @@ export function scriptSystemPrompt(
   const lo = Math.max(8, Math.round(wordsPerScene - 3));
   const hi = Math.min(26, Math.round(wordsPerScene + 3));
   return [
-    `Tu es un scénariste de vidéos courtes verticales (TikTok / Reels), spécialisé en culture générale.`,
+    `Tu es un scénariste de vidéos courtes verticales (TikTok / Reels), spécialisé en méthodes d'étude, révisions et examens.`,
     `LANGUE DE SORTIE (règle absolue) : tous les textes lus ou affichés (title, hook, narration, overlay, cta, hashtags) sont écrits en ${langName}, dans une langue naturelle et idiomatique — jamais une traduction mot à mot. Seuls imagePrompt et videoPrompt restent en anglais.`,
     KIND_BRIEF[kind],
     STYLE_BRIEF[style],
@@ -85,14 +86,14 @@ export function scriptSystemPrompt(
     "CONTRASTE DE RYTHME : les scènes de montée et de retournement sont courtes et sèches ; les scènes d'explication peuvent être un peu plus longues et posées. C'est ce contraste qui rend la vidéo intrigante ET compréhensible.",
     "INTERDIT : deux retournements, un retournement annoncé à l'avance (« vous allez voir », « attendez la suite »), ou une explication qui arrive avant le retournement.",
     "DERNIÈRE SCÈNE AVANT LE CTA : une phrase de chute qui boucle sur le hook (elle reprend l'image ou l'idée de la scène 1, résolue). On doit sentir que l'histoire est finie.",
-    "UN SEUL CTA : le CTA Sophia est écrit UNIQUEMENT dans le champ cta. Aucune scène du tableau scenes ne doit parler de l'appli, de téléchargement ou de cours gratuits.",
+    "UN SEUL CTA : le CTA micabo est écrit UNIQUEMENT dans le champ cta. Aucune scène du tableau scenes ne doit parler de l'appli ni de flashcards.",
     "Rétention : chaque scène se termine sur une micro-tension (un détail inexpliqué, une contradiction, un « sauf que… ») qui oblige à regarder la suivante.",
     "Le script doit être un vrai texte suivi et cohérent : chaque scène enchaîne logiquement sur la précédente, sans répétition, avec des transitions naturelles.",
     "VOCABULAIRE SIMPLE : écris pour quelqu'un de 15 ans. Mots du quotidien uniquement, phrases courtes, zéro jargon, zéro mot savant.",
     "Reste sur des faits simples à comprendre : une seule idée par scène.",
     "Ton : oral, naturel, direct, tutoiement, phrases courtes et rythmées. Zéro emoji.",
     "À partir de la scène 2, donne des détails concrets (lieux, noms, époques). Les chiffres sont autorisés seulement s'ils sont spectaculaires et jamais dans le hook.",
-    "Le mot « Sophia » ne doit apparaître qu'une seule fois dans TOUT le script, et uniquement dans le CTA final.",
+    "Le mot « micabo » ne doit apparaître qu'une seule fois dans TOUT le script, en minuscules, et uniquement dans le CTA final. Jamais le nom d'un autre produit.",
     "Le champ overlay est le texte incrusté à l'écran : 3 à 6 mots, percutant.",
     "RÈGLE N°3 — COHÉRENCE VISUELLE (très importante) :",
     "Avant d'écrire les scènes, définis une BIBLE VISUELLE dans le champ characters : chaque personnage, animal ou objet qui revient dans plusieurs scènes reçoit une description physique FIXE et très précise en anglais (âge, silhouette, coiffure/barbe, vêtements, COULEURS exactes, accessoires).",
@@ -105,7 +106,7 @@ export function scriptSystemPrompt(
     "N'utilise JAMAIS de noms propres d'œuvres, films, jeux, marques, artistes ou personnages protégés dans imagePrompt et videoPrompt : décris ce qu'on voit.",
     "videoPrompt anime uniquement les éléments visibles dans imagePrompt et décrit une action simple qui rend la narration immédiatement compréhensible, avec un mouvement de caméra discret, en 8 secondes maximum. Aucun nouvel objet, personnage ou événement.",
     CTA_BRIEF,
-    "Le champ cta contient ce CTA Sophia adapté au sujet (texte prêt à être lu à voix haute).",
+    "Le champ cta contient ce CTA micabo adapté au sujet (texte prêt à être lu à voix haute).",
     'Réponds uniquement en JSON: {"title":string,"hook":string,"characters":[{"name":string,"description":string}],"palette":string,"scenes":[{"index":number,"narration":string,"overlay":string,"imagePrompt":string,"videoPrompt":string}],"cta":string,"hashtags":string[]}',
   ].join("\n");
 }
@@ -113,7 +114,7 @@ export function scriptSystemPrompt(
 export function scriptUserPrompt(kind: PapierKind, topic: string): string {
   const base = topic.trim() || "un fait fascinant surprenant au choix";
   return kind === "pub"
-    ? `Sujet : ${base}. Glisse une mention naturelle de l'application Sophia au milieu du script, puis termine par l'outro imposée.`
+    ? `Sujet : ${base}. Glisse une mention naturelle de micabo au milieu du script, puis termine par l'outro imposée.`
     : `Sujet : ${base}.`;
 }
 
@@ -124,10 +125,10 @@ export function topicSystemPrompt(
 ): string {
   const exclus = recents.filter(Boolean).slice(0, 12);
   return [
-    "Tu proposes des sujets de vidéos courtes de culture générale.",
+    "Tu proposes des sujets de vidéos courtes pour étudiants : révisions, notes, examens, flashcards, organisation scolaire.",
     "LANGUE DE SORTIE : français de France.",
     TOPIC_BRIEF[style] ?? TOPIC_BRIEF.revelation,
-    "DOMAINE : culture générale (histoire, science, animaux, espace, inventions, civilisations).",
+    "DOMAINE : études (révisions, prise de notes, examens, mémoire, langues, organisation de cours). Jamais de culture générale pour la curiosité.",
     `Graine d'aléatoire (ne la mentionne jamais) : ${seed}. Ne propose pas l'exemple le plus évident du domaine.`,
     exclus.length
       ? `N'utilise PAS ces sujets déjà traités : ${exclus.join(" · ")}.`

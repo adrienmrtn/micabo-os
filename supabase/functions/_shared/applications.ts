@@ -1,5 +1,5 @@
-export const SLUG_SOPHIA = "sophia";
 export const SLUG_MICABO = "micabo";
+export const SLUG_SOPHIA = "sophia";
 
 export type ApplicationRow = {
   id: string;
@@ -19,12 +19,16 @@ export function normaliserSlug(valeur: unknown): string {
 }
 
 export function estSlugSophia(slug: string | null | undefined): boolean {
-  return (slug ?? SLUG_SOPHIA) === SLUG_SOPHIA;
+  return slug === SLUG_SOPHIA;
+}
+
+export function estSlugMicabo(slug: string | null | undefined): boolean {
+  return (slug ?? SLUG_MICABO) === SLUG_MICABO;
 }
 
 /**
- * Application d'un import : la source l'emporte toujours, puis l'id explicite
- * (lien isolé), puis Sophia. Un compte Micabo ne doit jamais retomber sur Sophia.
+ * Application d'un import : la source l'emporte, puis l'id explicite,
+ * puis le fallback (micabo sur cet OS).
  */
 export function resoudreApplicationImport(opts: {
   sourceApplicationId?: string | null;
@@ -39,40 +43,35 @@ export function resoudreApplicationImport(opts: {
 }
 
 export function clePromptPertinence(slug: string | null | undefined): string {
-  return estSlugSophia(slug) ? "pertinence" : `pertinence_${normaliserSlug(slug)}`;
+  const cle = normaliserSlug(slug) || SLUG_MICABO;
+  return cle === SLUG_MICABO ? "pertinence_micabo" : `pertinence_${cle}`;
 }
 
 export function clePromptPlacement(slug: string | null | undefined): string {
-  return estSlugSophia(slug) ? "placement_sophia" : `placement_${normaliserSlug(slug)}`;
+  const cle = normaliserSlug(slug) || SLUG_MICABO;
+  return `placement_${cle}`;
 }
 
-export function placementParDefaut(langue: string, slug = SLUG_SOPHIA): string {
-  if (slug === SLUG_MICABO) {
-    const par: Record<string, string> = {
-      fr: "transforme tes cours en flashcards et révise 10 minutes par jour. micabo est top pour ça, il les crée à partir de tes notes.",
-      en: "turn your notes into flashcards and review 10 minutes a day. micabo is great for that, it builds them from your notes.",
-      de: "mach aus deinen notizen flashcards und wiederhole 10 minuten am tag. micabo ist super dafür, es erstellt sie aus deinen unterlagen.",
-      es: "pasa tus apuntes a flashcards y repasa 10 minutos al día. micabo va genial para eso, las crea desde tus notas.",
-      it: "trasforma i tuoi appunti in flashcards e ripassa 10 minuti al giorno. micabo è top per questo, le crea dalle tue note.",
-    };
+export function placementParDefaut(langue: string, slug = SLUG_MICABO): string {
+  const par: Record<string, string> = {
+    fr: "transforme tes cours en flashcards et révise 10 minutes par jour. micabo est top pour ça, il les crée à partir de tes notes.",
+    en: "turn your notes into flashcards and review 10 minutes a day. micabo is great for that, it builds them from your notes.",
+    de: "mach aus deinen notizen flashcards und wiederhole 10 minuten am tag. micabo ist super dafür, es erstellt sie aus deinen unterlagen.",
+    es: "pasa tus apuntes a flashcards y repasa 10 minutos al día. micabo va genial para eso, las crea desde tus notas.",
+    it: "trasforma i tuoi appunti in flashcards e ripassa 10 minuti al giorno. micabo è top per questo, le crea dalle tue note.",
+    pt: "transforma as tuas notas em flashcards e revê 10 minutos por dia. o micabo é ótimo para isso, cria-as a partir das tuas notas.",
+    cs: "proměň poznámky ve flashcards a opakuj 10 minut denně. micabo je na to ideální, vytvoří je z tvých zápisků.",
+    nl: "zet je notities om in flashcards en herhaal 10 minuten per dag. micabo is daar top voor, het maakt ze van je notities.",
+    el: "μετέτρεψε τις σημειώσεις σου σε flashcards και επανάλαβε 10 λεπτά τη μέρα. το micabo είναι ιδανικό γι' αυτό.",
+    hu: "alakítsd a jegyzeteid flashcardokká, és ismételj napi 10 percet. a micabo pont erre jó.",
+    pl: "zamień notatki we flashcards i powtarzaj 10 minut dziennie. micabo jest do tego super.",
+    ro: "transformă-ți notițele în flashcards și repetă 10 minute pe zi. micabo e top pentru asta.",
+    sv: "gör flashcards av anteckningarna och repetera 10 minuter om dagen. micabo är toppen för det.",
+    tr: "notlarını flashcard'a çevir, günde 10 dakika tekrarla. micabo tam bunun için.",
+  };
+  if (slug && slug !== SLUG_MICABO) {
     return par[langue] ?? par.en;
   }
-  const par: Record<string, string> = {
-    fr: "Envie d'en apprendre plus chaque jour ? L'appli Sophia t'apprend une culture générale de dingue en quelques minutes. Teste-la 👀",
-    en: "Want to learn something new every day? The Sophia app teaches you wild general knowledge in minutes. Give it a try 👀",
-    es: "¿Quieres aprender algo nuevo cada día? La app Sophia te enseña cultura general increíble en minutos. Pruébala 👀",
-    de: "Lust, jeden Tag etwas Neues zu lernen? Die Sophia-App bringt dir in wenigen Minuten richtig gutes Allgemeinwissen bei. Probier's aus 👀",
-    it: "Vuoi imparare qualcosa di nuovo ogni giorno? L'app Sophia ti insegna una cultura generale pazzesca in pochi minuti. Provala 👀",
-    pt: "Queres aprender algo novo todos os dias? A app Sophia ensina-te cultura geral incrível em poucos minutos. Experimenta 👀",
-    cs: "Chceš se každý den naučit něco nového? Aplikace Sophia tě naučí skvělé všeobecné znalosti za pár minut. Vyzkoušej ji 👀",
-    nl: "Wil je elke dag iets nieuws leren? De Sophia-app leert je in een paar minuten waanzinnige algemene kennis. Probeer het 👀",
-    el: "Θέλεις να μαθαίνεις κάτι νέο κάθε μέρα; Η εφαρμογή Sophia σου μαθαίνει απίστευτη γενική γνώση σε λίγα λεπτά. Δοκίμασέ την 👀",
-    hu: "Szeretnél minden nap valami újat tanulni? A Sophia app perceken belül vad általános műveltséget ad. Próbáld ki 👀",
-    pl: "Chcesz codziennie uczyć się czegoś nowego? Aplikacja Sophia uczy szalonej wiedzy ogólnej w kilka minut. Wypróbuj 👀",
-    ro: "Vrei să înveți ceva nou în fiecare zi? Aplicația Sophia te învață cultură generală tare în câteva minute. Încearc-o 👀",
-    sv: "Vill du lära dig något nytt varje dag? Sophia-appen lär dig galen allmänbildning på några minuter. Testa den 👀",
-    tr: "Her gün yeni bir şey öğrenmek ister misin? Sophia uygulaması dakikalar içinde efsane genel kültür öğretir. Dene 👀",
-  };
   return par[langue] ?? par.en;
 }
 
@@ -80,7 +79,7 @@ export async function applicationParSlug(
   supabase: Supabase,
   slug: unknown,
 ): Promise<ApplicationRow | null> {
-  const cle = normaliserSlug(slug) || SLUG_SOPHIA;
+  const cle = normaliserSlug(slug) || SLUG_MICABO;
   const { data } = await supabase
     .from("applications")
     .select("id, slug, nom")
@@ -93,7 +92,7 @@ export async function applicationParId(
   supabase: Supabase,
   id: string | null | undefined,
 ): Promise<ApplicationRow | null> {
-  if (!id) return applicationParSlug(supabase, SLUG_SOPHIA);
+  if (!id) return applicationParSlug(supabase, SLUG_MICABO);
   const { data } = await supabase
     .from("applications")
     .select("id, slug, nom")
@@ -102,10 +101,15 @@ export async function applicationParId(
   return (data as ApplicationRow | null) ?? null;
 }
 
-export async function applicationSophia(supabase: Supabase): Promise<ApplicationRow> {
-  const app = await applicationParSlug(supabase, SLUG_SOPHIA);
-  if (!app) throw new Error("Application Sophia introuvable");
+export async function applicationMicabo(supabase: Supabase): Promise<ApplicationRow> {
+  const app = await applicationParSlug(supabase, SLUG_MICABO);
+  if (!app) throw new Error("Application micabo introuvable");
   return app;
+}
+
+/** @deprecated Utiliser applicationMicabo — conservé pour les imports existants. */
+export async function applicationSophia(supabase: Supabase): Promise<ApplicationRow> {
+  return applicationMicabo(supabase);
 }
 
 export async function resoudreApplication(
@@ -115,12 +119,12 @@ export async function resoudreApplication(
   const id = String(input.application_id ?? "").trim();
   if (id) {
     const parId = await applicationParId(supabase, id);
-    if (parId) return parId;
+    if (parId && parId.slug === SLUG_MICABO) return parId;
   }
   const slug = normaliserSlug(input.application_slug);
-  if (slug) {
+  if (slug && slug !== SLUG_SOPHIA) {
     const parSlug = await applicationParSlug(supabase, slug);
     if (parSlug) return parSlug;
   }
-  return applicationSophia(supabase);
+  return applicationMicabo(supabase);
 }

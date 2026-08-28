@@ -26,7 +26,7 @@ import {
   supprimerPoster,
 } from "@/features/moteur/api";
 import { useApplication } from "@/features/moteur/ApplicationContext";
-import { SLUG_SOPHIA } from "@/features/moteur/applications";
+import { SLUG_MICABO } from "@/features/moteur/applications";
 import { ChampsPremierCompte, type PremierCompte } from "@/features/moteur/ChampsPremierCompte";
 import { langueInitiale } from "@/features/moteur/langues";
 import { comptePrincipal, estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
@@ -244,7 +244,7 @@ export function HiringPosterPage() {
   const [nom, setNom] = React.useState("");
   const [langue, setLangue] = React.useState("");
   const { slug: slugContexte } = useApplication();
-  const [applicationSlug, setApplicationSlug] = React.useState(slugContexte || SLUG_SOPHIA);
+  const [applicationSlug, setApplicationSlug] = React.useState(slugContexte || SLUG_MICABO);
   const [premierCompte, setPremierCompte] = React.useState<PremierCompte>("perso");
   const [postsParJour, setPostsParJour] = React.useState<1 | 2 | 3>(2);
   const [handleTiktok, setHandleTiktok] = React.useState("");

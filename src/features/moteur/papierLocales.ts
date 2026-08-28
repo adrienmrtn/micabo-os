@@ -140,10 +140,11 @@ export function finaliserTraductionPapier(
   const ctaBrut = String(brut.cta ?? "").trim();
   let seen = false;
   const cta = ctaBrut
-    .replace(/\bSophia\b/gi, (m) => {
+    .replace(/\bSophia\b/gi, "micabo")
+    .replace(/\bmicabo\b/gi, () => {
       if (seen) return "l'appli";
       seen = true;
-      return m;
+      return "micabo";
     })
     .replace(/\s{2,}/g, " ")
     .trim();

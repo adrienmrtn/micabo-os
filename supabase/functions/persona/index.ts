@@ -75,7 +75,7 @@ Deno.serve(async (request) => {
 
     const slugApp =
       (await applicationParId(supabase, compte.application_id as string | undefined))?.slug ??
-      "sophia";
+      "micabo";
     const identite = slugApp === SLUG_MICABO
       ? await genererIdentiteMicabo(supabase, compte.langue, genre)
       : await genererIdentite(supabase, compte.langue, genre, labelNom);
