@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1290" />
+    <title>micabo — App Store frames</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --blue: #2f6bff;
+        --blue-deep: #1e4fd6;
+        --blue-ink: #163db8;
+        --paper: #f4f7ff;
+        --ink: #0b1220;
+        --muted: #5b6780;
+        --card: #ffffff;
+        --line: rgba(11, 18, 32, 0.08);
+        --ok: #1f9d6a;
+        --soft: #e8eeff;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        background: #111;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .frame {
+        width: 1290px;
+        height: 2796px;
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        padding: 108px 88px 0;
+      }
+
+      .frame--blue {
+        background:
+          radial-gradient(120% 70% at 50% 0%, #5b8fff 0%, #2f6bff 42%, #1e4fd6 100%);
+        color: #fff;
+      }
+
+      .frame--paper {
+        background:
+          radial-gradient(100% 60% at 50% 0%, #ffffff 0%, #f4f7ff 55%, #e7edff 100%);
+        color: var(--ink);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 48px;
+      }
+
+      .brand img {
+        width: 64px;
+        height: 64px;
+        border-radius: 16px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      }
+
+      .brand span {
+        font-size: 34px;
+        font-weight: 600;
+        letter-spacing: -0.04em;
+      }
+
+      .frame--blue .brand span {
+        color: #fff;
+      }
+
+      h1 {
+        font-size: 92px;
+        font-weight: 800;
+        letter-spacing: -0.045em;
+        line-height: 1.02;
+        max-width: 1120px;
+      }
+
+      .sub {
+        margin-top: 28px;
+        font-size: 36px;
+        font-weight: 500;
+        letter-spacing: -0.03em;
+        line-height: 1.25;
+      }
+
+      .frame--blue .sub {
+        color: rgba(255, 255, 255, 0.86);
+      }
+
+      .frame--paper .sub {
+        color: var(--muted);
+      }
+
+      .stage {
+        flex: 1;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        padding-top: 72px;
+      }
+
+      .device {
+        width: 920px;
+        height: 1886px;
+        background: #0b1220;
+        border-radius: 92px 92px 0 0;
+        padding: 18px 18px 0;
+        box-shadow:
+          0 40px 80px rgba(8, 16, 40, 0.28),
+          0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+      }
+
+      .frame--paper .device {
+        box-shadow:
+          0 40px 90px rgba(47, 107, 255, 0.18),
+          0 0 0 1px rgba(11, 18, 32, 0.06);
+      }
+
+      .screen {
+        height: 100%;
+        background: #f7f8fc;
+        border-radius: 76px 76px 0 0;
+        overflow: hidden;
+        position: relative;
+        color: var(--ink);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .island-row {
+        height: 86px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 52px;
+        font-size: 24px;
+        font-weight: 600;
+        color: #111;
+        flex-shrink: 0;
+      }
+
+      .island {
+        width: 168px;
+        height: 38px;
+        background: #0b1220;
+        border-radius: 20px;
+      }
+
+      .sys {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .sys svg {
+        display: block;
+      }
+
+      .app {
+        flex: 1;
+        padding: 8px 40px 56px;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      .eyebrow {
+        font-size: 22px;
+        font-weight: 600;
+        color: var(--blue);
+        letter-spacing: 0.02em;
+      }
+
+      .app h2 {
+        margin-top: 8px;
+        font-size: 40px;
+        font-weight: 700;
+        letter-spacing: -0.035em;
+      }
+
+      .meta {
+        margin-top: 8px;
+        font-size: 24px;
+        color: var(--muted);
+        font-weight: 500;
+      }
+
+      .flash {
+        margin: 36px 0 28px;
+        background: #fff;
+        border-radius: 36px;
+        min-height: 720px;
+        padding: 56px 48px;
+        box-shadow: 0 18px 50px rgba(16, 28, 60, 0.08);
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--line);
+      }
+
+      .flash .deck {
+        font-size: 22px;
+        font-weight: 600;
+        color: var(--blue);
+      }
+
+      .flash .q {
+        margin-top: 48px;
+        font-size: 48px;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+        line-height: 1.15;
+      }
+
+      .flash .hint {
+        margin-top: auto;
+        font-size: 24px;
+        color: var(--muted);
+        font-weight: 500;
+      }
+
+      .flash .a {
+        margin-top: 36px;
+        font-size: 32px;
+        line-height: 1.4;
+        font-weight: 500;
+        color: #1c2434;
+      }
+
+      .row {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+
+      .bar {
+        height: 10px;
+        background: #e4e8f2;
+        border-radius: 99px;
+        overflow: hidden;
+        margin: 16px 0 28px;
+      }
+
+      .bar > i {
+        display: block;
+        height: 100%;
+        width: 33%;
+        background: var(--blue);
+        border-radius: 99px;
+      }
+
+      .btns {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-top: auto;
+      }
+
+      .btn {
+        height: 88px;
+        border-radius: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        font-weight: 650;
+      }
+
+      .btn--ghost {
+        background: #fff;
+        color: var(--ink);
+        border: 1px solid var(--line);
+      }
+
+      .btn--ok {
+        background: #e8f8f0;
+        color: var(--ok);
+      }
+
+      .btn--primary {
+        background: var(--blue);
+        color: #fff;
+        box-shadow: 0 12px 28px rgba(47, 107, 255, 0.28);
+      }
+
+      .drop {
+        margin-top: 36px;
+        background: #fff;
+        border: 2px dashed #c5d0ef;
+        border-radius: 36px;
+        padding: 48px 40px;
+        text-align: center;
+      }
+
+      .drop strong {
+        display: block;
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+
+      .drop p {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 24px;
+      }
+
+      .ways {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 14px;
+        margin-top: 22px;
+      }
+
+      .way {
+        background: var(--soft);
+        border-radius: 22px;
+        padding: 28px 12px;
+        font-size: 22px;
+        font-weight: 650;
+        color: var(--blue-ink);
+      }
+
+      .file {
+        margin-top: 28px;
+        background: #fff;
+        border-radius: 28px;
+        padding: 28px 32px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        box-shadow: 0 10px 30px rgba(16, 28, 60, 0.06);
+        border: 1px solid var(--line);
+        text-align: left;
+      }
+
+      .pdf {
+        width: 64px;
+        height: 72px;
+        border-radius: 12px;
+        background: linear-gradient(180deg, #ff6b6b, #e23d3d);
+        color: #fff;
+        font-size: 18px;
+        font-weight: 800;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        padding-bottom: 8px;
+        flex-shrink: 0;
+      }
+
+      .file b {
+        display: block;
+        font-size: 26px;
+        letter-spacing: -0.03em;
+      }
+
+      .file span {
+        color: var(--muted);
+        font-size: 22px;
+        font-weight: 500;
+      }
+
+      .quote {
+        margin-top: 28px;
+        background: #fff;
+        border-radius: 32px;
+        padding: 36px 36px 32px;
+        border: 1px solid var(--line);
+        box-shadow: 0 12px 36px rgba(16, 28, 60, 0.06);
+      }
+
+      .quote .src {
+        font-size: 20px;
+        font-weight: 650;
+        color: var(--blue);
+      }
+
+      .quote p {
+        margin-top: 16px;
+        font-size: 28px;
+        line-height: 1.45;
+        font-weight: 500;
+      }
+
+      .quote mark {
+        background: #dbe6ff;
+        color: var(--ink);
+        padding: 0 4px;
+        border-radius: 4px;
+      }
+
+      .arrow {
+        text-align: center;
+        margin: 18px 0;
+        color: var(--blue);
+        font-size: 34px;
+        font-weight: 700;
+      }
+
+      .mini-card {
+        background: #fff;
+        border-radius: 32px;
+        padding: 32px 36px;
+        border: 1px solid var(--line);
+        box-shadow: 0 12px 36px rgba(16, 28, 60, 0.06);
+      }
+
+      .mini-card .deck {
+        font-size: 20px;
+        font-weight: 650;
+        color: var(--blue);
+      }
+
+      .mini-card .q {
+        margin-top: 14px;
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: -0.035em;
+        line-height: 1.2;
+      }
+
+      .decks {
+        margin-top: 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .deck-row {
+        background: #fff;
+        border-radius: 28px;
+        padding: 28px 32px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border: 1px solid var(--line);
+        box-shadow: 0 8px 24px rgba(16, 28, 60, 0.05);
+      }
+
+      .deck-row b {
+        display: block;
+        font-size: 28px;
+        letter-spacing: -0.03em;
+      }
+
+      .deck-row span {
+        color: var(--muted);
+        font-size: 22px;
+        font-weight: 500;
+      }
+
+      .count {
+        width: 64px;
+        height: 64px;
+        border-radius: 18px;
+        background: var(--soft);
+        color: var(--blue-ink);
+        font-size: 26px;
+        font-weight: 750;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .today {
+        margin-top: 28px;
+        background: var(--blue);
+        color: #fff;
+        border-radius: 36px;
+        padding: 36px 36px 32px;
+      }
+
+      .today .k {
+        font-size: 22px;
+        font-weight: 600;
+        opacity: 0.85;
+      }
+
+      .today .v {
+        margin-top: 8px;
+        font-size: 44px;
+        font-weight: 750;
+        letter-spacing: -0.04em;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="frame frame--blue" data-frame="01-hero" id="frame-01">
+      <div class="brand">
+        <img src="/public/micabo-logo.png" alt="" />
+        <span>micabo</span>
+      </div>
+      <h1>Tes cours deviennent des flashcards.</h1>
+      <p class="sub">Révise 10 minutes par jour.</p>
+      <div class="stage">
+        <div class="device">
+          <div class="screen">
+            <div class="island-row">
+              <span>9:41</span>
+              <div class="island"></div>
+              <span class="sys" aria-hidden="true">
+                <svg width="22" height="16" viewBox="0 0 22 16" fill="#111"><rect x="0" y="10" width="4" height="6" rx="1"/><rect x="6" y="7" width="4" height="9" rx="1"/><rect x="12" y="3" width="4" height="13" rx="1"/><rect x="18" y="0" width="4" height="16" rx="1"/></svg>
+                <svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="#111" stroke-width="2"><path d="M2 6.5a9 9 0 0 1 16 0"/><path d="M5.5 9.5a5 5 0 0 1 9 0"/><circle cx="10" cy="13" r="1.4" fill="#111" stroke="none"/></svg>
+                <svg width="32" height="16" viewBox="0 0 32 16" fill="none"><rect x="1" y="2" width="27" height="12" rx="3" stroke="#111" stroke-width="2"/><rect x="3.5" y="4.5" width="22" height="7" rx="1.5" fill="#111"/><rect x="28.5" y="5.5" width="2.5" height="5" rx="1" fill="#111"/></svg>
+              </span>
+            </div>
+            <div class="app">
+              <div class="eyebrow">Session du jour</div>
+              <h2>Physiologie</h2>
+              <p class="meta">CM3 — Synapses · 12 cartes</p>
+              <article class="flash">
+                <div class="deck">Carte 3 / 12</div>
+                <p class="q">Qu’est-ce qu’une synapse&nbsp;?</p>
+                <p class="hint">Touche pour retourner</p>
+              </article>
+              <div class="row"><span>8 min restantes</span><span>10 min</span></div>
+              <div class="bar"><i></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="frame frame--paper" data-frame="02-import" id="frame-02">
+      <div class="brand">
+        <img src="/public/micabo-logo.png" alt="" />
+        <span>micabo</span>
+      </div>
+      <h1>Dépose tes notes. Ou un PDF.</h1>
+      <p class="sub">micabo crée les cartes.</p>
+      <div class="stage">
+        <div class="device">
+          <div class="screen">
+            <div class="island-row">
+              <span>9:41</span>
+              <div class="island"></div>
+              <span class="sys" aria-hidden="true">
+                <svg width="22" height="16" viewBox="0 0 22 16" fill="#111"><rect x="0" y="10" width="4" height="6" rx="1"/><rect x="6" y="7" width="4" height="9" rx="1"/><rect x="12" y="3" width="4" height="13" rx="1"/><rect x="18" y="0" width="4" height="16" rx="1"/></svg>
+                <svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="#111" stroke-width="2"><path d="M2 6.5a9 9 0 0 1 16 0"/><path d="M5.5 9.5a5 5 0 0 1 9 0"/><circle cx="10" cy="13" r="1.4" fill="#111" stroke="none"/></svg>
+                <svg width="32" height="16" viewBox="0 0 32 16" fill="none"><rect x="1" y="2" width="27" height="12" rx="3" stroke="#111" stroke-width="2"/><rect x="3.5" y="4.5" width="22" height="7" rx="1.5" fill="#111"/><rect x="28.5" y="5.5" width="2.5" height="5" rx="1" fill="#111"/></svg>
+              </span>
+            </div>
+            <div class="app">
+              <div class="eyebrow">Nouveau deck</div>
+              <h2>Ajouter un cours</h2>
+              <p class="meta">Notes, PDF ou photo de fiche</p>
+              <div class="drop">
+                <strong>Dépose ton cours ici</strong>
+                <p>PDF, notes ou photo de tableau</p>
+                <div class="ways">
+                  <div class="way">PDF</div>
+                  <div class="way">Notes</div>
+                  <div class="way">Photo</div>
+                </div>
+              </div>
+              <div class="file">
+                <div class="pdf">PDF</div>
+                <div>
+                  <b>CM3 — synapses.pdf</b>
+                  <span>24 pages · prêt à transformer</span>
+                </div>
+              </div>
+              <div class="btns" style="margin-top: 28px; grid-template-columns: 1fr">
+                <div class="btn btn--primary">Créer les flashcards</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="frame frame--blue" data-frame="03-session" id="frame-03">
+      <div class="brand">
+        <img src="/public/micabo-logo.png" alt="" />
+        <span>micabo</span>
+      </div>
+      <h1>10 minutes. Pas une soirée.</h1>
+      <p class="sub">Les cartes qu’il te reste à savoir.</p>
+      <div class="stage">
+        <div class="device">
+          <div class="screen">
+            <div class="island-row">
+              <span>9:41</span>
+              <div class="island"></div>
+              <span class="sys" aria-hidden="true">
+                <svg width="22" height="16" viewBox="0 0 22 16" fill="#111"><rect x="0" y="10" width="4" height="6" rx="1"/><rect x="6" y="7" width="4" height="9" rx="1"/><rect x="12" y="3" width="4" height="13" rx="1"/><rect x="18" y="0" width="4" height="16" rx="1"/></svg>
+                <svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="#111" stroke-width="2"><path d="M2 6.5a9 9 0 0 1 16 0"/><path d="M5.5 9.5a5 5 0 0 1 9 0"/><circle cx="10" cy="13" r="1.4" fill="#111" stroke="none"/></svg>
+                <svg width="32" height="16" viewBox="0 0 32 16" fill="none"><rect x="1" y="2" width="27" height="12" rx="3" stroke="#111" stroke-width="2"/><rect x="3.5" y="4.5" width="22" height="7" rx="1.5" fill="#111"/><rect x="28.5" y="5.5" width="2.5" height="5" rx="1" fill="#111"/></svg>
+              </span>
+            </div>
+            <div class="app">
+              <div class="eyebrow">En cours · 8 min</div>
+              <h2>Carte 4 / 12</h2>
+              <p class="meta">Physiologie — CM3 Synapses</p>
+              <article class="flash">
+                <div class="deck">Verso</div>
+                <p class="a">
+                  Zone de contact entre deux neurones. La synapse chimique
+                  libère un neurotransmetteur dans la fente synaptique.
+                </p>
+                <p class="hint">Relis tes notes si tu bloques</p>
+              </article>
+              <div class="btns">
+                <div class="btn btn--ghost">À revoir</div>
+                <div class="btn btn--ok">Je savais</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="frame frame--paper" data-frame="04-source" id="frame-04">
+      <div class="brand">
+        <img src="/public/micabo-logo.png" alt="" />
+        <span>micabo</span>
+      </div>
+      <h1>Tes cours. Pas un quiz générique.</h1>
+      <p class="sub">Chaque carte vient de tes notes.</p>
+      <div class="stage">
+        <div class="device">
+          <div class="screen">
+            <div class="island-row">
+              <span>9:41</span>
+              <div class="island"></div>
+              <span class="sys" aria-hidden="true">
+                <svg width="22" height="16" viewBox="0 0 22 16" fill="#111"><rect x="0" y="10" width="4" height="6" rx="1"/><rect x="6" y="7" width="4" height="9" rx="1"/><rect x="12" y="3" width="4" height="13" rx="1"/><rect x="18" y="0" width="4" height="16" rx="1"/></svg>
+                <svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="#111" stroke-width="2"><path d="M2 6.5a9 9 0 0 1 16 0"/><path d="M5.5 9.5a5 5 0 0 1 9 0"/><circle cx="10" cy="13" r="1.4" fill="#111" stroke="none"/></svg>
+                <svg width="32" height="16" viewBox="0 0 32 16" fill="none"><rect x="1" y="2" width="27" height="12" rx="3" stroke="#111" stroke-width="2"/><rect x="3.5" y="4.5" width="22" height="7" rx="1.5" fill="#111"/><rect x="28.5" y="5.5" width="2.5" height="5" rx="1" fill="#111"/></svg>
+              </span>
+            </div>
+            <div class="app">
+              <div class="eyebrow">Source</div>
+              <h2>Depuis ton CM</h2>
+              <p class="meta">Physiologie — CM3, p. 7</p>
+              <div class="quote">
+                <div class="src">Tes notes</div>
+                <p>
+                  «&nbsp;La
+                  <mark>synapse chimique libère un neurotransmetteur</mark>
+                  dans la fente synaptique.&nbsp;»
+                </p>
+              </div>
+              <div class="arrow">↓</div>
+              <div class="mini-card">
+                <div class="deck">Flashcard créée</div>
+                <p class="q">Que libère une synapse chimique&nbsp;?</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="frame frame--blue" data-frame="05-habitude" id="frame-05">
+      <div class="brand">
+        <img src="/public/micabo-logo.png" alt="" />
+        <span>micabo</span>
+      </div>
+      <h1>Un peu tous les jours.</h1>
+      <p class="sub">Prêt le jour de l’examen.</p>
+      <div class="stage">
+        <div class="device">
+          <div class="screen">
+            <div class="island-row">
+              <span>9:41</span>
+              <div class="island"></div>
+              <span class="sys" aria-hidden="true">
+                <svg width="22" height="16" viewBox="0 0 22 16" fill="#111"><rect x="0" y="10" width="4" height="6" rx="1"/><rect x="6" y="7" width="4" height="9" rx="1"/><rect x="12" y="3" width="4" height="13" rx="1"/><rect x="18" y="0" width="4" height="16" rx="1"/></svg>
+                <svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="#111" stroke-width="2"><path d="M2 6.5a9 9 0 0 1 16 0"/><path d="M5.5 9.5a5 5 0 0 1 9 0"/><circle cx="10" cy="13" r="1.4" fill="#111" stroke="none"/></svg>
+                <svg width="32" height="16" viewBox="0 0 32 16" fill="none"><rect x="1" y="2" width="27" height="12" rx="3" stroke="#111" stroke-width="2"/><rect x="3.5" y="4.5" width="22" height="7" rx="1.5" fill="#111"/><rect x="28.5" y="5.5" width="2.5" height="5" rx="1" fill="#111"/></svg>
+              </span>
+            </div>
+            <div class="app">
+              <div class="eyebrow">Avant les partiels</div>
+              <h2>Aujourd’hui</h2>
+              <p class="meta">Ce qui revient avant l’examen</p>
+              <div class="today">
+                <div class="k">Session</div>
+                <div class="v">12 cartes · 10 min</div>
+              </div>
+              <div class="decks">
+                <div class="deck-row">
+                  <div>
+                    <b>Physiologie</b>
+                    <span>CM3 — Synapses</span>
+                  </div>
+                  <div class="count">5</div>
+                </div>
+                <div class="deck-row">
+                  <div>
+                    <b>Droit constitutionnel</b>
+                    <span>S2 — Contrôle de constitutionnalité</span>
+                  </div>
+                  <div class="count">4</div>
+                </div>
+                <div class="deck-row">
+                  <div>
+                    <b>Stats S2</b>
+                    <span>Loi normale — exercices</span>
+                  </div>
+                  <div class="count">3</div>
+                </div>
+              </div>
+              <div class="btns" style="margin-top: 28px; grid-template-columns: 1fr">
+                <div class="btn btn--primary">Réviser maintenant</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </body>
+</html>
