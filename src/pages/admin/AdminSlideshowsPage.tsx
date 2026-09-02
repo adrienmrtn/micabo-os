@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router-dom";
-import { Check, ImageUp, PenLine, RefreshCw, ScanText, Sparkles, Trash2, X } from "lucide-react";
+import { Check, ImageUp, PenLine, RefreshCw, Rocket, ScanText, Sparkles, Trash2, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,9 @@ import {
   listerLabels,
   listerSources,
   statsSlideshowsParSource,
+  forcerImportEloContenu,
   jobsReimportDepuisSlides,
+  kickImportWorkers,
   listerJobsReimportPhotosValides,
   listerMediasPourContenu,
   majMediaSlideContenu,
@@ -57,6 +59,7 @@ import {
   type ProviderNettoyage,
 } from "@/features/moteur/nettoyageEtapes";
 import { useApplication } from "@/features/moteur/ApplicationContext";
+import { peutForcerImportElo } from "@/features/moteur/importSlideshowActions";
 import { nomLangue } from "@/features/moteur/langues";
 import type { ContenuLangue, ContenuSlide, Media } from "@/features/moteur/types";
 import { ugcVisages } from "@/features/moteur/ugcVisages";
@@ -283,6 +286,58 @@ function Chip({
     >
       {children}
     </button>
+  );
+}
+
+function invaliderApresImport(qc: QueryClient) {
+  void qc.invalidateQueries({ queryKey: ["slideshows"] });
+  void qc.invalidateQueries({ queryKey: ["slideshow"] });
+  void qc.invalidateQueries({ queryKey: ["contenus"] });
+  void qc.invalidateQueries({ queryKey: ["historique-imports"] });
+}
+
+function ForcerEloBouton({
+  contenuId,
+  compact,
+  onClick,
+}: {
+  contenuId: string;
+  compact?: boolean;
+  onClick?: (e: React.MouseEvent) => void;
+}) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const forcer = useMutation({
+    mutationFn: () => forcerImportEloContenu(contenuId),
+    onSuccess: () => invaliderApresImport(queryClient),
+  });
+
+  return (
+    <div className={compact ? "inline-flex flex-col items-stretch gap-0.5" : "space-y-1"}>
+      <Button
+        size="sm"
+        variant={compact ? "outline" : "default"}
+        className={compact ? "h-6 px-1.5 text-[10px]" : "h-7 text-xs"}
+        disabled={forcer.isPending}
+        title={t("slideshows.forcerSeuilAide")}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick?.(e);
+          forcer.mutate();
+        }}
+      >
+        <Rocket className={compact ? "size-2.5" : "size-3"} />
+        {forcer.isPending ? t("slideshows.forcerSeuilEnCours") : t("slideshows.forcerSeuil")}
+      </Button>
+      {forcer.isError && (
+        <p className="text-[10px] text-destructive">{(forcer.error as Error).message}</p>
+      )}
+      {forcer.isSuccess && (
+        <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
+          {t("slideshows.forcerSeuilOk")}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -1159,6 +1214,10 @@ function DetailSlideshow({
                   {t("slideshows.ugcBadge")}
                 </Badge>
               )}
+              {d.import_elo_force_seuil && (
+                <Badge variant="outline">{t("slideshows.eloForce")}</Badge>
+              )}
+              {peutForcerImportElo(d) && <ForcerEloBouton contenuId={d.id} />}
               <Button
                 size="sm"
                 variant="outline"
@@ -1349,6 +1408,19 @@ function DetailSlideshow({
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("slideshows.elo")}
               </h3>
+              {d.import_elo_rapport?.texte && (
+                <details className="rounded border bg-muted/30 px-2.5 py-2">
+                  <summary className="cursor-pointer text-[11px] font-medium">
+                    {t("slideshows.eloRapport")}
+                    {d.import_elo_rapport.seuil != null
+                      ? ` · seuil ${d.import_elo_rapport.seuil}`
+                      : ""}
+                  </summary>
+                  <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-muted-foreground">
+                    {d.import_elo_rapport.texte}
+                  </pre>
+                </details>
+              )}
               {langues.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   {detail.isFetching
@@ -1552,7 +1624,9 @@ export function AdminSlideshowsPage() {
   const { applicationId } = useApplication();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [filtre, setFiltre] = React.useState<"tous" | "valide" | "rejete">("tous");
+  const [filtre, setFiltre] = React.useState<
+    "tous" | "valide" | "rejete" | "brouillon"
+  >("tous");
   const [filtreLabel, setFiltreLabel] = React.useState<FiltreLabel>(null);
   const [filtreCompte, setFiltreCompte] = React.useState<FiltreCompte>(null);
   const [filtreUgc, setFiltreUgc] = React.useState<FiltreUgc>("tous");
@@ -1565,6 +1639,7 @@ export function AdminSlideshowsPage() {
     total: number;
   } | null>(null);
   const [reimportLogs, setReimportLogs] = React.useState<string[]>([]);
+  const [relanceMsg, setRelanceMsg] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const id = searchParams.get("id");
@@ -1586,6 +1661,7 @@ export function AdminSlideshowsPage() {
         applicationId,
       }),
     enabled: Boolean(applicationId),
+    refetchInterval: filtre === "brouillon" ? 12_000 : false,
   });
 
   const sources = useQuery({
@@ -1598,7 +1674,8 @@ export function AdminSlideshowsPage() {
   const statsComptes = useQuery({
     queryKey: ["slideshows", "stats-comptes"],
     queryFn: statsSlideshowsParSource,
-    staleTime: 30_000,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
   });
 
   const labelsTous = useQuery({
@@ -1650,6 +1727,26 @@ export function AdminSlideshowsPage() {
       ? s.compteReferenceId === null
       : s.compteReferenceId === filtreCompte,
   );
+  const encoursTotal = statsActives.reduce((n, s) => n + s.encours, 0);
+  const relancer = useMutation({
+    mutationFn: () => kickImportWorkers(3),
+    onSuccess: () => {
+      setRelanceMsg(t("slideshows.relancerImportsOk"));
+      invaliderApresImport(queryClient);
+    },
+  });
+  const kickAuto = React.useRef(false);
+  React.useEffect(() => {
+    if (encoursTotal <= 0) return;
+    if (!kickAuto.current) {
+      kickAuto.current = true;
+      void kickImportWorkers(3).then(() => invaliderApresImport(queryClient));
+    }
+    const id = window.setInterval(() => {
+      void kickImportWorkers(1).then(() => invaliderApresImport(queryClient));
+    }, 50_000);
+    return () => window.clearInterval(id);
+  }, [encoursTotal, queryClient]);
 
   const groupesCompte = React.useMemo(() => {
     if (tri !== "compte" || filtreCompte) return null;
@@ -1783,8 +1880,36 @@ export function AdminSlideshowsPage() {
             </div>
           )}
           <div className="space-y-3">
+            {encoursTotal > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/40">
+                <p className="text-xs text-amber-950 dark:text-amber-100">
+                  {t("slideshows.importsBloques", { count: encoursTotal })}
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  disabled={relancer.isPending}
+                  title={t("slideshows.relancerImportsAide")}
+                  onClick={() => relancer.mutate()}
+                >
+                  <RefreshCw className={cn("size-3", relancer.isPending && "animate-spin")} />
+                  {relancer.isPending
+                    ? t("slideshows.relancerImportsEnCours")
+                    : t("slideshows.relancerImports")}
+                </Button>
+              </div>
+            )}
+            {relanceMsg && (
+              <p className="text-[11px] text-emerald-700 dark:text-emerald-400">{relanceMsg}</p>
+            )}
+            {relancer.isError && (
+              <p className="text-[11px] text-destructive">
+                {(relancer.error as Error).message}
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-1.5">
-              {(["tous", "valide", "rejete"] as const).map((f) => (
+              {(["tous", "valide", "rejete", "brouillon"] as const).map((f) => (
                 <Chip key={f} actif={filtre === f} onClick={() => setFiltre(f)}>
                   {t(`contenus.filtre.${f}`)}
                 </Chip>
@@ -1995,13 +2120,22 @@ export function AdminSlideshowsPage() {
                   a.nom.localeCompare(b.nom, undefined, { sensitivity: "base" }),
                 );
               return (
-                <button
+                <div
                   key={c.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => {
                     seedSlideshowDetail(queryClient, c.id);
                     setOuvert(c.id);
                     setSearchParams({ id: c.id }, { replace: true });
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      seedSlideshowDetail(queryClient, c.id);
+                      setOuvert(c.id);
+                      setSearchParams({ id: c.id }, { replace: true });
+                    }
                   }}
                   className={cn(
                     "overflow-hidden rounded-lg border text-left transition hover:ring-2 hover:ring-primary",
@@ -2089,6 +2223,16 @@ export function AdminSlideshowsPage() {
                       >
                         {c.statut}
                       </Badge>
+                      {c.statut === "brouillon" && c.import_etape && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {t("slideshows.etapeImport", { etape: c.import_etape })}
+                        </Badge>
+                      )}
+                      {c.import_elo_force_seuil && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {t("slideshows.eloForce")}
+                        </Badge>
+                      )}
                       {c.creation_mode === "manuel" && (
                         <Badge variant="outline" className="text-[10px]">
                           {t("slideshows.manuelBadge")}
@@ -2104,8 +2248,11 @@ export function AdminSlideshowsPage() {
                         {t("slideshows.nbPosts", { count: c.nb_posts ?? 0 })}
                       </span>
                     </div>
+                    {peutForcerImportElo(c) && (
+                      <ForcerEloBouton contenuId={c.id} compact />
+                    )}
                   </div>
-                </button>
+                </div>
               );
                   }),
                 ];

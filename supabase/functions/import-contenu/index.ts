@@ -9,6 +9,7 @@ import {
   listerUrlsCompteReference,
   MAX_TENTATIVES_IMPORT,
   prochainContenu,
+  relacherContenuApresPas,
   statsImportBatch,
   STATUTS_REPRENABLES,
   traiterImportFile,
@@ -245,10 +246,7 @@ Deno.serve(async (request) => {
     if (!contenu) return json({ ok: true, idle: true });
 
     const r = await avancerImport(supabase, contenu);
-    await supabase
-      .from("contenus")
-      .update({ import_lease_until: null })
-      .eq("id", contenu.id);
+    await relacherContenuApresPas(supabase, contenu.id, r.etape);
 
     return json({
       ok: true,
@@ -322,10 +320,7 @@ async function runWorker(
       return { action: tick.action, more: tick.more };
     }
     const r = await avancerImport(supabase, backfill);
-    await supabase
-      .from("contenus")
-      .update({ import_lease_until: null })
-      .eq("id", backfill.id);
+    await relacherContenuApresPas(supabase, backfill.id, r.etape);
     return continuer(supabase, {
       action: "backfill",
       contenuId: backfill.id,
@@ -334,10 +329,7 @@ async function runWorker(
   }
 
   const r = await avancerImport(supabase, contenu);
-  await supabase
-    .from("contenus")
-    .update({ import_lease_until: null })
-    .eq("id", contenu.id);
+  await relacherContenuApresPas(supabase, contenu.id, r.etape);
 
   return continuer(supabase, {
     action: "pipeline",

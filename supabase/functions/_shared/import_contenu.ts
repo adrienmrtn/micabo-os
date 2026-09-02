@@ -1862,6 +1862,30 @@ export const MAX_TENTATIVES_IMPORT = 5;
 /** Statuts qu'un worker peut reprendre — `running` compris si le bail a expiré. */
 export const STATUTS_REPRENABLES = ["pending", "failed", "running"] as const;
 
+const ETAPES_TERMINALES_IMPORT = new Set([
+  "done",
+  "rejete",
+  "elo_insuffisant",
+  "failed",
+]);
+
+/**
+ * Fin de pas : lâche le bail. Un pas intermédiaire redevient `pending`
+ * (sinon `running` + lease null reste affiché « en cours » à vie dès que
+ * le drain cron est coupé et qu'aucun worker ne se rechaîne).
+ */
+export async function relacherContenuApresPas(
+  supabase: Supabase,
+  contenuId: string,
+  etape: string,
+): Promise<void> {
+  const patch: { import_lease_until: null; import_statut?: "pending" } = {
+    import_lease_until: null,
+  };
+  if (!ETAPES_TERMINALES_IMPORT.has(etape)) patch.import_statut = "pending";
+  await supabase.from("contenus").update(patch).eq("id", contenuId);
+}
+
 /**
  * Claim d'une ligne import_file libre.
  *
