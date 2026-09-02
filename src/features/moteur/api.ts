@@ -3347,6 +3347,22 @@ export const forcerImportEloContenu = (contenuId: string) =>
     error?: string;
   }>("import-contenu", { forcerElo: true, contenuId });
 
+/** Un worker de drain (1 scrape ou 1 pas pipeline, puis auto-chaîne s'il reste du travail). */
+export const kickImportWorker = () =>
+  invoke<{
+    ok: boolean;
+    more?: boolean;
+    action?: string;
+    etape?: string;
+    contenuId?: string;
+    idle?: boolean;
+  }>("import-contenu", { worker: true });
+
+/** Amorçe N workers en parallèle — file + pipeline sans dépendre du cron. */
+export async function kickImportWorkers(n = 3): Promise<void> {
+  await Promise.all(Array.from({ length: Math.max(1, n) }, () => kickImportWorker()));
+}
+
 /** Scrape v-next d'un compte de référence → jusqu'à N contenus en file (legacy série). */
 export const scraperSourceVersContenus = (compteReferenceId: string) =>
   invoke<{ ok: boolean; crees: number; ids: string[]; scrapes?: number }>(

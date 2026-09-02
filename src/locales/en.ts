@@ -1316,6 +1316,7 @@ export const en = {
         tous: "All",
         valide: "Valid",
         rejete: "Rejected",
+        brouillon: "In progress",
       },
     },
     slideshows: {
@@ -1332,6 +1333,21 @@ export const en = {
       compteChip: "{{gardes}}/{{importes}} kept",
       compteChipSuite: "{{rejetes}} rejected · {{encours}} in progress",
       compteResume: "@{{handle}} — {{importes}} imported · {{gardes}} kept · {{rejetes}} rejected · {{encours}} in progress",
+      importsBloques:
+        "{{count}} import(s) still queued (often stuck if the drain cron is off). Resume kicks server workers.",
+      relancerImports: "Resume imports",
+      relancerImportsEnCours: "Resuming…",
+      relancerImportsOk: "Workers kicked — the pipeline continues in the background.",
+      relancerImportsAide:
+        "Picks up slideshows stuck at relevance / OCR / cleaning, without waiting for cron.",
+      forcerSeuil: "Force (≥ threshold)",
+      forcerSeuilEnCours: "Forcing…",
+      forcerSeuilOk: "ELO floored to threshold — cleaning restarted.",
+      forcerSeuilAide:
+        "Raises each language's ELO up to the import threshold, then starts cleaning.",
+      eloForce: "ELO forced",
+      eloRapport: "ELO breakdown",
+      etapeImport: "step {{etape}}",
       sansImage: "No image",
       detail: "Slideshow detail",
       langueSource: "Source language",

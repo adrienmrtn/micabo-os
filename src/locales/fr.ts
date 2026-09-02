@@ -1319,6 +1319,7 @@ export const fr = {
         tous: "Tous",
         valide: "Valides",
         rejete: "Rejetés",
+        brouillon: "En cours",
       },
     },
     slideshows: {
@@ -1335,6 +1336,21 @@ export const fr = {
       compteChip: "{{gardes}}/{{importes}} gardés",
       compteChipSuite: "{{rejetes}} rejetés · {{encours}} en cours",
       compteResume: "@{{handle}} — {{importes}} importé(s) · {{gardes}} gardé(s) · {{rejetes}} rejeté(s) · {{encours}} en cours",
+      importsBloques:
+        "{{count}} import(s) encore en file (souvent bloqués si le drain cron est coupé). Relancer enfile des workers serveur.",
+      relancerImports: "Relancer les imports",
+      relancerImportsEnCours: "Relance…",
+      relancerImportsOk: "Workers relancés — le pipeline reprend en arrière-plan.",
+      relancerImportsAide:
+        "Reprend les slideshows coincés (pertinence / OCR / nettoyage) sans attendre le cron.",
+      forcerSeuil: "Forcer (≥ seuil)",
+      forcerSeuilEnCours: "Forçage…",
+      forcerSeuilOk: "ELO planché au seuil — nettoyage relancé.",
+      forcerSeuilAide:
+        "Monte l'ELO de chaque langue jusqu'au seuil d'import, puis lance le nettoyage.",
+      eloForce: "ELO forcé",
+      eloRapport: "Calcul ELO",
+      etapeImport: "étape {{etape}}",
       sansImage: "Sans image",
       detail: "Détail du slideshow",
       langueSource: "Langue d'origine",
