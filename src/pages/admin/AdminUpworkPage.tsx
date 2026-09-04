@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight } from "lucide-react";
+import { Briefcase, ChevronRight, Clapperboard, UserRoundCog, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
@@ -9,6 +9,7 @@ import { drapeauLangue } from "@/features/moteur/langues";
 import { chargerUpworkDashboard } from "@/features/upwork/api";
 import { UPWORK_ORG_NOM } from "@/features/upwork/org";
 import { nomPays } from "@/features/upwork/pipeline";
+import { ICONE_KPI } from "@/features/upwork/icones";
 import { totauxUpwork } from "@/features/upwork/totaux";
 
 function formatQuand(iso: string | null | undefined, locale: string): string {
@@ -18,9 +19,20 @@ function formatQuand(iso: string | null | undefined, locale: string): string {
   return d.toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
 }
 
-function Total({ label, valeur }: { label: string; valeur: string }) {
+function Total({
+  label,
+  valeur,
+  icone: Icone,
+}: {
+  label: string;
+  valeur: string;
+  icone: typeof ICONE_KPI.hm;
+}) {
   return (
     <div className="rounded-lg border bg-card p-4">
+      <p className="mb-1 text-muted-foreground">
+        <Icone className="size-4" aria-hidden />
+      </p>
       <p className="text-2xl font-semibold tabular-nums">{valeur}</p>
       <p className="text-sm text-muted-foreground">{label}</p>
     </div>
@@ -69,10 +81,14 @@ export function AdminUpworkPage() {
           </p>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Total label={t("upwork.kpiHm")} valeur={String(totaux.hms)} />
-            <Total label={t("upwork.kpiCreateurs")} valeur={String(totaux.createurs)} />
-            <Total label={t("upwork.kpiJobHmOuverts")} valeur={String(totaux.jobsHmOuverts)} />
-            <Total label={t("upwork.kpiJobCreaOuverts")} valeur={String(totaux.jobsCreateursOuverts)} />
+            <Total icone={ICONE_KPI.hm} label={t("upwork.kpiHm")} valeur={String(totaux.hms)} />
+            <Total icone={ICONE_KPI.createurs} label={t("upwork.kpiCreateurs")} valeur={String(totaux.createurs)} />
+            <Total icone={ICONE_KPI.jobHm} label={t("upwork.kpiJobHmOuverts")} valeur={String(totaux.jobsHmOuverts)} />
+            <Total
+              icone={ICONE_KPI.jobCrea}
+              label={t("upwork.kpiJobCreaOuverts")}
+              valeur={String(totaux.jobsCreateursOuverts)}
+            />
           </div>
 
           {totaux.parPays.length === 0 ? (
@@ -90,14 +106,25 @@ export function AdminUpworkPage() {
                       <ChevronRight className="size-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent className="space-y-1 text-sm">
-                      <p>
-                        {t("upwork.paysKpiPersonnes", { hm: pays.hms, crea: pays.createurs })}
+                      <p className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-1">
+                          <UserRoundCog className="size-3.5" aria-hidden />
+                          {pays.hms}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <Users className="size-3.5" aria-hidden />
+                          {pays.createurs}
+                        </span>
                       </p>
-                      <p className="text-muted-foreground">
-                        {t("upwork.paysKpiJobs", {
-                          hm: pays.jobsHmOuverts,
-                          crea: pays.jobsCreateursOuverts,
-                        })}
+                      <p className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          <Briefcase className="size-3.5" aria-hidden />
+                          {pays.jobsHmOuverts}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <Clapperboard className="size-3.5" aria-hidden />
+                          {pays.jobsCreateursOuverts}
+                        </span>
                       </p>
                     </CardContent>
                   </Card>

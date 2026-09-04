@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Check, ChevronRight, Circle, ExternalLink } from "lucide-react";
+import { ArrowLeft, Briefcase, ChevronRight, ExternalLink } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link, Navigate, useParams } from "react-router-dom";
 
@@ -15,6 +15,7 @@ import {
   opportunitesEnCours,
   totauxUpwork,
 } from "@/features/upwork/totaux";
+import { ICONE_CHECK, ICONE_ETAPE, ICONE_KPI, ICONE_PHASE, IconeEtat } from "@/features/upwork/icones";
 import {
   OBJECTIF_CREATEURS,
   etapeCouranteTimeline,
@@ -27,9 +28,20 @@ import {
 import type { UpworkApproche, UpworkMission } from "@/features/upwork/types";
 import { cn } from "@/lib/utils";
 
-function Total({ label, valeur }: { label: string; valeur: string }) {
+function Total({
+  label,
+  valeur,
+  icone: Icone,
+}: {
+  label: string;
+  valeur: string;
+  icone: typeof ICONE_KPI.hm;
+}) {
   return (
     <div className="rounded-lg border bg-card p-4">
+      <p className="mb-1 text-muted-foreground">
+        <Icone className="size-4" aria-hidden />
+      </p>
       <p className="text-2xl font-semibold tabular-nums">{valeur}</p>
       <p className="text-sm text-muted-foreground">{label}</p>
     </div>
@@ -106,6 +118,7 @@ function TimelineHorizontale({
     <ol className="flex items-stretch gap-0 overflow-x-auto pb-1">
       {etapes.map((e, i) => {
         const ici = e.cle === courante && !e.ok;
+        const IconeEtape = ICONE_ETAPE[e.cle];
         const label =
           e.cle === "onboarding_envoi" && role === "createur"
             ? t("upwork.timeline.onboarding_envoi_crea")
@@ -126,7 +139,8 @@ function TimelineHorizontale({
               )}
             >
               <span className="inline-flex items-center gap-1 font-medium">
-                {e.ok ? <Check className="size-3" /> : <Circle className="size-3" />}
+                <IconeEtat ok={e.ok} className="size-3" />
+                <IconeEtape className="size-3.5 shrink-0" aria-hidden />
                 {label}
               </span>
               {e.cle === "pourparlers" && e.resume && (
@@ -134,12 +148,16 @@ function TimelineHorizontale({
               )}
               {e.checks && (
                 <ul className="mt-0.5 space-y-0.5 text-[11px]">
-                  {e.checks.map((c) => (
-                    <li key={c.cle} className="flex items-center gap-1">
-                      {c.ok ? <Check className="size-2.5" /> : <Circle className="size-2.5" />}
-                      {t(`upwork.timeline.check.${c.cle}`)}
-                    </li>
-                  ))}
+                  {e.checks.map((c) => {
+                    const IconeCheck = ICONE_CHECK[c.cle];
+                    return (
+                      <li key={c.cle} className="flex items-center gap-1">
+                        <IconeEtat ok={c.ok} className="size-2.5" />
+                        <IconeCheck className="size-3 shrink-0" aria-hidden />
+                        {t(`upwork.timeline.check.${c.cle}`)}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
@@ -169,6 +187,7 @@ function BandeauPhase({
   children: ReactNode;
   verrouille?: boolean;
 }) {
+  const Icone = ICONE_PHASE[n];
   return (
     <section
       className={cn(
@@ -178,7 +197,8 @@ function BandeauPhase({
       )}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold">
+        <h3 className="inline-flex items-center gap-1.5 text-sm font-semibold">
+          <Icone className="size-4" aria-hidden />
           {titre}
         </h3>
         {extra && <p className="text-xs tabular-nums text-muted-foreground">{extra}</p>}
@@ -269,7 +289,10 @@ function VieHm({
             <div className="space-y-3">
               {jobCrea ? (
                 <div className="space-y-1">
-                  <p className="text-sm font-medium">{jobCrea.titre}</p>
+                  <p className="inline-flex items-center gap-1.5 text-sm font-medium">
+                    <Briefcase className="size-3.5" aria-hidden />
+                    {jobCrea.titre}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {t("upwork.statsPost", {
                       inv: jobCrea.invites_sent,
@@ -363,10 +386,19 @@ export function AdminUpworkPaysPage() {
       {d && (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Total label={t("upwork.kpiHm")} valeur={String(pays?.hms ?? 0)} />
-            <Total label={t("upwork.kpiCreateurs")} valeur={String(pays?.createurs ?? 0)} />
-            <Total label={t("upwork.kpiJobHmOuverts")} valeur={String(pays?.jobsHmOuverts ?? 0)} />
+            <Total icone={ICONE_KPI.hm} label={t("upwork.kpiHm")} valeur={String(pays?.hms ?? 0)} />
             <Total
+              icone={ICONE_KPI.createurs}
+              label={t("upwork.kpiCreateurs")}
+              valeur={String(pays?.createurs ?? 0)}
+            />
+            <Total
+              icone={ICONE_KPI.jobHm}
+              label={t("upwork.kpiJobHmOuverts")}
+              valeur={String(pays?.jobsHmOuverts ?? 0)}
+            />
+            <Total
+              icone={ICONE_KPI.jobCrea}
               label={t("upwork.kpiJobCreaOuverts")}
               valeur={String(pays?.jobsCreateursOuverts ?? 0)}
             />
