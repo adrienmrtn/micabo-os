@@ -13,6 +13,7 @@ export type UpworkMission = {
   job_posting_id: string;
   titre: string;
   famille: FamilleMission;
+  langue: string | null;
   statut: string | null;
   type: string | null;
   created_time: string | null;
@@ -23,6 +24,8 @@ export type UpworkMission = {
   offered: number;
   hired: number;
   pending_invitations: number;
+  invites_sent: number;
+  description: string | null;
   job_url: string | null;
   synced_at: string;
 };
@@ -39,6 +42,15 @@ export type UpworkContrat = {
   profile_id: string | null;
   room_id: string | null;
   last_message_at: string | null;
+  langue: string | null;
+  job_posting_id: string | null;
+  slack_ok: boolean;
+  slack_user_id: string | null;
+  slack_at: string | null;
+  codes_at: string | null;
+  os_connecte_at: string | null;
+  createurs_n: number;
+  contrat_at: string | null;
   synced_at: string;
 };
 

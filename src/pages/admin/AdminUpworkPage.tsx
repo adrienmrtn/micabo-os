@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ExternalLink } from "lucide-react";
+import { Check, Circle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,20 +12,30 @@ import {
   CardTitle,
   EmptyState,
 } from "@/components/ui/card";
+import { drapeauLangue, nomLangue } from "@/features/moteur/langues";
 import { chargerUpworkDashboard } from "@/features/upwork/api";
 import { UPWORK_ORG_NOM } from "@/features/upwork/org";
+import {
+  etapeCourante,
+  formatDureeHeures,
+  pipelineHm,
+  pipelineMission,
+  redigerBriefHm,
+  redigerBriefMission,
+  type EtapePipeline,
+  type FaitsHm,
+} from "@/features/upwork/pipeline";
 import { missionsFiltrees, totauxUpwork } from "@/features/upwork/totaux";
-import type { FamilleMission, UpworkMission } from "@/features/upwork/types";
+import type { FamilleMission, UpworkContrat, UpworkMission } from "@/features/upwork/types";
 import { cn } from "@/lib/utils";
 
 type FiltreFamille = FamilleMission | "toutes";
 
-function badgeStatut(statut: string | null): "success" | "warning" | "secondary" | "destructive" {
-  const s = (statut ?? "").toUpperCase();
-  if (s === "PUBLISHED" || s === "ACTIVE" || s === "ACTIF") return "success";
-  if (s === "FILLED") return "secondary";
-  if (s === "CANCELLED" || s === "CLOSED") return "destructive";
-  return "warning";
+function formatQuand(iso: string | null | undefined, locale: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
 }
 
 function Total({ label, valeur }: { label: string; valeur: string }) {
@@ -35,13 +45,6 @@ function Total({ label, valeur }: { label: string; valeur: string }) {
       <p className="text-sm text-muted-foreground">{label}</p>
     </div>
   );
-}
-
-function formatQuand(iso: string | null | undefined, locale: string): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
 }
 
 function FiltreChip({
@@ -67,49 +70,197 @@ function FiltreChip({
   );
 }
 
-function LigneMission({ m }: { m: UpworkMission }) {
+function Drapeau({ langue }: { langue: string | null }) {
+  if (!langue) return <span className="text-xs text-muted-foreground">—</span>;
+  return (
+    <span className="inline-flex items-center gap-1 text-sm">
+      <span aria-hidden>{drapeauLangue(langue)}</span>
+      <span>{nomLangue(langue)}</span>
+    </span>
+  );
+}
+
+function Pipeline({ etapes, locale }: { etapes: EtapePipeline[]; locale: string }) {
   const { t } = useTranslation();
   return (
-    <tr className="border-t">
-      <td className="px-2.5 py-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="font-medium">{m.titre}</span>
-          <Badge variant="outline">{t(`upwork.famille.${m.famille}`)}</Badge>
+    <ol className="flex flex-wrap gap-2">
+      {etapes.map((e) => (
+        <li
+          key={e.cle}
+          className={cn(
+            "flex min-w-[7.5rem] flex-col gap-0.5 rounded-md border px-2 py-1.5 text-xs",
+            e.fait ? "border-foreground/30 bg-muted/40" : "border-dashed text-muted-foreground",
+          )}
+        >
+          <span className="inline-flex items-center gap-1 font-medium">
+            {e.fait ? <Check className="size-3" /> : <Circle className="size-3" />}
+            {t(`upwork.etape.${e.cle}`)}
+          </span>
+          <span className="tabular-nums text-muted-foreground">
+            {e.at ? formatQuand(e.at, locale) : e.fait ? t("upwork.etapeFait") : t("upwork.etapeVide")}
+          </span>
+          {e.heuresDepuisPrev != null && (
+            <span className="text-muted-foreground">
+              +{formatDureeHeures(e.heuresDepuisPrev, locale)}
+            </span>
+          )}
+          {e.detail && e.cle !== "slack" && e.detail !== "0" && (
+            <span className="text-muted-foreground">{e.detail}</span>
+          )}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function faitsMission(m: UpworkMission) {
+  return {
+    created_time: m.created_time,
+    applicants: m.applicants,
+    invites_sent: m.invites_sent,
+    messaged: m.messaged,
+    hired: m.hired,
+    langue: m.langue,
+    famille: m.famille,
+  };
+}
+
+function faitsHm(c: UpworkContrat, mission: UpworkMission | undefined) {
+  return {
+    nom: c.freelancer_nom || "—",
+    langue: c.langue ?? mission?.langue ?? null,
+    job_poste_at: mission?.created_time ?? null,
+    invites_sent: mission?.invites_sent ?? 0,
+    messaged: mission?.messaged ?? 0,
+    contrat_at: c.contrat_at ?? (c.start_date ? `${c.start_date}T00:00:00Z` : null),
+    slack_ok: c.slack_ok,
+    slack_at: c.slack_at,
+    codes_at: c.codes_at,
+    os_connecte_at: c.os_connecte_at,
+    createurs_n: c.createurs_n,
+  };
+}
+
+function faitsHmDepuisMission(m: UpworkMission, c?: UpworkContrat): FaitsHm {
+  if (c) return faitsHm(c, m);
+  return {
+    nom: "—",
+    langue: m.langue,
+    job_poste_at: m.created_time,
+    invites_sent: m.invites_sent,
+    messaged: m.messaged,
+    contrat_at: null,
+    slack_ok: false,
+    slack_at: null,
+    codes_at: null,
+    os_connecte_at: null,
+    createurs_n: 0,
+  };
+}
+
+function CarteMission({ m, contrat }: { m: UpworkMission; contrat?: UpworkContrat }) {
+  const { t, i18n } = useTranslation();
+  const faits = faitsMission(m);
+  const etapes =
+    m.famille === "hm" ? pipelineHm(faitsHmDepuisMission(m, contrat)) : pipelineMission(faits);
+  return (
+    <div className="space-y-3 rounded-lg border p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold">{m.titre}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <Drapeau langue={m.langue} />
+            <Badge variant="outline">{t(`upwork.famille.${m.famille}`)}</Badge>
+            {contrat?.freelancer_nom && (
+              <span className="text-xs text-muted-foreground">{contrat.freelancer_nom}</span>
+            )}
+          </div>
         </div>
-        <p className="text-[11px] text-muted-foreground">{m.type ?? "—"}</p>
-      </td>
-      <td className="px-2.5 py-2">
-        <Badge variant={badgeStatut(m.statut)}>{m.statut ?? "—"}</Badge>
-      </td>
-      <td className="px-2.5 py-2 text-right tabular-nums">{m.applicants}</td>
-      <td className="px-2.5 py-2 text-right tabular-nums">{m.new_applicants}</td>
-      <td className="px-2.5 py-2 text-right tabular-nums">{m.shortlisted}</td>
-      <td className="px-2.5 py-2 text-right tabular-nums">{m.messaged}</td>
-      <td className="px-2.5 py-2 text-right tabular-nums">{m.offered}</td>
-      <td className="px-2.5 py-2 text-right tabular-nums">{m.hired}</td>
-      <td className="px-2.5 py-2 text-right tabular-nums">{m.pending_invitations}</td>
-      <td className="px-2.5 py-2">
-        {m.job_url ? (
-          <a
-            href={m.job_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex text-muted-foreground hover:text-foreground"
-          >
-            <ExternalLink className="size-3.5" />
-          </a>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
-      </td>
-    </tr>
+        <p className="text-xs tabular-nums text-muted-foreground">
+          {t("upwork.faitsMission", {
+            appl: m.applicants,
+            inv: m.invites_sent,
+            msg: m.messaged,
+            hired: m.hired,
+          })}
+        </p>
+      </div>
+      <p className="text-sm text-muted-foreground">{redigerBriefMission(faits, i18n.language)}</p>
+      <Pipeline etapes={etapes} locale={i18n.language} />
+    </div>
+  );
+}
+
+function CarteHm({ c, mission }: { c: UpworkContrat; mission?: UpworkMission }) {
+  const { t, i18n } = useTranslation();
+  const faits = faitsHm(c, mission);
+  const etapes = pipelineHm(faits);
+  const prochaine = etapeCourante(etapes);
+  return (
+    <div className="space-y-3 rounded-lg border p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold">{c.freelancer_nom || t("upwork.sansNom")}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <Drapeau langue={faits.langue} />
+            <Badge variant={c.slack_ok ? "success" : "warning"}>
+              {c.slack_ok ? t("upwork.slackOk") : t("upwork.slackKo")}
+            </Badge>
+            <Badge variant={c.os_connecte_at ? "success" : "warning"}>
+              {c.os_connecte_at ? t("upwork.osOk") : t("upwork.osKo")}
+            </Badge>
+            <Badge variant="outline">
+              {t("upwork.prochaine")} : {t(`upwork.etape.${prochaine}`)}
+            </Badge>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {t("upwork.nbCreateursHm", { n: c.createurs_n })}
+        </p>
+      </div>
+      <p className="text-sm leading-relaxed">{redigerBriefHm(faits, i18n.language)}</p>
+      <dl className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <dt className="text-muted-foreground">{t("upwork.etape.job")}</dt>
+          <dd className="tabular-nums">{formatQuand(faits.job_poste_at, i18n.language)}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">{t("upwork.etape.invites")}</dt>
+          <dd className="tabular-nums">{faits.invites_sent}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">{t("upwork.etape.questions")}</dt>
+          <dd className="tabular-nums">{faits.messaged}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">{t("upwork.etape.contrat")}</dt>
+          <dd className="tabular-nums">{formatQuand(faits.contrat_at, i18n.language)}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">{t("upwork.etape.slack")}</dt>
+          <dd>{c.slack_ok ? (c.slack_user_id ?? t("upwork.etapeFait")) : t("upwork.etapeVide")}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">{t("upwork.etape.codes")}</dt>
+          <dd className="tabular-nums">{formatQuand(faits.codes_at, i18n.language)}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">{t("upwork.etape.os")}</dt>
+          <dd className="tabular-nums">{formatQuand(faits.os_connecte_at, i18n.language)}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">{t("upwork.famille.createur")}</dt>
+          <dd className="tabular-nums">{c.createurs_n}</dd>
+        </div>
+      </dl>
+      <Pipeline etapes={etapes} locale={i18n.language} />
+    </div>
   );
 }
 
 export function AdminUpworkPage() {
   const { t, i18n } = useTranslation();
   const [famille, setFamille] = React.useState<FiltreFamille>("toutes");
-  const [ouvertes, setOuvertes] = React.useState(true);
 
   const dash = useQuery({
     queryKey: ["upwork-dashboard"],
@@ -118,7 +269,11 @@ export function AdminUpworkPage() {
 
   const d = dash.data;
   const totaux = d ? totauxUpwork(d.missions, d.contrats, d.alertes) : null;
-  const missions = d ? missionsFiltrees(d.missions, famille, ouvertes) : [];
+  const missions = d ? missionsFiltrees(d.missions, famille) : [];
+  const missionParJob = new Map((d?.missions ?? []).map((m) => [m.job_posting_id, m]));
+  const contratParJob = new Map(
+    (d?.contrats ?? []).filter((c) => c.job_posting_id).map((c) => [c.job_posting_id as string, c]),
+  );
   const alertesL2 = (d?.alertes ?? []).filter((a) => a.niveau === "l2");
   const alertesL1 = (d?.alertes ?? []).filter((a) => a.niveau === "l1");
 
@@ -147,19 +302,14 @@ export function AdminUpworkPage() {
                   : t("upwork.syncJamais")}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-1 text-sm">
+            <CardContent className="flex flex-wrap items-center gap-2 text-sm">
               {d.sync && (
-                <>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={d.sync.last_ok ? "success" : "destructive"}>
-                      {d.sync.last_ok ? t("upwork.syncOk") : t("upwork.syncKo")}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">{UPWORK_ORG_NOM}</span>
-                  </div>
-                  {d.sync.last_detail && (
-                    <p className="text-muted-foreground">{d.sync.last_detail}</p>
-                  )}
-                </>
+                <Badge variant={d.sync.last_ok ? "success" : "destructive"}>
+                  {d.sync.last_ok ? t("upwork.syncOk") : t("upwork.syncKo")}
+                </Badge>
+              )}
+              {d.sync?.last_detail && (
+                <span className="text-muted-foreground">{d.sync.last_detail}</span>
               )}
             </CardContent>
           </Card>
@@ -170,10 +320,6 @@ export function AdminUpworkPage() {
             <Total label={t("upwork.kpiNew")} valeur={String(totaux.newApplicants)} />
             <Total label={t("upwork.kpiContrats")} valeur={String(totaux.contratsActifs)} />
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Total label={t("upwork.kpiL2")} valeur={String(totaux.alertesL2)} />
-            <Total label={t("upwork.kpiL1")} valeur={String(totaux.alertesL1)} />
-          </div>
 
           <Card>
             <CardHeader>
@@ -182,40 +328,19 @@ export function AdminUpworkPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap gap-1.5">
-                {(["toutes", "hm", "createur", "autre"] as const).map((f) => (
+                {(["toutes", "hm", "createur"] as const).map((f) => (
                   <FiltreChip key={f} actif={famille === f} onClick={() => setFamille(f)}>
                     {t(`upwork.famille.${f}`)}
                   </FiltreChip>
                 ))}
-                <FiltreChip actif={ouvertes} onClick={() => setOuvertes((v) => !v)}>
-                  {ouvertes ? t("upwork.ouvertesOn") : t("upwork.ouvertesOff")}
-                </FiltreChip>
               </div>
               {missions.length === 0 ? (
                 <EmptyState title={t("upwork.vide")} />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px] text-left text-sm">
-                    <thead className="text-xs text-muted-foreground">
-                      <tr>
-                        <th className="px-2.5 py-1.5 font-medium">{t("upwork.colTitre")}</th>
-                        <th className="px-2.5 py-1.5 font-medium">{t("upwork.colStatut")}</th>
-                        <th className="px-2.5 py-1.5 text-right font-medium">{t("upwork.colAppl")}</th>
-                        <th className="px-2.5 py-1.5 text-right font-medium">{t("upwork.colNew")}</th>
-                        <th className="px-2.5 py-1.5 text-right font-medium">{t("upwork.colShort")}</th>
-                        <th className="px-2.5 py-1.5 text-right font-medium">{t("upwork.colMsg")}</th>
-                        <th className="px-2.5 py-1.5 text-right font-medium">{t("upwork.colOffre")}</th>
-                        <th className="px-2.5 py-1.5 text-right font-medium">{t("upwork.colHired")}</th>
-                        <th className="px-2.5 py-1.5 text-right font-medium">{t("upwork.colInvites")}</th>
-                        <th className="px-2.5 py-1.5 font-medium" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {missions.map((m) => (
-                        <LigneMission key={m.id} m={m} />
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="space-y-3">
+                  {missions.map((m) => (
+                    <CarteMission key={m.id} m={m} contrat={contratParJob.get(m.job_posting_id)} />
+                  ))}
                 </div>
               )}
             </CardContent>
@@ -230,25 +355,13 @@ export function AdminUpworkPage() {
               {d.contrats.length === 0 ? (
                 <EmptyState title={t("upwork.vide")} />
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {d.contrats.map((c) => (
-                    <div
+                    <CarteHm
                       key={c.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-sm"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-medium">{c.freelancer_nom || t("upwork.sansNom")}</p>
-                        <p className="text-xs text-muted-foreground">{c.titre || "—"}</p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={badgeStatut(c.statut)}>{c.statut ?? "—"}</Badge>
-                        {c.profile_id ? (
-                          <Badge variant="outline">{t("upwork.lieOs")}</Badge>
-                        ) : (
-                          <Badge variant="warning">{t("upwork.pasLie")}</Badge>
-                        )}
-                      </div>
-                    </div>
+                      c={c}
+                      mission={c.job_posting_id ? missionParJob.get(c.job_posting_id) : undefined}
+                    />
                   ))}
                 </div>
               )}
@@ -299,12 +412,7 @@ export function AdminUpworkPage() {
                           key={a.id}
                           className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-sm"
                         >
-                          <span className="truncate">
-                            {a.nom}
-                            {a.handle ? (
-                              <span className="ml-1.5 text-xs text-muted-foreground">@{a.handle}</span>
-                            ) : null}
-                          </span>
+                          <span className="truncate">{a.nom}</span>
                           <span className="text-xs text-muted-foreground">
                             {a.manager_nom || t("upwork.sansHm")}
                           </span>

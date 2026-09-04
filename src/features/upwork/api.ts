@@ -3,10 +3,10 @@ import { supabase } from "@/lib/supabase/client";
 import type { UpworkAlerte, UpworkContrat, UpworkDashboard, UpworkMission, UpworkSync } from "./types";
 
 const MISSION_COLS =
-  "id, job_posting_id, titre, famille, statut, type, created_time, applicants, new_applicants, shortlisted, messaged, offered, hired, pending_invitations, job_url, synced_at";
+  "id, job_posting_id, titre, famille, langue, statut, type, created_time, applicants, new_applicants, shortlisted, messaged, offered, hired, pending_invitations, invites_sent, description, job_url, synced_at";
 
 const CONTRAT_COLS =
-  "id, contract_id, titre, statut, freelancer_nom, freelancer_id, hourly_rate, start_date, profile_id, room_id, last_message_at, synced_at";
+  "id, contract_id, titre, statut, freelancer_nom, freelancer_id, hourly_rate, start_date, profile_id, room_id, last_message_at, langue, job_posting_id, slack_ok, slack_user_id, slack_at, codes_at, os_connecte_at, createurs_n, contrat_at, synced_at";
 
 const ALERTE_COLS =
   "id, compte_id, poster_id, nom, handle, niveau, jours_sans_post, manager_id, manager_nom, contract_id, synced_at";

@@ -43,8 +43,10 @@ après un test manuel.
 
 ## Upwork (Micabo seulement)
 
-Le dashboard OS `/admin/upwork` est **lecture seule** : missions, funnel,
-contrats HM, alertes « jours sans post ». Aucun envoi depuis l’OS.
+Le dashboard OS `/admin/upwork` est **lecture seule** : missions
+**PUBLISHED seulement** (jamais CANCELLED / FILLED / DRAFT), pipeline
+HM (job → invites → questions → contrat → Slack → codes → OS), alertes.
+Aucun envoi depuis l’OS.
 
 - Org figé : `1990051114607612379` (Micabo). `list_accounts` d’abord ;
   si l’org n’est pas celle-là → stop. Jamais Maximilien / VIk Studios.
@@ -55,20 +57,22 @@ contrats HM, alertes « jours sans post ». Aucun envoi depuis l’OS.
 ### Sweep 2 h (Automation Cursor)
 
 Prompt à coller dans l’Automation (repo `adrienmrtn/micabo-os`, MCP
-Upwork + Supabase, projet `qkmiwnmiwsvwkttldqgb`) :
+Upwork + Supabase + Slack, projet `qkmiwnmiwsvwkttldqgb`) :
 
-1. `list_accounts` → garder uniquement org Micabo
-   `1990051114607612379`.
-2. `get_job_posting` action=list (pager `next_page` jusqu’à la fin).
-3. `list_contracts` action=search (`ACTIVE`, `PAUSED`).
-4. Appeler `select public.upwork_sync_appliquer($payload::jsonb)` avec
-   `org_uid`, `ok`, `detail`, `missions[]` (`job_posting_id`, `titre`,
-   `statut`, `type`, `created_time`, compteurs funnel), `contrats[]`
-   (`contract_id` = `node.contract.id`, `titre`, `statut`,
-   `freelancer_nom`, `freelancer_id`).
-5. Ne **rien** envoyer sur Upwork. Ne pas confirmer de draft.
-6. Si un compte / job / contrat pointe hors Micabo → stop, ne pas
-   écrire.
+1. `list_accounts` → org Micabo `1990051114607612379` seulement.
+2. `get_job_posting` action=list, **uniquement statut PUBLISHED**.
+   Pour chaque job : `action=get` (description, `totalInvitesSent`,
+   `job_url`). Langue = pays dans titre/description.
+3. `list_contracts` action=search (`ACTIVE`, `PAUSED`) puis `get` pour
+   `job.id`, `startDate`.
+4. Slack : `slack_search_users` par nom / email. Si trouvé →
+   `slack_ok=true` + `slack_user_id`.
+5. `select public.upwork_sync_appliquer($payload::jsonb)` :
+   missions PUBLISHED (`job_posting_id`, `titre`, `description`,
+   `langue`, `statut`, `invites_sent`, funnel, `job_url`) ;
+   contrats (`contract_id`, `job_posting_id`, `contrat_at`,
+   `freelancer_nom`, `slack_ok`, `slack_user_id`).
+6. Ne **rien** envoyer. Pas de draft. Stop si hors Micabo.
 
 Mettre en place l’Automation : Cursor → Automations → New → repo
 `adrienmrtn/micabo-os` → trigger cron `0 */2 * * *` → coller le sweep
