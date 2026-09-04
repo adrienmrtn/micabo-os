@@ -43,10 +43,10 @@ après un test manuel.
 
 ## Upwork (Micabo seulement)
 
-Le dashboard OS `/admin/upwork` est **lecture seule** : missions
-**PUBLISHED seulement** (jamais CANCELLED / FILLED / DRAFT), pipeline
-HM (job → invites → questions → contrat → Slack → codes → OS → créateurs), alertes.
-Aucun envoi depuis l’OS.
+Le dashboard OS `/admin/upwork` est **lecture seule**, groupé **par pays**.
+Quatre objets distincts : job HM · HM (personne) · job créateurs · créateurs.
+Missions **PUBLISHED seulement**. Pipelines séparées (job 4 étapes /
+HM personne : contrat → Slack → codes → OS → créateurs). Aucun envoi.
 
 - Org figé : `1990051114607612379` (Micabo). `list_accounts` d’abord ;
   si l’org n’est pas celle-là → stop. Jamais Maximilien / VIk Studios.
