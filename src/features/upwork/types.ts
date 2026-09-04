@@ -68,16 +68,51 @@ export type UpworkAlerte = {
   synced_at: string;
 };
 
+export type UpworkApproche = {
+  id: string;
+  job_posting_id: string;
+  contract_id: string | null;
+  upwork_proposal_id: string;
+  upwork_freelancer_id: string | null;
+  upwork_profile_url: string | null;
+  nom: string;
+  role: "hm" | "createur";
+  statut: "messaged" | "hired";
+  resume_discussions: string | null;
+  contrat_envoye_ok: boolean;
+  contrat_signe_ok: boolean;
+  slack_envoye_ok: boolean;
+  email_demande_ok: boolean;
+  codes_ok: boolean;
+  os_ok: boolean;
+  slack_ok: boolean;
+  upwork_ajoute_ok: boolean;
+  job_createur_id: string | null;
+  warmup_actif: boolean;
+  premier_post_ok: boolean;
+  synced_at: string;
+};
+
 export type UpworkDashboard = {
   sync: UpworkSync | null;
   missions: UpworkMission[];
   contrats: UpworkContrat[];
   alertes: UpworkAlerte[];
+  approches: UpworkApproche[];
+};
+
+export type TotauxPays = {
+  langue: string;
+  hms: number;
+  createurs: number;
+  jobsHmOuverts: number;
+  jobsCreateursOuverts: number;
 };
 
 export type TotauxUpwork = {
+  hms: number;
+  createurs: number;
   jobsHmOuverts: number;
-  hmEnPoste: number;
   jobsCreateursOuverts: number;
-  createursEnRetard: number;
+  parPays: TotauxPays[];
 };
