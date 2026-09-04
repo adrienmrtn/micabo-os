@@ -88,12 +88,10 @@ describe("totauxUpwork", () => {
       },
     ];
     expect(totauxUpwork(missions, contrats, alertes)).toEqual({
-      missionsOuvertes: 2,
-      missionsHmOuvertes: 1,
-      newApplicants: 10,
-      contratsActifs: 1,
-      alertesL2: 1,
-      alertesL1: 1,
+      jobsHmOuverts: 1,
+      hmEnPoste: 1,
+      jobsCreateursOuverts: 1,
+      createursEnRetard: 2,
     });
   });
 });
