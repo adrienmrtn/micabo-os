@@ -28,11 +28,10 @@ export function totauxUpwork(
 export function missionsFiltrees(
   missions: UpworkMission[],
   famille: FamilleMission | "toutes",
-  ouvertesSeulement: boolean,
 ): UpworkMission[] {
   return missions.filter((m) => {
+    if (!missionOuverte(m.statut)) return false;
     if (famille !== "toutes" && m.famille !== famille) return false;
-    if (ouvertesSeulement && !missionOuverte(m.statut)) return false;
     return true;
   });
 }

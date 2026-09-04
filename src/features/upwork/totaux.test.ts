@@ -19,6 +19,9 @@ function mission(over: Partial<UpworkMission> & Pick<UpworkMission, "id">): Upwo
     hired: 0,
     pending_invitations: 0,
     job_url: null,
+    langue: null,
+    invites_sent: 0,
+    description: null,
     synced_at: "2026-09-04T00:00:00Z",
     ...over,
   };
@@ -44,6 +47,15 @@ describe("totauxUpwork", () => {
         profile_id: null,
         room_id: null,
         last_message_at: null,
+        langue: null,
+        job_posting_id: null,
+        slack_ok: false,
+        slack_user_id: null,
+        slack_at: null,
+        codes_at: null,
+        os_connecte_at: null,
+        createurs_n: 0,
+        contrat_at: null,
         synced_at: "2026-09-04T00:00:00Z",
       },
     ];
@@ -93,8 +105,8 @@ describe("filtres", () => {
       mission({ id: "2", famille: "createur" }),
       mission({ id: "3", famille: "hm", statut: "CANCELLED" }),
     ];
-    expect(missionsFiltrees(missions, "hm", true).map((m) => m.id)).toEqual(["1"]);
-    expect(missionsFiltrees(missions, "toutes", false)).toHaveLength(3);
+    expect(missionsFiltrees(missions, "hm").map((m) => m.id)).toEqual(["1"]);
+    expect(missionsFiltrees(missions, "toutes")).toHaveLength(2);
   });
 
   it("reconnaît PUBLISHED / Active", () => {
