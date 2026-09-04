@@ -28,6 +28,24 @@ describe("pipelineHm", () => {
     expect(etapes.find((e) => e.cle === "codes")?.fait).toBe(true);
     expect(etapes.find((e) => e.cle === "os")?.fait).toBe(false);
     expect(etapeCourante(etapes)).toBe("slack");
+    expect(etapes.find((e) => e.cle === "createurs")?.fait).toBe(false);
+  });
+
+  it("bloque sur créateurs une fois Slack + OS OK", () => {
+    const etapes = pipelineHm({
+      nom: "Rana Barakli",
+      langue: "tr",
+      job_poste_at: "2026-09-02T15:18:09Z",
+      invites_sent: 3,
+      messaged: 2,
+      contrat_at: "2026-09-03T14:01:58Z",
+      slack_ok: true,
+      slack_at: null,
+      codes_at: "2026-09-03T14:57:26Z",
+      os_connecte_at: "2026-09-03T15:45:12Z",
+      createurs_n: 0,
+    });
+    expect(etapeCourante(etapes)).toBe("createurs");
     const codes = etapes.find((e) => e.cle === "codes");
     expect(codes?.heuresDepuisPrev).toBeGreaterThan(0);
     expect(codes?.heuresDepuisPrev).toBeLessThan(1);
@@ -56,6 +74,7 @@ describe("briefs", () => {
     expect(texte).toMatch(/pas encore sur Slack/);
     expect(texte).toMatch(/pas encore connectée/);
     expect(texte).toMatch(/0 créateur/);
+    expect(texte).toMatch(/ajouter sur Slack/);
   });
 
   it("écrit un brief mission", () => {
