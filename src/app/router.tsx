@@ -36,6 +36,7 @@ import { AdminUgcVideosPage } from "@/pages/admin/AdminUgcVideosPage";
 import { AdminPapierPage } from "@/pages/admin/AdminPapierPage";
 import { AdminCreationPage } from "@/pages/admin/AdminCreationPage";
 import { AdminUpworkPage } from "@/pages/admin/AdminUpworkPage";
+import { AdminUpworkPaysPage } from "@/pages/admin/AdminUpworkPaysPage";
 import { PosterCalendrierPage } from "@/pages/poster/PosterCalendrierPage";
 import { PosterReferralPage } from "@/pages/poster/PosterReferralPage";
 import { PosterPostPage } from "@/pages/poster/PosterPostPage";
@@ -79,6 +80,7 @@ export function AppRouter() {
             <Route path="/admin/reviews" element={<AdminReviewsPage />} />
             <Route path="/admin/parrainages" element={<AdminReferralsPage />} />
             <Route path="/admin/upwork" element={<AdminUpworkPage />} />
+            <Route path="/admin/upwork/:langue" element={<AdminUpworkPaysPage />} />
             <Route path="/admin/bibliotheque" element={<AdminBibliothequePage />} />
             <Route path="/admin/tests" element={<AdminTestsPage />} />
             <Route path="/admin/test-nettoyage" element={<Navigate to="/admin/tests" replace />} />

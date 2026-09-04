@@ -43,10 +43,11 @@ après un test manuel.
 
 ## Upwork (Micabo seulement)
 
-Le dashboard OS `/admin/upwork` est **lecture seule**, groupé **par pays**.
-Quatre objets distincts : job HM · HM (personne) · job créateurs · créateurs.
-Missions **PUBLISHED seulement**. Pipelines séparées (job 4 étapes /
-HM personne : contrat → Slack → codes → OS → créateurs). Aucun envoi.
+Le dashboard OS `/admin/upwork` est **lecture seule**.
+Page globale : HM, créateurs, jobs HM ouverts (par pays), jobs créateurs
+ouverts (par pays). Dive `/admin/upwork/:langue` : mini-dashboard +
+timeline **par personne qui a répondu** (HM puis jobs créateurs).
+Missions **PUBLISHED seulement**. Aucun envoi.
 
 - Org figé : `1990051114607612379` (Micabo). `list_accounts` d’abord ;
   si l’org n’est pas celle-là → stop. Jamais Maximilien / VIk Studios.
@@ -65,14 +66,20 @@ Upwork + Supabase + Slack, projet `qkmiwnmiwsvwkttldqgb`) :
    `job_url`). Langue = pays dans titre/description.
 3. `list_contracts` action=search (`ACTIVE`, `PAUSED`) puis `get` pour
    `job.id`, `startDate`.
-4. Slack : `slack_search_users` par nom / email. Si trouvé →
+4. Pour chaque job PUBLISHED : `list_client_proposals` status
+   `messaged` **et** `hired` seulement (pas declined / all). Une
+   approche = une personne qui a répondu.
+5. Slack : `slack_search_users` par nom / email. Si trouvé →
    `slack_ok=true` + `slack_user_id`.
-5. `select public.upwork_sync_appliquer($payload::jsonb)` :
+6. `select public.upwork_sync_appliquer($payload::jsonb)` :
    missions PUBLISHED (`job_posting_id`, `titre`, `description`,
    `langue`, `statut`, `invites_sent`, funnel, `job_url`) ;
    contrats (`contract_id`, `job_posting_id`, `contrat_at`,
-   `freelancer_nom`, `slack_ok`, `slack_user_id`).
-6. Ne **rien** envoyer. Pas de draft. Stop si hors Micabo.
+   `freelancer_nom`, `slack_ok`, `slack_user_id`) ;
+   approches (`upwork_proposal_id`, `job_posting_id`, `nom`, `role`,
+   `statut` messaged|hired, `resume_discussions`, flags contrat /
+   Slack / OS / warmup / premier_post).
+7. Ne **rien** envoyer. Pas de draft. Stop si hors Micabo.
 
 Mettre en place l’Automation : Cursor → Automations → New → repo
 `adrienmrtn/micabo-os` → trigger cron `0 */2 * * *` → coller le sweep

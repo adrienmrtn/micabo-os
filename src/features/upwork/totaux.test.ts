@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { contratActif, missionOuverte, missionsFiltrees, totauxUpwork } from "./totaux";
-import type { UpworkAlerte, UpworkContrat, UpworkMission } from "./types";
+import type { UpworkContrat, UpworkMission } from "./types";
 
 function mission(over: Partial<UpworkMission> & Pick<UpworkMission, "id">): UpworkMission {
   return {
@@ -27,71 +27,53 @@ function mission(over: Partial<UpworkMission> & Pick<UpworkMission, "id">): Upwo
   };
 }
 
+function contrat(over: Partial<UpworkContrat> & Pick<UpworkContrat, "id">): UpworkContrat {
+  return {
+    contract_id: over.id,
+    titre: "HM",
+    statut: "ACTIVE",
+    freelancer_nom: "Sara",
+    freelancer_id: null,
+    hourly_rate: null,
+    start_date: null,
+    profile_id: null,
+    room_id: null,
+    last_message_at: null,
+    langue: "fr",
+    job_posting_id: null,
+    slack_ok: false,
+    slack_user_id: null,
+    slack_at: null,
+    codes_at: null,
+    os_connecte_at: null,
+    createurs_n: 0,
+    contrat_at: null,
+    synced_at: "2026-09-04T00:00:00Z",
+    ...over,
+  };
+}
+
 describe("totauxUpwork", () => {
-  it("ne compte que les missions PUBLISHED et les L2", () => {
+  it("compte HM, créateurs et jobs ouverts, y compris par pays", () => {
     const missions = [
-      mission({ id: "1", new_applicants: 4, famille: "hm" }),
-      mission({ id: "2", new_applicants: 6, famille: "createur" }),
-      mission({ id: "3", statut: "FILLED", new_applicants: 10, famille: "hm" }),
+      mission({ id: "1", famille: "hm", langue: "fr", hired: 1 }),
+      mission({ id: "2", famille: "createur", langue: "fr" }),
+      mission({ id: "3", famille: "hm", langue: "de" }),
+      mission({ id: "4", statut: "FILLED", famille: "hm", langue: "es" }),
     ];
     const contrats: UpworkContrat[] = [
-      {
-        id: "c1",
-        contract_id: "1",
-        titre: "HM",
-        statut: "Active",
-        freelancer_nom: "Marta",
-        freelancer_id: null,
-        hourly_rate: null,
-        start_date: null,
-        profile_id: null,
-        room_id: null,
-        last_message_at: null,
-        langue: null,
-        job_posting_id: null,
-        slack_ok: false,
-        slack_user_id: null,
-        slack_at: null,
-        codes_at: null,
-        os_connecte_at: null,
-        createurs_n: 0,
-        contrat_at: null,
-        synced_at: "2026-09-04T00:00:00Z",
-      },
+      contrat({ id: "c1", langue: "fr", createurs_n: 2 }),
+      contrat({ id: "c2", langue: "es", statut: "CLOSED", createurs_n: 9 }),
     ];
-    const alertes: UpworkAlerte[] = [
-      {
-        id: "a1",
-        compte_id: "x",
-        poster_id: null,
-        nom: "Léa",
-        handle: "lea",
-        niveau: "l2",
-        jours_sans_post: 3,
-        manager_id: null,
-        manager_nom: "Marta",
-        contract_id: null,
-        synced_at: "2026-09-04T00:00:00Z",
-      },
-      {
-        id: "a2",
-        compte_id: "y",
-        poster_id: null,
-        nom: "Noa",
-        handle: null,
-        niveau: "l1",
-        jours_sans_post: 1,
-        manager_id: null,
-        manager_nom: null,
-        contract_id: null,
-        synced_at: "2026-09-04T00:00:00Z",
-      },
-    ];
-    expect(totauxUpwork(missions, contrats, alertes)).toEqual({
-      jobsHmOuverts: 1,
-      hmEnPoste: 1,
+    expect(totauxUpwork(missions, contrats)).toEqual({
+      hms: 1,
+      createurs: 2,
+      jobsHmOuverts: 2,
       jobsCreateursOuverts: 1,
-      createursEnRetard: 2,
+      parPays: [
+        { langue: "fr", hms: 1, createurs: 2, jobsHmOuverts: 1, jobsCreateursOuverts: 1 },
+        { langue: "de", hms: 0, createurs: 0, jobsHmOuverts: 1, jobsCreateursOuverts: 0 },
+      ],
     });
   });
 });
