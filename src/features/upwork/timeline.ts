@@ -117,6 +117,16 @@ export function nettoyerResume(texte: string | null | undefined, max = 280): str
   return propre.length > max ? `${propre.slice(0, max).trimEnd()}…` : propre;
 }
 
+export const OBJECTIF_CREATEURS = 10;
+
+export function phase1Terminee(f: FaitsApproche): boolean {
+  return f.job_createur_poste;
+}
+
+export function phase2Terminee(createursN: number): boolean {
+  return createursN >= OBJECTIF_CREATEURS;
+}
+
 export function faitsDepuisApproche(a: {
   role: FaitsApproche["role"];
   statut: FaitsApproche["statut"];

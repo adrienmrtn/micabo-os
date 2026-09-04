@@ -68,7 +68,8 @@ Upwork + Supabase + Slack, projet `qkmiwnmiwsvwkttldqgb`) :
    `job.id`, `startDate`.
 4. Pour chaque job PUBLISHED : `list_client_proposals` status
    `messaged` **et** `hired` seulement (pas declined / all). Une
-   approche = une personne qui a répondu.
+   approche = une personne qui a répondu. `action=get` pour
+   `user.photoUrl` + `user.publicUrl`.
 5. Slack : `slack_search_users` par nom / email. Si trouvé →
    `slack_ok=true` + `slack_user_id`.
 6. `select public.upwork_sync_appliquer($payload::jsonb)` :
@@ -77,8 +78,9 @@ Upwork + Supabase + Slack, projet `qkmiwnmiwsvwkttldqgb`) :
    contrats (`contract_id`, `job_posting_id`, `contrat_at`,
    `freelancer_nom`, `slack_ok`, `slack_user_id`) ;
    approches (`upwork_proposal_id`, `job_posting_id`, `nom`, `role`,
-   `statut` messaged|hired, `resume_discussions`, flags contrat /
-   Slack / OS / warmup / premier_post).
+   `statut` messaged|hired, `resume_discussions`, `photo_url` depuis
+   `user.photoUrl`, `upwork_profile_url` depuis `user.publicUrl`,
+   flags contrat / Slack / OS / warmup / premier_post).
 7. Ne **rien** envoyer. Pas de draft. Stop si hors Micabo.
 
 Mettre en place l’Automation : Cursor → Automations → New → repo

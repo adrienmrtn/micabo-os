@@ -2170,6 +2170,13 @@ export const en = {
       retourDash: "All countries",
       sectionJobHm: "HM job posts",
       sectionJobCrea: "Creator job posts",
+      phase1: "Phase 1 — Contacted → creator job posted",
+      phase2: "Phase 2 — 10 creators",
+      phase2Progress: "{{n}} / {{max}} creators",
+      phase2Avant: "After the creator job is posted.",
+      phase3: "Phase 3 — Interview (in parallel)",
+      phase3Avant: "Interviews start with the creator job.",
+      entretienVide: "No interviews in progress.",
       statsPost:
         "{{inv}} invited · {{opp}} opportunities in progress · {{appl}} applicants · {{hired}} hired",
       approcheVide: "Nobody has replied yet.",
