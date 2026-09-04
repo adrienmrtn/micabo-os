@@ -1,0 +1,39 @@
+import { supabase } from "@/lib/supabase/client";
+
+import type { UpworkAlerte, UpworkContrat, UpworkDashboard, UpworkMission, UpworkSync } from "./types";
+
+const MISSION_COLS =
+  "id, job_posting_id, titre, famille, statut, type, created_time, applicants, new_applicants, shortlisted, messaged, offered, hired, pending_invitations, job_url, synced_at";
+
+const CONTRAT_COLS =
+  "id, contract_id, titre, statut, freelancer_nom, freelancer_id, hourly_rate, start_date, profile_id, room_id, last_message_at, synced_at";
+
+const ALERTE_COLS =
+  "id, compte_id, poster_id, nom, handle, niveau, jours_sans_post, manager_id, manager_nom, contract_id, synced_at";
+
+export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
+  const [syncRes, missionsRes, contratsRes, alertesRes] = await Promise.all([
+    supabase
+      .from("upwork_sync")
+      .select("org_uid, last_run_at, last_ok, last_detail, updated_at")
+      .eq("id", true)
+      .maybeSingle(),
+    supabase.from("upwork_missions").select(MISSION_COLS).order("created_time", { ascending: false }),
+    supabase.from("upwork_contrats").select(CONTRAT_COLS).order("freelancer_nom"),
+    supabase
+      .from("upwork_alertes")
+      .select(ALERTE_COLS)
+      .order("jours_sans_post", { ascending: false }),
+  ]);
+  if (syncRes.error) throw syncRes.error;
+  if (missionsRes.error) throw missionsRes.error;
+  if (contratsRes.error) throw contratsRes.error;
+  if (alertesRes.error) throw alertesRes.error;
+
+  return {
+    sync: (syncRes.data as UpworkSync | null) ?? null,
+    missions: (missionsRes.data ?? []) as UpworkMission[],
+    contrats: (contratsRes.data ?? []) as UpworkContrat[],
+    alertes: (alertesRes.data ?? []) as UpworkAlerte[],
+  };
+}
