@@ -71,10 +71,8 @@ describe("briefs", () => {
       "fr",
     );
     expect(texte).toMatch(/Marta Figueroa/);
-    expect(texte).toMatch(/pas encore sur Slack/);
-    expect(texte).toMatch(/pas encore connectée/);
-    expect(texte).toMatch(/0 créateur/);
-    expect(texte).toMatch(/ajouter sur Slack/);
+    expect(texte).toMatch(/pas sur Slack/);
+    expect(texte).not.toMatch(/Faits :/);
   });
 
   it("écrit un brief mission", () => {

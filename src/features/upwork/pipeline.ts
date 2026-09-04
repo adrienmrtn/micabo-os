@@ -1,16 +1,8 @@
-export const ETAPES_MISSION = ["job", "invites", "questions", "contrat"] as const;
-export const ETAPES_HM = [
-  "job",
-  "invites",
-  "questions",
-  "contrat",
-  "slack",
-  "codes",
-  "os",
-  "createurs",
-] as const;
+export const ETAPES_JOB = ["job", "invites", "questions", "contrat"] as const;
+export const ETAPES_MISSION = ETAPES_JOB;
+export const ETAPES_HM = ["contrat", "slack", "codes", "os", "createurs"] as const;
 
-export type EtapeCle = (typeof ETAPES_HM)[number];
+export type EtapeCle = (typeof ETAPES_JOB)[number] | (typeof ETAPES_HM)[number];
 
 export type EtapePipeline = {
   cle: EtapeCle;
@@ -61,7 +53,7 @@ function annoterDurees(etapes: EtapePipeline[]): EtapePipeline[] {
   });
 }
 
-export function pipelineMission(f: FaitsMission): EtapePipeline[] {
+export function pipelineJob(f: FaitsMission): EtapePipeline[] {
   const jobFait = Boolean(f.created_time);
   const invitesFait = f.invites_sent > 0;
   const questionsFait = f.messaged > 0;
@@ -98,29 +90,12 @@ export function pipelineMission(f: FaitsMission): EtapePipeline[] {
   ]);
 }
 
+export function pipelineMission(f: FaitsMission): EtapePipeline[] {
+  return pipelineJob(f);
+}
+
 export function pipelineHm(f: FaitsHm): EtapePipeline[] {
   return annoterDurees([
-    {
-      cle: "job",
-      fait: Boolean(f.job_poste_at),
-      at: f.job_poste_at,
-      detail: "",
-      heuresDepuisPrev: null,
-    },
-    {
-      cle: "invites",
-      fait: f.invites_sent > 0,
-      at: null,
-      detail: String(f.invites_sent),
-      heuresDepuisPrev: null,
-    },
-    {
-      cle: "questions",
-      fait: f.messaged > 0,
-      at: null,
-      detail: String(f.messaged),
-      heuresDepuisPrev: null,
-    },
     {
       cle: "contrat",
       fait: Boolean(f.contrat_at),
@@ -230,8 +205,6 @@ export function redigerBriefMission(f: FaitsMission, locale: string): string {
 export function redigerBriefHm(f: FaitsHm, locale: string): string {
   const fr = locale.startsWith("fr");
   const pays = nomPays(f.langue, locale);
-  const phase = libelleEtape(etapeCourante(pipelineHm(f)), locale);
-
   let lead: string;
   if (!f.contrat_at) {
     lead = fr
@@ -259,9 +232,5 @@ export function redigerBriefHm(f: FaitsHm, locale: string): string {
       : `${f.nom} is running ${f.createurs_n} creator(s) (${pays}).`;
   }
 
-  const faits = fr
-    ? `Faits : ${f.invites_sent} invité(s) sur le job, ${f.messaged} en questions, contrat ${f.contrat_at ? "signé" : "ouvert"}, ${f.slack_ok ? "présente sur Slack" : "pas encore sur Slack"}, ${f.codes_at ? "codes OS envoyés" : "pas de compte OS"}, ${f.os_connecte_at ? "déjà connectée à l’OS" : "pas encore connectée à l’OS"}, ${f.createurs_n} créateur(s). Prochaine étape : ${phase}.`
-    : `Facts: ${f.invites_sent} invited on the job, ${f.messaged} in questions, contract ${f.contrat_at ? "signed" : "open"}, ${f.slack_ok ? "in Slack" : "not in Slack yet"}, ${f.codes_at ? "OS login created" : "no OS account yet"}, ${f.os_connecte_at ? "already signed into the OS" : "has not signed into the OS yet"}, ${f.createurs_n} creator(s). Next step: ${phase}.`;
-
-  return `${lead} ${faits}`;
+  return lead;
 }

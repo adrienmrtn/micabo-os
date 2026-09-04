@@ -16,12 +16,10 @@ export function totauxUpwork(
 ): TotauxUpwork {
   const ouvertes = missions.filter((m) => missionOuverte(m.statut));
   return {
-    missionsOuvertes: ouvertes.length,
-    missionsHmOuvertes: ouvertes.filter((m) => m.famille === "hm").length,
-    newApplicants: ouvertes.reduce((s, m) => s + m.new_applicants, 0),
-    contratsActifs: contrats.filter((c) => contratActif(c.statut)).length,
-    alertesL2: alertes.filter((a) => a.niveau === "l2").length,
-    alertesL1: alertes.filter((a) => a.niveau === "l1").length,
+    jobsHmOuverts: ouvertes.filter((m) => m.famille === "hm" && m.hired === 0).length,
+    hmEnPoste: contrats.filter((c) => contratActif(c.statut)).length,
+    jobsCreateursOuverts: ouvertes.filter((m) => m.famille === "createur").length,
+    createursEnRetard: alertes.length,
   };
 }
 

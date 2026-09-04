@@ -76,10 +76,8 @@ export type UpworkDashboard = {
 };
 
 export type TotauxUpwork = {
-  missionsOuvertes: number;
-  missionsHmOuvertes: number;
-  newApplicants: number;
-  contratsActifs: number;
-  alertesL2: number;
-  alertesL1: number;
+  jobsHmOuverts: number;
+  hmEnPoste: number;
+  jobsCreateursOuverts: number;
+  createursEnRetard: number;
 };
