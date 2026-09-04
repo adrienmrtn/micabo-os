@@ -19,7 +19,7 @@ const ALERTE_COLS =
   "id, compte_id, poster_id, nom, handle, niveau, jours_sans_post, manager_id, manager_nom, contract_id, synced_at";
 
 const APPROCHE_COLS =
-  "id, job_posting_id, contract_id, upwork_proposal_id, upwork_freelancer_id, upwork_profile_url, nom, role, statut, resume_discussions, contrat_envoye_ok, contrat_signe_ok, slack_envoye_ok, email_demande_ok, codes_ok, os_ok, slack_ok, upwork_ajoute_ok, job_createur_id, warmup_actif, premier_post_ok, synced_at";
+  "id, job_posting_id, contract_id, upwork_proposal_id, upwork_freelancer_id, upwork_profile_url, photo_url, nom, role, statut, resume_discussions, contrat_envoye_ok, contrat_signe_ok, slack_envoye_ok, email_demande_ok, codes_ok, os_ok, slack_ok, upwork_ajoute_ok, job_createur_id, warmup_actif, premier_post_ok, synced_at";
 
 export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
   const [syncRes, missionsRes, contratsRes, alertesRes, approchesRes] = await Promise.all([

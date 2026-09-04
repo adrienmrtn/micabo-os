@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  OBJECTIF_CREATEURS,
   etapeCouranteTimeline,
   faitsDepuisApproche,
   nettoyerResume,
+  phase1Terminee,
+  phase2Terminee,
   timelineCreateur,
   timelineHm,
 } from "./timeline";
@@ -97,6 +100,15 @@ describe("nettoyerResume", () => {
       "Hi!",
     );
     expect(nettoyerResume("x".repeat(300))?.endsWith("…")).toBe(true);
+  });
+});
+
+describe("phases HM", () => {
+  it("ouvre les phases 2 et 3 seulement après le job créateurs", () => {
+    expect(phase1Terminee(base)).toBe(false);
+    expect(phase1Terminee({ ...base, job_createur_poste: true })).toBe(true);
+    expect(phase2Terminee(0)).toBe(false);
+    expect(phase2Terminee(OBJECTIF_CREATEURS)).toBe(true);
   });
 });
 

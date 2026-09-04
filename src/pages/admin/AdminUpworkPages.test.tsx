@@ -94,6 +94,7 @@ const dash: UpworkDashboard = {
       upwork_proposal_id: "p1",
       upwork_freelancer_id: "1",
       upwork_profile_url: "https://www.upwork.com/ab/applicants/job-fr-hm",
+      photo_url: "https://example.com/sara.jpg",
       nom: "Sara Benamer",
       role: "hm",
       statut: "hired",
@@ -118,6 +119,7 @@ const dash: UpworkDashboard = {
       upwork_proposal_id: "p2",
       upwork_freelancer_id: "2",
       upwork_profile_url: "https://www.upwork.com/ab/applicants/job-fr-cr",
+      photo_url: null,
       nom: "Arisoa Estelle Rajaobelina",
       role: "createur",
       statut: "messaged",
@@ -171,7 +173,9 @@ describe("pages Upwork", () => {
     expect(await screen.findByText("Sara Benamer")).toBeInTheDocument();
     expect(screen.getByText("Hiring Manager sur une autre app.")).toBeInTheDocument();
     expect(screen.getByText("Arisoa Estelle Rajaobelina")).toBeInTheDocument();
-    expect(screen.getByText("Job posts créateurs")).toBeInTheDocument();
+    expect(screen.getByText(/Phase 1/)).toBeInTheDocument();
+    expect(screen.getByText(/Phase 2/)).toBeInTheDocument();
+    expect(screen.getByText(/Entretien/)).toBeInTheDocument();
     expect(screen.getByText("Warmup actif")).toBeInTheDocument();
   });
 });

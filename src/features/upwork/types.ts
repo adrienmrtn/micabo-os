@@ -75,6 +75,7 @@ export type UpworkApproche = {
   upwork_proposal_id: string;
   upwork_freelancer_id: string | null;
   upwork_profile_url: string | null;
+  photo_url: string | null;
   nom: string;
   role: "hm" | "createur";
   statut: "messaged" | "hired";
