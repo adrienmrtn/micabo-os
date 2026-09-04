@@ -2175,6 +2175,10 @@ export const en = {
       etapeVide: "not yet",
       etapeFait: "done",
       prochaine: "Next step",
+      pipelineTitre: "Pipeline",
+      pipelineChemin:
+        "job → invited → questions → contract → Slack → OS codes → signed into OS → creators",
+      pipelineCheminCreateur: "job → invited → questions → contract",
       etape: {
         job: "Job posted",
         invites: "Invited",

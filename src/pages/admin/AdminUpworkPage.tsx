@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Check, Circle } from "lucide-react";
+import { Check, ChevronRight, Circle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -80,36 +80,60 @@ function Drapeau({ langue }: { langue: string | null }) {
   );
 }
 
-function Pipeline({ etapes, locale }: { etapes: EtapePipeline[]; locale: string }) {
+function Pipeline({
+  etapes,
+  locale,
+  chemin,
+}: {
+  etapes: EtapePipeline[];
+  locale: string;
+  chemin?: string;
+}) {
   const { t } = useTranslation();
+  const courante = etapeCourante(etapes);
   return (
-    <ol className="flex flex-wrap gap-2">
-      {etapes.map((e) => (
-        <li
-          key={e.cle}
-          className={cn(
-            "flex min-w-[7.5rem] flex-col gap-0.5 rounded-md border px-2 py-1.5 text-xs",
-            e.fait ? "border-foreground/30 bg-muted/40" : "border-dashed text-muted-foreground",
-          )}
-        >
-          <span className="inline-flex items-center gap-1 font-medium">
-            {e.fait ? <Check className="size-3" /> : <Circle className="size-3" />}
-            {t(`upwork.etape.${e.cle}`)}
-          </span>
-          <span className="tabular-nums text-muted-foreground">
-            {e.at ? formatQuand(e.at, locale) : e.fait ? t("upwork.etapeFait") : t("upwork.etapeVide")}
-          </span>
-          {e.heuresDepuisPrev != null && (
-            <span className="text-muted-foreground">
-              +{formatDureeHeures(e.heuresDepuisPrev, locale)}
-            </span>
-          )}
-          {e.detail && e.cle !== "slack" && e.detail !== "0" && (
-            <span className="text-muted-foreground">{e.detail}</span>
-          )}
-        </li>
-      ))}
-    </ol>
+    <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+      <p className="text-xs font-semibold tracking-tight">{t("upwork.pipelineTitre")}</p>
+      <p className="text-[11px] text-muted-foreground">{chemin ?? t("upwork.pipelineChemin")}</p>
+      <ol className="flex items-stretch gap-0 overflow-x-auto pb-1">
+        {etapes.map((e, i) => {
+          const ici = e.cle === courante && !e.fait;
+          return (
+            <li key={e.cle} className="flex shrink-0 items-stretch">
+              {i > 0 && (
+                <span className="flex items-center px-0.5 text-muted-foreground" aria-hidden>
+                  <ChevronRight className="size-4" />
+                </span>
+              )}
+              <div
+                className={cn(
+                  "flex min-w-[6.25rem] flex-col gap-0.5 rounded-md border px-2 py-1.5 text-xs",
+                  e.fait && "border-foreground/40 bg-background",
+                  ici && "border-foreground bg-background ring-2 ring-foreground",
+                  !e.fait && !ici && "border-dashed text-muted-foreground",
+                )}
+              >
+                <span className="inline-flex items-center gap-1 font-medium">
+                  {e.fait ? <Check className="size-3" /> : <Circle className="size-3" />}
+                  {t(`upwork.etape.${e.cle}`)}
+                </span>
+                <span className={cn("tabular-nums", !e.fait && "text-muted-foreground")}>
+                  {e.at ? formatQuand(e.at, locale) : e.fait ? t("upwork.etapeFait") : t("upwork.etapeVide")}
+                </span>
+                {e.heuresDepuisPrev != null && (
+                  <span className="text-muted-foreground">
+                    +{formatDureeHeures(e.heuresDepuisPrev, locale)}
+                  </span>
+                )}
+                {e.detail && e.cle !== "slack" && e.detail !== "0" && (
+                  <span className="text-muted-foreground">{e.detail}</span>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
@@ -185,8 +209,12 @@ function CarteMission({ m, contrat }: { m: UpworkMission; contrat?: UpworkContra
           })}
         </p>
       </div>
+      <Pipeline
+        etapes={etapes}
+        locale={i18n.language}
+        chemin={m.famille === "hm" ? undefined : t("upwork.pipelineCheminCreateur")}
+      />
       <p className="text-sm text-muted-foreground">{redigerBriefMission(faits, i18n.language)}</p>
-      <Pipeline etapes={etapes} locale={i18n.language} />
     </div>
   );
 }
@@ -218,6 +246,7 @@ function CarteHm({ c, mission }: { c: UpworkContrat; mission?: UpworkMission }) 
           {t("upwork.nbCreateursHm", { n: c.createurs_n })}
         </p>
       </div>
+      <Pipeline etapes={etapes} locale={i18n.language} />
       <p className="text-sm leading-relaxed">{redigerBriefHm(faits, i18n.language)}</p>
       <dl className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
         <div>
@@ -253,7 +282,6 @@ function CarteHm({ c, mission }: { c: UpworkContrat; mission?: UpworkMission }) 
           <dd className="tabular-nums">{c.createurs_n}</dd>
         </div>
       </dl>
-      <Pipeline etapes={etapes} locale={i18n.language} />
     </div>
   );
 }
