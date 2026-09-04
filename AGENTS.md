@@ -45,7 +45,7 @@ après un test manuel.
 
 Le dashboard OS `/admin/upwork` est **lecture seule** : missions
 **PUBLISHED seulement** (jamais CANCELLED / FILLED / DRAFT), pipeline
-HM (job → invites → questions → contrat → Slack → codes → OS), alertes.
+HM (job → invites → questions → contrat → Slack → codes → OS → créateurs), alertes.
 Aucun envoi depuis l’OS.
 
 - Org figé : `1990051114607612379` (Micabo). `list_accounts` d’abord ;

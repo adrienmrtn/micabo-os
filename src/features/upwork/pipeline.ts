@@ -1,5 +1,14 @@
 export const ETAPES_MISSION = ["job", "invites", "questions", "contrat"] as const;
-export const ETAPES_HM = ["job", "invites", "questions", "contrat", "slack", "codes", "os"] as const;
+export const ETAPES_HM = [
+  "job",
+  "invites",
+  "questions",
+  "contrat",
+  "slack",
+  "codes",
+  "os",
+  "createurs",
+] as const;
 
 export type EtapeCle = (typeof ETAPES_HM)[number];
 
@@ -140,12 +149,35 @@ export function pipelineHm(f: FaitsHm): EtapePipeline[] {
       detail: "",
       heuresDepuisPrev: null,
     },
+    {
+      cle: "createurs",
+      fait: f.createurs_n > 0,
+      at: null,
+      detail: String(f.createurs_n),
+      heuresDepuisPrev: null,
+    },
   ]);
 }
 
 export function etapeCourante(etapes: EtapePipeline[]): EtapeCle {
   const prochaine = etapes.find((e) => !e.fait);
   return prochaine?.cle ?? etapes[etapes.length - 1]!.cle;
+}
+
+const LIBELLE_ETAPE: Record<EtapeCle, { fr: string; en: string }> = {
+  job: { fr: "poster le job", en: "post the job" },
+  invites: { fr: "inviter", en: "invite" },
+  questions: { fr: "phase questions", en: "questions" },
+  contrat: { fr: "contrat", en: "contract" },
+  slack: { fr: "ajouter sur Slack", en: "add to Slack" },
+  codes: { fr: "envoyer les codes OS", en: "send OS codes" },
+  os: { fr: "première connexion OS", en: "first OS login" },
+  createurs: { fr: "rattacher des créateurs", en: "attach creators" },
+};
+
+export function libelleEtape(cle: EtapeCle, locale: string): string {
+  const row = LIBELLE_ETAPE[cle];
+  return locale.startsWith("fr") ? row.fr : row.en;
 }
 
 export function formatDureeHeures(heures: number, locale: string): string {
@@ -178,7 +210,7 @@ export function nomPays(langue: string | null, locale: string): string {
 
 export function redigerBriefMission(f: FaitsMission, locale: string): string {
   const fr = locale.startsWith("fr");
-  const phase = etapeCourante(pipelineMission(f));
+  const phase = libelleEtape(etapeCourante(pipelineMission(f)), locale);
   const pays = nomPays(f.langue, locale);
   if (f.famille === "hm") {
     if (f.hired > 0) {
@@ -198,7 +230,7 @@ export function redigerBriefMission(f: FaitsMission, locale: string): string {
 export function redigerBriefHm(f: FaitsHm, locale: string): string {
   const fr = locale.startsWith("fr");
   const pays = nomPays(f.langue, locale);
-  const phase = etapeCourante(pipelineHm(f));
+  const phase = libelleEtape(etapeCourante(pipelineHm(f)), locale);
 
   let lead: string;
   if (!f.contrat_at) {

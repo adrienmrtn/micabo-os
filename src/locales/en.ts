@@ -2183,6 +2183,7 @@ export const en = {
         slack: "Slack",
         codes: "OS codes",
         os: "Signed into OS",
+        createurs: "Creators",
       },
       alertesTitre: "Creator follow-up",
       alertesDesc: "Accounts out of warmup with no recent post, plus the HM in charge.",

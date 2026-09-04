@@ -2182,6 +2182,7 @@ export const fr = {
         slack: "Slack",
         codes: "Codes OS",
         os: "Connectée OS",
+        createurs: "Créateurs",
       },
       alertesTitre: "Suivi créateurs",
       alertesDesc: "Comptes hors warmup sans post récent, avec le HM qui s’en occupe.",
