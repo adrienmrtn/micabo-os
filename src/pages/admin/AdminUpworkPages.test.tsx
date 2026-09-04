@@ -175,7 +175,7 @@ describe("pages Upwork", () => {
     expect(screen.getByText("Arisoa Estelle Rajaobelina")).toBeInTheDocument();
     expect(screen.getByText(/Phase 1/)).toBeInTheDocument();
     expect(screen.getByText(/Phase 2/)).toBeInTheDocument();
-    expect(screen.getByText(/Entretien/)).toBeInTheDocument();
+    expect(screen.queryByText(/Phase 3/)).not.toBeInTheDocument();
     expect(screen.getByText("Warmup actif")).toBeInTheDocument();
   });
 });

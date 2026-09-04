@@ -263,9 +263,8 @@ function VieHm({
   const { t } = useTranslation();
   const faits = faitsDepuisApproche(hm);
   const p1ok = phase1Terminee(faits);
-  const embauches = approchesCrea.filter((a) => a.statut === "hired");
-  const entretiens = approchesCrea.filter((a) => a.statut === "messaged");
-  const n = Math.max(createursN, embauches.length);
+  const embauches = approchesCrea.filter((a) => a.statut === "hired").length;
+  const n = Math.max(createursN, embauches);
   const opp = jobCrea ? opportunitesEnCours(approchesCrea, jobCrea.job_posting_id) : 0;
 
   return (
@@ -276,59 +275,45 @@ function VieHm({
         <TimelineHorizontale etapes={timelineHm(faits)} role="hm" />
       </BandeauPhase>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <BandeauPhase
-          n={2}
-          titre={t("upwork.phase2")}
-          extra={t("upwork.phase2Progress", { n, max: OBJECTIF_CREATEURS })}
-          verrouille={!p1ok}
-        >
-          {!p1ok ? (
-            <p className="text-sm text-muted-foreground">{t("upwork.phase2Avant")}</p>
-          ) : (
-            <div className="space-y-3">
-              {jobCrea ? (
-                <div className="space-y-1">
-                  <p className="inline-flex items-center gap-1.5 text-sm font-medium">
-                    <Briefcase className="size-3.5" aria-hidden />
-                    {jobCrea.titre}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {t("upwork.statsPost", {
-                      inv: jobCrea.invites_sent,
-                      opp,
-                      appl: jobCrea.applicants,
-                      hired: jobCrea.hired,
-                    })}
-                  </p>
-                  {jobCrea.job_url && (
-                    <LienUpwork url={jobCrea.job_url} label={t("upwork.lienJob")} />
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">{t("upwork.jobCreaVide")}</p>
-              )}
-              {embauches.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("upwork.createursVide")}</p>
-              ) : (
-                embauches.map((a) => <CartePersonne key={a.id} a={a} role="createur" />)
-              )}
-            </div>
-          )}
-        </BandeauPhase>
-
-        <BandeauPhase n={3} titre={t("upwork.phase3")} verrouille={!p1ok}>
-          {!p1ok ? (
-            <p className="text-sm text-muted-foreground">{t("upwork.phase3Avant")}</p>
-          ) : entretiens.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("upwork.entretienVide")}</p>
-          ) : (
-            <div className="space-y-3">
-              {entretiens.map((a) => <CartePersonne key={a.id} a={a} role="createur" />)}
-            </div>
-          )}
-        </BandeauPhase>
-      </div>
+      <BandeauPhase
+        n={2}
+        titre={t("upwork.phase2")}
+        extra={t("upwork.phase2Progress", { n, max: OBJECTIF_CREATEURS })}
+        verrouille={!p1ok}
+      >
+        {!p1ok ? (
+          <p className="text-sm text-muted-foreground">{t("upwork.phase2Avant")}</p>
+        ) : (
+          <div className="space-y-3">
+            {jobCrea ? (
+              <div className="space-y-1">
+                <p className="inline-flex items-center gap-1.5 text-sm font-medium">
+                  <Briefcase className="size-3.5" aria-hidden />
+                  {jobCrea.titre}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {t("upwork.statsPost", {
+                    inv: jobCrea.invites_sent,
+                    opp,
+                    appl: jobCrea.applicants,
+                    hired: jobCrea.hired,
+                  })}
+                </p>
+                {jobCrea.job_url && (
+                  <LienUpwork url={jobCrea.job_url} label={t("upwork.lienJob")} />
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("upwork.jobCreaVide")}</p>
+            )}
+            {approchesCrea.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t("upwork.approcheVide")}</p>
+            ) : (
+              approchesCrea.map((a) => <CartePersonne key={a.id} a={a} role="createur" />)
+            )}
+          </div>
+        )}
+      </BandeauPhase>
     </article>
   );
 }

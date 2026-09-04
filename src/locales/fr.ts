@@ -2170,12 +2170,9 @@ export const fr = {
       sectionJobHm: "Job posts HM",
       sectionJobCrea: "Job posts créateurs",
       phase1: "Phase 1 — Contacté → job créateurs posté",
-      phase2: "Phase 2 — 10 créateurs",
+      phase2: "Phase 2 — Recrutement des créateurs",
       phase2Progress: "{{n}} / {{max}} créateurs",
       phase2Avant: "Après le job créateurs.",
-      phase3: "Phase 3 — Entretien (en parallèle)",
-      phase3Avant: "Les entretiens démarrent avec le job créateurs.",
-      entretienVide: "Aucun entretien en cours.",
       statsPost:
         "{{inv}} invités · {{opp}} opportunités en cours · {{appl}} candidatures · {{hired}} embauchés",
       approcheVide: "Personne n’a encore répondu.",
