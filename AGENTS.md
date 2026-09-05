@@ -28,8 +28,9 @@ Tu travailles **uniquement** dans `adrienmrtn/micabo-os`.
 
 - Front Vite : `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` (type Config
   sur Vercel, jamais Secret, jamais `service_role`).
-- Secrets moteur (`GEMINI`, `FAL`, `APIFY`, `CRON_SECRET`) : Edge Function
-  Secrets du projet `qkmiwnmiwsvwkttldqgb` seulement.
+- Secrets moteur (`FAL_KEY`, `APIFY_TOKEN`, `CRON_SECRET`) : Edge Function
+  Secrets du projet `qkmiwnmiwsvwkttldqgb` seulement. Le texte (Gemini)
+  passe par Fal OpenRouter — pas de `GEMINI_API_KEY`.
 - Slug unique : `micabo`. Pas de switcher, pas de `localStorage`
   `os-application-slug`, pas de fallback `application_id_sophia()`.
 - Mails internes : domaine `micabo.app`.

@@ -17,7 +17,7 @@ import { klingMotionControl } from "./fal_kling_motion.ts";
 import { mergerVideosFal } from "./fal_merge_videos.ts";
 import { formaterVideoMeta, sonderVideoMeta } from "./fal_normaliser_video.ts";
 import { falHebergerOctets } from "./fal_queue.ts";
-import { cleanImage, TEXT_MODELS } from "./gemini.ts";
+import { cleanImage, generateTextFast } from "./gemini.ts";
 import { mapPool } from "./parallel.ts";
 import { chargerPrompt, serviceClient } from "./supabase.ts";
 
@@ -89,8 +89,6 @@ async function genererCaptionGemini(input: {
   videoText: string | null;
   instructions: string;
 }): Promise<string> {
-  const key = Deno.env.get("GEMINI_API_KEY");
-  if (!key) throw new Error("GEMINI_API_KEY manquant");
   const prompt = `${input.instructions}
 
 Langue cible : ${input.langue}
@@ -99,35 +97,9 @@ Texte OCR lu sur la frame réaction (contexte, peut être vide) :
 ${input.videoText?.trim() || "(aucun)"}
 ---
 Légende :`;
-
-  const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-  let last = "";
-  for (const model of TEXT_MODELS) {
-    try {
-      const res = await fetch(`${BASE}/${model}:generateContent?key=${key}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-        }),
-      });
-      if (!res.ok) {
-        last = `${model} ${res.status}`;
-        continue;
-      }
-      const data = await res.json();
-      const text = String(
-        data?.candidates?.[0]?.content?.parts
-          ?.map((p: { text?: string }) => p.text ?? "")
-          .join("") ?? "",
-      ).trim();
-      if (text) return text.replace(/^["«]|["»]$/g, "").trim();
-      last = `${model}: vide`;
-    } catch (e) {
-      last = `${model}: ${e instanceof Error ? e.message : String(e)}`;
-    }
-  }
-  throw new Error(`Caption Gemini échouée (${last})`);
+  const text = (await generateTextFast(prompt)).trim();
+  if (!text) throw new Error("Caption LLM vide");
+  return text.replace(/^["«]|["»]$/g, "").trim();
 }
 
 async function labelsDuCompte(
