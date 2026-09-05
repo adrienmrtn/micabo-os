@@ -31,6 +31,8 @@ export type TimelineCheck = {
   cle: "os" | "slack" | "upwork";
   ok: boolean;
   source: SourceVerite;
+  /** L'admin est la source : la pastille se clique au lieu d'être lue. */
+  cochable?: boolean;
 };
 
 export type TimelineEtape = {
@@ -40,11 +42,13 @@ export type TimelineEtape = {
   resume?: string | null;
   detail?: string | null;
   checks?: TimelineCheck[];
+  /** Comme les sous-cases : un clic sur la pastille, pas un interrupteur. */
+  cochable?: boolean;
 };
 
 export type FaitsApproche = {
   role: "hm" | "createur";
-  statut: "messaged" | "hired";
+  statut: "messaged" | "offered" | "hired";
   resume_discussions: string | null;
   contrat_envoye_ok: boolean;
   contrat_signe_ok: boolean;
@@ -62,7 +66,9 @@ export type FaitsApproche = {
 };
 
 function aParle(f: FaitsApproche): boolean {
-  return Boolean(f.resume_discussions?.trim()) || f.statut === "hired" || f.contrat_envoye_ok;
+  return (
+    Boolean(f.resume_discussions?.trim()) || f.statut !== "messaged" || f.contrat_envoye_ok
+  );
 }
 
 export function timelineHm(f: FaitsApproche): TimelineEtape[] {
@@ -70,7 +76,12 @@ export function timelineHm(f: FaitsApproche): TimelineEtape[] {
   return [
     { cle: "contacte", ok: true, source: "upwork" },
     { cle: "pourparlers", ok: aParle(f), source: "upwork", resume: f.resume_discussions },
-    { cle: "contrat_envoye", ok: f.contrat_envoye_ok, source: "upwork" },
+    {
+      cle: "contrat_envoye",
+      ok: f.contrat_envoye_ok,
+      source: "admin",
+      cochable: true,
+    },
     { cle: "contrat_signe", ok: f.contrat_signe_ok, source: "upwork" },
     { cle: "acces_envoyes", ok: envoiOk, source: "upwork" },
     {
@@ -80,7 +91,7 @@ export function timelineHm(f: FaitsApproche): TimelineEtape[] {
       checks: [
         { cle: "os", ok: f.os_ok, source: "os" },
         { cle: "slack", ok: f.slack_ok, source: "slack" },
-        { cle: "upwork", ok: f.upwork_ajoute_ok, source: "admin" },
+        { cle: "upwork", ok: f.upwork_ajoute_ok, source: "admin", cochable: true },
       ],
     },
     { cle: "job_createur_poste", ok: f.job_createur_poste, source: "upwork" },
@@ -92,7 +103,12 @@ export function timelineCreateur(f: FaitsApproche): TimelineEtape[] {
   return [
     { cle: "contacte", ok: true, source: "upwork" },
     { cle: "pourparlers", ok: aParle(f), source: "upwork", resume: f.resume_discussions },
-    { cle: "contrat_envoye", ok: f.contrat_envoye_ok, source: "upwork" },
+    {
+      cle: "contrat_envoye",
+      ok: f.contrat_envoye_ok,
+      source: "admin",
+      cochable: true,
+    },
     { cle: "contrat_signe", ok: f.contrat_signe_ok, source: "upwork" },
     { cle: "acces_envoyes", ok: envoiOk, source: "upwork" },
     {

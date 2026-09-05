@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { drapeauLangue } from "@/features/moteur/langues";
 import { annulerActionUpwork, chargerUpworkDashboard } from "@/features/upwork/api";
 import { Repliable } from "@/features/upwork/Deroule";
+import { EditeurModeles } from "@/features/upwork/EditeurModeles";
 import { UPWORK_ORG_NOM } from "@/features/upwork/org";
 import { nomPays } from "@/features/upwork/pipeline";
 import { ICONE_KPI } from "@/features/upwork/icones";
@@ -197,6 +198,8 @@ export function AdminUpworkPage() {
               valeur={String(totaux.jobsCreateursOuverts)}
             />
           </div>
+
+          <EditeurModeles modeles={d.modeles} />
 
           {totaux.parPays.length === 0 ? (
             <p className="text-muted-foreground text-sm">{t("upwork.vide")}</p>

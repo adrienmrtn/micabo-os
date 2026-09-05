@@ -66,7 +66,8 @@ describe("timelineHm", () => {
     expect(etapes.find((e) => e.cle === "integration")?.checks).toEqual([
       { cle: "os", ok: true, source: "os" },
       { cle: "slack", ok: false, source: "slack" },
-      { cle: "upwork", ok: true, source: "admin" },
+      // Seule case dont l'admin est la source : elle se clique.
+      { cle: "upwork", ok: true, source: "admin", cochable: true },
     ]);
     expect(etapeCouranteTimeline(etapes)).toBe("integration");
   });

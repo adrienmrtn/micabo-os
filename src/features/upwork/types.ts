@@ -1,3 +1,5 @@
+import type { UpworkModele } from "./modeles";
+
 export type FamilleMission = "hm" | "createur" | "autre";
 
 export type UpworkSync = {
@@ -78,8 +80,10 @@ export type UpworkApproche = {
   photo_url: string | null;
   nom: string;
   role: "hm" | "createur";
-  statut: "messaged" | "hired";
+  statut: "messaged" | "offered" | "hired";
   resume_discussions: string | null;
+  /** Rendue par Upwork quand l'agent a préparé le brouillon d'offre. */
+  offre_finalize_url: string | null;
   contrat_envoye_ok: boolean;
   contrat_signe_ok: boolean;
   slack_envoye_ok: boolean;
@@ -97,22 +101,69 @@ export type UpworkApproche = {
   synced_at: string;
 };
 
-export type TypeAction = "arreter_recrutement";
+export type TypeAction =
+  | "arreter_recrutement"
+  | "publier_job_hm"
+  | "sourcer_hm"
+  | "inviter_hm"
+  | "envoyer_message"
+  | "preparer_contrat";
 
 /** Une action déclenchée dans l'OS = un prompt figé, en attente de l'agent. */
 export type UpworkAction = {
   id: string;
   type: TypeAction;
+  campagne_id: string | null;
   upwork_proposal_id: string | null;
   cible_nom: string;
   cible_role: "hm" | "createur" | null;
   langue: string | null;
   prompt: string;
+  /** Le texte exact à envoyer sur Upwork, relu par l'admin avant la file. */
+  message: string | null;
   note: string | null;
   statut: "en_attente" | "fait" | "annule";
   demande_at: string;
   fait_at: string | null;
   resultat: string | null;
+};
+
+/** Recrutement HM d'un pays, piloté par l'OS et exécuté par l'agent. */
+export type UpworkCampagne = {
+  id: string;
+  langue: string;
+  pays_nom: string | null;
+  role_cible: "hm";
+  statut: "active" | "en_pause" | "terminee" | "arretee";
+  job_posting_id: string | null;
+  objectif_hm: number;
+  profils_par_passage: number;
+  delai_validation_h: number;
+  lance_at: string;
+  job_publie_at: string | null;
+  fin_at: string | null;
+  detail: string | null;
+};
+
+/** Profil recommandé par l'agent, à valider avant invitation. */
+export type UpworkCandidat = {
+  id: string;
+  campagne_id: string;
+  upwork_person_id: string;
+  nom: string;
+  titre_profil: string | null;
+  photo_url: string | null;
+  upwork_profile_url: string | null;
+  pays: string | null;
+  taux_horaire: number | null;
+  job_success: number | null;
+  pourquoi: string | null;
+  statut: "propose" | "valide" | "refuse" | "invite";
+  auto_valide: boolean;
+  propose_at: string;
+  echeance_at: string;
+  decide_at: string | null;
+  invite_at: string | null;
 };
 
 export type UpworkDashboard = {
@@ -122,6 +173,9 @@ export type UpworkDashboard = {
   alertes: UpworkAlerte[];
   approches: UpworkApproche[];
   actions: UpworkAction[];
+  campagnes: UpworkCampagne[];
+  candidats: UpworkCandidat[];
+  modeles: UpworkModele[];
 };
 
 export type TotauxPays = {
