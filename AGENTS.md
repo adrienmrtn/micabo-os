@@ -80,7 +80,9 @@ Upwork + Supabase + Slack, projet `qkmiwnmiwsvwkttldqgb`) :
    approches (`upwork_proposal_id`, `job_posting_id`, `nom`, `role`,
    `statut` messaged|hired, `resume_discussions`, `photo_url` depuis
    `user.photoUrl`, `upwork_profile_url` depuis `user.publicUrl`,
-   flags contrat / Slack / OS / warmup / premier_post).
+   flags contrat / Slack / OS / warmup / premier_post ;
+   `job_createur_id` = le job créateurs **de ce HM**, jamais le job
+   du pays — un post = un HM).
 7. Ne **rien** envoyer. Pas de draft. Stop si hors Micabo.
 
 Mettre en place l’Automation : Cursor → Automations → New → repo

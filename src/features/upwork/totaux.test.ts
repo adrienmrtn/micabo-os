@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { contratActif, missionOuverte, missionsFiltrees, totauxUpwork } from "./totaux";
-import type { UpworkContrat, UpworkMission } from "./types";
+import {
+  contratActif,
+  jobCreateurPourHm,
+  missionOuverte,
+  missionsFiltrees,
+  totauxUpwork,
+} from "./totaux";
+import type { UpworkApproche, UpworkContrat, UpworkMission } from "./types";
 
 function mission(over: Partial<UpworkMission> & Pick<UpworkMission, "id">): UpworkMission {
   return {
@@ -22,6 +28,33 @@ function mission(over: Partial<UpworkMission> & Pick<UpworkMission, "id">): Upwo
     langue: null,
     invites_sent: 0,
     description: null,
+    synced_at: "2026-09-04T00:00:00Z",
+    ...over,
+  };
+}
+
+function approche(over: Partial<UpworkApproche> & Pick<UpworkApproche, "id" | "nom">): UpworkApproche {
+  return {
+    job_posting_id: "job-fr-hm",
+    contract_id: over.id,
+    upwork_proposal_id: over.id,
+    upwork_freelancer_id: null,
+    upwork_profile_url: null,
+    photo_url: null,
+    role: "hm",
+    statut: "hired",
+    resume_discussions: null,
+    contrat_envoye_ok: true,
+    contrat_signe_ok: true,
+    slack_envoye_ok: false,
+    email_demande_ok: false,
+    codes_ok: false,
+    os_ok: false,
+    slack_ok: false,
+    upwork_ajoute_ok: false,
+    job_createur_id: null,
+    warmup_actif: false,
+    premier_post_ok: false,
     synced_at: "2026-09-04T00:00:00Z",
     ...over,
   };
@@ -94,5 +127,38 @@ describe("filtres", () => {
     expect(missionOuverte("filled")).toBe(false);
     expect(contratActif("Active")).toBe(true);
     expect(contratActif("CLOSED")).toBe(false);
+  });
+});
+
+describe("jobCreateurPourHm", () => {
+  it("rattache la phase 2 au job du HM, pas au job du pays", () => {
+    const jobCrea = mission({
+      id: "job-fr-cr",
+      job_posting_id: "job-fr-cr",
+      famille: "createur",
+      langue: "fr",
+    });
+    const sara = approche({
+      id: "a-sara",
+      nom: "Sara Benamer",
+      contract_id: "c-sara",
+      job_createur_id: "job-fr-cr",
+      os_ok: true,
+      slack_ok: true,
+    });
+    const rose = approche({
+      id: "a-rose",
+      nom: "Rose Vasquez",
+      contract_id: "c-rose",
+      job_createur_id: "job-fr-cr",
+    });
+    const hms = [sara, rose];
+    const contrats = [
+      contrat({ id: "c-sara", contract_id: "c-sara", createurs_n: 1, contrat_at: "2026-09-01T00:00:00Z" }),
+      contrat({ id: "c-rose", contract_id: "c-rose", createurs_n: 0, contrat_at: "2026-09-05T00:00:00Z" }),
+    ];
+    expect(jobCreateurPourHm(sara, [jobCrea], hms, contrats)?.job_posting_id).toBe("job-fr-cr");
+    expect(jobCreateurPourHm(rose, [jobCrea], hms, contrats)).toBeNull();
+    expect(jobCreateurPourHm({ ...rose, job_createur_id: null }, [jobCrea], hms, contrats)).toBeNull();
   });
 });

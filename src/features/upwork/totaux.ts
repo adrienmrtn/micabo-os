@@ -83,6 +83,55 @@ export function approchesDuJob(approches: UpworkApproche[], jobPostingId: string
     });
 }
 
+type HmJobCreateur = Pick<
+  UpworkApproche,
+  "id" | "role" | "job_createur_id" | "contract_id" | "os_ok" | "slack_ok" | "nom"
+>;
+
+function scoreProprieteJobCreateur(hm: HmJobCreateur, contrats: UpworkContrat[]): [number, string, number, string] {
+  const contrat = contrats.find((c) => c.contract_id && c.contract_id === hm.contract_id);
+  return [
+    contrat?.createurs_n ?? 0,
+    contrat?.contrat_at ?? "9999",
+    (hm.os_ok ? 1 : 0) + (hm.slack_ok ? 1 : 0),
+    hm.nom,
+  ];
+}
+
+/** Un job créateurs n’appartient qu’à un HM — jamais « le job du pays ». */
+export function proprietaireJobCreateur(
+  jobPostingId: string,
+  hms: HmJobCreateur[],
+  contrats: UpworkContrat[],
+): HmJobCreateur | null {
+  const candidats = hms.filter((h) => h.role === "hm" && h.job_createur_id === jobPostingId);
+  if (candidats.length === 0) return null;
+  return [...candidats].sort((a, b) => {
+    const [na, ta, sa, noma] = scoreProprieteJobCreateur(a, contrats);
+    const [nb, tb, sb, nomb] = scoreProprieteJobCreateur(b, contrats);
+    if (na !== nb) return nb - na;
+    if (ta !== tb) return ta.localeCompare(tb);
+    if (sa !== sb) return sb - sa;
+    return noma.localeCompare(nomb, "fr");
+  })[0]!;
+}
+
+/** Phase 2 : uniquement le job post de ce HM, s’il en est le seul propriétaire. */
+export function jobCreateurPourHm(
+  hm: HmJobCreateur,
+  missions: UpworkMission[],
+  hms: HmJobCreateur[],
+  contrats: UpworkContrat[],
+): UpworkMission | null {
+  const id = hm.job_createur_id;
+  if (!id) return null;
+  const job = missions.find((m) => m.job_posting_id === id && missionOuverte(m.statut));
+  if (!job) return null;
+  const proprio = proprietaireJobCreateur(id, hms, contrats);
+  if (!proprio || proprio.id !== hm.id) return null;
+  return job;
+}
+
 export function opportunitesEnCours(approches: UpworkApproche[], jobPostingId: string): number {
   return approches.filter((a) => a.job_posting_id === jobPostingId && a.statut === "messaged").length;
 }
