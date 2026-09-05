@@ -89,9 +89,30 @@ export type UpworkApproche = {
   slack_ok: boolean;
   upwork_ajoute_ok: boolean;
   job_createur_id: string | null;
+  profile_id: string | null;
+  tiktok_cree_ok: boolean;
+  tiktok_handle: string | null;
   warmup_actif: boolean;
   premier_post_ok: boolean;
   synced_at: string;
+};
+
+export type TypeAction = "arreter_recrutement";
+
+/** Une action déclenchée dans l'OS = un prompt figé, en attente de l'agent. */
+export type UpworkAction = {
+  id: string;
+  type: TypeAction;
+  upwork_proposal_id: string | null;
+  cible_nom: string;
+  cible_role: "hm" | "createur" | null;
+  langue: string | null;
+  prompt: string;
+  note: string | null;
+  statut: "en_attente" | "fait" | "annule";
+  demande_at: string;
+  fait_at: string | null;
+  resultat: string | null;
 };
 
 export type UpworkDashboard = {
@@ -100,6 +121,7 @@ export type UpworkDashboard = {
   contrats: UpworkContrat[];
   alertes: UpworkAlerte[];
   approches: UpworkApproche[];
+  actions: UpworkAction[];
 };
 
 export type TotauxPays = {

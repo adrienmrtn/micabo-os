@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   OBJECTIF_CREATEURS,
+  avancement,
   etapeCouranteTimeline,
   faitsDepuisApproche,
   nettoyerResume,
@@ -24,6 +25,8 @@ const base = {
   slack_ok: false,
   upwork_ajoute_ok: false,
   job_createur_poste: false,
+  tiktok_cree_ok: false,
+  tiktok_handle: null,
   warmup_actif: false,
   premier_post_ok: false,
 };
@@ -36,8 +39,8 @@ describe("timelineHm", () => {
       "pourparlers",
       "contrat_envoye",
       "contrat_signe",
-      "onboarding_envoi",
-      "onboarding_rejoint",
+      "acces_envoyes",
+      "integration",
       "job_createur_poste",
     ]);
     expect(etapes.find((e) => e.cle === "contacte")?.ok).toBe(true);
@@ -45,7 +48,7 @@ describe("timelineHm", () => {
     expect(etapeCouranteTimeline(etapes)).toBe("contrat_envoye");
   });
 
-  it("n’ouvre l’onboarding qu’après Slack + email + codes, puis la checklist", () => {
+  it("n’ouvre l’intégration qu’après Slack + email + codes, puis la checklist", () => {
     const etapes = timelineHm({
       ...base,
       statut: "hired",
@@ -58,39 +61,71 @@ describe("timelineHm", () => {
       slack_ok: false,
       upwork_ajoute_ok: true,
     });
-    expect(etapes.find((e) => e.cle === "onboarding_envoi")?.ok).toBe(true);
-    expect(etapes.find((e) => e.cle === "onboarding_rejoint")?.ok).toBe(false);
-    expect(etapes.find((e) => e.cle === "onboarding_rejoint")?.checks).toEqual([
-      { cle: "os", ok: true },
-      { cle: "slack", ok: false },
-      { cle: "upwork", ok: true },
+    expect(etapes.find((e) => e.cle === "acces_envoyes")?.ok).toBe(true);
+    expect(etapes.find((e) => e.cle === "integration")?.ok).toBe(false);
+    expect(etapes.find((e) => e.cle === "integration")?.checks).toEqual([
+      { cle: "os", ok: true, source: "os" },
+      { cle: "slack", ok: false, source: "slack" },
+      { cle: "upwork", ok: true, source: "admin" },
     ]);
-    expect(etapeCouranteTimeline(etapes)).toBe("onboarding_rejoint");
+    expect(etapeCouranteTimeline(etapes)).toBe("integration");
+  });
+
+  it("dit d’où vient chaque case : OS, Slack ou coche admin", () => {
+    const checks = timelineHm(base).find((e) => e.cle === "integration")?.checks ?? [];
+    expect(checks.map((c) => c.source)).toEqual(["os", "slack", "admin"]);
   });
 });
 
 describe("timelineCreateur", () => {
-  it("finit par warmup puis premier post, sans case Upwork", () => {
-    const etapes = timelineCreateur({
-      ...base,
-      role: "createur",
-      statut: "hired",
-      contrat_envoye_ok: true,
-      contrat_signe_ok: true,
-      slack_envoye_ok: true,
-      codes_ok: true,
-      os_ok: true,
-      slack_ok: true,
-      warmup_actif: true,
-      premier_post_ok: false,
-    });
-    expect(etapes.map((e) => e.cle)).toContain("warmup");
-    expect(etapes.map((e) => e.cle)).toContain("premier_post");
-    expect(etapes.find((e) => e.cle === "onboarding_rejoint")?.checks?.map((c) => c.cle)).toEqual([
+  const embauchee = {
+    ...base,
+    role: "createur" as const,
+    statut: "hired" as const,
+    contrat_envoye_ok: true,
+    contrat_signe_ok: true,
+    slack_envoye_ok: true,
+    codes_ok: true,
+    os_ok: true,
+    slack_ok: true,
+  };
+
+  it("intercale le compte TikTok entre l’intégration et le warmup", () => {
+    const etapes = timelineCreateur(embauchee);
+    expect(etapes.map((e) => e.cle)).toEqual([
+      "contacte",
+      "pourparlers",
+      "contrat_envoye",
+      "contrat_signe",
+      "acces_envoyes",
+      "integration",
+      "tiktok_cree",
+      "warmup",
+      "premier_post",
+    ]);
+    expect(etapes.find((e) => e.cle === "integration")?.checks?.map((c) => c.cle)).toEqual([
       "os",
       "slack",
     ]);
-    expect(etapeCouranteTimeline(etapes)).toBe("premier_post");
+    expect(etapeCouranteTimeline(etapes)).toBe("tiktok_cree");
+  });
+
+  it("bloque le warmup tant que le compte TikTok n’existe pas dans l’OS", () => {
+    const sansTikTok = timelineCreateur({ ...embauchee, warmup_actif: true });
+    expect(sansTikTok.find((e) => e.cle === "tiktok_cree")?.ok).toBe(false);
+    expect(etapeCouranteTimeline(sansTikTok)).toBe("tiktok_cree");
+
+    const avecTikTok = timelineCreateur({
+      ...embauchee,
+      tiktok_cree_ok: true,
+      tiktok_handle: "manon.examen872",
+      warmup_actif: true,
+    });
+    const tiktok = avecTikTok.find((e) => e.cle === "tiktok_cree");
+    expect(tiktok?.ok).toBe(true);
+    expect(tiktok?.source).toBe("os");
+    expect(tiktok?.detail).toBe("@manon.examen872");
+    expect(etapeCouranteTimeline(avecTikTok)).toBe("premier_post");
   });
 });
 
@@ -121,5 +156,11 @@ describe("faitsDepuisApproche", () => {
       premier_post_ok: false,
     });
     expect(faits.job_createur_poste).toBe(true);
+  });
+});
+
+describe("avancement", () => {
+  it("compte les étapes franchies pour l’aperçu replié", () => {
+    expect(avancement(timelineHm(base))).toEqual({ faites: 2, total: 7 });
   });
 });
