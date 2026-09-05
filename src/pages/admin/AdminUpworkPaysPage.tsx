@@ -11,11 +11,16 @@ import { Switch } from "@/components/ui/switch";
 import { drapeauLangue } from "@/features/moteur/langues";
 import {
   annulerActionUpwork,
+  arreterCampagneHm,
   chargerUpworkDashboard,
   creerActionUpwork,
+  deciderCandidat,
+  lancerCampagneHm,
   marquerAjoutUpwork,
 } from "@/features/upwork/api";
+import { campagneDuPays, candidatsDeCampagne } from "@/features/upwork/campagne";
 import { Deroule, Jauge, Repliable, ResumeEtape } from "@/features/upwork/Deroule";
+import { JobsHm } from "@/features/upwork/JobsHm";
 import { nomPays } from "@/features/upwork/pipeline";
 import {
   approchesDuJob,
@@ -420,6 +425,21 @@ export function AdminUpworkPaysPage() {
     onSuccess: rafraichir,
   });
 
+  const lancerCampagne = useMutation({
+    mutationFn: (v: { langue: string; pays: string }) => lancerCampagneHm(v.langue, v.pays),
+    onSuccess: rafraichir,
+  });
+
+  const arreterCampagne = useMutation({
+    mutationFn: (id: string) => arreterCampagneHm(id),
+    onSuccess: rafraichir,
+  });
+
+  const deciderProfil = useMutation({
+    mutationFn: (v: { id: string; ok: boolean }) => deciderCandidat(v.id, v.ok),
+    onSuccess: rafraichir,
+  });
+
   if (!/^[a-z]{2}$/.test(langue)) {
     return <Navigate to="/admin/upwork" replace />;
   }
@@ -438,8 +458,23 @@ export function AdminUpworkPaysPage() {
     .flatMap((j) => approchesDuJob(approches, j.job_posting_id))
     .filter((a) => a.role === "hm");
 
-  const enCours = basculerUpwork.isPending || arreter.isPending || annuler.isPending;
-  const erreur = (basculerUpwork.error ?? arreter.error ?? annuler.error) as Error | null;
+  const campagne = campagneDuPays(d?.campagnes ?? [], langue);
+  const candidats = campagne ? candidatsDeCampagne(d?.candidats ?? [], campagne.id) : [];
+  const paysNom = nomPays(langue, i18n.language);
+
+  const enCours =
+    basculerUpwork.isPending ||
+    arreter.isPending ||
+    annuler.isPending ||
+    lancerCampagne.isPending ||
+    arreterCampagne.isPending ||
+    deciderProfil.isPending;
+  const erreur = (basculerUpwork.error ??
+    arreter.error ??
+    annuler.error ??
+    lancerCampagne.error ??
+    arreterCampagne.error ??
+    deciderProfil.error) as Error | null;
 
   return (
     <div className="space-y-6">
@@ -485,6 +520,18 @@ export function AdminUpworkPaysPage() {
               valeur={String(pays?.jobsCreateursOuverts ?? 0)}
             />
           </div>
+
+          <JobsHm
+            paysNom={paysNom}
+            jobsHm={jobsHm}
+            campagne={campagne}
+            candidats={candidats}
+            actions={actions}
+            bloque={enCours}
+            onLancer={() => lancerCampagne.mutate({ langue, pays: paysNom })}
+            onArreter={(id) => arreterCampagne.mutate(id)}
+            onDecider={(id, ok) => deciderProfil.mutate({ id, ok })}
+          />
 
           {hms.length === 0 ? (
             <p className="text-muted-foreground text-sm">{t("upwork.approcheVide")}</p>

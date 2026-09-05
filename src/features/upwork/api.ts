@@ -5,6 +5,8 @@ import type {
   UpworkAction,
   UpworkAlerte,
   UpworkApproche,
+  UpworkCampagne,
+  UpworkCandidat,
   UpworkContrat,
   UpworkDashboard,
   UpworkMission,
@@ -24,11 +26,25 @@ const APPROCHE_COLS =
   "id, job_posting_id, contract_id, upwork_proposal_id, upwork_freelancer_id, upwork_profile_url, photo_url, nom, role, statut, resume_discussions, contrat_envoye_ok, contrat_signe_ok, slack_envoye_ok, email_demande_ok, codes_ok, os_ok, slack_ok, upwork_ajoute_ok, job_createur_id, profile_id, tiktok_cree_ok, tiktok_handle, warmup_actif, premier_post_ok, synced_at";
 
 const ACTION_COLS =
-  "id, type, upwork_proposal_id, cible_nom, cible_role, langue, prompt, note, statut, demande_at, fait_at, resultat";
+  "id, type, campagne_id, upwork_proposal_id, cible_nom, cible_role, langue, prompt, note, statut, demande_at, fait_at, resultat";
+
+const CAMPAGNE_COLS =
+  "id, langue, pays_nom, role_cible, statut, job_posting_id, objectif_hm, profils_par_passage, delai_validation_h, lance_at, job_publie_at, fin_at, detail";
+
+const CANDIDAT_COLS =
+  "id, campagne_id, upwork_person_id, nom, titre_profil, photo_url, upwork_profile_url, pays, taux_horaire, job_success, pourquoi, statut, auto_valide, propose_at, echeance_at, decide_at, invite_at";
 
 export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
-  const [syncRes, missionsRes, contratsRes, alertesRes, approchesRes, actionsRes] =
-    await Promise.all([
+  const [
+    syncRes,
+    missionsRes,
+    contratsRes,
+    alertesRes,
+    approchesRes,
+    actionsRes,
+    campagnesRes,
+    candidatsRes,
+  ] = await Promise.all([
       supabase
         .from("upwork_sync")
         .select("org_uid, last_run_at, last_ok, last_detail, updated_at")
@@ -48,6 +64,14 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
         .from("upwork_actions")
         .select(ACTION_COLS)
         .order("demande_at", { ascending: false }),
+      supabase
+        .from("upwork_campagnes")
+        .select(CAMPAGNE_COLS)
+        .order("lance_at", { ascending: false }),
+      supabase
+        .from("upwork_candidats")
+        .select(CANDIDAT_COLS)
+        .order("propose_at", { ascending: false }),
     ]);
   if (syncRes.error) throw syncRes.error;
   if (missionsRes.error) throw missionsRes.error;
@@ -55,6 +79,8 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
   if (alertesRes.error) throw alertesRes.error;
   if (approchesRes.error) throw approchesRes.error;
   if (actionsRes.error) throw actionsRes.error;
+  if (campagnesRes.error) throw campagnesRes.error;
+  if (candidatsRes.error) throw candidatsRes.error;
 
   return {
     sync: (syncRes.data as UpworkSync | null) ?? null,
@@ -63,7 +89,35 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
     alertes: (alertesRes.data ?? []) as UpworkAlerte[],
     approches: (approchesRes.data ?? []) as UpworkApproche[],
     actions: (actionsRes.data ?? []) as UpworkAction[],
+    campagnes: (campagnesRes.data ?? []) as UpworkCampagne[],
+    candidats: (candidatsRes.data ?? []) as UpworkCandidat[],
   };
+}
+
+/** Lance le recrutement HM d'un pays : l'OS pose l'état, l'agent exécute. */
+export async function lancerCampagneHm(
+  langue: string,
+  paysNom: string,
+  delaiH = 10,
+): Promise<void> {
+  const { error } = await supabase.rpc("upwork_campagne_lancer", {
+    p_langue: langue,
+    p_pays_nom: paysNom,
+    p_objectif: 1,
+    p_delai_h: delaiH,
+  });
+  if (error) throw error;
+}
+
+export async function arreterCampagneHm(id: string): Promise<void> {
+  const { error } = await supabase.rpc("upwork_campagne_arreter", { p_id: id });
+  if (error) throw error;
+}
+
+/** Sans décision avant l'échéance, le profil part quand même. */
+export async function deciderCandidat(id: string, ok: boolean): Promise<void> {
+  const { error } = await supabase.rpc("upwork_candidat_decider", { p_id: id, p_ok: ok });
+  if (error) throw error;
 }
 
 /** Seule case cochée à la main : « ajoutée à mon compte Upwork ». */

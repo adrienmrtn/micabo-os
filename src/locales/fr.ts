@@ -2221,6 +2221,36 @@ export const fr = {
       actionDepuis: "demandé le {{date}}",
       action: {
         arreter_recrutement: "Arrêter le recrutement",
+        publier_job_hm: "publier le job HM",
+        sourcer_hm: "sélectionner des profils",
+        inviter_hm: "envoyer les invitations",
+      },
+      campagneLancer: "Lancer le recrutement HM",
+      campagneArreter: "Arrêter la campagne",
+      campagneActive: "Campagne en cours",
+      campagneAbsente:
+        "Aucune campagne sur {{pays}}. Lancer publie le job, sélectionne des profils et invite en boucle.",
+      campagneProchaine: "Prochain passage de l’agent : {{etape}}.",
+      campagneAttente:
+        "{{n}} profil(s) attendent ta validation — l’agent reprend ensuite tout seul.",
+      campagneTerminee: "Campagne terminée : le HM est recruté.",
+      campagneArretee: "Campagne arrêtée.",
+      campagneConfirm:
+        "Lancer le recrutement HM sur {{pays}} ?\n\nAu prochain passage l’agent publiera le job si besoin, puis te proposera des profils à valider avant toute invitation.",
+      candidatsAValider: "{{n}} profil(s) à valider",
+      candidatsAide:
+        "Sans réponse de ta part sous {{h}} h, ils sont invités automatiquement au passage suivant.",
+      candidatsDecides: "{{n}} profil(s) déjà tranchés",
+      candidatValider: "Valider",
+      candidatRefuser: "Refuser",
+      candidatAuto: "validé par le délai",
+      autoDans: "invitation auto dans {{h}} h",
+      autoMaintenant: "part au prochain passage",
+      candidatStatut: {
+        propose: "à valider",
+        valide: "validé",
+        refuse: "refusé",
+        invite: "invité",
       },
       promptsTitre: "Prompts prêts pour l’agent",
       promptsVide: "Aucune action en attente.",

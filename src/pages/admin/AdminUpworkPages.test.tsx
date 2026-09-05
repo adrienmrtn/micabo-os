@@ -113,6 +113,7 @@ const dash: UpworkDashboard = {
     {
       id: "act-1",
       type: "arreter_recrutement",
+      campagne_id: null,
       upwork_proposal_id: "p2",
       cible_nom: "Arisoa Estelle Rajaobelina",
       cible_role: "createur",
@@ -123,6 +124,64 @@ const dash: UpworkDashboard = {
       demande_at: "2026-09-05T10:00:00Z",
       fait_at: null,
       resultat: null,
+    },
+  ],
+  campagnes: [
+    {
+      id: "camp-fr",
+      langue: "fr",
+      pays_nom: "France",
+      role_cible: "hm",
+      statut: "active",
+      job_posting_id: "job-fr-hm",
+      objectif_hm: 1,
+      profils_par_passage: 10,
+      delai_validation_h: 10,
+      lance_at: "2026-09-05T09:00:00Z",
+      job_publie_at: "2026-09-01T00:00:00Z",
+      fin_at: null,
+      detail: null,
+    },
+  ],
+  candidats: [
+    {
+      id: "cand-1",
+      campagne_id: "camp-fr",
+      upwork_person_id: "99",
+      nom: "Lina Moreau",
+      titre_profil: "Recruteuse freelance",
+      photo_url: null,
+      upwork_profile_url: "https://www.upwork.com/freelancers/~99",
+      pays: "France",
+      taux_horaire: 12,
+      job_success: 96,
+      pourquoi: "A déjà monté des équipes de créateurs.",
+      statut: "propose",
+      auto_valide: false,
+      propose_at: "2026-09-05T09:05:00Z",
+      // Loin dans le futur : le compte à rebours doit rester lisible.
+      echeance_at: "2099-01-01T00:00:00Z",
+      decide_at: null,
+      invite_at: null,
+    },
+    {
+      id: "cand-2",
+      campagne_id: "camp-fr",
+      upwork_person_id: "98",
+      nom: "Hugo Petit",
+      titre_profil: null,
+      photo_url: null,
+      upwork_profile_url: null,
+      pays: "France",
+      taux_horaire: null,
+      job_success: null,
+      pourquoi: null,
+      statut: "invite",
+      auto_valide: true,
+      propose_at: "2026-09-04T09:05:00Z",
+      echeance_at: "2026-09-04T19:05:00Z",
+      decide_at: "2026-09-04T19:10:00Z",
+      invite_at: "2026-09-04T19:10:00Z",
     },
   ],
   approches: [
@@ -218,6 +277,9 @@ vi.mock("@/features/upwork/api", () => ({
   marquerAjoutUpwork: vi.fn(async () => undefined),
   creerActionUpwork: vi.fn(async () => undefined),
   annulerActionUpwork: vi.fn(async () => undefined),
+  lancerCampagneHm: vi.fn(async () => undefined),
+  arreterCampagneHm: vi.fn(async () => undefined),
+  deciderCandidat: vi.fn(async () => undefined),
 }));
 
 function wrap(path: string) {
@@ -292,6 +354,26 @@ describe("pages Upwork", () => {
 
     // Rose n'a pas le job du pays : Sara le garde.
     expect(screen.getByText(/Après le job créateurs/)).toBeInTheDocument();
+  });
+
+  it("page France : bloc jobs HM avec profils à valider", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork/fr");
+    expect(await screen.findByText("Job posts HM")).toBeInTheDocument();
+    expect(screen.getByText("Campagne en cours")).toBeInTheDocument();
+
+    // Un profil attend une décision, avec son compte à rebours.
+    expect(screen.getByText("1 profil(s) à valider")).toBeInTheDocument();
+    expect(screen.getByText("Lina Moreau")).toBeInTheDocument();
+    expect(screen.getByText("A déjà monté des équipes de créateurs.")).toBeInTheDocument();
+    expect(screen.getByText(/invitation auto dans/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /valider/i })).toBeInTheDocument();
+
+    // Ceux déjà tranchés restent repliés.
+    expect(screen.queryByText("Hugo Petit")).not.toBeInTheDocument();
+    toutDeplier();
+    expect(screen.getByText("Hugo Petit")).toBeInTheDocument();
+    expect(screen.getByText("validé par le délai")).toBeInTheDocument();
   });
 
   it("page France : « onboarding » a disparu de la chaîne", async () => {

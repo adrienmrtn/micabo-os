@@ -75,8 +75,32 @@ Pas d'« onboarding » nulle part.
 - Org figé : `1990051114607612379` (Micabo). `list_accounts` d’abord ;
   si l’org n’est pas celle-là → stop. Jamais Maximilien / VIk Studios.
 - Writes Upwork (poster, message, offre) : **cette convo** + confirm
-  explicite. Pas de cron Supabase.
+  explicite, **ou** une action de la file écrite depuis l’OS par l’admin.
+  Rien d’autre. Pas de cron Supabase.
 - Sync vers l’OS : Automation Cursor **toutes les 2 h** (pas `pg_cron`).
+
+### Campagne de recrutement HM (un pays)
+
+L’admin clique « Lancer le recrutement HM » sur `/admin/upwork/:langue`.
+Ce clic **est** la validation humaine : il est tracé
+(`upwork_campagnes.lance_par` / `lance_at`). L’OS n’appelle jamais Upwork,
+il pose l’état ; `upwork_campagnes_planifier()` en déduit la prochaine
+action et la met dans la file. Une seule action de campagne à la fois.
+
+    pas de job                    → publier_job_hm
+    job publié, rien en attente   → sourcer_hm  (find_freelancers smart_search)
+    des profils prêts             → inviter_hm  (invite_freelancer)
+    un HM embauché sur le pays    → campagne terminée, file purgée
+    job plus PUBLISHED            → campagne en pause
+
+`sourcer_hm` **n’invite personne** : il écrit des recommandations dans
+`upwork_candidats`. L’admin valide ou refuse dans l’OS. Sans réponse
+sous `delai_validation_h` (10 h par défaut), le profil devient invitable
+tout seul — c’est évalué à la lecture par `upwork_candidats_a_inviter()`,
+donc **aucun cron** n’est nécessaire, le passage 2 h suffit.
+
+Dès qu’une personne répond, le sync la crée dans `upwork_approches` et
+elle rejoint la chaîne HM classique. Rien de spécial à faire.
 
 ### Sweep 2 h (Automation Cursor)
 
@@ -112,6 +136,9 @@ Upwork + Supabase + Slack, projet `qkmiwnmiwsvwkttldqgb`) :
    `prompt` **tel quel**, puis
    `select public.upwork_action_terminer('<id>', '<résumé>')`.
    Rien à inventer, le prompt contient déjà la cible et les garde-fous.
+   Cet appel replanifie les campagnes : c'est le seul point d'entrée.
+   Terminer une action de campagne débloque la suivante au même passage,
+   donc **relire la file** après chaque `upwork_action_terminer`.
 8. Ne **rien** envoyer d'autre. Pas de draft. Stop si hors Micabo.
 
 Mettre en place l’Automation : Cursor → Automations → New → repo
