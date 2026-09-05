@@ -10,6 +10,7 @@ import { chargerUpworkDashboard } from "@/features/upwork/api";
 import { nomPays } from "@/features/upwork/pipeline";
 import {
   approchesDuJob,
+  jobCreateurPourHm,
   langueCle,
   missionOuverte,
   opportunitesEnCours,
@@ -394,9 +395,7 @@ export function AdminUpworkPaysPage() {
           ) : (
             <div className="space-y-4">
               {hms.map((hm) => {
-                const jobCrea =
-                  jobsCrea.find((j) => j.job_posting_id === hm.job_createur_id) ??
-                  (hm.statut === "hired" ? jobsCrea[0] ?? null : null);
+                const jobCrea = jobCreateurPourHm(hm, jobsCrea, hms, d.contrats ?? []);
                 const approchesCrea = jobCrea
                   ? approchesDuJob(approches, jobCrea.job_posting_id)
                   : [];
@@ -406,11 +405,9 @@ export function AdminUpworkPaysPage() {
                 return (
                   <VieHm
                     key={hm.id}
-                    hm={hm}
-                    jobCrea={hm.job_createur_id || hm.statut === "hired" ? jobCrea : null}
-                    approchesCrea={
-                      hm.job_createur_id || hm.statut === "hired" ? approchesCrea : []
-                    }
+                    hm={{ ...hm, job_createur_id: jobCrea?.job_posting_id ?? null }}
+                    jobCrea={jobCrea}
+                    approchesCrea={approchesCrea}
                     createursN={contrat?.createurs_n ?? 0}
                   />
                 );
