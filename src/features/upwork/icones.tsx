@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  AtSign,
   Briefcase,
   Check,
   Circle,
@@ -21,7 +22,7 @@ import {
   Users,
 } from "lucide-react";
 
-import type { EtapeTimelineCle, TimelineCheck } from "./timeline";
+import type { EtapeTimelineCle, SourceVerite, TimelineCheck } from "./timeline";
 
 export const ICONE_KPI = {
   hm: UserRoundCog,
@@ -41,9 +42,10 @@ export const ICONE_ETAPE: Record<EtapeTimelineCle, LucideIcon> = {
   pourparlers: MessagesSquare,
   contrat_envoye: FileUp,
   contrat_signe: FileCheck2,
-  onboarding_envoi: KeyRound,
-  onboarding_rejoint: ClipboardCheck,
+  acces_envoyes: KeyRound,
+  integration: ClipboardCheck,
   job_createur_poste: Clapperboard,
+  tiktok_cree: AtSign,
   warmup: Flame,
   premier_post: ImagePlay,
 };
@@ -52,6 +54,14 @@ export const ICONE_CHECK: Record<TimelineCheck["cle"], LucideIcon> = {
   os: Monitor,
   slack: Hash,
   upwork: UserPlus,
+};
+
+/** Rappelle d'où vient l'info : OS, Slack MCP, Upwork, ou coche admin. */
+export const ICONE_SOURCE: Record<SourceVerite, LucideIcon> = {
+  os: Monitor,
+  slack: Hash,
+  upwork: Briefcase,
+  admin: UserPlus,
 };
 
 export function IconeEtat({ ok, className }: { ok: boolean; className?: string }) {

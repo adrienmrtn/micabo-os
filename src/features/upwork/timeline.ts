@@ -3,8 +3,8 @@ export const ETAPES_TIMELINE_HM = [
   "pourparlers",
   "contrat_envoye",
   "contrat_signe",
-  "onboarding_envoi",
-  "onboarding_rejoint",
+  "acces_envoyes",
+  "integration",
   "job_createur_poste",
 ] as const;
 
@@ -13,8 +13,9 @@ export const ETAPES_TIMELINE_CREATEUR = [
   "pourparlers",
   "contrat_envoye",
   "contrat_signe",
-  "onboarding_envoi",
-  "onboarding_rejoint",
+  "acces_envoyes",
+  "integration",
+  "tiktok_cree",
   "warmup",
   "premier_post",
 ] as const;
@@ -23,15 +24,21 @@ export type EtapeTimelineHm = (typeof ETAPES_TIMELINE_HM)[number];
 export type EtapeTimelineCreateur = (typeof ETAPES_TIMELINE_CREATEUR)[number];
 export type EtapeTimelineCle = EtapeTimelineHm | EtapeTimelineCreateur;
 
+/** Qui dit vrai sur une case : l'OS, Slack, ou l'admin qui coche à la main. */
+export type SourceVerite = "os" | "slack" | "admin" | "upwork";
+
 export type TimelineCheck = {
   cle: "os" | "slack" | "upwork";
   ok: boolean;
+  source: SourceVerite;
 };
 
 export type TimelineEtape = {
   cle: EtapeTimelineCle;
   ok: boolean;
+  source: SourceVerite;
   resume?: string | null;
+  detail?: string | null;
   checks?: TimelineCheck[];
 };
 
@@ -48,6 +55,8 @@ export type FaitsApproche = {
   slack_ok: boolean;
   upwork_ajoute_ok: boolean;
   job_createur_poste: boolean;
+  tiktok_cree_ok: boolean;
+  tiktok_handle: string | null;
   warmup_actif: boolean;
   premier_post_ok: boolean;
 };
@@ -59,42 +68,50 @@ function aParle(f: FaitsApproche): boolean {
 export function timelineHm(f: FaitsApproche): TimelineEtape[] {
   const envoiOk = f.slack_envoye_ok && f.email_demande_ok && f.codes_ok;
   return [
-    { cle: "contacte", ok: true },
-    { cle: "pourparlers", ok: aParle(f), resume: f.resume_discussions },
-    { cle: "contrat_envoye", ok: f.contrat_envoye_ok },
-    { cle: "contrat_signe", ok: f.contrat_signe_ok },
-    { cle: "onboarding_envoi", ok: envoiOk },
+    { cle: "contacte", ok: true, source: "upwork" },
+    { cle: "pourparlers", ok: aParle(f), source: "upwork", resume: f.resume_discussions },
+    { cle: "contrat_envoye", ok: f.contrat_envoye_ok, source: "upwork" },
+    { cle: "contrat_signe", ok: f.contrat_signe_ok, source: "upwork" },
+    { cle: "acces_envoyes", ok: envoiOk, source: "upwork" },
     {
-      cle: "onboarding_rejoint",
+      cle: "integration",
       ok: f.os_ok && f.slack_ok && f.upwork_ajoute_ok,
+      source: "os",
       checks: [
-        { cle: "os", ok: f.os_ok },
-        { cle: "slack", ok: f.slack_ok },
-        { cle: "upwork", ok: f.upwork_ajoute_ok },
+        { cle: "os", ok: f.os_ok, source: "os" },
+        { cle: "slack", ok: f.slack_ok, source: "slack" },
+        { cle: "upwork", ok: f.upwork_ajoute_ok, source: "admin" },
       ],
     },
-    { cle: "job_createur_poste", ok: f.job_createur_poste },
+    { cle: "job_createur_poste", ok: f.job_createur_poste, source: "upwork" },
   ];
 }
 
 export function timelineCreateur(f: FaitsApproche): TimelineEtape[] {
   const envoiOk = f.slack_envoye_ok && f.codes_ok;
   return [
-    { cle: "contacte", ok: true },
-    { cle: "pourparlers", ok: aParle(f), resume: f.resume_discussions },
-    { cle: "contrat_envoye", ok: f.contrat_envoye_ok },
-    { cle: "contrat_signe", ok: f.contrat_signe_ok },
-    { cle: "onboarding_envoi", ok: envoiOk },
+    { cle: "contacte", ok: true, source: "upwork" },
+    { cle: "pourparlers", ok: aParle(f), source: "upwork", resume: f.resume_discussions },
+    { cle: "contrat_envoye", ok: f.contrat_envoye_ok, source: "upwork" },
+    { cle: "contrat_signe", ok: f.contrat_signe_ok, source: "upwork" },
+    { cle: "acces_envoyes", ok: envoiOk, source: "upwork" },
     {
-      cle: "onboarding_rejoint",
+      cle: "integration",
       ok: f.os_ok && f.slack_ok,
+      source: "os",
       checks: [
-        { cle: "os", ok: f.os_ok },
-        { cle: "slack", ok: f.slack_ok },
+        { cle: "os", ok: f.os_ok, source: "os" },
+        { cle: "slack", ok: f.slack_ok, source: "slack" },
       ],
     },
-    { cle: "warmup", ok: f.warmup_actif },
-    { cle: "premier_post", ok: f.premier_post_ok },
+    {
+      cle: "tiktok_cree",
+      ok: f.tiktok_cree_ok,
+      source: "os",
+      detail: f.tiktok_handle ? `@${f.tiktok_handle.replace(/^@/, "")}` : null,
+    },
+    { cle: "warmup", ok: f.warmup_actif, source: "os" },
+    { cle: "premier_post", ok: f.premier_post_ok, source: "os" },
   ];
 }
 
@@ -105,6 +122,11 @@ export function timelinePour(f: FaitsApproche): TimelineEtape[] {
 export function etapeCouranteTimeline(etapes: TimelineEtape[]): EtapeTimelineCle {
   const prochaine = etapes.find((e) => !e.ok);
   return prochaine?.cle ?? etapes[etapes.length - 1]!.cle;
+}
+
+/** Combien d'étapes franchies : ce qu'on lit avant de déplier. */
+export function avancement(etapes: TimelineEtape[]): { faites: number; total: number } {
+  return { faites: etapes.filter((e) => e.ok).length, total: etapes.length };
 }
 
 export function nettoyerResume(texte: string | null | undefined, max = 280): string | null {
@@ -140,6 +162,8 @@ export function faitsDepuisApproche(a: {
   slack_ok: boolean;
   upwork_ajoute_ok: boolean;
   job_createur_id?: string | null;
+  tiktok_cree_ok?: boolean;
+  tiktok_handle?: string | null;
   warmup_actif: boolean;
   premier_post_ok: boolean;
 }): FaitsApproche {
@@ -156,6 +180,8 @@ export function faitsDepuisApproche(a: {
     slack_ok: a.slack_ok,
     upwork_ajoute_ok: a.upwork_ajoute_ok,
     job_createur_poste: Boolean(a.job_createur_id),
+    tiktok_cree_ok: Boolean(a.tiktok_cree_ok),
+    tiktok_handle: a.tiktok_handle ?? null,
     warmup_actif: a.warmup_actif,
     premier_post_ok: a.premier_post_ok,
   };

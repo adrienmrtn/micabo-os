@@ -1,12 +1,21 @@
 import type { ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Briefcase, ChevronRight, ExternalLink } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Briefcase, ExternalLink, OctagonX } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link, Navigate, useParams } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { drapeauLangue } from "@/features/moteur/langues";
-import { chargerUpworkDashboard } from "@/features/upwork/api";
+import {
+  annulerActionUpwork,
+  chargerUpworkDashboard,
+  creerActionUpwork,
+  marquerAjoutUpwork,
+} from "@/features/upwork/api";
+import { Deroule, Jauge, Repliable, ResumeEtape } from "@/features/upwork/Deroule";
 import { nomPays } from "@/features/upwork/pipeline";
 import {
   approchesDuJob,
@@ -16,17 +25,16 @@ import {
   opportunitesEnCours,
   totauxUpwork,
 } from "@/features/upwork/totaux";
-import { ICONE_CHECK, ICONE_ETAPE, ICONE_KPI, ICONE_PHASE, IconeEtat } from "@/features/upwork/icones";
+import { ICONE_KPI } from "@/features/upwork/icones";
 import {
   OBJECTIF_CREATEURS,
-  etapeCouranteTimeline,
+  avancement,
   faitsDepuisApproche,
   phase1Terminee,
   timelineCreateur,
   timelineHm,
-  type TimelineEtape,
 } from "@/features/upwork/timeline";
-import type { UpworkApproche, UpworkMission } from "@/features/upwork/types";
+import type { UpworkAction, UpworkApproche, UpworkMission } from "@/features/upwork/types";
 import { cn } from "@/lib/utils";
 
 function Total({
@@ -39,12 +47,10 @@ function Total({
   icone: typeof ICONE_KPI.hm;
 }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <p className="mb-1 text-muted-foreground">
-        <Icone className="size-4" aria-hidden />
-      </p>
-      <p className="text-2xl font-semibold tabular-nums">{valeur}</p>
-      <p className="text-sm text-muted-foreground">{label}</p>
+    <div className="rounded-xl border bg-card p-4">
+      <Icone className="mb-2 size-4 text-muted-foreground" aria-hidden />
+      <p className="font-semibold text-2xl tabular-nums">{valeur}</p>
+      <p className="text-muted-foreground text-sm">{label}</p>
     </div>
   );
 }
@@ -67,7 +73,7 @@ function Photo({
   url: string | null;
   taille?: "sm" | "md";
 }) {
-  const dim = taille === "sm" ? "size-9 text-[11px]" : "size-12 text-sm";
+  const dim = taille === "sm" ? "size-8 text-[11px]" : "size-10 text-xs";
   if (url) {
     return (
       <img
@@ -92,13 +98,14 @@ function Photo({
 }
 
 function LienUpwork({ url, label }: { url: string | null; label: string }) {
-  if (!url) return <span className="text-sm text-muted-foreground">{label}</span>;
+  if (!url) return null;
   return (
     <a
       href={url}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center gap-1 text-sm underline-offset-2 hover:underline"
+      className="inline-flex items-center gap-1 text-muted-foreground text-xs underline-offset-2 hover:text-foreground hover:underline"
+      onClick={(e) => e.stopPropagation()}
     >
       {label}
       <ExternalLink className="size-3" />
@@ -106,147 +113,160 @@ function LienUpwork({ url, label }: { url: string | null; label: string }) {
   );
 }
 
-function TimelineHorizontale({
+/** Entête compacte : c'est ce qu'on voit avant de déplier. */
+function EntetePersonne({
+  a,
   etapes,
-  role,
+  taille,
 }: {
-  etapes: TimelineEtape[];
-  role: "hm" | "createur";
+  a: UpworkApproche;
+  etapes: ReturnType<typeof timelineHm>;
+  taille: "sm" | "md";
 }) {
   const { t } = useTranslation();
-  const courante = etapeCouranteTimeline(etapes);
+  const { faites, total } = avancement(etapes);
   return (
-    <ol className="flex items-stretch gap-0 overflow-x-auto pb-1">
-      {etapes.map((e, i) => {
-        const ici = e.cle === courante && !e.ok;
-        const IconeEtape = ICONE_ETAPE[e.cle];
-        const label =
-          e.cle === "onboarding_envoi" && role === "createur"
-            ? t("upwork.timeline.onboarding_envoi_crea")
-            : t(`upwork.timeline.${e.cle}`);
-        return (
-          <li key={e.cle} className="flex shrink-0 items-stretch">
-            {i > 0 && (
-              <span className="flex items-center px-0.5 text-muted-foreground" aria-hidden>
-                <ChevronRight className="size-4" />
-              </span>
-            )}
-            <div
-              className={cn(
-                "flex min-w-[7.5rem] max-w-[11rem] flex-col gap-0.5 rounded-md border px-2 py-1.5 text-xs",
-                e.ok && "border-foreground/30 bg-background/80",
-                ici && "border-foreground bg-background ring-2 ring-foreground",
-                !e.ok && !ici && "border-dashed text-muted-foreground",
-              )}
-            >
-              <span className="inline-flex items-center gap-1 font-medium">
-                <IconeEtat ok={e.ok} className="size-3" />
-                <IconeEtape className="size-3.5 shrink-0" aria-hidden />
-                {label}
-              </span>
-              {e.cle === "pourparlers" && e.resume && (
-                <p className="line-clamp-3 text-[11px] leading-snug text-foreground">{e.resume}</p>
-              )}
-              {e.checks && (
-                <ul className="mt-0.5 space-y-0.5 text-[11px]">
-                  {e.checks.map((c) => {
-                    const IconeCheck = ICONE_CHECK[c.cle];
-                    return (
-                      <li key={c.cle} className="flex items-center gap-1">
-                        <IconeEtat ok={c.ok} className="size-2.5" />
-                        <IconeCheck className="size-3 shrink-0" aria-hidden />
-                        {t(`upwork.timeline.check.${c.cle}`)}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          </li>
-        );
-      })}
-    </ol>
+    <span className="flex items-center gap-3">
+      <Photo nom={a.nom} url={a.photo_url} taille={taille} />
+      <span className="min-w-0 flex-1 space-y-1">
+        <span className="flex flex-wrap items-center gap-2">
+          <span className={cn("font-semibold", taille === "md" ? "text-sm" : "text-sm")}>
+            {a.nom}
+          </span>
+          <Badge variant={a.statut === "hired" ? "success" : "secondary"} size="sm">
+            {a.statut === "hired" ? t("upwork.statutHired") : t("upwork.statutMessaged")}
+          </Badge>
+        </span>
+        <ResumeEtape etapes={etapes} />
+        <Jauge faites={faites} total={total} />
+      </span>
+    </span>
   );
 }
 
-const PHASE = {
-  1: "border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/40",
-  2: "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40",
-  3: "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40",
-} as const;
+/** Une seule case se coche à la main : le reste vient de l'OS, Slack ou Upwork. */
+function CocheAdmin({
+  ok,
+  disabled,
+  onChange,
+}: {
+  ok: boolean;
+  disabled: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <label className="mt-3 flex items-start gap-3 rounded-lg border border-dashed p-3">
+      <Switch checked={ok} disabled={disabled} onCheckedChange={onChange} />
+      <span className="min-w-0">
+        <span className="block font-medium text-sm">{t("upwork.timeline.check.upwork")}</span>
+        <span className="block text-muted-foreground text-xs">{t("upwork.cocheAide")}</span>
+      </span>
+    </label>
+  );
+}
+
+function BoutonArreter({
+  nom,
+  enAttente,
+  disabled,
+  onArreter,
+  onAnnuler,
+}: {
+  nom: string;
+  enAttente: UpworkAction | null;
+  disabled: boolean;
+  onArreter: (note: string | null) => void;
+  onAnnuler: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+
+  if (enAttente) {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <Badge variant="warning" size="sm">
+          {t("upwork.actionEnAttente")}
+        </Badge>
+        <Button variant="ghost" size="xs" disabled={disabled} onClick={() => onAnnuler(enAttente.id)}>
+          {t("upwork.actionAnnuler")}
+        </Button>
+      </span>
+    );
+  }
+
+  return (
+    <Button
+      variant="destructive-outline"
+      size="xs"
+      disabled={disabled}
+      onClick={() => {
+        const note = window.prompt(t("upwork.arreterConfirm", { nom }));
+        if (note === null) return;
+        onArreter(note.trim() || null);
+      }}
+    >
+      <OctagonX className="size-3.5" />
+      {t("upwork.arreter")}
+    </Button>
+  );
+}
+
+function CarteCreateur({
+  a,
+  actions,
+  actionsBloquees,
+  onArreter,
+  onAnnuler,
+}: {
+  a: UpworkApproche;
+  actions: UpworkAction[];
+  actionsBloquees: boolean;
+  onArreter: (proposalId: string, note: string | null) => void;
+  onAnnuler: (id: string) => void;
+}) {
+  const etapes = timelineCreateur(faitsDepuisApproche(a));
+  const enAttente =
+    actions.find((x) => x.upwork_proposal_id === a.upwork_proposal_id && x.statut === "en_attente") ??
+    null;
+
+  return (
+    <div className="rounded-lg border bg-background p-3">
+      <Repliable entete={<EntetePersonne a={a} etapes={etapes} taille="sm" />}>
+        <Deroule etapes={etapes} role="createur" />
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+          <LienUpwork url={a.upwork_profile_url} label="Upwork" />
+          <BoutonArreter
+            nom={a.nom}
+            enAttente={enAttente}
+            disabled={actionsBloquees}
+            onArreter={(note) => onArreter(a.upwork_proposal_id, note)}
+            onAnnuler={onAnnuler}
+          />
+        </div>
+      </Repliable>
+    </div>
+  );
+}
 
 function BandeauPhase({
-  n,
   titre,
   extra,
   children,
   verrouille,
 }: {
-  n: 1 | 2 | 3;
   titre: string;
   extra?: string;
   children: ReactNode;
   verrouille?: boolean;
 }) {
-  const Icone = ICONE_PHASE[n];
   return (
-    <section
-      className={cn(
-        "space-y-3 rounded-lg border p-3",
-        PHASE[n],
-        verrouille && "opacity-60",
-      )}
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="inline-flex items-center gap-1.5 text-sm font-semibold">
-          <Icone className="size-4" aria-hidden />
-          {titre}
-        </h3>
-        {extra && <p className="text-xs tabular-nums text-muted-foreground">{extra}</p>}
+    <section className={cn("rounded-xl border bg-muted/30 p-3", verrouille && "opacity-70")}>
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-semibold text-sm">{titre}</h3>
+        {extra && <p className="text-muted-foreground text-xs tabular-nums">{extra}</p>}
       </div>
       {children}
     </section>
-  );
-}
-
-function EntetePersonne({
-  a,
-  taille,
-}: {
-  a: UpworkApproche;
-  taille: "sm" | "md";
-}) {
-  const { t } = useTranslation();
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Photo nom={a.nom} url={a.photo_url} taille={taille} />
-      <div className="min-w-0">
-        <p className="text-sm font-semibold">{a.nom}</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={a.statut === "hired" ? "success" : "secondary"}>
-            {a.statut === "hired" ? t("upwork.statutHired") : t("upwork.statutMessaged")}
-          </Badge>
-          <LienUpwork url={a.upwork_profile_url} label={t("upwork.lienUpwork")} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CartePersonne({
-  a,
-  role,
-}: {
-  a: UpworkApproche;
-  role: "hm" | "createur";
-}) {
-  const faits = faitsDepuisApproche(a);
-  const etapes = role === "createur" ? timelineCreateur(faits) : timelineHm(faits);
-  return (
-    <div className="space-y-2">
-      <EntetePersonne a={a} taille={role === "hm" ? "md" : "sm"} />
-      <TimelineHorizontale etapes={etapes} role={role} />
-    </div>
   );
 }
 
@@ -255,67 +275,119 @@ function VieHm({
   jobCrea,
   approchesCrea,
   createursN,
+  actions,
+  actionsBloquees,
+  onArreter,
+  onAnnuler,
+  onToggleUpwork,
 }: {
   hm: UpworkApproche;
   jobCrea: UpworkMission | null;
   approchesCrea: UpworkApproche[];
   createursN: number;
+  actions: UpworkAction[];
+  actionsBloquees: boolean;
+  onArreter: (proposalId: string, note: string | null) => void;
+  onAnnuler: (id: string) => void;
+  onToggleUpwork: (proposalId: string, ok: boolean) => void;
 }) {
   const { t } = useTranslation();
   const faits = faitsDepuisApproche(hm);
+  const etapes = timelineHm(faits);
   const p1ok = phase1Terminee(faits);
   const embauches = approchesCrea.filter((a) => a.statut === "hired").length;
   const n = Math.max(createursN, embauches);
   const opp = jobCrea ? opportunitesEnCours(approchesCrea, jobCrea.job_posting_id) : 0;
+  const enAttente =
+    actions.find(
+      (x) => x.upwork_proposal_id === hm.upwork_proposal_id && x.statut === "en_attente",
+    ) ?? null;
 
   return (
-    <article className="space-y-3 rounded-xl border bg-card p-4">
-      <EntetePersonne a={hm} taille="md" />
+    <Card>
+      <CardContent className="space-y-3 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <Repliable entete={<EntetePersonne a={hm} etapes={etapes} taille="md" />}>
+              <BandeauPhase titre={t("upwork.phase1")}>
+                <Deroule etapes={etapes} role="hm" />
+                <CocheAdmin
+                  ok={hm.upwork_ajoute_ok}
+                  disabled={actionsBloquees}
+                  onChange={(v) => onToggleUpwork(hm.upwork_proposal_id, v)}
+                />
+              </BandeauPhase>
+            </Repliable>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <LienUpwork url={hm.upwork_profile_url} label={t("upwork.lienUpwork")} />
+            <BoutonArreter
+              nom={hm.nom}
+              enAttente={enAttente}
+              disabled={actionsBloquees}
+              onArreter={(note) => onArreter(hm.upwork_proposal_id, note)}
+              onAnnuler={onAnnuler}
+            />
+          </div>
+        </div>
 
-      <BandeauPhase n={1} titre={t("upwork.phase1")}>
-        <TimelineHorizontale etapes={timelineHm(faits)} role="hm" />
-      </BandeauPhase>
-
-      <BandeauPhase
-        n={2}
-        titre={t("upwork.phase2")}
-        extra={t("upwork.phase2Progress", { n, max: OBJECTIF_CREATEURS })}
-        verrouille={!p1ok}
-      >
-        {!p1ok ? (
-          <p className="text-sm text-muted-foreground">{t("upwork.phase2Avant")}</p>
-        ) : (
-          <div className="space-y-3">
-            {jobCrea ? (
-              <div className="space-y-1">
-                <p className="inline-flex items-center gap-1.5 text-sm font-medium">
-                  <Briefcase className="size-3.5" aria-hidden />
-                  {jobCrea.titre}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {t("upwork.statsPost", {
-                    inv: jobCrea.invites_sent,
-                    opp,
-                    appl: jobCrea.applicants,
-                    hired: jobCrea.hired,
-                  })}
-                </p>
-                {jobCrea.job_url && (
-                  <LienUpwork url={jobCrea.job_url} label={t("upwork.lienJob")} />
+        <BandeauPhase
+          titre={t("upwork.phase2")}
+          extra={t("upwork.phase2Progress", { n, max: OBJECTIF_CREATEURS })}
+          verrouille={!p1ok}
+        >
+          {!p1ok ? (
+            <p className="text-muted-foreground text-sm">{t("upwork.phase2Avant")}</p>
+          ) : (
+            <Repliable
+              entete={
+                <span className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+                  <Briefcase className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="truncate font-medium">
+                    {jobCrea?.titre ?? t("upwork.jobCreaVide")}
+                  </span>
+                  <span className="text-muted-foreground text-xs">
+                    {t("upwork.personnesRepondu", { n: approchesCrea.length })}
+                  </span>
+                </span>
+              }
+            >
+              <div className="space-y-3">
+                {jobCrea && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <p className="text-muted-foreground text-xs">
+                      {t("upwork.statsPost", {
+                        inv: jobCrea.invites_sent,
+                        opp,
+                        appl: jobCrea.applicants,
+                        hired: jobCrea.hired,
+                      })}
+                    </p>
+                    <LienUpwork url={jobCrea.job_url} label={t("upwork.lienJob")} />
+                  </div>
+                )}
+                {approchesCrea.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">{t("upwork.approcheVide")}</p>
+                ) : (
+                  <div className="space-y-2">
+                    {approchesCrea.map((a) => (
+                      <CarteCreateur
+                        key={a.id}
+                        a={a}
+                        actions={actions}
+                        actionsBloquees={actionsBloquees}
+                        onArreter={onArreter}
+                        onAnnuler={onAnnuler}
+                      />
+                    ))}
+                  </div>
                 )}
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">{t("upwork.jobCreaVide")}</p>
-            )}
-            {approchesCrea.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("upwork.approcheVide")}</p>
-            ) : (
-              approchesCrea.map((a) => <CartePersonne key={a.id} a={a} role="createur" />)
-            )}
-          </div>
-        )}
-      </BandeauPhase>
-    </article>
+            </Repliable>
+          )}
+        </BandeauPhase>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -323,10 +395,29 @@ export function AdminUpworkPaysPage() {
   const { t, i18n } = useTranslation();
   const { langue: raw } = useParams();
   const langue = (raw ?? "").toLowerCase();
+  const queryClient = useQueryClient();
 
   const dash = useQuery({
     queryKey: ["upwork-dashboard"],
     queryFn: chargerUpworkDashboard,
+  });
+
+  const rafraichir = () => queryClient.invalidateQueries({ queryKey: ["upwork-dashboard"] });
+
+  const basculerUpwork = useMutation({
+    mutationFn: (v: { proposalId: string; ok: boolean }) => marquerAjoutUpwork(v.proposalId, v.ok),
+    onSuccess: rafraichir,
+  });
+
+  const arreter = useMutation({
+    mutationFn: (v: { proposalId: string; note: string | null }) =>
+      creerActionUpwork("arreter_recrutement", v.proposalId, v.note ?? undefined),
+    onSuccess: rafraichir,
+  });
+
+  const annuler = useMutation({
+    mutationFn: (id: string) => annulerActionUpwork(id),
+    onSuccess: rafraichir,
   });
 
   if (!/^[a-z]{2}$/.test(langue)) {
@@ -342,32 +433,37 @@ export function AdminUpworkPaysPage() {
   const jobsHm = jobs.filter((m) => m.famille === "hm");
   const jobsCrea = jobs.filter((m) => m.famille === "createur");
   const approches = d?.approches ?? [];
+  const actions = d?.actions ?? [];
   const hms = jobsHm
     .flatMap((j) => approchesDuJob(approches, j.job_posting_id))
     .filter((a) => a.role === "hm");
+
+  const enCours = basculerUpwork.isPending || arreter.isPending || annuler.isPending;
+  const erreur = (basculerUpwork.error ?? arreter.error ?? annuler.error) as Error | null;
 
   return (
     <div className="space-y-6">
       <div>
         <Link
           to="/admin/upwork"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
         >
           <ArrowLeft className="size-3.5" />
           {t("upwork.retourDash")}
         </Link>
-        <h1 className="mt-2 flex items-center gap-2 text-lg font-semibold tracking-tight">
+        <h1 className="mt-2 flex items-center gap-2 font-semibold text-lg tracking-tight">
           <span aria-hidden>{drapeauLangue(langue)}</span>
           {nomPays(langue, i18n.language)}
         </h1>
       </div>
 
-      {dash.isPending && <p className="text-sm text-muted-foreground">{t("common.loading")}</p>}
+      {dash.isPending && <p className="text-muted-foreground text-sm">{t("common.loading")}</p>}
       {dash.isError && (
-        <p className="text-sm text-destructive">
+        <p className="text-destructive text-sm">
           {(dash.error as Error).message || t("common.error")}
         </p>
       )}
+      {erreur && <p className="text-destructive text-sm">{erreur.message}</p>}
 
       {d && (
         <>
@@ -391,9 +487,9 @@ export function AdminUpworkPaysPage() {
           </div>
 
           {hms.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("upwork.approcheVide")}</p>
+            <p className="text-muted-foreground text-sm">{t("upwork.approcheVide")}</p>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {hms.map((hm) => {
                 const jobCrea = jobCreateurPourHm(hm, jobsCrea, hms, d.contrats ?? []);
                 const approchesCrea = jobCrea
@@ -409,6 +505,11 @@ export function AdminUpworkPaysPage() {
                     jobCrea={jobCrea}
                     approchesCrea={approchesCrea}
                     createursN={contrat?.createurs_n ?? 0}
+                    actions={actions}
+                    actionsBloquees={enCours}
+                    onArreter={(proposalId, note) => arreter.mutate({ proposalId, note })}
+                    onAnnuler={(id) => annuler.mutate(id)}
+                    onToggleUpwork={(proposalId, ok) => basculerUpwork.mutate({ proposalId, ok })}
                   />
                 );
               })}

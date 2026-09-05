@@ -43,11 +43,34 @@ après un test manuel.
 
 ## Upwork (Micabo seulement)
 
-Le dashboard OS `/admin/upwork` est **lecture seule**.
-Page globale : HM, créateurs, jobs HM ouverts (par pays), jobs créateurs
-ouverts (par pays). Dive `/admin/upwork/:langue` : mini-dashboard +
-timeline **par personne qui a répondu** (HM puis jobs créateurs).
+Le dashboard OS `/admin/upwork` est **lecture seule sur Upwork** : les
+seules écritures OS sont la coche admin et la file d'actions ci-dessous.
+Page globale : dernier passage de l'agent, prompts prêts, HM, créateurs,
+jobs HM ouverts (par pays), jobs créateurs ouverts (par pays). Dive
+`/admin/upwork/:langue` : mini-dashboard + timeline **par personne qui a
+répondu** (HM puis jobs créateurs), tout replié par défaut.
 Missions **PUBLISHED seulement**. Aucun envoi.
+
+### Qui dit vrai sur une case
+
+| Case | Source | Qui l'écrit |
+| --- | --- | --- |
+| `os_ok` (« rejoint l'OS ») | OS | dérivé SQL : `auth.users.last_sign_in_at` |
+| `tiktok_cree_ok` (« compte TikTok créé ») | OS | dérivé SQL : `comptes.handle_tiktok` |
+| `slack_ok` (« rejoint Slack ») | Slack MCP | payload du sweep |
+| `upwork_ajoute_ok` | admin | coche dans l'OS, jamais le sweep |
+
+`os_ok` et `tiktok_cree_ok` sont recalculés par le trigger
+`upwork_approches_relier_os` après chaque insert : **ne pas** les mettre
+dans le payload, ils seraient écrasés. Pas de clé Apify ici, tout vient
+de l'OS. `upwork_ajoute_ok` est conservé dans `upwork_admin_flags` et
+réappliqué après le wipe du sync.
+
+Chaîne HM : contacté → pourparlers → contrat envoyé → contrat signé →
+accès envoyés → a rejoint (OS + Slack + Upwork) → job créateurs posté.
+Chaîne créateur : … → accès envoyés → a rejoint (OS + Slack) →
+**compte TikTok créé** → warmup actif → premier post.
+Pas d'« onboarding » nulle part.
 
 - Org figé : `1990051114607612379` (Micabo). `list_accounts` d’abord ;
   si l’org n’est pas celle-là → stop. Jamais Maximilien / VIk Studios.
@@ -83,7 +106,13 @@ Upwork + Supabase + Slack, projet `qkmiwnmiwsvwkttldqgb`) :
    flags contrat / Slack / OS / warmup / premier_post ;
    `job_createur_id` = le job créateurs **de ce HM**, jamais le job
    du pays — un post = un HM).
-7. Ne **rien** envoyer. Pas de draft. Stop si hors Micabo.
+   Ne pas envoyer `os_ok`, `tiktok_cree_ok` ni `upwork_ajoute_ok` :
+   l'OS les recalcule seul.
+7. `select * from public.upwork_actions_en_attente()` : exécuter chaque
+   `prompt` **tel quel**, puis
+   `select public.upwork_action_terminer('<id>', '<résumé>')`.
+   Rien à inventer, le prompt contient déjà la cible et les garde-fous.
+8. Ne **rien** envoyer d'autre. Pas de draft. Stop si hors Micabo.
 
 Mettre en place l’Automation : Cursor → Automations → New → repo
 `adrienmrtn/micabo-os` → trigger cron `0 */2 * * *` → coller le sweep

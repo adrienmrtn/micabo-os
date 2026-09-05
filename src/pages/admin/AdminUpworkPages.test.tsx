@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -109,6 +109,22 @@ const dash: UpworkDashboard = {
     },
   ],
   alertes: [],
+  actions: [
+    {
+      id: "act-1",
+      type: "arreter_recrutement",
+      upwork_proposal_id: "p2",
+      cible_nom: "Arisoa Estelle Rajaobelina",
+      cible_role: "createur",
+      langue: "fr",
+      prompt: "Arrête le recrutement de Arisoa Estelle Rajaobelina (createur fr).",
+      note: null,
+      statut: "en_attente",
+      demande_at: "2026-09-05T10:00:00Z",
+      fait_at: null,
+      resultat: null,
+    },
+  ],
   approches: [
     {
       id: "a-sara",
@@ -131,6 +147,9 @@ const dash: UpworkDashboard = {
       slack_ok: true,
       upwork_ajoute_ok: true,
       job_createur_id: "job-fr-cr",
+      profile_id: "p-sara",
+      tiktok_cree_ok: false,
+      tiktok_handle: null,
       warmup_actif: false,
       premier_post_ok: false,
       synced_at: "2026-09-04T12:00:00Z",
@@ -156,6 +175,9 @@ const dash: UpworkDashboard = {
       slack_ok: false,
       upwork_ajoute_ok: true,
       job_createur_id: "job-fr-cr",
+      profile_id: "p-rose",
+      tiktok_cree_ok: false,
+      tiktok_handle: null,
       warmup_actif: false,
       premier_post_ok: false,
       synced_at: "2026-09-04T12:00:00Z",
@@ -181,6 +203,9 @@ const dash: UpworkDashboard = {
       slack_ok: false,
       upwork_ajoute_ok: false,
       job_createur_id: null,
+      profile_id: null,
+      tiktok_cree_ok: false,
+      tiktok_handle: null,
       warmup_actif: false,
       premier_post_ok: false,
       synced_at: "2026-09-04T12:00:00Z",
@@ -190,6 +215,9 @@ const dash: UpworkDashboard = {
 
 vi.mock("@/features/upwork/api", () => ({
   chargerUpworkDashboard: vi.fn(async () => dash),
+  marquerAjoutUpwork: vi.fn(async () => undefined),
+  creerActionUpwork: vi.fn(async () => undefined),
+  annulerActionUpwork: vi.fn(async () => undefined),
 }));
 
 function wrap(path: string) {
@@ -206,6 +234,15 @@ function wrap(path: string) {
   );
 }
 
+/** Déplie tout ce qui est repliable, de proche en proche. */
+function toutDeplier() {
+  for (let garde = 0; garde < 12; garde += 1) {
+    const bouton = screen.queryAllByRole("button", { name: /voir le déroulé/i })[0];
+    if (!bouton) return;
+    fireEvent.click(bouton);
+  }
+}
+
 describe("pages Upwork", () => {
   it("dashboard : 4 KPI + lien vers un pays", async () => {
     await i18n.changeLanguage("fr");
@@ -215,18 +252,53 @@ describe("pages Upwork", () => {
     expect(screen.getByText("Créateurs")).toBeInTheDocument();
   });
 
-  it("page France : timelines HM et créateur", async () => {
+  it("dashboard : dernier passage de l’agent et prompts en attente", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork");
+    expect(await screen.findByText("Dernier passage de l’agent")).toBeInTheDocument();
+    expect(screen.getByText("Prompts prêts pour l’agent")).toBeInTheDocument();
+    expect(screen.getByText("Arisoa Estelle Rajaobelina")).toBeInTheDocument();
+
+    // Le prompt lui-même reste caché tant qu'on n'a pas déplié.
+    expect(screen.queryByText(/Arrête le recrutement de/)).not.toBeInTheDocument();
+    toutDeplier();
+    expect(screen.getByText(/Arrête le recrutement de/)).toBeInTheDocument();
+  });
+
+  it("page France : replié, on ne voit que l’étape en cours", async () => {
     await i18n.changeLanguage("fr");
     wrap("/admin/upwork/fr");
     expect(await screen.findByText("Sara Benamer")).toBeInTheDocument();
-    expect(screen.getByText("Hiring Manager sur une autre app.")).toBeInTheDocument();
-    expect(screen.getByText("Arisoa Estelle Rajaobelina")).toBeInTheDocument();
-    expect(screen.getByText(/Phase 1/)).toBeInTheDocument();
-    expect(screen.getByText(/Phase 2/)).toBeInTheDocument();
-    expect(screen.queryByText(/Phase 3/)).not.toBeInTheDocument();
-    expect(screen.getByText("Warmup actif")).toBeInTheDocument();
     expect(screen.getByText("Rose Vasquez")).toBeInTheDocument();
-    expect(screen.getByText(/Après le job créateurs/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Phase 2/)).toHaveLength(2);
+    expect(screen.queryByText(/Phase 3/)).not.toBeInTheDocument();
+
+    expect(screen.queryByText("Hiring Manager sur une autre app.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Warmup actif")).not.toBeInTheDocument();
+    expect(screen.queryByText("Arisoa Estelle Rajaobelina")).not.toBeInTheDocument();
+  });
+
+  it("page France : déplié, la chaîne complète apparaît", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork/fr");
+    await screen.findByText("Sara Benamer");
+    toutDeplier();
+
+    expect(screen.getByText("Hiring Manager sur une autre app.")).toBeInTheDocument();
+    expect(screen.getAllByText("A rejoint").length).toBeGreaterThan(0);
+    expect(screen.getByText("Compte TikTok créé")).toBeInTheDocument();
+    expect(screen.getByText("Warmup actif")).toBeInTheDocument();
     expect(screen.getAllByText("Arisoa Estelle Rajaobelina")).toHaveLength(1);
+
+    // Rose n'a pas le job du pays : Sara le garde.
+    expect(screen.getByText(/Après le job créateurs/)).toBeInTheDocument();
+  });
+
+  it("page France : « onboarding » a disparu de la chaîne", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork/fr");
+    await screen.findByText("Sara Benamer");
+    toutDeplier();
+    expect(screen.queryByText(/onboarding/i)).not.toBeInTheDocument();
   });
 });
