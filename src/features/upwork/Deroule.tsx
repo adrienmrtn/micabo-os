@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 import { ICONE_CHECK, ICONE_ETAPE } from "./icones";
-import type { SourceVerite, TimelineEtape } from "./timeline";
+import type { EtapeTimelineCle, SourceVerite, TimelineCheck, TimelineEtape } from "./timeline";
 import { avancement, etapeCouranteTimeline } from "./timeline";
 
 /** Bloc dont le contenu reste caché tant qu'on n'a pas cliqué. */
@@ -54,9 +54,19 @@ function Source({ source }: { source: SourceVerite }) {
 export function Deroule({
   etapes,
   role,
+  onCocher,
+  onCocherEtape,
+  cocheEnCours,
+  encart,
 }: {
   etapes: TimelineEtape[];
   role: "hm" | "createur";
+  /** Bascule une case dont l'admin est la source de vérité. */
+  onCocher?: (cle: TimelineCheck["cle"], ok: boolean) => void;
+  onCocherEtape?: (cle: EtapeTimelineCle, ok: boolean) => void;
+  cocheEnCours?: boolean;
+  /** Ce qu'on glisse sous une étape : message à envoyer, lien de contrat… */
+  encart?: (etape: TimelineEtape, courante: boolean) => React.ReactNode;
 }) {
   const { t } = useTranslation();
   const courante = etapeCouranteTimeline(etapes);
@@ -67,21 +77,35 @@ export function Deroule({
         const ici = e.cle === courante && !e.ok;
         const Icone = ICONE_ETAPE[e.cle];
         const dernier = i === etapes.length - 1;
+        const etapeCochable = Boolean(e.cochable && onCocherEtape);
+        const pastilleClasse = cn(
+          "z-10 mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border",
+          e.ok && "border-transparent bg-foreground text-background",
+          ici && "border-foreground border-dashed bg-background text-foreground",
+          !e.ok && !ici && "border-dashed bg-background text-muted-foreground/60",
+          etapeCochable && "transition-colors hover:border-foreground",
+        );
+        const pastille = e.ok ? <Check className="size-3.5" /> : <Icone className="size-3.5" />;
         return (
           <li key={e.cle} className={cn("relative flex gap-3", !dernier && "pb-3")}>
             {!dernier && (
               <span className="absolute top-7 bottom-0 left-[13px] w-px bg-border" aria-hidden />
             )}
-            <span
-              className={cn(
-                "z-10 mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border",
-                e.ok && "border-transparent bg-foreground text-background",
-                ici && "border-foreground border-dashed bg-background text-foreground",
-                !e.ok && !ici && "border-dashed bg-background text-muted-foreground/60",
-              )}
-            >
-              {e.ok ? <Check className="size-3.5" /> : <Icone className="size-3.5" />}
-            </span>
+            {etapeCochable ? (
+              <button
+                type="button"
+                aria-pressed={e.ok}
+                aria-label={t(`upwork.timeline.${e.cle}`)}
+                disabled={cocheEnCours}
+                title={t("upwork.cocherIndice")}
+                onClick={() => onCocherEtape?.(e.cle, !e.ok)}
+                className={cn(pastilleClasse, "disabled:opacity-50")}
+              >
+                {pastille}
+              </button>
+            ) : (
+              <span className={pastilleClasse}>{pastille}</span>
+            )}
 
             <div className="min-w-0 flex-1 pt-1">
               <p
@@ -109,33 +133,88 @@ export function Deroule({
 
               {e.checks && (
                 <ul className="mt-1.5 space-y-1">
-                  {e.checks.map((c) => {
-                    const IconeCheck = ICONE_CHECK[c.cle];
-                    return (
-                      <li key={c.cle} className="flex items-center gap-1.5 text-xs">
-                        <span
-                          className={cn(
-                            "inline-flex size-4 items-center justify-center rounded-full",
-                            c.ok ? "bg-foreground text-background" : "border border-dashed",
-                          )}
-                        >
-                          {c.ok && <Check className="size-2.5" />}
-                        </span>
-                        <IconeCheck className="size-3 shrink-0 text-muted-foreground" aria-hidden />
-                        <span className={cn(!c.ok && "text-muted-foreground")}>
-                          {t(`upwork.timeline.check.${c.cle}`)}
-                        </span>
-                        <Source source={c.source} />
-                      </li>
-                    );
-                  })}
+                  {e.checks.map((c) => (
+                    <li key={c.cle}>
+                      <LigneCheck
+                        check={c}
+                        onCocher={onCocher}
+                        enCours={Boolean(cocheEnCours)}
+                      />
+                    </li>
+                  ))}
                 </ul>
               )}
+
+              {encart?.(e, ici)}
             </div>
           </li>
         );
       })}
     </ol>
+  );
+}
+
+/**
+ * Une case cochable se clique directement sur sa pastille — pas d'interrupteur
+ * à côté du texte.
+ */
+function LigneCheck({
+  check,
+  onCocher,
+  enCours,
+}: {
+  check: TimelineCheck;
+  onCocher?: (cle: TimelineCheck["cle"], ok: boolean) => void;
+  enCours: boolean;
+}) {
+  const { t } = useTranslation();
+  const Icone = ICONE_CHECK[check.cle];
+  const cochable = Boolean(check.cochable && onCocher);
+
+  const pastille = (
+    <span
+      className={cn(
+        "inline-flex size-4 shrink-0 items-center justify-center rounded-full transition-colors",
+        check.ok ? "bg-foreground text-background" : "border border-dashed",
+        cochable && !check.ok && "border-foreground/40 group-hover:border-foreground",
+        cochable && check.ok && "group-hover:bg-foreground/80",
+      )}
+    >
+      {check.ok && <Check className="size-2.5" />}
+    </span>
+  );
+
+  const corps = (
+    <>
+      <Icone className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+      <span className={cn(!check.ok && "text-muted-foreground")}>
+        {t(`upwork.timeline.check.${check.cle}`)}
+      </span>
+      <Source source={check.source} />
+    </>
+  );
+
+  if (!cochable) {
+    return (
+      <span className="flex items-center gap-1.5 text-xs">
+        {pastille}
+        {corps}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      aria-pressed={check.ok}
+      disabled={enCours}
+      onClick={() => onCocher?.(check.cle, !check.ok)}
+      title={t("upwork.cocherIndice")}
+      className="group -mx-1 flex items-center gap-1.5 rounded px-1 py-0.5 text-xs transition-colors hover:bg-muted/60 disabled:opacity-50"
+    >
+      {pastille}
+      {corps}
+    </button>
   );
 }
 

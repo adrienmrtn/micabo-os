@@ -2180,6 +2180,11 @@ export const fr = {
       lienJob: "Voir le job",
       statutHired: "Embauché",
       statutMessaged: "A répondu",
+      statut: {
+        messaged: "A répondu",
+        offered: "Offre envoyée",
+        hired: "Embauché",
+      },
       timeline: {
         contacte: "Contacté",
         pourparlers: "Pourparlers",
@@ -2211,6 +2216,31 @@ export const fr = {
         admin: "toi",
       },
       cocheAide: "La seule case que tu coches toi — le reste vient de l’OS, de Slack et d’Upwork.",
+      cocherIndice: "Cliquer pour cocher — c’est toi la source sur cette case.",
+      messageEtape: "Message pour cette étape",
+      messageEnvoyer: "Envoyer",
+      messageEnFile: "Envoi demandé",
+      messageAide:
+        "Relis, modifie si besoin : c’est ce texte exact que l’agent enverra sur Upwork.",
+      messageManque:
+        "Il manque {{vars}} — complète le texte à la main avant d’envoyer.",
+      messageAucunModele: "Pas de modèle pour cette étape. À écrire depuis la page Upwork.",
+      contratPreparer: "Préparer le contrat",
+      contratPreparerAide:
+        "L’agent prépare le brouillon d’offre sur Upwork. C’est toi qui l’envoies ensuite.",
+      contratEnPreparation: "Brouillon demandé",
+      contratFinaliser: "Finaliser sur Upwork",
+      contratFinaliserAide:
+        "Relis les termes et envoie. Clique ensuite la pastille — ou attends le prochain passage, Upwork la cochera.",
+      modelesTitre: "Modèles de messages",
+      modelesCompte: "{{n}} modèle(s)",
+      modelesAide:
+        "Un message par étape, réutilisé pour chaque personne. Variables disponibles : {{vars}}",
+      modelesModifie: "Non enregistré",
+      modelesRole: {
+        hm: "Hiring managers",
+        createur: "Créateurs",
+      },
       arreter: "Arrêter le recrutement",
       arreterConfirm:
         "Arrêter le recrutement de {{nom}} ? L’agent archivera son profil Upwork et supprimera son compte OS au prochain passage.\n\nContexte (facultatif) :",
@@ -2224,6 +2254,8 @@ export const fr = {
         publier_job_hm: "publier le job HM",
         sourcer_hm: "sélectionner des profils",
         inviter_hm: "envoyer les invitations",
+        envoyer_message: "envoyer un message",
+        preparer_contrat: "préparer le contrat",
       },
       campagneLancer: "Lancer le recrutement HM",
       campagneArreter: "Arrêter la campagne",

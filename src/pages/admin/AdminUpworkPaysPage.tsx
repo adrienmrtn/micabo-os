@@ -7,7 +7,6 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
 import { drapeauLangue } from "@/features/moteur/langues";
 import {
   annulerActionUpwork,
@@ -15,12 +14,17 @@ import {
   chargerUpworkDashboard,
   creerActionUpwork,
   deciderCandidat,
+  envoyerMessageUpwork,
   lancerCampagneHm,
   marquerAjoutUpwork,
+  marquerContratEnvoye,
+  preparerContratUpwork,
 } from "@/features/upwork/api";
 import { campagneDuPays, candidatsDeCampagne } from "@/features/upwork/campagne";
 import { Deroule, Jauge, Repliable, ResumeEtape } from "@/features/upwork/Deroule";
 import { JobsHm } from "@/features/upwork/JobsHm";
+import { MessageEtape } from "@/features/upwork/MessageEtape";
+import { type ContexteModele, type UpworkModele, prenomDe } from "@/features/upwork/modeles";
 import { nomPays } from "@/features/upwork/pipeline";
 import {
   approchesDuJob,
@@ -138,36 +142,19 @@ function EntetePersonne({
           <span className={cn("font-semibold", taille === "md" ? "text-sm" : "text-sm")}>
             {a.nom}
           </span>
-          <Badge variant={a.statut === "hired" ? "success" : "secondary"} size="sm">
-            {a.statut === "hired" ? t("upwork.statutHired") : t("upwork.statutMessaged")}
+          <Badge
+            variant={
+              a.statut === "hired" ? "success" : a.statut === "offered" ? "warning" : "secondary"
+            }
+            size="sm"
+          >
+            {t(`upwork.statut.${a.statut}`)}
           </Badge>
         </span>
         <ResumeEtape etapes={etapes} />
         <Jauge faites={faites} total={total} />
       </span>
     </span>
-  );
-}
-
-/** Une seule case se coche à la main : le reste vient de l'OS, Slack ou Upwork. */
-function CocheAdmin({
-  ok,
-  disabled,
-  onChange,
-}: {
-  ok: boolean;
-  disabled: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <label className="mt-3 flex items-start gap-3 rounded-lg border border-dashed p-3">
-      <Switch checked={ok} disabled={disabled} onCheckedChange={onChange} />
-      <span className="min-w-0">
-        <span className="block font-medium text-sm">{t("upwork.timeline.check.upwork")}</span>
-        <span className="block text-muted-foreground text-xs">{t("upwork.cocheAide")}</span>
-      </span>
-    </label>
   );
 }
 
@@ -216,36 +203,84 @@ function BoutonArreter({
   );
 }
 
+/** Ce qu'il faut pour proposer le bon message sous la bonne étape. */
+type OutilsMessage = {
+  modeles: UpworkModele[];
+  langue: string | null;
+  paysNom: string;
+  actions: UpworkAction[];
+  bloque: boolean;
+  onEnvoyer: (proposalId: string, corps: string) => void;
+  onPreparerContrat: (proposalId: string) => void;
+  onCocherContrat: (proposalId: string, ok: boolean) => void;
+  onAnnuler: (id: string) => void;
+};
+
+/** Le message ne s'affiche que sous l'étape en cours : une seule chose à faire. */
+function encartMessage(a: UpworkApproche, o: OutilsMessage, hmPrenom: string | null = null) {
+  const contexte: ContexteModele = {
+    prenom: prenomDe(a.nom),
+    nom: a.nom,
+    pays: o.paysNom,
+    hm_prenom: hmPrenom,
+  };
+  return (etape: { cle: Parameters<typeof MessageEtape>[0]["etape"] }, courante: boolean) =>
+    courante ? (
+      <MessageEtape
+        approche={a}
+        etape={etape.cle}
+        modeles={o.modeles}
+        langue={o.langue}
+        contexte={contexte}
+        actions={o.actions}
+        bloque={o.bloque}
+        onEnvoyer={o.onEnvoyer}
+        onPreparerContrat={o.onPreparerContrat}
+        onAnnuler={o.onAnnuler}
+      />
+    ) : null;
+}
+
 function CarteCreateur({
   a,
-  actions,
-  actionsBloquees,
+  hmPrenom,
+  outils,
   onArreter,
-  onAnnuler,
 }: {
   a: UpworkApproche;
-  actions: UpworkAction[];
-  actionsBloquees: boolean;
+  hmPrenom: string;
+  outils: OutilsMessage;
   onArreter: (proposalId: string, note: string | null) => void;
-  onAnnuler: (id: string) => void;
 }) {
   const etapes = timelineCreateur(faitsDepuisApproche(a));
   const enAttente =
-    actions.find((x) => x.upwork_proposal_id === a.upwork_proposal_id && x.statut === "en_attente") ??
-    null;
+    outils.actions.find(
+      (x) =>
+        x.upwork_proposal_id === a.upwork_proposal_id &&
+        x.type === "arreter_recrutement" &&
+        x.statut === "en_attente",
+    ) ?? null;
 
   return (
     <div className="rounded-lg border bg-background p-3">
       <Repliable entete={<EntetePersonne a={a} etapes={etapes} taille="sm" />}>
-        <Deroule etapes={etapes} role="createur" />
+        <Deroule
+          etapes={etapes}
+          role="createur"
+          cocheEnCours={outils.bloque}
+          onCocherEtape={(cle, ok) => {
+            if (cle === "contrat_envoye") outils.onCocherContrat(a.upwork_proposal_id, ok);
+          }}
+          encart={encartMessage(a, outils, hmPrenom)}
+        />
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
           <LienUpwork url={a.upwork_profile_url} label="Upwork" />
           <BoutonArreter
             nom={a.nom}
             enAttente={enAttente}
-            disabled={actionsBloquees}
+            disabled={outils.bloque}
             onArreter={(note) => onArreter(a.upwork_proposal_id, note)}
-            onAnnuler={onAnnuler}
+            onAnnuler={outils.onAnnuler}
           />
         </div>
       </Repliable>
@@ -280,21 +315,19 @@ function VieHm({
   jobCrea,
   approchesCrea,
   createursN,
-  actions,
-  actionsBloquees,
+  outils,
   onArreter,
-  onAnnuler,
   onToggleUpwork,
+  onToggleContrat,
 }: {
   hm: UpworkApproche;
   jobCrea: UpworkMission | null;
   approchesCrea: UpworkApproche[];
   createursN: number;
-  actions: UpworkAction[];
-  actionsBloquees: boolean;
+  outils: OutilsMessage;
   onArreter: (proposalId: string, note: string | null) => void;
-  onAnnuler: (id: string) => void;
   onToggleUpwork: (proposalId: string, ok: boolean) => void;
+  onToggleContrat: (proposalId: string, ok: boolean) => void;
 }) {
   const { t } = useTranslation();
   const faits = faitsDepuisApproche(hm);
@@ -304,8 +337,11 @@ function VieHm({
   const n = Math.max(createursN, embauches);
   const opp = jobCrea ? opportunitesEnCours(approchesCrea, jobCrea.job_posting_id) : 0;
   const enAttente =
-    actions.find(
-      (x) => x.upwork_proposal_id === hm.upwork_proposal_id && x.statut === "en_attente",
+    outils.actions.find(
+      (x) =>
+        x.upwork_proposal_id === hm.upwork_proposal_id &&
+        x.type === "arreter_recrutement" &&
+        x.statut === "en_attente",
     ) ?? null;
 
   return (
@@ -315,11 +351,17 @@ function VieHm({
           <div className="min-w-0 flex-1">
             <Repliable entete={<EntetePersonne a={hm} etapes={etapes} taille="md" />}>
               <BandeauPhase titre={t("upwork.phase1")}>
-                <Deroule etapes={etapes} role="hm" />
-                <CocheAdmin
-                  ok={hm.upwork_ajoute_ok}
-                  disabled={actionsBloquees}
-                  onChange={(v) => onToggleUpwork(hm.upwork_proposal_id, v)}
+                <Deroule
+                  etapes={etapes}
+                  role="hm"
+                  cocheEnCours={outils.bloque}
+                  onCocher={(cle, ok) => {
+                    if (cle === "upwork") onToggleUpwork(hm.upwork_proposal_id, ok);
+                  }}
+                  onCocherEtape={(cle, ok) => {
+                    if (cle === "contrat_envoye") onToggleContrat(hm.upwork_proposal_id, ok);
+                  }}
+                  encart={encartMessage(hm, outils)}
                 />
               </BandeauPhase>
             </Repliable>
@@ -329,9 +371,9 @@ function VieHm({
             <BoutonArreter
               nom={hm.nom}
               enAttente={enAttente}
-              disabled={actionsBloquees}
+              disabled={outils.bloque}
               onArreter={(note) => onArreter(hm.upwork_proposal_id, note)}
-              onAnnuler={onAnnuler}
+              onAnnuler={outils.onAnnuler}
             />
           </div>
         </div>
@@ -379,10 +421,9 @@ function VieHm({
                       <CarteCreateur
                         key={a.id}
                         a={a}
-                        actions={actions}
-                        actionsBloquees={actionsBloquees}
+                        hmPrenom={prenomDe(hm.nom)}
+                        outils={outils}
                         onArreter={onArreter}
-                        onAnnuler={onAnnuler}
                       />
                     ))}
                   </div>
@@ -414,6 +455,12 @@ export function AdminUpworkPaysPage() {
     onSuccess: rafraichir,
   });
 
+  const basculerContrat = useMutation({
+    mutationFn: (v: { proposalId: string; ok: boolean }) =>
+      marquerContratEnvoye(v.proposalId, v.ok),
+    onSuccess: rafraichir,
+  });
+
   const arreter = useMutation({
     mutationFn: (v: { proposalId: string; note: string | null }) =>
       creerActionUpwork("arreter_recrutement", v.proposalId, v.note ?? undefined),
@@ -437,6 +484,17 @@ export function AdminUpworkPaysPage() {
 
   const deciderProfil = useMutation({
     mutationFn: (v: { id: string; ok: boolean }) => deciderCandidat(v.id, v.ok),
+    onSuccess: rafraichir,
+  });
+
+  const envoyerMessage = useMutation({
+    mutationFn: (v: { proposalId: string; corps: string }) =>
+      envoyerMessageUpwork(v.proposalId, v.corps),
+    onSuccess: rafraichir,
+  });
+
+  const preparerContrat = useMutation({
+    mutationFn: (proposalId: string) => preparerContratUpwork(proposalId),
     onSuccess: rafraichir,
   });
 
@@ -468,13 +526,31 @@ export function AdminUpworkPaysPage() {
     annuler.isPending ||
     lancerCampagne.isPending ||
     arreterCampagne.isPending ||
-    deciderProfil.isPending;
+    deciderProfil.isPending ||
+    envoyerMessage.isPending ||
+    preparerContrat.isPending ||
+    basculerContrat.isPending;
   const erreur = (basculerUpwork.error ??
     arreter.error ??
     annuler.error ??
     lancerCampagne.error ??
     arreterCampagne.error ??
-    deciderProfil.error) as Error | null;
+    deciderProfil.error ??
+    envoyerMessage.error ??
+    preparerContrat.error ??
+    basculerContrat.error) as Error | null;
+
+  const outils: OutilsMessage = {
+    modeles: d?.modeles ?? [],
+    langue,
+    paysNom,
+    actions,
+    bloque: enCours,
+    onEnvoyer: (proposalId, corps) => envoyerMessage.mutate({ proposalId, corps }),
+    onPreparerContrat: (proposalId) => preparerContrat.mutate(proposalId),
+    onCocherContrat: (proposalId, ok) => basculerContrat.mutate({ proposalId, ok }),
+    onAnnuler: (id) => annuler.mutate(id),
+  };
 
   return (
     <div className="space-y-6">
@@ -552,11 +628,12 @@ export function AdminUpworkPaysPage() {
                     jobCrea={jobCrea}
                     approchesCrea={approchesCrea}
                     createursN={contrat?.createurs_n ?? 0}
-                    actions={actions}
-                    actionsBloquees={enCours}
+                    outils={outils}
                     onArreter={(proposalId, note) => arreter.mutate({ proposalId, note })}
-                    onAnnuler={(id) => annuler.mutate(id)}
                     onToggleUpwork={(proposalId, ok) => basculerUpwork.mutate({ proposalId, ok })}
+                    onToggleContrat={(proposalId, ok) =>
+                      basculerContrat.mutate({ proposalId, ok })
+                    }
                   />
                 );
               })}

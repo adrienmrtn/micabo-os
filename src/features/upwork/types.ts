@@ -1,3 +1,5 @@
+import type { UpworkModele } from "./modeles";
+
 export type FamilleMission = "hm" | "createur" | "autre";
 
 export type UpworkSync = {
@@ -78,8 +80,10 @@ export type UpworkApproche = {
   photo_url: string | null;
   nom: string;
   role: "hm" | "createur";
-  statut: "messaged" | "hired";
+  statut: "messaged" | "offered" | "hired";
   resume_discussions: string | null;
+  /** Rendue par Upwork quand l'agent a préparé le brouillon d'offre. */
+  offre_finalize_url: string | null;
   contrat_envoye_ok: boolean;
   contrat_signe_ok: boolean;
   slack_envoye_ok: boolean;
@@ -101,7 +105,9 @@ export type TypeAction =
   | "arreter_recrutement"
   | "publier_job_hm"
   | "sourcer_hm"
-  | "inviter_hm";
+  | "inviter_hm"
+  | "envoyer_message"
+  | "preparer_contrat";
 
 /** Une action déclenchée dans l'OS = un prompt figé, en attente de l'agent. */
 export type UpworkAction = {
@@ -113,6 +119,8 @@ export type UpworkAction = {
   cible_role: "hm" | "createur" | null;
   langue: string | null;
   prompt: string;
+  /** Le texte exact à envoyer sur Upwork, relu par l'admin avant la file. */
+  message: string | null;
   note: string | null;
   statut: "en_attente" | "fait" | "annule";
   demande_at: string;
@@ -167,6 +175,7 @@ export type UpworkDashboard = {
   actions: UpworkAction[];
   campagnes: UpworkCampagne[];
   candidats: UpworkCandidat[];
+  modeles: UpworkModele[];
 };
 
 export type TotauxPays = {

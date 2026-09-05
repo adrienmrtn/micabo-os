@@ -57,8 +57,9 @@ Missions **PUBLISHED seulement**. Aucun envoi.
 | --- | --- | --- |
 | `os_ok` (« rejoint l'OS ») | OS | dérivé SQL : `auth.users.last_sign_in_at` |
 | `tiktok_cree_ok` (« compte TikTok créé ») | OS | dérivé SQL : `comptes.handle_tiktok` |
+| `contrat_envoye_ok` | Upwork + admin | dérivé SQL (`offered` / contrat) **ou** clic sur la pastille |
 | `slack_ok` (« rejoint Slack ») | Slack MCP | payload du sweep |
-| `upwork_ajoute_ok` | admin | coche dans l'OS, jamais le sweep |
+| `upwork_ajoute_ok` | admin | clic sur la pastille dans l'OS, jamais le sweep |
 
 `os_ok` et `tiktok_cree_ok` sont recalculés par le trigger
 `upwork_approches_relier_os` après chaque insert : **ne pas** les mettre
@@ -102,6 +103,24 @@ donc **aucun cron** n’est nécessaire, le passage 2 h suffit.
 Dès qu’une personne répond, le sync la crée dans `upwork_approches` et
 elle rejoint la chaîne HM classique. Rien de spécial à faire.
 
+### Messages et contrats
+
+Chaque étape a un message pré-écrit dans `upwork_modeles` (`cle` =
+l’étape, `role_cible`, `langue` = pays ou `*`). L’OS remplit les
+variables (`{{prenom}}`, `{{pays}}`, `{{hm_prenom}}`…), l’admin relit et
+envoie. L’action `envoyer_message` porte le texte **fini** dans sa
+colonne `message` : envoyer ce champ tel quel via `send_message`
+action=message_proposal. Ne rien réécrire, ne rien traduire, ne rien
+ajouter. Si l’envoi échoue, le dire dans le résumé — pas de reformulation.
+
+Le contrat ne part **jamais** de l’agent : `manage_offers` ne sait faire
+qu’un brouillon. L’action `preparer_contrat` crée le draft, reprend les
+termes du dernier contrat signé du même rôle, et range la `finalize_url`
+avec `upwork_contrat_lien()`. C’est l’admin qui ouvre le lien et envoie.
+La case « contrat envoyé » se clique comme « ajoutée à mon compte
+Upwork », et se coche aussi toute seule au sync suivant quand Upwork
+passe la candidature en `offered`.
+
 ### Sweep 2 h (Automation Cursor)
 
 Prompt à coller dans l’Automation (repo `adrienmrtn/micabo-os`, MCP
@@ -114,9 +133,9 @@ Upwork + Supabase + Slack, projet `qkmiwnmiwsvwkttldqgb`) :
 3. `list_contracts` action=search (`ACTIVE`, `PAUSED`) puis `get` pour
    `job.id`, `startDate`.
 4. Pour chaque job PUBLISHED : `list_client_proposals` status
-   `messaged` **et** `hired` seulement (pas declined / all). Une
-   approche = une personne qui a répondu. `action=get` pour
-   `user.photoUrl` + `user.publicUrl`.
+ `messaged`, `offered` **et** `hired` seulement (pas declined /
+ all). Une approche = une personne qui a répondu. `action=get`
+ pour `user.photoUrl` + `user.publicUrl`.
 5. Slack : `slack_search_users` par nom / email. Si trouvé →
    `slack_ok=true` + `slack_user_id`.
 6. `select public.upwork_sync_appliquer($payload::jsonb)` :
@@ -125,13 +144,13 @@ Upwork + Supabase + Slack, projet `qkmiwnmiwsvwkttldqgb`) :
    contrats (`contract_id`, `job_posting_id`, `contrat_at`,
    `freelancer_nom`, `slack_ok`, `slack_user_id`) ;
    approches (`upwork_proposal_id`, `job_posting_id`, `nom`, `role`,
-   `statut` messaged|hired, `resume_discussions`, `photo_url` depuis
+ `statut` messaged|offered|hired, `resume_discussions`, `photo_url` depuis
    `user.photoUrl`, `upwork_profile_url` depuis `user.publicUrl`,
    flags contrat / Slack / OS / warmup / premier_post ;
    `job_createur_id` = le job créateurs **de ce HM**, jamais le job
-   du pays — un post = un HM).
-   Ne pas envoyer `os_ok`, `tiktok_cree_ok` ni `upwork_ajoute_ok` :
-   l'OS les recalcule seul.
+ du pays — un post = un HM).
+ Ne pas envoyer `os_ok`, `tiktok_cree_ok`, `contrat_envoye_ok` ni
+ `upwork_ajoute_ok` : l'OS les recalcule seul.
 7. `select * from public.upwork_actions_en_attente()` : exécuter chaque
    `prompt` **tel quel**, puis
    `select public.upwork_action_terminer('<id>', '<résumé>')`.

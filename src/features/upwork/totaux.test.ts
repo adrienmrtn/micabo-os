@@ -47,6 +47,7 @@ function approche(over: Partial<UpworkApproche> & Pick<UpworkApproche, "id" | "n
     role: "hm",
     statut: "hired",
     resume_discussions: null,
+    offre_finalize_url: null,
     contrat_envoye_ok: true,
     contrat_signe_ok: true,
     slack_envoye_ok: false,

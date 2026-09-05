@@ -2181,6 +2181,11 @@ export const en = {
       lienJob: "View job",
       statutHired: "Hired",
       statutMessaged: "Replied",
+      statut: {
+        messaged: "Replied",
+        offered: "Offer sent",
+        hired: "Hired",
+      },
       timeline: {
         contacte: "Contacted",
         pourparlers: "Talks",
@@ -2212,6 +2217,29 @@ export const en = {
         admin: "you",
       },
       cocheAide: "The only box you tick yourself — everything else comes from the OS, Slack and Upwork.",
+      cocherIndice: "Click to tick — you are the source on this one.",
+      messageEtape: "Message for this step",
+      messageEnvoyer: "Send",
+      messageEnFile: "Send requested",
+      messageAide: "Read it over, edit if needed: this exact text is what the agent will send.",
+      messageManque: "Missing {{vars}} — fill it in by hand before sending.",
+      messageAucunModele: "No template for this step. Write one from the Upwork page.",
+      contratPreparer: "Prepare the contract",
+      contratPreparerAide:
+        "The agent prepares the draft offer on Upwork. You send it yourself afterwards.",
+      contratEnPreparation: "Draft requested",
+      contratFinaliser: "Finalise on Upwork",
+      contratFinaliserAide:
+        "Review the terms and send. Then click the tick — or wait for the next run, Upwork will tick it.",
+      modelesTitre: "Message templates",
+      modelesCompte: "{{n}} template(s)",
+      modelesAide:
+        "One message per step, reused for everyone. Available variables: {{vars}}",
+      modelesModifie: "Unsaved",
+      modelesRole: {
+        hm: "Hiring managers",
+        createur: "Creators",
+      },
       arreter: "Stop recruiting",
       arreterConfirm:
         "Stop recruiting {{nom}}? The agent will archive their Upwork profile and delete their OS account on its next run.\n\nContext (optional):",
@@ -2225,6 +2253,8 @@ export const en = {
         publier_job_hm: "publish the HM job",
         sourcer_hm: "shortlist profiles",
         inviter_hm: "send the invitations",
+        envoyer_message: "send a message",
+        preparer_contrat: "prepare the contract",
       },
       campagneLancer: "Start HM recruiting",
       campagneArreter: "Stop the campaign",

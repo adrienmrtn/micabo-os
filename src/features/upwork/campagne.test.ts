@@ -59,6 +59,7 @@ function action(over: Partial<UpworkAction> = {}): UpworkAction {
     cible_role: "hm",
     langue: "de",
     prompt: "…",
+    message: null,
     note: null,
     statut: "en_attente",
     demande_at: "2026-09-05T09:00:00Z",

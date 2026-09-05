@@ -1,9 +1,15 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import i18n from "@/locales";
+import {
+  envoyerMessageUpwork,
+  marquerAjoutUpwork,
+  marquerContratEnvoye,
+  preparerContratUpwork,
+} from "@/features/upwork/api";
 import type { UpworkDashboard } from "@/features/upwork/types";
 import { AdminUpworkPage } from "./AdminUpworkPage";
 import { AdminUpworkPaysPage } from "./AdminUpworkPaysPage";
@@ -119,6 +125,7 @@ const dash: UpworkDashboard = {
       cible_role: "createur",
       langue: "fr",
       prompt: "Arrête le recrutement de Arisoa Estelle Rajaobelina (createur fr).",
+      message: null,
       note: null,
       statut: "en_attente",
       demande_at: "2026-09-05T10:00:00Z",
@@ -197,6 +204,7 @@ const dash: UpworkDashboard = {
       role: "hm",
       statut: "hired",
       resume_discussions: "Hiring Manager sur une autre app.",
+      offre_finalize_url: null,
       contrat_envoye_ok: true,
       contrat_signe_ok: true,
       slack_envoye_ok: true,
@@ -225,6 +233,7 @@ const dash: UpworkDashboard = {
       role: "hm",
       statut: "hired",
       resume_discussions: "Dispo tout de suite.",
+      offre_finalize_url: null,
       contrat_envoye_ok: true,
       contrat_signe_ok: true,
       slack_envoye_ok: false,
@@ -253,6 +262,7 @@ const dash: UpworkDashboard = {
       role: "createur",
       statut: "messaged",
       resume_discussions: "Vit en France, déjà fait des TikTok.",
+      offre_finalize_url: null,
       contrat_envoye_ok: false,
       contrat_signe_ok: false,
       slack_envoye_ok: false,
@@ -270,6 +280,32 @@ const dash: UpworkDashboard = {
       synced_at: "2026-09-04T12:00:00Z",
     },
   ],
+  modeles: [
+    {
+      id: "mod-hm-pourparlers",
+      cle: "pourparlers",
+      role_cible: "hm",
+      langue: "*",
+      corps: "Bonjour {{prenom}}, on lance micabo sur {{pays}}.",
+      maj_at: "2026-09-01T00:00:00Z",
+    },
+    {
+      id: "mod-hm-acces",
+      cle: "acces_envoyes",
+      role_cible: "hm",
+      langue: "*",
+      corps: "Bonjour {{prenom}}, tes accès micabo pour {{pays}} arrivent.",
+      maj_at: "2026-09-01T00:00:00Z",
+    },
+    {
+      id: "mod-crea-pourparlers",
+      cle: "pourparlers",
+      role_cible: "createur",
+      langue: "*",
+      corps: "Bonjour {{prenom}}, ici {{hm_prenom}} pour micabo sur {{pays}}.",
+      maj_at: "2026-09-01T00:00:00Z",
+    },
+  ],
 };
 
 vi.mock("@/features/upwork/api", () => ({
@@ -280,6 +316,10 @@ vi.mock("@/features/upwork/api", () => ({
   lancerCampagneHm: vi.fn(async () => undefined),
   arreterCampagneHm: vi.fn(async () => undefined),
   deciderCandidat: vi.fn(async () => undefined),
+  envoyerMessageUpwork: vi.fn(async () => undefined),
+  preparerContratUpwork: vi.fn(async () => undefined),
+  enregistrerModele: vi.fn(async () => undefined),
+  marquerContratEnvoye: vi.fn(async () => undefined),
 }));
 
 function wrap(path: string) {
@@ -374,6 +414,76 @@ describe("pages Upwork", () => {
     toutDeplier();
     expect(screen.getByText("Hugo Petit")).toBeInTheDocument();
     expect(screen.getByText("validé par le délai")).toBeInTheDocument();
+  });
+
+  it("page France : la case admin se coche en cliquant la pastille, sans interrupteur", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork/fr");
+    await screen.findByText("Sara Benamer");
+    toutDeplier();
+
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    const coches = screen.getAllByRole("button", { name: /ajoutée à mon compte upwork/i });
+    expect(coches.length).toBeGreaterThan(0);
+    // Rose est déjà cochée : le clic la décoche.
+    expect(coches[0]).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(coches[0]!);
+    await waitFor(() => expect(marquerAjoutUpwork).toHaveBeenCalledWith("p-rose", false));
+  });
+
+  it("page France : le message de l’étape en cours est prêt, variables remplies", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork/fr");
+    await screen.findByText("Rose Vasquez");
+    toutDeplier();
+
+    // Rose bloque sur « Accès envoyés » : c'est ce message-là qu'on propose,
+    // et lui seul — pas ceux des étapes déjà passées.
+    const attendu = "Bonjour Rose, tes accès micabo pour France arrivent.";
+    expect(screen.getByDisplayValue(attendu)).toBeInTheDocument();
+    expect(screen.queryByDisplayValue(/on lance micabo/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /^envoyer$/i })[0]!);
+    await waitFor(() => expect(envoyerMessageUpwork).toHaveBeenCalledWith("p-rose", attendu));
+  });
+
+  it("page France : le contrat passe par un brouillon, jamais par un envoi direct", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork/fr");
+    await screen.findByText("Sara Benamer");
+    toutDeplier();
+
+    // Arisoa en est au contrat : on prépare un brouillon, on n'envoie rien.
+    fireEvent.click(screen.getByRole("button", { name: /préparer le contrat/i }));
+    await waitFor(() => expect(preparerContratUpwork).toHaveBeenCalledWith("p2"));
+  });
+
+  it("page France : la pastille « contrat envoyé » se clique, sans interrupteur", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork/fr");
+    await screen.findByText("Sara Benamer");
+    toutDeplier();
+    expect(screen.getByText("Arisoa Estelle Rajaobelina")).toBeInTheDocument();
+
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    const pastilles = screen.getAllByRole("button", { name: /^contrat envoyé$/i });
+    const aFaire = pastilles.find((b) => b.getAttribute("aria-pressed") === "false");
+    expect(aFaire).toBeTruthy();
+    fireEvent.click(aFaire!);
+    await waitFor(() => expect(marquerContratEnvoye).toHaveBeenCalledWith("p2", true));
+  });
+
+  it("dashboard : les modèles de messages s’éditent sur la page Upwork", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork");
+    expect(await screen.findByText("Modèles de messages")).toBeInTheDocument();
+
+    // Le gabarit garde ses variables : c'est à l'affichage qu'elles se remplissent.
+    expect(screen.queryByDisplayValue(/\{\{prenom\}\}/)).not.toBeInTheDocument();
+    toutDeplier();
+    expect(
+      screen.getByDisplayValue("Bonjour {{prenom}}, on lance micabo sur {{pays}}."),
+    ).toBeInTheDocument();
   });
 
   it("page France : « onboarding » a disparu de la chaîne", async () => {
