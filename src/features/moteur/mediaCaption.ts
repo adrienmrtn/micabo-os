@@ -65,6 +65,20 @@ export function normaliserCaptionOk(brut: string): string | null {
   return captionEstVide(court) ? null : court;
 }
 
+/**
+ * Correction admin d'une caption. Contrairement au modèle, on garde le texte
+ * tel quel (pas de filtre placeholder) : vide = l'admin retire la caption.
+ */
+export function normaliserCaptionManuelle(brut: string): {
+  caption: string | null;
+  caption_statut: CaptionStatut;
+} {
+  const texte = brut.replace(/\s+/g, " ").trim().slice(0, CAPTION_MAX);
+  return texte
+    ? { caption: texte, caption_statut: "ok" }
+    : { caption: null, caption_statut: "aucune" };
+}
+
 export interface SlideHookCandidat {
   position?: number | null;
   media_id?: string | null;

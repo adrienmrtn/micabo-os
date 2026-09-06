@@ -7,9 +7,11 @@ import {
   estLabelSysteme,
   idsPremiereSlide,
   mediaEstPremiereSlide,
+  normaliserCaptionManuelle,
   normaliserCaptionOk,
   pathEstPremiereSlide,
   raccourcirCaption,
+  CAPTION_MAX,
   SLUG_HOOK,
 } from "./mediaCaption";
 
@@ -79,6 +81,31 @@ describe("normaliserCaptionOk", () => {
     expect(normaliserCaptionOk("A detailed view of a kitchen counter.")).toBe(
       "A detailed view of a kitchen counter.",
     );
+  });
+});
+
+describe("normaliserCaptionManuelle", () => {
+  it("garde le texte de l'admin, même refusé par le filtre modèle", () => {
+    expect(normaliserCaptionManuelle("  Une   fiche de révision  ")).toEqual({
+      caption: "Une fiche de révision",
+      caption_statut: "ok",
+    });
+    expect(normaliserCaptionManuelle("n/a")).toEqual({
+      caption: "n/a",
+      caption_statut: "ok",
+    });
+  });
+
+  it("vide = plus de caption", () => {
+    expect(normaliserCaptionManuelle("   ")).toEqual({
+      caption: null,
+      caption_statut: "aucune",
+    });
+  });
+
+  it("plafonne à CAPTION_MAX", () => {
+    const r = normaliserCaptionManuelle("a".repeat(CAPTION_MAX + 50));
+    expect(r.caption).toHaveLength(CAPTION_MAX);
   });
 });
 

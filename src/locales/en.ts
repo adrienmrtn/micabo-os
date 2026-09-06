@@ -1389,6 +1389,12 @@ export const en = {
       captionEnCours: "Captioning…",
       captionHook: "Hook",
       captionAucune: "No caption recognized",
+      captionPasEncore: "Not captioned yet",
+      captionEcrire: "Write",
+      captionEditLabel: "Slide caption",
+      captionPlaceholder: "What the photo shows",
+      captionEditAide:
+        "Empty = no caption. A manual fix sticks: the auto catch-up skips it, only “Caption” re-runs the model.",
       slideN: "Slide {{n}}",
       renettoyer: "Re-clean",
       remplacer: "Replace",

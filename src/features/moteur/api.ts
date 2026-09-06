@@ -40,7 +40,7 @@ import {
   type ApplicationOs,
 } from "./applications";
 import { comptePrincipal, normaliserTypeCompte, resoudrePremierCompte } from "./comptesCm";
-import { estLabelSysteme, SLUG_HOOK } from "./mediaCaption";
+import { estLabelSysteme, normaliserCaptionManuelle, SLUG_HOOK } from "./mediaCaption";
 import {
   ELO_MANUEL_DEFAUT,
   hookTexteDepuisDeck,
@@ -2572,6 +2572,29 @@ export async function captionnerMediaBiblio(
   if (r?.error) throw new Error(r.error);
   if (!r?.ok) throw new Error("Réponse caption-media invalide");
   return r;
+}
+
+/**
+ * Corrige à la main la caption détectée par les modèles. Texte vide = aucune
+ * caption. Le statut posé sort le média du rattrapage auto (qui ne prend que
+ * `caption_statut is null`) : la correction tient, seul « Captionner » relance
+ * un modèle par-dessus.
+ */
+export async function majCaptionMedia(
+  mediaId: string,
+  caption: string,
+): Promise<{ caption: string | null; caption_statut: "ok" | "aucune" }> {
+  const normalisee = normaliserCaptionManuelle(caption);
+  const { error } = await supabase
+    .from("media_library")
+    .update({
+      ...normalisee,
+      caption_modele: "manuel",
+      caption_le: new Date().toISOString(),
+    })
+    .eq("id", mediaId);
+  if (error) throw error;
+  return normalisee;
 }
 
 export async function listerMediasARattraperCaption(): Promise<{
