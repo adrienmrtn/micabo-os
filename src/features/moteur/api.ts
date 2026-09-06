@@ -18,6 +18,7 @@ import type {
   Label,
   Contenu,
   ContenuLangue,
+  ContenuLangueSlide,
   ContenuSlide,
   EloImportRapport,
   Passage,
@@ -41,6 +42,7 @@ import {
 } from "./applications";
 import { comptePrincipal, normaliserTypeCompte, resoudrePremierCompte } from "./comptesCm";
 import { estLabelSysteme, normaliserCaptionManuelle, SLUG_HOOK } from "./mediaCaption";
+import { fusionnerTexteSlide } from "./deckSlides";
 import {
   ELO_MANUEL_DEFAUT,
   hookTexteDepuisDeck,
@@ -2595,6 +2597,38 @@ export async function majCaptionMedia(
     .eq("id", mediaId);
   if (error) throw error;
   return normalisee;
+}
+
+/**
+ * Corrige à la main le texte d'une slide dans un deck de langue.
+ *
+ * Sur le deck source, c'est l'OCR d'import qu'on corrige : les langues pas
+ * encore traduites partiront de la version corrigée. Sur un deck déjà traduit,
+ * `assurerDeckPourLangue` ne retraduit pas un deck qui a du texte — la
+ * correction tient jusqu'au post.
+ */
+export async function majTexteSlideDeck(
+  contenuLangueId: string,
+  position: number,
+  texte: string,
+): Promise<ContenuLangueSlide[]> {
+  const { data, error } = await supabase
+    .from("contenu_langues")
+    .select("slides")
+    .eq("id", contenuLangueId)
+    .single();
+  if (error) throw error;
+  const slides = fusionnerTexteSlide(
+    ((data?.slides ?? []) as ContenuLangueSlide[]),
+    position,
+    texte,
+  );
+  const { error: erreurMaj } = await supabase
+    .from("contenu_langues")
+    .update({ slides })
+    .eq("id", contenuLangueId);
+  if (erreurMaj) throw erreurMaj;
+  return slides;
 }
 
 export async function listerMediasARattraperCaption(): Promise<{

@@ -1395,6 +1395,12 @@ export const fr = {
       captionPasEncore: "Pas encore captionnée",
       captionTitre: "Caption :",
       captionEcrire: "Écrire",
+      texteEcrire: "Écrire",
+      texteEditLabel: "Texte de la slide",
+      texteEditAideSource:
+        "C’est l’OCR d’import : les langues pas encore traduites partiront de cette version.",
+      texteEditAideTrad:
+        "Ce texte part tel quel au prochain post. La traduction ne repasse pas dessus ; seul le placement micabo peut encore compléter une slide.",
       captionEditLabel: "Caption de la slide",
       captionPlaceholder: "Ce qu’on voit sur la photo",
       captionEditAide:

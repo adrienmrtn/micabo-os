@@ -41,6 +41,7 @@ import {
   listerJobsReimportPhotosValides,
   listerMediasPourContenu,
   majCaptionMedia,
+  majTexteSlideDeck,
   majMediaSlideContenu,
   marquerUgcParLabel,
   mediaIdsDepuisSlides,
@@ -63,6 +64,7 @@ import {
 import { useApplication } from "@/features/moteur/ApplicationContext";
 import { peutForcerImportElo } from "@/features/moteur/importSlideshowActions";
 import { nomLangue } from "@/features/moteur/langues";
+import { TEXTE_SLIDE_MAX } from "@/features/moteur/deckSlides";
 import { CAPTION_MAX } from "@/features/moteur/mediaCaption";
 import type { ContenuLangue, ContenuSlide, Media } from "@/features/moteur/types";
 import { ugcVisages } from "@/features/moteur/ugcVisages";
@@ -440,6 +442,102 @@ function ForcerEloBouton({
   );
 }
 
+/** Texte d'une slide dans un deck : OCR d'import ou traduction, corrigeable. */
+function TexteSlideDeck({
+  contenuId,
+  contenuLangueId,
+  position,
+  texte,
+  cibleEstSource,
+}: {
+  contenuId: string;
+  contenuLangueId: string | null;
+  position: number;
+  texte: string | null;
+  cibleEstSource: boolean;
+}) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [edit, setEdit] = React.useState(false);
+  const [valeur, setValeur] = React.useState(texte ?? "");
+
+  const save = useMutation({
+    mutationFn: () => majTexteSlideDeck(contenuLangueId ?? "", position, valeur),
+    onSuccess: () => {
+      setEdit(false);
+      void queryClient.invalidateQueries({ queryKey: ["slideshow", contenuId] });
+      void queryClient.invalidateQueries({ queryKey: ["slideshows"] });
+    },
+  });
+
+  if (edit) {
+    return (
+      <div className="space-y-1">
+        <Textarea
+          value={valeur}
+          rows={4}
+          maxLength={TEXTE_SLIDE_MAX}
+          disabled={save.isPending}
+          onChange={(e) => setValeur(e.target.value)}
+          className="text-xs leading-snug"
+          aria-label={t("slideshows.texteEditLabel")}
+        />
+        <p className="text-[10px] text-muted-foreground">
+          {cibleEstSource
+            ? t("slideshows.texteEditAideSource")
+            : t("slideshows.texteEditAideTrad")}
+        </p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            disabled={save.isPending}
+            onClick={() => save.mutate()}
+          >
+            {save.isPending ? t("common.saving") : t("common.save")}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-[11px]"
+            disabled={save.isPending}
+            onClick={() => setEdit(false)}
+          >
+            {t("common.cancel")}
+          </Button>
+        </div>
+        {save.isError ? (
+          <p className="text-[10px] text-destructive">{(save.error as Error).message}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      {texte ? (
+        <p className="whitespace-pre-line text-xs leading-snug">{texte}</p>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">{t("slideshows.sansTexte")}</p>
+      )}
+      {contenuLangueId ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 gap-1 px-2 text-[11px]"
+          onClick={() => {
+            setValeur(texte ?? "");
+            setEdit(true);
+          }}
+        >
+          <PenLine className="size-3" />
+          {texte ? t("common.edit") : t("slideshows.texteEcrire")}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 const DeckLangue = React.memo(function DeckLangue({
   contenu,
   langue,
@@ -457,10 +555,9 @@ const DeckLangue = React.memo(function DeckLangue({
   // Pas encore de passage sur cette langue → on montre le texte OCR d'origine
   // (stocké à l'import, sans pub Sophia). Traduction + Sophia = à l'assignation.
   const montrerOriginel = !aPassage || (!estSource && !aTexteLangue);
-  const slidesTexte = montrerOriginel
-    ? (sourceCl?.slides ?? [])
-    : (langue.slides ?? []);
-  const textes = new Map(slidesTexte.map((s) => [s.position, s] as const));
+  // Deck réellement affiché, donc celui qu'une correction doit écrire.
+  const cible = montrerOriginel ? sourceCl : langue;
+  const textes = new Map((cible?.slides ?? []).map((s) => [s.position, s] as const));
 
   if (structure.length === 0) {
     return <p className="text-xs text-muted-foreground">{t("slideshows.deckVide")}</p>;
@@ -512,13 +609,14 @@ const DeckLangue = React.memo(function DeckLangue({
                     </Badge>
                   )}
                 </div>
-                {texte ? (
-                  <p className="text-xs leading-snug">{texte}</p>
-                ) : (
-                  <p className="text-[11px] text-muted-foreground">
-                    {t("slideshows.sansTexte")}
-                  </p>
-                )}
+                <TexteSlideDeck
+                  key={`${cible?.id ?? "sans"}-${s.position}`}
+                  contenuId={contenu.id}
+                  contenuLangueId={cible?.id ?? null}
+                  position={s.position}
+                  texte={texte}
+                  cibleEstSource={montrerOriginel || estSource}
+                />
                 {s.pinned ? (
                   <p className="text-[10px] text-muted-foreground">{t("creation.pinned")}</p>
                 ) : s.critere ? (

@@ -1392,6 +1392,12 @@ export const en = {
       captionPasEncore: "Not captioned yet",
       captionTitre: "Caption:",
       captionEcrire: "Write",
+      texteEcrire: "Write",
+      texteEditLabel: "Slide text",
+      texteEditAideSource:
+        "This is the import OCR: languages not translated yet will start from this version.",
+      texteEditAideTrad:
+        "This text ships as-is on the next post. Translation won’t overwrite it; only the micabo placement can still complete a slide.",
       captionEditLabel: "Slide caption",
       captionPlaceholder: "What the photo shows",
       captionEditAide:
