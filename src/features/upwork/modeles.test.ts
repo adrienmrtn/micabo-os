@@ -187,19 +187,28 @@ describe("intentionTalks", () => {
   });
 });
 
+const docTalks = {
+  cle: "reponses_upwork",
+  titre: "Réponses",
+  contenu:
+    "<h2>Comment on démarre ?</h2><p>On envoie le contrat Upwork.</p><h2>Faut-il un appel ?</h2><p>Non. On fait tout sur le fil Upwork.</p>",
+  contenu_en:
+    "<h2>How do we get started?</h2><p>We send the Upwork contract. You accept, then Slack and the OS.</p><h2>Do we need a call?</h2><p>No. We do everything on the Upwork thread.</p>",
+};
+
 describe("composerMessage", () => {
-  it("Talks : répond à leur dernier message, pas au playbook", () => {
+  it("Talks : répond depuis les documents OS, pas le playbook", () => {
     const sofia = approche();
     const ctx = contexteDepuisApproche(sofia, {
       pays: "Spain",
       etape: "pourparlers",
       langue: "es",
+      documents: [docTalks],
     });
     const { texte, manquantes } = composerMessage("Three questions to move forward.", ctx);
     expect(manquantes).toEqual([]);
     expect(texte).toContain("Hi Sofia,");
-    expect(texte).toContain("You asked how we get started");
-    expect(texte).toContain("Upwork contract");
+    expect(texte).toContain("We send the Upwork contract");
     expect(texte).not.toContain("Noted:");
     expect(texte).not.toContain("Three questions to move forward.");
     expect(texte).not.toContain("Bonjour");
@@ -233,11 +242,25 @@ describe("composerMessage", () => {
       pays: "Turkey",
       etape: "pourparlers",
       langue: "tr",
+      documents: [docTalks],
     });
     const { texte } = composerMessage("Three questions to move forward.", ctx);
-    expect(texte).toContain("No need for a call");
-    expect(texte).toContain("Upwork contract");
+    expect(texte).toContain("on the Upwork thread");
     expect(texte).not.toContain("Three questions");
+  });
+
+  it("Talks : applique la consigne de style", () => {
+    const sofia = approche();
+    const ctx = contexteDepuisApproche(sofia, {
+      pays: "Spain",
+      etape: "pourparlers",
+      langue: "es",
+      documents: [docTalks],
+      consigne: "Ajoute des smileys. Pas de tirets cadratins.",
+    });
+    const { texte } = composerMessage("Playbook.", ctx);
+    expect(texte).toContain("🙂");
+    expect(texte).not.toContain("—");
   });
 
   it("reste en français pour la France", () => {

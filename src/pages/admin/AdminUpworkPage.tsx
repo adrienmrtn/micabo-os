@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { drapeauLangue } from "@/features/moteur/langues";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { annulerActionUpwork, chargerUpworkDashboard, sauverAccesUpwork } from "@/features/upwork/api";
+import { CONSIGNE_DEFAUT } from "@/features/upwork/savoir";
 import { Repliable } from "@/features/upwork/Deroule";
 import { EditeurModeles } from "@/features/upwork/EditeurModeles";
 import { UPWORK_ORG_NOM } from "@/features/upwork/org";
@@ -166,6 +168,50 @@ function ChampSlack({
   );
 }
 
+function ChampConsigne({ initial }: { initial: string }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [texte, setTexte] = React.useState(initial || CONSIGNE_DEFAUT);
+
+  React.useEffect(() => {
+    setTexte(initial || CONSIGNE_DEFAUT);
+  }, [initial]);
+
+  const sauver = useMutation({
+    mutationFn: () => sauverAccesUpwork({ consigne: texte.trim() || CONSIGNE_DEFAUT }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["upwork-dashboard"] }),
+  });
+
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <p className="mb-1 font-medium text-sm">{t("upwork.consigneTitre")}</p>
+      <p className="mb-3 text-muted-foreground text-xs">
+        {t("upwork.consigneAide")}{" "}
+        <Link to="/admin/documents" className="underline underline-offset-2">
+          {t("upwork.consigneDocs")}
+        </Link>
+      </p>
+      <Textarea
+        value={texte}
+        onChange={(e) => setTexte(e.target.value)}
+        rows={4}
+        placeholder={t("upwork.consignePh")}
+        className="text-sm leading-relaxed"
+        aria-label={t("upwork.consigneTitre")}
+      />
+      <div className="mt-2">
+        <Button
+          size="sm"
+          disabled={sauver.isPending || texte.trim() === (initial || CONSIGNE_DEFAUT).trim()}
+          onClick={() => sauver.mutate()}
+        >
+          {sauver.isPending ? t("common.saving") : t("common.save")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function AdminUpworkPage() {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
@@ -273,6 +319,8 @@ export function AdminUpworkPage() {
             initial={d.acces.slack_invite_manager}
             osUrl={d.acces.os_url}
           />
+
+          <ChampConsigne initial={d.acces.consigne} />
 
           <EditeurModeles modeles={d.modeles} />
 

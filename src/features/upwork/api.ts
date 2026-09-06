@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase/client";
 
 import type { UpworkModele } from "./modeles";
+import { CLES_DOCS_UPWORK, CONSIGNE_DEFAUT, type DocSavoir } from "./savoir";
 import type {
   TypeAction,
   UpworkAction,
@@ -51,6 +52,7 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
     modelesRes,
     accesRes,
     surveillanceRes,
+    docsRes,
   ] = await Promise.all([
       supabase
         .from("upwork_sync")
@@ -82,6 +84,10 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
       supabase.from("upwork_modeles").select(MODELE_COLS).order("cle"),
       supabase.rpc("upwork_acces_reglages"),
       supabase.rpc("upwork_surveillance"),
+      supabase
+        .from("documents")
+        .select("cle, titre, contenu, contenu_en")
+        .in("cle", [...CLES_DOCS_UPWORK]),
     ]);
   if (syncRes.error) throw syncRes.error;
   if (missionsRes.error) throw missionsRes.error;
@@ -94,10 +100,12 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
   if (modelesRes.error) throw modelesRes.error;
   if (accesRes.error) throw accesRes.error;
   if (surveillanceRes.error) throw surveillanceRes.error;
+  if (docsRes.error) throw docsRes.error;
 
   const accesBrut = (accesRes.data ?? {}) as {
     slack_invite_manager?: string;
     os_url?: string;
+    consigne?: string;
   };
 
   return {
@@ -113,14 +121,17 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
     acces: {
       slack_invite_manager: accesBrut.slack_invite_manager ?? "",
       os_url: accesBrut.os_url ?? "https://os.micabo.app/login",
+      consigne: accesBrut.consigne?.trim() || CONSIGNE_DEFAUT,
     },
+    documents: (docsRes.data ?? []) as DocSavoir[],
     surveillance: (surveillanceRes.data ?? []) as LigneSurveillance[],
   };
 }
 
 export async function sauverAccesUpwork(valeur: {
-  slack_invite_manager: string;
-  os_url: string;
+  slack_invite_manager?: string;
+  os_url?: string;
+  consigne?: string;
 }): Promise<void> {
   const { error } = await supabase.rpc("upwork_acces_reglages_sauver", {
     p_valeur: valeur,

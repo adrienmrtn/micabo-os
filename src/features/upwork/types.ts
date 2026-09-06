@@ -1,4 +1,5 @@
 import type { UpworkModele } from "./modeles";
+import type { DocSavoir } from "./savoir";
 
 export type FamilleMission = "hm" | "createur" | "autre";
 
@@ -195,7 +196,8 @@ export type UpworkDashboard = {
   campagnes: UpworkCampagne[];
   candidats: UpworkCandidat[];
   modeles: UpworkModele[];
-  acces: { slack_invite_manager: string; os_url: string };
+  acces: { slack_invite_manager: string; os_url: string; consigne: string };
+  documents: DocSavoir[];
   surveillance: LigneSurveillance[];
 };
 

@@ -1,5 +1,10 @@
 import type { EtapeTimelineCle } from "./timeline";
 import type { UpworkApproche } from "./types";
+import {
+  type DocSavoir,
+  appliquerConsigne,
+  reponseDepuisDocuments,
+} from "./savoir";
 
 /** Message pré-écrit pour une étape, éditable dans l'OS. */
 export type UpworkModele = {
@@ -38,6 +43,8 @@ export type ContexteModele = Partial<Record<VariableModele, string | null>> & {
   langue?: string | null;
   /** Leurs mots, pas le résumé. La réponse Talks s'appuie là-dessus. */
   dernier_message?: string | null;
+  documents?: DocSavoir[];
+  consigne?: string | null;
 };
 
 export const MODELE_GENERIQUE = "*";
@@ -158,6 +165,8 @@ export function contexteDepuisApproche(
     hmPrenom?: string | null;
     etape: EtapeTimelineCle;
     langue?: string | null;
+    documents?: DocSavoir[];
+    consigne?: string | null;
   },
 ): ContexteModele {
   const manques = manquesPour(a, extras.etape, extras.langue);
@@ -168,6 +177,8 @@ export function contexteDepuisApproche(
     hm_prenom: extras.hmPrenom ?? null,
     resume: a.resume_discussions?.trim() || null,
     dernier_message: a.dernier_message?.trim() || a.resume_discussions?.trim() || null,
+    documents: extras.documents,
+    consigne: extras.consigne ?? null,
     manques: manques.length ? manques.map((m) => `- ${m}`).join("\n") : null,
     role: a.role,
     etape: extras.etape,
@@ -254,7 +265,7 @@ function corpsReponseTalks(fr: boolean, dernier: string, intention: IntentionTal
     case "refus":
       return fr
         ? "C'est noté, merci de m'avoir prévenu. Je clos le fil."
-        : "Understood — thanks for letting me know. I'll close the thread.";
+        : "Understood, thanks for letting me know. I'll close the thread.";
     case "appel":
       return fr
         ? "Pas besoin d'appel, on fait tout ici. Prochaine étape : je t'envoie le contrat Upwork."
@@ -290,8 +301,8 @@ function corpsReponseTalks(fr: boolean, dernier: string, intention: IntentionTal
 }
 
 /**
- * Talks : on répond à LEUR dernier message. Le playbook ne sert que s'ils
- * n'ont rien dit d'utilisable.
+ * Talks : leur dernier message, réponse tirée des documents OS.
+ * Playbook seulement s'ils n'ont rien dit, ou si aucun document ne colle.
  */
 export function composerReponseTalks(
   playbook: string,
@@ -310,8 +321,14 @@ export function composerReponseTalks(
 
   if (prenom) blocs.push(fr ? `Bonjour ${prenom},` : `Hi ${prenom},`);
   if (messageUtileTalks(dernier)) {
+    const intention = intentionTalks(dernier);
+    const depuisDocs = reponseDepuisDocuments(dernier, ctx.documents, ctx.langue);
     blocs.push("");
-    blocs.push(corpsReponseTalks(fr, dernier, intentionTalks(dernier)));
+    if (intention === "refus") {
+      blocs.push(corpsReponseTalks(fr, dernier, intention));
+    } else {
+      blocs.push(depuisDocs ?? suite ?? corpsReponseTalks(fr, dernier, intention));
+    }
   } else if (suite) {
     blocs.push("");
     blocs.push(suite);
@@ -319,7 +336,10 @@ export function composerReponseTalks(
   blocs.push("");
   blocs.push(signaturePour(ctx));
 
-  const texte = blocs.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  const texte = appliquerConsigne(
+    blocs.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
+    ctx.consigne,
+  );
   const manquantes = rempli.manquantes.filter((v) => v !== "resume" && v !== "manques");
   return { texte, manquantes };
 }
@@ -363,7 +383,10 @@ export function composerMessage(
   blocs.push("");
   blocs.push(signaturePour(ctx));
 
-  const texte = blocs.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  const texte = appliquerConsigne(
+    blocs.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
+    ctx.consigne,
+  );
   const manquantes = rempli.manquantes.filter((v) => v !== "resume" && v !== "manques");
   return { texte, manquantes };
 }
