@@ -125,11 +125,12 @@ envoie le champ `message` **tel quel**. Pas un gabarit. Si l’envoi a déjà
 eu lieu hors file, l’admin coche la pastille.
 
 `upwork_modeles` est le playbook des autres étapes (la suite à
-couvrir), pas la lettre. L’OS compose un brouillon **par personne** :
-prénom, ce qu’elle a dit (`resume_discussions`), ce qu’il lui manque
-vraiment, puis le playbook. **Français si le pays est la France,
-anglais sinon** — invitations et brouillons compris, jamais
-l’espagnol / l’allemand / etc. L’admin relit et
+couvrir), pas la lettre. Sur **Talks / pourparlers**, l’OS affiche le
+**dernier message d’eux** (`dernier_message`) et compose une réponse
+qui dépend de ce message — pas un « Noted: » + gabarit. Le playbook
+ne sert que s’ils n’ont rien dit d’utilisable. **Français si le pays
+est la France, anglais sinon** — invitations et brouillons compris,
+jamais l’espagnol / l’allemand / etc. L’admin relit et
 envoie. L’action `envoyer_message` porte le texte **fini** dans sa
 colonne `message` : envoyer ce champ tel quel via `send_message`
 action=message_proposal. Ne rien réécrire, ne rien traduire, ne rien
@@ -157,7 +158,12 @@ Upwork + Supabase + Slack, projet `qkmiwnmiwsvwkttldqgb`) :
 4. Pour chaque job PUBLISHED : `list_client_proposals` status
  `messaged`, `offered` **et** `hired` seulement (pas declined /
  all). Une approche = une personne qui a répondu. `action=get`
- pour `user.photoUrl` + `user.publicUrl`.
+ pour `user.photoUrl` + `user.publicUrl`. Puis
+ `get_messages` `find_room` (context_type=proposal,
+ context_id=proposal_id) + `list_messages` : le **dernier message
+ d'eux** (`from_self` absent / false), verbatim, devient
+ `dernier_message` + `dernier_message_at`. Pas le nôtre. Pas un
+ résumé. `resume_discussions` reste le résumé court.
 5. Slack : `slack_search_users` par nom / email. Si trouvé →
    `slack_ok=true` + `slack_user_id`.
 6. `select public.upwork_sync_appliquer($payload::jsonb)` :
@@ -166,8 +172,9 @@ Upwork + Supabase + Slack, projet `qkmiwnmiwsvwkttldqgb`) :
    contrats (`contract_id`, `job_posting_id`, `contrat_at`,
    `freelancer_nom`, `slack_ok`, `slack_user_id`) ;
    approches (`upwork_proposal_id`, `job_posting_id`, `nom`, `role`,
- `statut` messaged|offered|hired, `resume_discussions`, `photo_url` depuis
-   `user.photoUrl`, `upwork_profile_url` depuis `user.publicUrl`,
+ `statut` messaged|offered|hired, `resume_discussions`,
+ `dernier_message`, `dernier_message_at`, `photo_url` depuis
+ `user.photoUrl`, `upwork_profile_url` depuis `user.publicUrl`,
    flags contrat / Slack / OS / warmup / premier_post ;
    `job_createur_id` = le job créateurs **de ce HM**, jamais le job
  du pays — un post = un HM).

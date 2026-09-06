@@ -205,6 +205,8 @@ const dash: UpworkDashboard = {
       role: "hm",
       statut: "hired",
       resume_discussions: "Hiring Manager sur une autre app.",
+      dernier_message: null,
+      dernier_message_at: null,
       offre_finalize_url: null,
       contrat_envoye_ok: true,
       contrat_signe_ok: true,
@@ -234,6 +236,8 @@ const dash: UpworkDashboard = {
       role: "hm",
       statut: "hired",
       resume_discussions: "Dispo tout de suite.",
+      dernier_message: null,
+      dernier_message_at: null,
       offre_finalize_url: null,
       contrat_envoye_ok: true,
       contrat_signe_ok: true,
@@ -263,6 +267,8 @@ const dash: UpworkDashboard = {
       role: "hm",
       statut: "messaged",
       resume_discussions: "OK pour démarrer.",
+      dernier_message: "OK pour démarrer, je suis dispo cette semaine.",
+      dernier_message_at: "2026-09-04T10:00:00Z",
       offre_finalize_url: null,
       contrat_envoye_ok: false,
       contrat_signe_ok: false,
@@ -292,6 +298,9 @@ const dash: UpworkDashboard = {
       role: "createur",
       statut: "messaged",
       resume_discussions: "Vit en France, déjà fait des TikTok.",
+      dernier_message:
+        "I’m really interested in it. I live in France and available right now.",
+      dernier_message_at: "2026-09-03T09:00:27.498Z",
       offre_finalize_url: null,
       contrat_envoye_ok: false,
       contrat_signe_ok: false,
@@ -321,6 +330,8 @@ const dash: UpworkDashboard = {
       role: "createur",
       statut: "hired",
       resume_discussions: "Premier post publié.",
+      dernier_message: null,
+      dernier_message_at: null,
       offre_finalize_url: null,
       contrat_envoye_ok: true,
       contrat_signe_ok: true,
@@ -557,7 +568,23 @@ describe("pages Upwork", () => {
     expect(screen.queryByText("Accès envoyés : Slack + codes OS")).not.toBeInTheDocument();
     expect(screen.queryByText(/je poste ton job créateurs/i)).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue(/ici {{hm_prenom}}/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^envoyer$/i })).not.toBeInTheDocument();
+    // Un seul Envoyer : Talks HM. Pas de Send sur les créateurs.
+    expect(screen.getAllByRole("button", { name: /^envoyer$/i })).toHaveLength(1);
+  });
+
+  it("page France : Talks montre le dernier message et une réponse qui en dépend", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork/fr");
+    await screen.findByText("Leiliane De Saint Jores");
+    toutDeplier();
+
+    expect(screen.getAllByText("Son dernier message").length).toBeGreaterThan(0);
+    expect(screen.getByText("OK pour démarrer, je suis dispo cette semaine.")).toBeInTheDocument();
+    const reponse = (screen.getByLabelText("Réponse prête") as HTMLTextAreaElement).value;
+    expect(reponse).toMatch(/contrat Upwork/i);
+    expect(reponse).not.toMatch(/j'ai bien noté/i);
+    expect(reponse).not.toMatch(/on lance micabo/i);
+    expect(screen.getByText("I’m really interested in it. I live in France and available right now.")).toBeInTheDocument();
   });
 
   it("page France : le contrat HM passe par un brouillon, jamais par un envoi direct", async () => {

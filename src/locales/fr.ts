@@ -2231,6 +2231,10 @@ export const fr = {
       cocheAide: "La seule case que tu coches toi — le reste vient de l’OS, de Slack et d’Upwork.",
       cocherIndice: "Cliquer pour cocher — c’est toi la source sur cette case.",
       messageEtape: "Message pour cette étape",
+      dernierMessage: "Son dernier message",
+      reponsePrete: "Réponse prête",
+      reponseAide:
+        "Répond à son dernier message, pas au playbook. Relis et corrige — c’est ce texte exact que l’agent enverra.",
       messageEnvoyer: "Envoyer",
       messageEnFile: "Envoi demandé",
       messageAide:

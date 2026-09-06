@@ -5,9 +5,11 @@ import {
   type UpworkModele,
   composerMessage,
   contexteDepuisApproche,
+  intentionTalks,
   langueMessage,
   manquesPour,
   messageEnvoyable,
+  messageUtileTalks,
   modelePour,
   prenomDe,
   remplirModele,
@@ -126,6 +128,8 @@ function approche(over: Partial<UpworkApproche> = {}): UpworkApproche {
     role: "hm",
     statut: "messaged",
     resume_discussions: "Intéressée. Demande comment on démarre.",
+    dernier_message: "Hi, how are you? I'm interested in the proposal.\nHow do we get started? Thanks.",
+    dernier_message_at: "2026-09-03T19:46:10.298Z",
     offre_finalize_url: null,
     contrat_envoye_ok: false,
     contrat_signe_ok: false,
@@ -167,8 +171,24 @@ describe("manquesPour", () => {
   });
 });
 
+describe("intentionTalks", () => {
+  it("lit ce qu'ils viennent de dire, pas un résumé", () => {
+    expect(intentionTalks("How do we get started? Thanks.")).toBe("demarrage");
+    expect(
+      intentionTalks("Let me know when would be a good time to get on a call."),
+    ).toBe("appel");
+    expect(
+      intentionTalks("I have decided to pursue another opportunity at this time."),
+    ).toBe("refus");
+    expect(intentionTalks("I live in France and available right now")).toBe("dispo");
+    expect(intentionTalks("I'm interested in the proposal.")).toBe("interesse");
+    expect(messageUtileTalks(".")).toBe(false);
+    expect(messageUtileTalks("How do we get started?")).toBe(true);
+  });
+});
+
 describe("composerMessage", () => {
-  it("répond en anglais hors France", () => {
+  it("Talks : répond à leur dernier message, pas au playbook", () => {
     const sofia = approche();
     const ctx = contexteDepuisApproche(sofia, {
       pays: "Spain",
@@ -178,10 +198,46 @@ describe("composerMessage", () => {
     const { texte, manquantes } = composerMessage("Three questions to move forward.", ctx);
     expect(manquantes).toEqual([]);
     expect(texte).toContain("Hi Sofia,");
-    expect(texte).toContain("Noted: Intéressée. Demande comment on démarre.");
-    expect(texte).toContain("Three questions to move forward.");
+    expect(texte).toContain("You asked how we get started");
+    expect(texte).toContain("Upwork contract");
+    expect(texte).not.toContain("Noted:");
+    expect(texte).not.toContain("Three questions to move forward.");
     expect(texte).not.toContain("Bonjour");
     expect(texte).toMatch(/Adrien$/);
+  });
+
+  it("Talks : un refus ne propose pas le contrat", () => {
+    const priya = approche({
+      nom: "Priya Chokanda Kaverappa",
+      dernier_message:
+        "Thanks for the offer; however, I have decided to pursue another opportunity at this time.",
+    });
+    const ctx = contexteDepuisApproche(priya, {
+      pays: "Germany",
+      etape: "pourparlers",
+      langue: "de",
+    });
+    const { texte } = composerMessage("Three questions to move forward.", ctx);
+    expect(texte).toContain("I'll close the thread");
+    expect(texte).not.toContain("contract");
+    expect(texte).not.toContain("Three questions");
+  });
+
+  it("Talks : une demande d'appel se refuse, on reste sur le fil", () => {
+    const aya = approche({
+      nom: "Aya El Walid",
+      dernier_message:
+        "Happy to discuss the details. Let me know when would be a good time to get on a call.",
+    });
+    const ctx = contexteDepuisApproche(aya, {
+      pays: "Turkey",
+      etape: "pourparlers",
+      langue: "tr",
+    });
+    const { texte } = composerMessage("Three questions to move forward.", ctx);
+    expect(texte).toContain("No need for a call");
+    expect(texte).toContain("Upwork contract");
+    expect(texte).not.toContain("Three questions");
   });
 
   it("reste en français pour la France", () => {

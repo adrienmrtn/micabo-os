@@ -230,10 +230,16 @@ type OutilsMessage = {
   onAnnuler: (id: string) => void;
 };
 
-/** Le message ne s'affiche que sous l'étape en cours : une seule chose à faire. */
+/**
+ * Talks : dernier message + réponse, tant que le contrat n'est pas signé.
+ * Les autres encarts restent sous l'étape en cours.
+ */
 function encartMessage(a: UpworkApproche, o: OutilsMessage, hmPrenom: string | null = null) {
-  return (etape: { cle: Parameters<typeof MessageEtape>[0]["etape"] }, courante: boolean) =>
-    courante ? (
+  return (etape: { cle: Parameters<typeof MessageEtape>[0]["etape"] }, courante: boolean) => {
+    const talksOuverts =
+      etape.cle === "pourparlers" && a.role === "hm" && !a.contrat_signe_ok;
+    if (!courante && !talksOuverts) return null;
+    return (
       <MessageEtape
         approche={a}
         etape={etape.cle}
@@ -251,7 +257,8 @@ function encartMessage(a: UpworkApproche, o: OutilsMessage, hmPrenom: string | n
         onPreparerContrat={o.onPreparerContrat}
         onAnnuler={o.onAnnuler}
       />
-    ) : null;
+    );
+  };
 }
 
 function CarteCreateur({ a }: { a: UpworkApproche }) {

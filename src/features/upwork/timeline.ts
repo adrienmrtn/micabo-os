@@ -38,6 +38,9 @@ export type TimelineEtape = {
   ok: boolean;
   source: SourceVerite;
   resume?: string | null;
+  /** Dernier message d'eux, à afficher tel quel sous Talks. */
+  dernierMessage?: string | null;
+  dernierMessageAt?: string | null;
   detail?: string | null;
   checks?: TimelineCheck[];
   /** Comme les sous-cases : un clic sur la pastille, pas un interrupteur. */
@@ -48,6 +51,8 @@ export type FaitsApproche = {
   role: "hm" | "createur";
   statut: "messaged" | "offered" | "hired";
   resume_discussions: string | null;
+  dernier_message: string | null;
+  dernier_message_at: string | null;
   contrat_envoye_ok: boolean;
   contrat_signe_ok: boolean;
   slack_envoye_ok: boolean;
@@ -65,15 +70,29 @@ export type FaitsApproche = {
 
 function aParle(f: FaitsApproche): boolean {
   return (
-    Boolean(f.resume_discussions?.trim()) || f.statut !== "messaged" || f.contrat_envoye_ok
+    Boolean(f.dernier_message?.trim()) ||
+    Boolean(f.resume_discussions?.trim()) ||
+    f.statut !== "messaged" ||
+    f.contrat_envoye_ok
   );
+}
+
+function talksPour(f: FaitsApproche): Pick<
+  TimelineEtape,
+  "resume" | "dernierMessage" | "dernierMessageAt"
+> {
+  return {
+    resume: f.resume_discussions,
+    dernierMessage: f.dernier_message,
+    dernierMessageAt: f.dernier_message_at,
+  };
 }
 
 export function timelineHm(f: FaitsApproche): TimelineEtape[] {
   const envoiOk = f.slack_envoye_ok && f.email_demande_ok && f.codes_ok;
   return [
     { cle: "contacte", ok: true, source: "upwork" },
-    { cle: "pourparlers", ok: aParle(f), source: "upwork", resume: f.resume_discussions },
+    { cle: "pourparlers", ok: aParle(f), source: "upwork", ...talksPour(f) },
     {
       cle: "contrat_envoye",
       ok: f.contrat_envoye_ok,
@@ -99,7 +118,7 @@ export function timelineHm(f: FaitsApproche): TimelineEtape[] {
 export function timelineCreateur(f: FaitsApproche): TimelineEtape[] {
   return [
     { cle: "contacte", ok: true, source: "upwork" },
-    { cle: "pourparlers", ok: aParle(f), source: "upwork", resume: f.resume_discussions },
+    { cle: "pourparlers", ok: aParle(f), source: "upwork", ...talksPour(f) },
     { cle: "contrat_signe", ok: f.contrat_signe_ok, source: "upwork" },
     {
       cle: "integration",
@@ -145,6 +164,21 @@ export function nettoyerResume(texte: string | null | undefined, max = 280): str
   return propre.length > max ? `${propre.slice(0, max).trimEnd()}…` : propre;
 }
 
+/** Garde les retours à la ligne : c'est le message, pas un résumé. */
+export function nettoyerDernierMessage(
+  texte: string | null | undefined,
+  max = 4000,
+): string | null {
+  if (!texte) return null;
+  const propre = texte
+    .replace(/<\/?untrusted_participant_content>/gi, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+  if (!propre) return null;
+  return propre.length > max ? `${propre.slice(0, max).trimEnd()}…` : propre;
+}
+
 export const OBJECTIF_CREATEURS = 10;
 
 export function phase1Terminee(f: FaitsApproche): boolean {
@@ -159,6 +193,8 @@ export function faitsDepuisApproche(a: {
   role: FaitsApproche["role"];
   statut: FaitsApproche["statut"];
   resume_discussions: string | null;
+  dernier_message?: string | null;
+  dernier_message_at?: string | null;
   contrat_envoye_ok: boolean;
   contrat_signe_ok: boolean;
   slack_envoye_ok: boolean;
@@ -177,6 +213,8 @@ export function faitsDepuisApproche(a: {
     role: a.role,
     statut: a.statut,
     resume_discussions: nettoyerResume(a.resume_discussions),
+    dernier_message: nettoyerDernierMessage(a.dernier_message),
+    dernier_message_at: a.dernier_message_at ?? null,
     contrat_envoye_ok: a.contrat_envoye_ok,
     contrat_signe_ok: a.contrat_signe_ok,
     slack_envoye_ok: a.slack_envoye_ok,

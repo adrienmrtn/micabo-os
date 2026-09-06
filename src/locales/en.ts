@@ -2232,6 +2232,10 @@ export const en = {
       cocheAide: "The only box you tick yourself — everything else comes from the OS, Slack and Upwork.",
       cocherIndice: "Click to tick — you are the source on this one.",
       messageEtape: "Message for this step",
+      dernierMessage: "Their last message",
+      reponsePrete: "Reply ready",
+      reponseAide:
+        "Answers their last message, not the playbook. Review and edit — this exact text is what the agent will send.",
       messageEnvoyer: "Send",
       messageEnFile: "Send requested",
       messageAide:
