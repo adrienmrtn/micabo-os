@@ -367,7 +367,7 @@ export function composerMessage(
   const blocs: string[] = [];
 
   if (prenom) blocs.push(fr ? `Bonjour ${prenom},` : `Hi ${prenom},`);
-  if (ctx.resume?.trim() && !porteResume) {
+  if (ctx.resume?.trim() && !porteResume && ctx.etape !== "contrat_envoye") {
     blocs.push("");
     blocs.push(fr ? `J'ai bien noté : ${ctx.resume.trim()}` : `Noted: ${ctx.resume.trim()}`);
   }

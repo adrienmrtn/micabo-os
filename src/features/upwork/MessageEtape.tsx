@@ -83,7 +83,7 @@ export function MessageEtape({
   const contratIci = etape === "contrat_envoye";
   const accesHm = etape === "acces_envoyes";
   if (!ETAPES_AVEC_MESSAGE.includes(etape) && !contratIci && !accesHm) return null;
-  const titreMessage = talksIci ? t("upwork.reponsePrete") : t("upwork.messageEtape");
+  const titreMessage = t("upwork.propositionEnvoyer");
   const aideMessage = talksIci ? t("upwork.reponseAide") : t("upwork.messageAide");
 
   if (accesHm) {

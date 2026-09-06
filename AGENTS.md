@@ -154,11 +154,15 @@ envoie le champ `message` **tel quel**. Pas un gabarit. Si l’envoi a déjà
 eu lieu hors file, l’admin coche la pastille.
 
 `upwork_modeles` est le playbook des autres étapes (la suite à
-couvrir), pas la lettre. Sur **Talks / pourparlers**, l’OS affiche le
-**dernier message d’eux** (`dernier_message`) et compose une réponse
-**tirée des documents OS** (`reponses_upwork`, FAQ / guide manager) —
-pas un « Noted: » + gabarit inventé. Le playbook ne sert que s’ils
-n’ont rien dit, ou si aucun document ne colle. La **consigne de style**
+couvrir), pas la lettre. Quand c’est à l’admin d’écrire (Talks ou
+contrat, HM seulement), la **proposition à envoyer** est sur la carte,
+toujours visible, éditable, adaptée à l’échelon. Sur **Talks /
+pourparlers**, l’OS affiche le **dernier message d’eux**
+(`dernier_message`) et compose une réponse **tirée des documents OS**
+(`reponses_upwork`, FAQ / guide manager) — pas un « Noted: » + gabarit
+inventé. Le playbook ne sert que s’ils n’ont rien dit, ou si aucun
+document ne colle. Au contrat, c’est le playbook `contrat_envoye`,
+sans « Noted: ». La **consigne de style**
 (page `/admin/upwork`, éditable) s’applique aux brouillons : smileys,
 pas de tirets cadratins, etc. Elle est aussi recopiée dans le prompt
 des actions `envoyer_message` et `preparer_contrat`. **Français si le

@@ -263,6 +263,24 @@ describe("composerMessage", () => {
     expect(texte).not.toContain("—");
   });
 
+  it("contrat : playbook sans Noted", () => {
+    const leiliane = approche({
+      nom: "Leiliane De Saint Jores",
+      resume_discussions: "OK pour démarrer.",
+      dernier_message: "OK pour démarrer, je suis dispo cette semaine.",
+    });
+    const ctx = contexteDepuisApproche(leiliane, {
+      pays: "France",
+      etape: "contrat_envoye",
+      langue: "fr",
+    });
+    const { texte } = composerMessage("Je t'envoie le contrat sur Upwork dans la foulée.", ctx);
+    expect(texte).toContain("Bonjour Leiliane,");
+    expect(texte).toContain("Je t'envoie le contrat sur Upwork dans la foulée.");
+    expect(texte).not.toContain("J'ai bien noté");
+    expect(texte).not.toContain("Noted:");
+  });
+
   it("reste en français pour la France", () => {
     const rose = approche({
       nom: "Rose Vasquez",
