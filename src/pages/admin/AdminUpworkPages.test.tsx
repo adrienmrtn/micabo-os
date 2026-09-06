@@ -7,6 +7,7 @@ import i18n from "@/locales";
 import {
   envoyerMessageUpwork,
   marquerAjoutUpwork,
+  marquerAccesEnvoyes,
   marquerContratEnvoye,
   preparerContratUpwork,
 } from "@/features/upwork/api";
@@ -19,7 +20,7 @@ const dash: UpworkDashboard = {
     org_uid: "1990051114607612379",
     last_run_at: "2026-09-04T12:00:00Z",
     last_ok: true,
-    last_detail: "6 jobs",
+    last_detail: "Ce que j'ai fait\n• 6 missions PUBLISHED syncées.\n\nÉtat du compte\nFrance — Sara en phase 2.",
     updated_at: "2026-09-04T12:00:00Z",
   },
   missions: [
@@ -336,7 +337,8 @@ const dash: UpworkDashboard = {
     },
   ],
   acces: {
-    slack_invite_manager: "",
+    slack_invite_manager:
+      "https://join.slack.com/t/micaboapp/shared_invite/zt-48nrw6z5x-Cdeo6CPVDldMYUBsQEzs8A",
     os_url: "https://os.micabo.app/login",
   },
 };
@@ -353,6 +355,7 @@ vi.mock("@/features/upwork/api", () => ({
   preparerContratUpwork: vi.fn(async () => undefined),
   enregistrerModele: vi.fn(async () => undefined),
   marquerContratEnvoye: vi.fn(async () => undefined),
+  marquerAccesEnvoyes: vi.fn(async () => undefined),
   sauverAccesUpwork: vi.fn(async () => undefined),
 }));
 
@@ -380,6 +383,13 @@ function toutDeplier() {
 }
 
 describe("pages Upwork", () => {
+  it("page xx : faux pays, retour au dashboard", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork/xx");
+    expect(await screen.findByText("Dernier passage de l’agent")).toBeInTheDocument();
+    expect(screen.queryByText("XX xx")).not.toBeInTheDocument();
+  });
+
   it("dashboard : 4 KPI + lien vers un pays", async () => {
     await i18n.changeLanguage("fr");
     wrap("/admin/upwork");
@@ -392,13 +402,19 @@ describe("pages Upwork", () => {
     await i18n.changeLanguage("fr");
     wrap("/admin/upwork");
     expect(await screen.findByText("Lien Slack managers")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("https://join.slack.com/…")).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue(
+        "https://join.slack.com/t/micaboapp/shared_invite/zt-48nrw6z5x-Cdeo6CPVDldMYUBsQEzs8A",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("dashboard : dernier passage de l’agent et prompts en attente", async () => {
     await i18n.changeLanguage("fr");
     wrap("/admin/upwork");
     expect(await screen.findByText("Dernier passage de l’agent")).toBeInTheDocument();
+    expect(screen.getByText(/Ce que j'ai fait/)).toBeInTheDocument();
+    expect(screen.getByText(/État du compte/)).toBeInTheDocument();
     expect(screen.getByText("Prompts prêts pour l’agent")).toBeInTheDocument();
     expect(screen.getByText("Arisoa Estelle Rajaobelina")).toBeInTheDocument();
 
@@ -479,7 +495,8 @@ describe("pages Upwork", () => {
     toutDeplier();
 
     expect(screen.getByText("Accès après contrat signé")).toBeInTheDocument();
-    expect(screen.getByText(/crée le recruiter/)).toBeInTheDocument();
+    expect(screen.getByText(/crée le compte/)).toBeInTheDocument();
+    expect(screen.getByText(/clique la pastille/)).toBeInTheDocument();
     expect(screen.queryByDisplayValue(/tes accès micabo/)).not.toBeInTheDocument();
   });
 
@@ -517,6 +534,21 @@ describe("pages Upwork", () => {
     expect(aFaire).toBeTruthy();
     fireEvent.click(aFaire!);
     await waitFor(() => expect(marquerContratEnvoye).toHaveBeenCalledWith("p-leiliane", true));
+  });
+
+  it("page France : la pastille « accès envoyés » se clique si l’agent n’a pas tout coché", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork/fr");
+    await screen.findByText("Rose Vasquez");
+    toutDeplier();
+
+    const pastilles = screen.getAllByRole("button", {
+      name: /accès envoyés : slack \+ demande email \+ codes os/i,
+    });
+    const aFaire = pastilles.find((b) => b.getAttribute("aria-pressed") === "false");
+    expect(aFaire).toBeTruthy();
+    fireEvent.click(aFaire!);
+    await waitFor(() => expect(marquerAccesEnvoyes).toHaveBeenCalledWith("p-rose", true));
   });
 
   it("dashboard : les modèles de messages s’éditent sur la page Upwork", async () => {

@@ -60,7 +60,7 @@ Missions **PUBLISHED seulement**. Aucun envoi.
 | `contrat_envoye_ok` | Upwork + admin | dérivé SQL (`offered` / contrat) **ou** clic sur la pastille |
 | `slack_ok` (« rejoint Slack ») | Slack MCP | payload du sweep |
 | `upwork_ajoute_ok` | admin | clic sur la pastille dans l'OS, jamais le sweep |
-| `slack_envoye_ok` / `email_demande_ok` / `codes_ok` | OS | après l'envoi auto des accès HM (`envoyer_acces_hm`) |
+| `slack_envoye_ok` / `email_demande_ok` / `codes_ok` | OS + admin | après `envoyer_acces_hm` **ou** clic sur la pastille « accès envoyés » |
 
 `os_ok` et `tiktok_cree_ok` sont recalculés par le trigger
 `upwork_approches_relier_os` après chaque insert : **ne pas** les mettre
@@ -114,9 +114,10 @@ elle rejoint la chaîne HM classique. Rien de spécial à faire.
 
 Après **contrat signé** (HM), l’OS envoie les accès tout seul : il
 crée le recruiter (`hiring_manager`, langue du pays, email `@micabo.app`),
-compose le message (lien Slack managers + codes OS + demande d’email)
-et pose `envoyer_acces_hm` dans la file. L’agent envoie le champ
-`message` **tel quel**. Pas un gabarit.
+compose le message (**lien Slack managers à cliquer** + email/mot de passe
+OS + demande d’email) et pose `envoyer_acces_hm` dans la file. L’agent
+envoie le champ `message` **tel quel**. Pas un gabarit. Si l’envoi a déjà
+eu lieu hors file, l’admin coche la pastille.
 
 `upwork_modeles` est le playbook des autres étapes (la suite à
 couvrir), pas la lettre. L’OS compose un brouillon **par personne** :

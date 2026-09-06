@@ -18,6 +18,32 @@ import { ICONE_KPI } from "@/features/upwork/icones";
 import { totauxUpwork } from "@/features/upwork/totaux";
 import type { UpworkAction } from "@/features/upwork/types";
 
+function CompteRendu({ texte }: { texte: string }) {
+  const blocs = texte
+    .split(/\n\n+/)
+    .map((b) => b.trim())
+    .filter(Boolean);
+  return (
+    <div className="mt-3 max-h-[28rem] space-y-3 overflow-y-auto rounded-lg bg-muted/50 p-3 text-sm leading-relaxed">
+      {blocs.map((bloc) => (
+        <div key={bloc.slice(0, 48)} className="space-y-1">
+          {bloc.split("\n").map((ligne) => {
+            const titre = !ligne.startsWith("•") && !ligne.includes(" — ");
+            return (
+              <p
+                key={ligne}
+                className={titre ? "font-medium text-foreground" : "text-muted-foreground"}
+              >
+                {ligne}
+              </p>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function formatQuand(iso: string | null | undefined, locale: string): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -177,7 +203,7 @@ export function AdminUpworkPage() {
       {d && totaux && (
         <>
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-xl border bg-card p-4">
+            <div className="rounded-xl border bg-card p-4 md:col-span-2">
               <p className="mb-2 font-medium text-sm">{t("upwork.syncTitre")}</p>
               <p className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
                 {d.sync && (
@@ -193,9 +219,7 @@ export function AdminUpworkPage() {
                     : t("upwork.syncJamais")}
                 </span>
               </p>
-              {d.sync?.last_detail && (
-                <p className="mt-1 text-muted-foreground text-xs">{d.sync.last_detail}</p>
-              )}
+              {d.sync?.last_detail && <CompteRendu texte={d.sync.last_detail} />}
             </div>
 
             <div className="rounded-xl border bg-card p-4">
@@ -257,7 +281,7 @@ export function AdminUpworkPage() {
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {totaux.parPays.map((pays) => (
-                <Link key={pays.langue || "inconnu"} to={`/admin/upwork/${pays.langue || "xx"}`}>
+                <Link key={pays.langue} to={`/admin/upwork/${pays.langue}`}>
                   <Card className="h-full transition-colors hover:bg-accent/40">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="flex items-center gap-2 text-base">

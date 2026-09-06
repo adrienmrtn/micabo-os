@@ -16,6 +16,7 @@ import {
   deciderCandidat,
   envoyerMessageUpwork,
   lancerCampagneHm,
+  marquerAccesEnvoyes,
   marquerAjoutUpwork,
   marquerContratEnvoye,
   preparerContratUpwork,
@@ -25,6 +26,7 @@ import { Deroule, Jauge, Repliable, ResumeEtape } from "@/features/upwork/Deroul
 import { JobsHm } from "@/features/upwork/JobsHm";
 import { MessageEtape } from "@/features/upwork/MessageEtape";
 import { type UpworkModele, contexteDepuisApproche } from "@/features/upwork/modeles";
+import { langueValide } from "@/features/upwork/langue";
 import { nomPays } from "@/features/upwork/pipeline";
 import {
   approchesDuJob,
@@ -308,6 +310,7 @@ function VieHm({
   onArreter,
   onToggleUpwork,
   onToggleContrat,
+  onToggleAcces,
 }: {
   hm: UpworkApproche;
   jobCrea: UpworkMission | null;
@@ -317,6 +320,7 @@ function VieHm({
   onArreter: (proposalId: string, note: string | null) => void;
   onToggleUpwork: (proposalId: string, ok: boolean) => void;
   onToggleContrat: (proposalId: string, ok: boolean) => void;
+  onToggleAcces: (proposalId: string, ok: boolean) => void;
 }) {
   const { t } = useTranslation();
   const faits = faitsDepuisApproche(hm);
@@ -348,6 +352,7 @@ function VieHm({
                   }}
                   onCocherEtape={(cle, ok) => {
                     if (cle === "contrat_envoye") onToggleContrat(hm.upwork_proposal_id, ok);
+                    if (cle === "acces_envoyes") onToggleAcces(hm.upwork_proposal_id, ok);
                   }}
                   encart={encartMessage(hm, outils)}
                 />
@@ -451,6 +456,12 @@ export function AdminUpworkPaysPage() {
     onSuccess: rafraichir,
   });
 
+  const basculerAcces = useMutation({
+    mutationFn: (v: { proposalId: string; ok: boolean }) =>
+      marquerAccesEnvoyes(v.proposalId, v.ok),
+    onSuccess: rafraichir,
+  });
+
   const arreter = useMutation({
     mutationFn: (v: { proposalId: string; note: string | null }) =>
       creerActionUpwork("arreter_recrutement", v.proposalId, v.note ?? undefined),
@@ -488,7 +499,7 @@ export function AdminUpworkPaysPage() {
     onSuccess: rafraichir,
   });
 
-  if (!/^[a-z]{2}$/.test(langue)) {
+  if (!langueValide(langue)) {
     return <Navigate to="/admin/upwork" replace />;
   }
 
@@ -519,7 +530,8 @@ export function AdminUpworkPaysPage() {
     deciderProfil.isPending ||
     envoyerMessage.isPending ||
     preparerContrat.isPending ||
-    basculerContrat.isPending;
+    basculerContrat.isPending ||
+    basculerAcces.isPending;
   const erreur = (basculerUpwork.error ??
     arreter.error ??
     annuler.error ??
@@ -528,7 +540,8 @@ export function AdminUpworkPaysPage() {
     deciderProfil.error ??
     envoyerMessage.error ??
     preparerContrat.error ??
-    basculerContrat.error) as Error | null;
+    basculerContrat.error ??
+    basculerAcces.error) as Error | null;
 
   const outils: OutilsMessage = {
     modeles: d?.modeles ?? [],
@@ -624,6 +637,9 @@ export function AdminUpworkPaysPage() {
                     onToggleUpwork={(proposalId, ok) => basculerUpwork.mutate({ proposalId, ok })}
                     onToggleContrat={(proposalId, ok) =>
                       basculerContrat.mutate({ proposalId, ok })
+                    }
+                    onToggleAcces={(proposalId, ok) =>
+                      basculerAcces.mutate({ proposalId, ok })
                     }
                   />
                 );

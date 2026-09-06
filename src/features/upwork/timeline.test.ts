@@ -61,7 +61,10 @@ describe("timelineHm", () => {
       slack_ok: false,
       upwork_ajoute_ok: true,
     });
-    expect(etapes.find((e) => e.cle === "acces_envoyes")?.ok).toBe(true);
+    const acces = etapes.find((e) => e.cle === "acces_envoyes");
+    expect(acces?.ok).toBe(true);
+    expect(acces?.source).toBe("admin");
+    expect(acces?.cochable).toBe(true);
     expect(etapes.find((e) => e.cle === "integration")?.ok).toBe(false);
     expect(etapes.find((e) => e.cle === "integration")?.checks).toEqual([
       { cle: "os", ok: true, source: "os" },

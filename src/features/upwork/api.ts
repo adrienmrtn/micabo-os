@@ -204,6 +204,16 @@ export async function marquerContratEnvoye(proposalId: string, ok: boolean): Pro
   if (error) throw error;
 }
 
+/** Slack + demande email + codes OS : l'agent le fait, ou l'admin coche si ça a déjà été fait. */
+export async function marquerAccesEnvoyes(proposalId: string, ok: boolean): Promise<void> {
+  const { error } = await supabase.rpc("upwork_marquer_flag", {
+    p_proposal_id: proposalId,
+    p_flag: "acces_envoyes",
+    p_ok: ok,
+  });
+  if (error) throw error;
+}
+
 /** Empile un prompt : l'OS n'exécute rien, l'agent le prendra au passage suivant. */
 export async function creerActionUpwork(
   type: TypeAction,
