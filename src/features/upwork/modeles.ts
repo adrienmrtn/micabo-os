@@ -1,4 +1,4 @@
-import type { EtapeTimelineCle } from "./timeline";
+import { type EtapeTimelineCle, messageDeNous } from "./timeline";
 import type { UpworkApproche } from "./types";
 import {
   type DocSavoir,
@@ -186,14 +186,20 @@ export function contexteDepuisApproche(
   };
 }
 
-function retirerOuverture(texte: string, prenom: string): string {
-  const ligne = texte.replace(/^\s+/u, "");
+/** Hi / Hello / Bonjour en tête — y compris un « Hello! » tout seul. */
+export function retirerOuvertures(texte: string, prenom: string): string {
+  let ligne = texte.replace(/^\s+/u, "");
   const nom = prenom.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const motif = new RegExp(
-    `^(?:bonjour|hi|hello)(?:\\s+${nom})?\\s*,?\\s*`,
+    `^(?:bonjour|salut|hi|hey|hello)(?:\\s+${nom})?\\s*[,!.…]*\\s*`,
     "i",
   );
-  return ligne.replace(motif, "").replace(/^\n+/, "").trim();
+  for (let i = 0; i < 5; i += 1) {
+    const next = ligne.replace(motif, "").replace(/^\n+/, "").trim();
+    if (next === ligne) break;
+    ligne = next;
+  }
+  return ligne;
 }
 
 function retirerSignature(texte: string): string {
@@ -310,24 +316,34 @@ export function composerReponseTalks(
 ): { texte: string; manquantes: string[] } {
   const fr = langueMessage(ctx.langue) === "fr";
   const prenom = ctx.prenom?.trim() || "";
-  const dernier = (ctx.dernier_message ?? "").trim();
+  const brutDernier = (ctx.dernier_message ?? "").trim();
+  const dernier = messageDeNous(brutDernier, prenom) ? "" : brutDernier;
   const rempli = remplirModele(playbook, {
     ...ctx,
     resume: ctx.resume ?? "",
     manques: ctx.manques ?? "",
   });
-  const suite = retirerSignature(retirerOuverture(rempli.texte, prenom || "x"));
+  const suite = retirerSignature(retirerOuvertures(rempli.texte, prenom || "x"));
   const blocs: string[] = [];
+  let extraManquantes: string[] = [];
 
   if (prenom) blocs.push(fr ? `Bonjour ${prenom},` : `Hi ${prenom},`);
   if (messageUtileTalks(dernier)) {
     const intention = intentionTalks(dernier);
     const depuisDocs = reponseDepuisDocuments(dernier, ctx.documents, ctx.langue ?? null);
+    const brut = depuisDocs ?? suite ?? corpsReponseTalks(fr, dernier, intention);
+    const rempliCorps = remplirModele(brut, {
+      ...ctx,
+      resume: ctx.resume ?? "",
+      manques: ctx.manques ?? "",
+    });
+    extraManquantes = rempliCorps.manquantes;
+    const corps = retirerSignature(retirerOuvertures(rempliCorps.texte, prenom || "x"));
     blocs.push("");
     if (intention === "refus") {
       blocs.push(corpsReponseTalks(fr, dernier, intention));
-    } else {
-      blocs.push(depuisDocs ?? suite ?? corpsReponseTalks(fr, dernier, intention));
+    } else if (corps) {
+      blocs.push(corps);
     }
   } else if (suite) {
     blocs.push("");
@@ -340,13 +356,16 @@ export function composerReponseTalks(
     blocs.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
     ctx.consigne,
   );
-  const manquantes = rempli.manquantes.filter((v) => v !== "resume" && v !== "manques");
+  const manquantes = [...rempli.manquantes, ...extraManquantes].filter(
+    (v, i, all) => all.indexOf(v) === i && v !== "resume" && v !== "manques",
+  );
   return { texte, manquantes };
 }
 
 /**
- * Un brouillon pour CETTE personne, dans SA langue. Talks = leur dernier
- * message. Les autres étapes : ce qu'il manque, puis le gabarit.
+ * Un brouillon pour CETTE personne, dans SA langue. Talks = dernier
+ * du fil (eux), sans répondre à notre propre message. Les autres
+ * étapes : ce qu'il manque, puis le gabarit.
  */
 export function composerMessage(
   corps: string,
@@ -363,7 +382,7 @@ export function composerMessage(
     manques: ctx.manques ?? "",
   });
   const prenom = ctx.prenom?.trim() || "";
-  const suite = retirerSignature(retirerOuverture(rempli.texte, prenom || "x"));
+  const suite = retirerSignature(retirerOuvertures(rempli.texte, prenom || "x"));
   const blocs: string[] = [];
 
   if (prenom) blocs.push(fr ? `Bonjour ${prenom},` : `Hi ${prenom},`);

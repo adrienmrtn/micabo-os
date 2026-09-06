@@ -2244,7 +2244,8 @@ export const fr = {
       cocheAide: "La seule case que tu coches toi — le reste vient de l’OS, de Slack et d’Upwork.",
       cocherIndice: "Cliquer pour cocher — c’est toi la source sur cette case.",
       messageEtape: "Message pour cette étape",
-      dernierMessage: "Son dernier message",
+      dernierMessage: "Dernier message",
+      dernierMessageNous: "Toi",
       reponsePrete: "Réponse prête",
       propositionEnvoyer: "Proposition à envoyer",
       reponseAide:

@@ -13,7 +13,9 @@ import {
   modelePour,
   prenomDe,
   remplirModele,
+  retirerOuvertures,
 } from "./modeles";
+import { messageDeNous } from "./timeline";
 import type { UpworkApproche } from "./types";
 
 function modele(p: Partial<UpworkModele> = {}): UpworkModele {
@@ -312,5 +314,59 @@ describe("composerMessage", () => {
         "Adrien",
       ].join("\n"),
     );
+  });
+
+  it("Talks : un seul bonjour, Hello! du doc retiré, {{pays}} rempli", () => {
+    const sofia = approche();
+    const ctx = contexteDepuisApproche(sofia, {
+      pays: "Spain",
+      etape: "pourparlers",
+      langue: "es",
+      documents: [
+        {
+          cle: "reponses_upwork",
+          titre: "Réponses",
+          contenu: "<h2>How do we get started?</h2><p>Hello!\nThe role: recruit creators in {{pays}}.</p>",
+          contenu_en: "<h2>How do we get started?</h2><p>Hello!\nThe role: recruit creators in {{pays}}.</p>",
+        },
+      ],
+    });
+    const { texte, manquantes } = composerMessage("Hello!\nPlaybook leftover.", ctx);
+    expect(manquantes).toEqual([]);
+    expect(texte).toContain("Hi Sofia,");
+    expect(texte).toContain("The role: recruit creators in Spain.");
+    expect(texte).not.toMatch(/Hi Sofia,[\s\S]*Hello!/i);
+    expect(texte).not.toContain("{{pays}}");
+  });
+
+  it("Talks : n’utilise pas notre dernier message comme leur question", () => {
+    const sofia = approche({
+      dernier_message: "Hi Sofia, :)\n\nThe role: recruit creators in Spain.",
+    });
+    const ctx = contexteDepuisApproche(sofia, {
+      pays: "Spain",
+      etape: "pourparlers",
+      langue: "es",
+      documents: [docTalks],
+    });
+    const { texte } = composerMessage("Playbook leftover.", ctx);
+    expect(texte).toContain("Hi Sofia,");
+    expect(texte).not.toContain("You asked");
+    expect(texte).not.toContain("The role: recruit creators in Spain.");
+  });
+});
+
+describe("retirerOuvertures / messageDeNous", () => {
+  it("enlève Hello! après un premier salut", () => {
+    expect(retirerOuvertures("Hello!\nThe role: hire in Spain.", "Sofia")).toBe(
+      "The role: hire in Spain.",
+    );
+    expect(retirerOuvertures("Hi Sofia,\n\nHello!\nNext step.", "Sofia")).toBe("Next step.");
+  });
+
+  it("reconnaît notre dernier message, pas le leur", () => {
+    expect(messageDeNous("Hi Sofia, :)\n\nThe role: recruit.", "Sofia")).toBe(true);
+    expect(messageDeNous("Hi, how are you? I'm interested.", "Sofia")).toBe(false);
+    expect(messageDeNous("Hi! Yes, I’m interested.", "Aya")).toBe(false);
   });
 });

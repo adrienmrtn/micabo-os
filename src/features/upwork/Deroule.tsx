@@ -127,6 +127,7 @@ export function Deroule({
                 <blockquote className="mt-1.5 space-y-1 rounded-md border bg-background px-2.5 py-2">
                   <p className="font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
                     {t("upwork.dernierMessage")}
+                    {e.dernierMessageDeNous ? ` · ${t("upwork.dernierMessageNous")}` : ""}
                   </p>
                   <p className="whitespace-pre-wrap text-xs leading-snug">
                     {e.dernierMessage}

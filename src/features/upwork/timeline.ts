@@ -38,9 +38,10 @@ export type TimelineEtape = {
   ok: boolean;
   source: SourceVerite;
   resume?: string | null;
-  /** Dernier message d'eux, à afficher tel quel sous Talks. */
+  /** Dernier message du fil, à afficher tel quel sous Talks. */
   dernierMessage?: string | null;
   dernierMessageAt?: string | null;
+  dernierMessageDeNous?: boolean;
   detail?: string | null;
   checks?: TimelineCheck[];
   /** Comme les sous-cases : un clic sur la pastille, pas un interrupteur. */
@@ -48,6 +49,7 @@ export type TimelineEtape = {
 };
 
 export type FaitsApproche = {
+  nom?: string | null;
   role: "hm" | "createur";
   statut: "messaged" | "offered" | "hired";
   resume_discussions: string | null;
@@ -69,14 +71,24 @@ export type FaitsApproche = {
 };
 
 /**
- * Un vrai message d'eux — pas un résumé, pas un « . » de PDF vide.
- * C'est ça qu'on affiche sous Talks, jamais `resume_discussions`.
+ * Un vrai message du fil — le dernier, qu'il soit d'eux ou de nous.
+ * Pas un résumé, pas un « . » de PDF vide.
  */
 export function dernierMessageUtile(texte: string | null | undefined): string | null {
   const propre = nettoyerDernierMessage(texte);
   if (!propre) return null;
   if (propre.replace(/[.\s]/g, "").length < 8) return null;
   return propre;
+}
+
+/** Hi Sofia / Bonjour Rose en tête : c'est notre message, pas le leur. */
+export function messageDeNous(
+  texte: string | null | undefined,
+  prenom: string | null | undefined,
+): boolean {
+  if (!texte?.trim() || !prenom?.trim()) return false;
+  const nom = prenom.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^(?:bonjour|salut|hi|hey|hello)\\s+${nom}\\b`, "i").test(texte.trim());
 }
 
 /** Talks ne se coche que quand on passe au contrat — pas au premier « hi ». */
@@ -91,13 +103,15 @@ export function talksTermines(f: Pick<FaitsApproche, "contrat_envoye_ok" | "cont
 
 function talksPour(f: FaitsApproche): Pick<
   TimelineEtape,
-  "resume" | "dernierMessage" | "dernierMessageAt"
+  "resume" | "dernierMessage" | "dernierMessageAt" | "dernierMessageDeNous"
 > {
   const dernier = dernierMessageUtile(f.dernier_message);
+  const prenom = f.nom?.trim().split(/\s+/)[0] ?? "";
   return {
     resume: f.resume_discussions,
     dernierMessage: dernier,
     dernierMessageAt: dernier ? f.dernier_message_at : null,
+    dernierMessageDeNous: Boolean(dernier && messageDeNous(dernier, prenom)),
   };
 }
 
@@ -212,6 +226,7 @@ export function phase2Terminee(createursN: number): boolean {
 }
 
 export function faitsDepuisApproche(a: {
+  nom?: string | null;
   role: FaitsApproche["role"];
   statut: FaitsApproche["statut"];
   resume_discussions: string | null;
@@ -232,6 +247,7 @@ export function faitsDepuisApproche(a: {
   premier_post_ok: boolean;
 }): FaitsApproche {
   return {
+    nom: a.nom ?? null,
     role: a.role,
     statut: a.statut,
     resume_discussions: nettoyerResume(a.resume_discussions),

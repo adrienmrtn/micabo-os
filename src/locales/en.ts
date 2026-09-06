@@ -2245,7 +2245,8 @@ export const en = {
       cocheAide: "The only box you tick yourself — everything else comes from the OS, Slack and Upwork.",
       cocherIndice: "Click to tick — you are the source on this one.",
       messageEtape: "Message for this step",
-      dernierMessage: "Their last message",
+      dernierMessage: "Last message",
+      dernierMessageNous: "You",
       reponsePrete: "Reply ready",
       propositionEnvoyer: "Draft to send",
       reponseAide:

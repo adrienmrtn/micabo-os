@@ -14,6 +14,7 @@ import {
   phase2Terminee,
   timelineCreateur,
   timelineHm,
+  messageDeNous,
 } from "./timeline";
 
 const base = {
@@ -237,6 +238,18 @@ describe("dernierMessageUtile", () => {
     expect(dernierMessageUtile("Dispo tout de suite.")).toBe("Dispo tout de suite.");
     expect(talksTermines(base)).toBe(false);
     expect(talksTermines({ ...base, contrat_envoye_ok: true })).toBe(true);
+  });
+
+  it("affiche le dernier du fil même s’il est de nous", () => {
+    const notre = "Hi Sofia, :)\n\nThe role: recruit creators in Spain.";
+    expect(messageDeNous(notre, "Sofia")).toBe(true);
+    const talks = timelineHm({
+      ...base,
+      nom: "Sofia Jimenez",
+      dernier_message: notre,
+    }).find((e) => e.cle === "pourparlers");
+    expect(talks?.dernierMessage).toBe(notre);
+    expect(talks?.dernierMessageDeNous).toBe(true);
   });
 });
 
