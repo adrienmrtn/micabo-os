@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import i18n from "@/locales";
 import {
-  envoyerMessageUpwork,
   marquerAjoutUpwork,
   marquerAccesEnvoyes,
   marquerContratEnvoye,
