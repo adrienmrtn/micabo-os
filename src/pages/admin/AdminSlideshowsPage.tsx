@@ -12,6 +12,7 @@ import { Check, ImageUp, PenLine, RefreshCw, Rocket, ScanText, Sparkles, Trash2,
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -39,6 +40,7 @@ import {
   kickImportWorkers,
   listerJobsReimportPhotosValides,
   listerMediasPourContenu,
+  majCaptionMedia,
   majMediaSlideContenu,
   marquerUgcParLabel,
   mediaIdsDepuisSlides,
@@ -61,6 +63,7 @@ import {
 import { useApplication } from "@/features/moteur/ApplicationContext";
 import { peutForcerImportElo } from "@/features/moteur/importSlideshowActions";
 import { nomLangue } from "@/features/moteur/langues";
+import { CAPTION_MAX } from "@/features/moteur/mediaCaption";
 import type { ContenuLangue, ContenuSlide, Media } from "@/features/moteur/types";
 import { ugcVisages } from "@/features/moteur/ugcVisages";
 import {
@@ -171,6 +174,97 @@ function PassageLien({
           {t("common.cancel")}
         </Button>
       )}
+    </div>
+  );
+}
+
+/** Caption d'une slide : ce que les modèles ont vu, corrigeable à la main. */
+function CaptionSlide({
+  mediaId,
+  contenuId,
+  caption,
+  captionStatut,
+}: {
+  mediaId: string;
+  contenuId: string;
+  caption: string | null;
+  captionStatut: "ok" | "aucune" | null;
+}) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [edit, setEdit] = React.useState(false);
+  const [texte, setTexte] = React.useState(caption ?? "");
+
+  const save = useMutation({
+    mutationFn: () => majCaptionMedia(mediaId, texte),
+    onSuccess: () => {
+      setEdit(false);
+      void queryClient.invalidateQueries({ queryKey: ["slideshow", contenuId] });
+      void queryClient.invalidateQueries({ queryKey: ["slideshows"] });
+      void queryClient.invalidateQueries({ queryKey: ["medias-biblio"] });
+    },
+  });
+
+  function ouvrir() {
+    setTexte(caption ?? "");
+    setEdit(true);
+  }
+
+  if (edit) {
+    return (
+      <div className="space-y-1">
+        <Textarea
+          value={texte}
+          rows={2}
+          maxLength={CAPTION_MAX}
+          disabled={save.isPending}
+          onChange={(e) => setTexte(e.target.value)}
+          placeholder={t("slideshows.captionPlaceholder")}
+          className="text-xs leading-snug"
+          aria-label={t("slideshows.captionEditLabel")}
+        />
+        <p className="text-[11px] text-muted-foreground">{t("slideshows.captionEditAide")}</p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button
+            size="sm"
+            className="h-7 text-xs"
+            disabled={save.isPending}
+            onClick={() => save.mutate()}
+          >
+            {save.isPending ? t("common.saving") : t("common.save")}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs"
+            disabled={save.isPending}
+            onClick={() => setEdit(false)}
+          >
+            {t("common.cancel")}
+          </Button>
+        </div>
+        {save.isError ? (
+          <p className="text-[11px] text-destructive">{(save.error as Error).message}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-start gap-x-2">
+      <p className="min-w-0 flex-1 text-[11px] leading-snug text-muted-foreground">
+        {caption ??
+          (captionStatut === "aucune"
+            ? t("slideshows.captionAucune")
+            : t("slideshows.captionPasEncore"))}
+      </p>
+      <button
+        type="button"
+        className="shrink-0 text-[11px] text-muted-foreground underline underline-offset-2"
+        onClick={ouvrir}
+      >
+        {caption ? t("common.edit") : t("slideshows.captionEcrire")}
+      </button>
     </div>
   );
 }
@@ -727,14 +821,13 @@ const VisuelsContenu = React.memo(function VisuelsContenu({
                       </Badge>
                     ) : null}
                   </p>
-                  {metaCap?.caption ? (
-                    <p className="text-[11px] leading-snug text-muted-foreground">
-                      {metaCap.caption}
-                    </p>
-                  ) : metaCap?.caption_statut === "aucune" ? (
-                    <p className="text-[11px] text-muted-foreground">
-                      {t("slideshows.captionAucune")}
-                    </p>
+                  {s.media_id ? (
+                    <CaptionSlide
+                      mediaId={s.media_id}
+                      contenuId={contenu.id}
+                      caption={metaCap?.caption ?? null}
+                      captionStatut={metaCap?.caption_statut ?? null}
+                    />
                   ) : null}
                   <div className="flex flex-wrap gap-1.5">
                     <Button

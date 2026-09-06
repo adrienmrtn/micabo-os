@@ -1392,6 +1392,12 @@ export const fr = {
       captionEnCours: "Caption…",
       captionHook: "Hook",
       captionAucune: "Pas de caption reconnue",
+      captionPasEncore: "Pas encore captionnée",
+      captionEcrire: "Écrire",
+      captionEditLabel: "Caption de la slide",
+      captionPlaceholder: "Ce qu’on voit sur la photo",
+      captionEditAide:
+        "Vide = pas de caption. Une correction à la main tient : le rattrapage auto ne repasse pas dessus, seul « Captionner » relance le modèle.",
       slideN: "Slide {{n}}",
       renettoyer: "Re-nettoyer",
       remplacer: "Remplacer",
