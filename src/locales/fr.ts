@@ -2225,6 +2225,13 @@ export const fr = {
       messageManque:
         "Il manque {{vars}} — complète le texte à la main avant d’envoyer.",
       messageAucunModele: "Pas de modèle pour cette étape. À écrire depuis la page Upwork.",
+      accesAutoTitre: "Accès après contrat signé",
+      accesAutoAide:
+        "Automatique : dès que le contrat est signé, l’OS crée le recruiter (langue du pays), compose le message (lien Slack managers, codes OS, demande d’email) et le met en file pour le prochain passage.",
+      slackInviteTitre: "Lien Slack managers",
+      slackInviteAide:
+        "Collé dans le message d’accès HM. Sans ce lien, Slack attend — codes et email partent quand même.",
+      slackInvitePh: "https://join.slack.com/…",
       contratPreparer: "Préparer le contrat",
       contratPreparerAide:
         "L’agent prépare le brouillon d’offre sur Upwork. C’est toi qui l’envoies ensuite.",
@@ -2235,7 +2242,11 @@ export const fr = {
       modelesTitre: "Playbook des étapes",
       modelesCompte: "{{n}} playbook(s)",
       modelesAide:
-        "La suite à couvrir à cette étape — pas la lettre. L’OS ajoute le prénom, ce que la personne a dit, et ce qu’il lui manque. Variables : {{vars}}",
+        "La suite à couvrir à cette étape — pas la lettre. Français pour la France, anglais pour tous les autres pays. L’OS ajoute le prénom, ce que la personne a dit, et ce qu’il lui manque. Variables : {{vars}}",
+      modelesLangue: {
+        fr: "Français — France",
+        en: "English — everywhere else",
+      },
       modelesModifie: "Non enregistré",
       modelesRole: {
         hm: "Hiring managers",
@@ -2256,6 +2267,7 @@ export const fr = {
         inviter_hm: "envoyer les invitations",
         envoyer_message: "envoyer un message",
         preparer_contrat: "préparer le contrat",
+        envoyer_acces_hm: "envoyer les accès HM",
       },
       campagneLancer: "Lancer le recrutement HM",
       campagneArreter: "Arrêter la campagne",

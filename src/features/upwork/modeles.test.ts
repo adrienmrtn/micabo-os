@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  MODELE_FRANCE,
   MODELE_GENERIQUE,
   type UpworkModele,
   composerMessage,
   contexteDepuisApproche,
+  langueMessage,
   manquesPour,
   messageEnvoyable,
   modelePour,
@@ -35,17 +37,28 @@ describe("prenomDe", () => {
   });
 });
 
-describe("modelePour", () => {
-  const generique = modele({ corps: "générique" });
-  const espagnol = modele({ langue: "es", corps: "español" });
-  const modeles = [generique, espagnol];
+describe("langueMessage", () => {
+  it("n'est français que pour la France", () => {
+    expect(langueMessage("fr")).toBe("fr");
+    expect(langueMessage("es")).toBe("en");
+    expect(langueMessage("de")).toBe("en");
+    expect(langueMessage(null)).toBe("en");
+  });
+});
 
-  it("préfère le modèle du pays", () => {
-    expect(modelePour(modeles, "pourparlers", "hm", "es")?.corps).toBe("español");
+describe("modelePour", () => {
+  const anglais = modele({ corps: "english" });
+  const francais = modele({ langue: MODELE_FRANCE, corps: "français" });
+  const espagnol = modele({ langue: "es", corps: "español" });
+  const modeles = [anglais, francais, espagnol];
+
+  it("prend le français pour la France", () => {
+    expect(modelePour(modeles, "pourparlers", "hm", "fr")?.corps).toBe("français");
   });
 
-  it("retombe sur le générique quand le pays n'a pas le sien", () => {
-    expect(modelePour(modeles, "pourparlers", "hm", "de")?.corps).toBe("générique");
+  it("prend l'anglais pour tout autre pays, même s'il existe un modèle local", () => {
+    expect(modelePour(modeles, "pourparlers", "hm", "es")?.corps).toBe("english");
+    expect(modelePour(modeles, "pourparlers", "hm", "de")?.corps).toBe("english");
   });
 
   it("ne mélange pas les rôles", () => {
@@ -145,33 +158,33 @@ describe("manquesPour", () => {
       slack_ok: false,
       upwork_ajoute_ok: true,
     });
-    expect(manquesPour(rose, "acces_envoyes")).toEqual(["t'envoyer l'invitation Slack"]);
-    expect(manquesPour(rose, "integration")).toEqual([
+    expect(manquesPour(rose, "acces_envoyes", "fr")).toEqual(["t'envoyer l'invitation Slack"]);
+    expect(manquesPour(rose, "integration", "fr")).toEqual([
       "que tu te connectes à l'OS",
       "que tu rejoignes Slack",
     ]);
+    expect(manquesPour(rose, "acces_envoyes", "es")).toEqual(["send you the Slack invite"]);
   });
 });
 
 describe("composerMessage", () => {
-  it("répond à ce que la personne a dit, pas un gabarit identique", () => {
+  it("répond en anglais hors France", () => {
     const sofia = approche();
     const ctx = contexteDepuisApproche(sofia, {
-      pays: "Espagne",
+      pays: "Spain",
       etape: "pourparlers",
+      langue: "es",
     });
-    const { texte, manquantes } = composerMessage(
-      "Trois questions pour avancer.",
-      ctx,
-    );
+    const { texte, manquantes } = composerMessage("Three questions to move forward.", ctx);
     expect(manquantes).toEqual([]);
-    expect(texte).toContain("Bonjour Sofia,");
-    expect(texte).toContain("J'ai bien noté : Intéressée. Demande comment on démarre.");
-    expect(texte).toContain("Trois questions pour avancer.");
+    expect(texte).toContain("Hi Sofia,");
+    expect(texte).toContain("Noted: Intéressée. Demande comment on démarre.");
+    expect(texte).toContain("Three questions to move forward.");
+    expect(texte).not.toContain("Bonjour");
     expect(texte).toMatch(/Adrien$/);
   });
 
-  it("ajoute les manques d'intégration de CETTE personne", () => {
+  it("reste en français pour la France", () => {
     const rose = approche({
       nom: "Rose Vasquez",
       resume_discussions: "Dispo tout de suite.",
@@ -182,6 +195,7 @@ describe("composerMessage", () => {
     const ctx = contexteDepuisApproche(rose, {
       pays: "France",
       etape: "acces_envoyes",
+      langue: "fr",
     });
     const { texte } = composerMessage(
       "Bonjour {{prenom}}, tes accès micabo pour {{pays}} arrivent.",

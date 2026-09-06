@@ -107,7 +107,8 @@ export type TypeAction =
   | "sourcer_hm"
   | "inviter_hm"
   | "envoyer_message"
-  | "preparer_contrat";
+  | "preparer_contrat"
+  | "envoyer_acces_hm";
 
 /** Une action déclenchée dans l'OS = un prompt figé, en attente de l'agent. */
 export type UpworkAction = {
@@ -176,6 +177,7 @@ export type UpworkDashboard = {
   campagnes: UpworkCampagne[];
   candidats: UpworkCandidat[];
   modeles: UpworkModele[];
+  acces: { slack_invite_manager: string; os_url: string };
 };
 
 export type TotauxPays = {

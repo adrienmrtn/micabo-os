@@ -306,6 +306,10 @@ const dash: UpworkDashboard = {
       maj_at: "2026-09-01T00:00:00Z",
     },
   ],
+  acces: {
+    slack_invite_manager: "",
+    os_url: "https://os.micabo.app/login",
+  },
 };
 
 vi.mock("@/features/upwork/api", () => ({
@@ -320,6 +324,7 @@ vi.mock("@/features/upwork/api", () => ({
   preparerContratUpwork: vi.fn(async () => undefined),
   enregistrerModele: vi.fn(async () => undefined),
   marquerContratEnvoye: vi.fn(async () => undefined),
+  sauverAccesUpwork: vi.fn(async () => undefined),
 }));
 
 function wrap(path: string) {
@@ -352,6 +357,13 @@ describe("pages Upwork", () => {
     expect(await screen.findByRole("link", { name: /france/i })).toBeInTheDocument();
     expect(screen.getByText("HM")).toBeInTheDocument();
     expect(screen.getByText("Créateurs")).toBeInTheDocument();
+  });
+
+  it("dashboard : champ pour le lien Slack managers", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork");
+    expect(await screen.findByText("Lien Slack managers")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("https://join.slack.com/…")).toBeInTheDocument();
   });
 
   it("dashboard : dernier passage de l’agent et prompts en attente", async () => {
@@ -431,23 +443,15 @@ describe("pages Upwork", () => {
     await waitFor(() => expect(marquerAjoutUpwork).toHaveBeenCalledWith("p-rose", false));
   });
 
-  it("page France : le message de l’étape en cours est prêt, variables remplies", async () => {
+  it("page France : les accès HM partent tout seuls après le contrat, pas un gabarit", async () => {
     await i18n.changeLanguage("fr");
     wrap("/admin/upwork/fr");
     await screen.findByText("Rose Vasquez");
     toutDeplier();
 
-    // Rose bloque sur « Accès envoyés » : brouillon composé pour ELLE
-    // (ce qu'elle a dit + Slack manquant), pas le gabarit brut.
-    const zone = screen.getByDisplayValue(/J'ai bien noté : Dispo tout de suite/) as HTMLTextAreaElement;
-    expect(zone.value).toContain("t'envoyer l'invitation Slack");
-    expect(zone.value).toContain("tes accès micabo pour France arrivent.");
-    expect(screen.queryByDisplayValue(/on lance micabo/)).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getAllByRole("button", { name: /^envoyer$/i })[0]!);
-    await waitFor(() =>
-      expect(envoyerMessageUpwork).toHaveBeenCalledWith("p-rose", (zone as HTMLTextAreaElement).value),
-    );
+    expect(screen.getByText("Accès après contrat signé")).toBeInTheDocument();
+    expect(screen.getByText(/crée le recruiter/)).toBeInTheDocument();
+    expect(screen.queryByDisplayValue(/tes accès micabo/)).not.toBeInTheDocument();
   });
 
   it("page France : le contrat passe par un brouillon, jamais par un envoi direct", async () => {

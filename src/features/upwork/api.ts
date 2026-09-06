@@ -48,6 +48,7 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
     campagnesRes,
     candidatsRes,
     modelesRes,
+    accesRes,
   ] = await Promise.all([
       supabase
         .from("upwork_sync")
@@ -77,6 +78,7 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
         .select(CANDIDAT_COLS)
         .order("propose_at", { ascending: false }),
       supabase.from("upwork_modeles").select(MODELE_COLS).order("cle"),
+      supabase.rpc("upwork_acces_reglages"),
     ]);
   if (syncRes.error) throw syncRes.error;
   if (missionsRes.error) throw missionsRes.error;
@@ -87,6 +89,12 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
   if (campagnesRes.error) throw campagnesRes.error;
   if (candidatsRes.error) throw candidatsRes.error;
   if (modelesRes.error) throw modelesRes.error;
+  if (accesRes.error) throw accesRes.error;
+
+  const accesBrut = (accesRes.data ?? {}) as {
+    slack_invite_manager?: string;
+    os_url?: string;
+  };
 
   return {
     sync: (syncRes.data as UpworkSync | null) ?? null,
@@ -98,7 +106,21 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
     campagnes: (campagnesRes.data ?? []) as UpworkCampagne[],
     candidats: (candidatsRes.data ?? []) as UpworkCandidat[],
     modeles: (modelesRes.data ?? []) as UpworkModele[],
+    acces: {
+      slack_invite_manager: accesBrut.slack_invite_manager ?? "",
+      os_url: accesBrut.os_url ?? "https://os.micabo.app/login",
+    },
   };
+}
+
+export async function sauverAccesUpwork(valeur: {
+  slack_invite_manager: string;
+  os_url: string;
+}): Promise<void> {
+  const { error } = await supabase.rpc("upwork_acces_reglages_sauver", {
+    p_valeur: valeur,
+  });
+  if (error) throw error;
 }
 
 /**
