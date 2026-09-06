@@ -48,6 +48,28 @@ commande d’un job existant (`0163_cutover_assignation_vnext.sql` recopie
 l’hôte `mbikecieskoobeizixig`). Détails et vérifications :
 `supabase/migrations/0236_crons_minuit.sql`.
 
+Toute commande cron appelle l’Edge via `public.kick_edge_micabo('<fn>', <jsonb>)` :
+lui seul tient l’hôte et le secret. Corps JSON avec `jsonb_build_object`, jamais
+un `'{"…":…}'::jsonb` écrit à la main — les guillemets ressortent échappés
+quand la migration passe par un outil, et le job casse en silence au tick.
+
+## Prod ≠ dépôt (à savoir avant de déployer)
+
+Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
+`qkmiwnmiwsvwkttldqgb`. Vérifié le 06/09/2026 :
+
+- `papier-cm` (v11, déployée le 01/09) embarque sept modules `_shared/papier_*`
+ absents d’ici et un `papier_master.ts` bien plus gros. La redéployer depuis ce
+ dépôt est une régression. Schéma récupéré en `0237` / `0238`, code non.
+- `suivi-rc` (déployée le 03/09) lit les charts RevenueCat du projet **Sophia**
+ (`proj3f496a80`, cache `rc_metrics_cache` id `sophia`) : hors cloisonnement,
+ aucune source ici. Son cron 4 h est **non planifié** — ne pas le relancer.
+- `import-contenu` en prod est antérieure au correctif imports coincés
+ (`relacherContenuApresPas`, dans `main` depuis le 02/09) : à redéployer.
+
+Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
+être en avance sur `main`.
+
 ## Upwork (Micabo seulement)
 
 Le dashboard OS `/admin/upwork` est **lecture seule sur Upwork** : les
