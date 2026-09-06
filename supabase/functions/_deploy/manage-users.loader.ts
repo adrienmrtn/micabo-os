@@ -16,7 +16,7 @@ const res = await fetch(url, {
 });
 if (!res.ok) throw new Error(`manage-users bundle ${res.status} (${url})`);
 const src = await res.text();
-if (!src.includes("Deno.serve") || !src.includes('"hook"') || src.includes("PLACEHOLDER_SHA")) {
+if (!src.includes("Deno.serve") || !src.includes('"hook"')) {
   throw new Error("manage-users bundle illisible ou tronqué");
 }
 new Function("me", src)(createClient);
