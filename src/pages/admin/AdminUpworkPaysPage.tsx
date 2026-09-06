@@ -49,6 +49,7 @@ import {
   OBJECTIF_CREATEURS,
   type EtapeTimelineCle,
   avancement,
+  dernierMessageUtile,
   etapePropositionMessage,
   faitsDepuisApproche,
   phase1Terminee,
@@ -272,7 +273,8 @@ function encartMessage(
   hmPrenom: string | null = null,
 ) {
   return (etape: { cle: EtapeTimelineCle }, courante: boolean) => {
-    if (etapeProp || !courante) return null;
+    if (!courante) return null;
+    if (etapeProp && etape.cle !== "acces_envoyes") return null;
     return composerEtape(a, etape.cle, o, hmPrenom);
   };
 }
@@ -348,7 +350,7 @@ function VieHm({
   const faits = faitsDepuisApproche(hm);
   const etapes = timelineHm(faits);
   const etapeProp = etapePropositionMessage(faits);
-  const dernier = hm.dernier_message?.trim() || hm.resume_discussions?.trim() || null;
+  const dernier = dernierMessageUtile(hm.dernier_message);
   const p1ok = phase1Terminee(faits);
   const phase3 = createursPhase3(approchesCrea, lignes, hm.profile_id);
   const encorePhase2 = approchesCrea.filter((a) => encoreEnRecrutement(a, phase3));
@@ -399,7 +401,7 @@ function VieHm({
           </div>
         </div>
 
-        {etapeProp && (
+        {(dernier || etapeProp) && (
           <div className="space-y-2">
             {dernier && (
               <blockquote className="space-y-1 rounded-md border bg-background px-2.5 py-2">
@@ -407,9 +409,17 @@ function VieHm({
                   {t("upwork.dernierMessage")}
                 </p>
                 <p className="whitespace-pre-wrap text-xs leading-snug">{dernier}</p>
+                {hm.dernier_message_at && (
+                  <time
+                    className="block text-[10px] text-muted-foreground"
+                    dateTime={hm.dernier_message_at}
+                  >
+                    {new Date(hm.dernier_message_at).toLocaleString()}
+                  </time>
+                )}
               </blockquote>
             )}
-            {composerEtape(hm, etapeProp, outils)}
+            {etapeProp && composerEtape(hm, etapeProp, outils)}
           </div>
         )}
 

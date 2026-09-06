@@ -68,12 +68,24 @@ export type FaitsApproche = {
   premier_post_ok: boolean;
 };
 
-function aParle(f: FaitsApproche): boolean {
+/**
+ * Un vrai message d'eux — pas un résumé, pas un « . » de PDF vide.
+ * C'est ça qu'on affiche sous Talks, jamais `resume_discussions`.
+ */
+export function dernierMessageUtile(texte: string | null | undefined): string | null {
+  const propre = nettoyerDernierMessage(texte);
+  if (!propre) return null;
+  if (propre.replace(/[.\s]/g, "").length < 8) return null;
+  return propre;
+}
+
+/** Talks ne se coche que quand on passe au contrat — pas au premier « hi ». */
+export function talksTermines(f: Pick<FaitsApproche, "contrat_envoye_ok" | "contrat_signe_ok" | "statut">): boolean {
   return (
-    Boolean(f.dernier_message?.trim()) ||
-    Boolean(f.resume_discussions?.trim()) ||
-    f.statut !== "messaged" ||
-    f.contrat_envoye_ok
+    f.contrat_envoye_ok ||
+    f.contrat_signe_ok ||
+    f.statut === "offered" ||
+    f.statut === "hired"
   );
 }
 
@@ -81,10 +93,11 @@ function talksPour(f: FaitsApproche): Pick<
   TimelineEtape,
   "resume" | "dernierMessage" | "dernierMessageAt"
 > {
+  const dernier = dernierMessageUtile(f.dernier_message);
   return {
     resume: f.resume_discussions,
-    dernierMessage: f.dernier_message,
-    dernierMessageAt: f.dernier_message_at,
+    dernierMessage: dernier,
+    dernierMessageAt: dernier ? f.dernier_message_at : null,
   };
 }
 
@@ -92,7 +105,7 @@ export function timelineHm(f: FaitsApproche): TimelineEtape[] {
   const envoiOk = f.slack_envoye_ok && f.email_demande_ok && f.codes_ok;
   return [
     { cle: "contacte", ok: true, source: "upwork" },
-    { cle: "pourparlers", ok: aParle(f), source: "upwork", ...talksPour(f) },
+    { cle: "pourparlers", ok: talksTermines(f), source: "upwork", ...talksPour(f) },
     {
       cle: "contrat_envoye",
       ok: f.contrat_envoye_ok,
@@ -118,7 +131,7 @@ export function timelineHm(f: FaitsApproche): TimelineEtape[] {
 export function timelineCreateur(f: FaitsApproche): TimelineEtape[] {
   return [
     { cle: "contacte", ok: true, source: "upwork" },
-    { cle: "pourparlers", ok: aParle(f), source: "upwork", ...talksPour(f) },
+    { cle: "pourparlers", ok: talksTermines(f), source: "upwork", ...talksPour(f) },
     { cle: "contrat_signe", ok: f.contrat_signe_ok, source: "upwork" },
     {
       cle: "integration",
@@ -149,11 +162,12 @@ export function etapeCouranteTimeline(etapes: TimelineEtape[]): EtapeTimelineCle
   return prochaine?.cle ?? etapes[etapes.length - 1]!.cle;
 }
 
-/** Étape où l'admin doit envoyer un message HM. Sinon null : on attend. */
+/** Étape où l'admin doit envoyer un message HM. Talks tant que le contrat n'est pas parti. */
 export function etapePropositionMessage(f: FaitsApproche): EtapeTimelineCle | null {
-  if (f.role !== "hm" || f.contrat_signe_ok) return null;
-  const courante = etapeCouranteTimeline(timelineHm(f));
-  if (courante === "pourparlers" || courante === "contrat_envoye") return courante;
+  if (f.role !== "hm") return null;
+  if (!talksTermines(f)) return "pourparlers";
+  if (!f.contrat_signe_ok) return "contrat_envoye";
+  if (dernierMessageUtile(f.dernier_message)) return "pourparlers";
   return null;
 }
 

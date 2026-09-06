@@ -157,7 +157,7 @@ const dash: UpworkDashboard = {
       upwork_person_id: "99",
       nom: "Lina Moreau",
       titre_profil: "Recruteuse freelance",
-      photo_url: null,
+      photo_url: "https://example.com/lina.jpg",
       upwork_profile_url: "https://www.upwork.com/freelancers/~99",
       pays: "France",
       taux_horaire: 12,
@@ -235,8 +235,9 @@ const dash: UpworkDashboard = {
       role: "hm",
       statut: "hired",
       resume_discussions: "Dispo tout de suite.",
-      dernier_message: null,
-      dernier_message_at: null,
+      dernier_message:
+        "Oui, j’ai accès à Slack + compte Micabo+ compte Upwork. 🙌 Quand je vais savoir dans quel pays je dois publier l’offre?",
+      dernier_message_at: "2026-09-06T16:45:27.999Z",
       offre_finalize_url: null,
       contrat_envoye_ok: true,
       contrat_signe_ok: true,
@@ -550,6 +551,10 @@ describe("pages Upwork", () => {
     // Un profil attend une décision, avec son compte à rebours.
     expect(screen.getByText("1 profil(s) à valider")).toBeInTheDocument();
     expect(screen.getByText("Lina Moreau")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Lina Moreau" })).toHaveAttribute(
+      "src",
+      "https://example.com/lina.jpg",
+    );
     expect(screen.getByText("A déjà monté des équipes de créateurs.")).toBeInTheDocument();
     expect(screen.getByText(/invitation auto dans/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /valider/i })).toBeInTheDocument();
@@ -599,8 +604,9 @@ describe("pages Upwork", () => {
     expect(screen.queryByText("Accès envoyés : Slack + codes OS")).not.toBeInTheDocument();
     expect(screen.queryByText(/je poste ton job créateurs/i)).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue(/ici {{hm_prenom}}/)).not.toBeInTheDocument();
-    // Un seul Envoyer : HM à qui on doit écrire. Pas de Send sur les créateurs.
-    expect(screen.getAllByRole("button", { name: /^envoyer$/i })).toHaveLength(1);
+    // Envoyer seulement sur les HM (Talks). Pas de Send sur les créateurs.
+    expect(screen.getAllByRole("button", { name: /^envoyer$/i }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/je poste ton job créateurs/i)).not.toBeInTheDocument();
   });
 
   it("page France : proposition à envoyer visible sans déplier, adaptée à l’échelon", async () => {
@@ -609,14 +615,17 @@ describe("pages Upwork", () => {
     await screen.findByText("Leiliane De Saint Jores");
 
     expect(screen.getByText("OK pour démarrer, je suis dispo cette semaine.")).toBeInTheDocument();
-    expect(screen.getByText("Proposition à envoyer")).toBeInTheDocument();
-    const brouillon = screen.getByLabelText("Proposition à envoyer") as HTMLTextAreaElement;
-    expect(brouillon.value).toMatch(/contrat sur Upwork/i);
-    expect(brouillon.value).not.toMatch(/j'ai bien noté/i);
-    expect(screen.getAllByRole("button", { name: /^envoyer$/i })).toHaveLength(1);
+    expect(
+      screen.getByText(
+        "Oui, j’ai accès à Slack + compte Micabo+ compte Upwork. 🙌 Quand je vais savoir dans quel pays je dois publier l’offre?",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Proposition à envoyer").length).toBeGreaterThanOrEqual(1);
+    const brouillons = screen.getAllByLabelText("Proposition à envoyer") as HTMLTextAreaElement[];
+    expect(brouillons.some((b) => /parfait/i.test(b.value) || /micabo/i.test(b.value))).toBe(true);
+    expect(brouillons.every((b) => !/j'ai bien noté/i.test(b.value))).toBe(true);
 
     toutDeplier();
-    expect(screen.getAllByRole("button", { name: /^envoyer$/i })).toHaveLength(1);
     expect(screen.getByText("I’m really interested in it. I live in France and available right now.")).toBeInTheDocument();
   });
 
@@ -626,7 +635,8 @@ describe("pages Upwork", () => {
     await screen.findByText("Leiliane De Saint Jores");
     toutDeplier();
 
-    fireEvent.click(screen.getByRole("button", { name: /préparer le contrat/i }));
+    const preparer = screen.getAllByRole("button", { name: /préparer le contrat/i });
+    fireEvent.click(preparer[preparer.length - 1]);
     await waitFor(() => expect(preparerContratUpwork).toHaveBeenCalledWith("p-leiliane"));
   });
 

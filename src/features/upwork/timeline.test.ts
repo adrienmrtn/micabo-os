@@ -4,10 +4,12 @@ import {
   OBJECTIF_CREATEURS,
   avancement,
   etapeCouranteTimeline,
+  dernierMessageUtile,
   etapePropositionMessage,
   faitsDepuisApproche,
   nettoyerDernierMessage,
   nettoyerResume,
+  talksTermines,
   phase1Terminee,
   phase2Terminee,
   timelineCreateur,
@@ -36,7 +38,7 @@ const base = {
 };
 
 describe("timelineHm", () => {
-  it("bloque sur pourparlers dès le contact si pas de contrat", () => {
+  it("reste sur Talks tant que le contrat n’est pas parti", () => {
     const etapes = timelineHm(base);
     expect(etapes.map((e) => e.cle)).toEqual([
       "contacte",
@@ -48,11 +50,23 @@ describe("timelineHm", () => {
       "job_createur_poste",
     ]);
     expect(etapes.find((e) => e.cle === "contacte")?.ok).toBe(true);
+    expect(etapes.find((e) => e.cle === "pourparlers")?.ok).toBe(false);
     expect(etapes.find((e) => e.cle === "pourparlers")?.resume).toContain("10 min");
     expect(etapes.find((e) => e.cle === "pourparlers")?.dernierMessage).toBe(
       "How do we get started?",
     );
-    expect(etapeCouranteTimeline(etapes)).toBe("contrat_envoye");
+    expect(etapeCouranteTimeline(etapes)).toBe("pourparlers");
+  });
+
+  it("ne coche pas Talks pour un PDF vide (« . »)", () => {
+    const etapes = timelineHm({
+      ...base,
+      dernier_message: ".",
+      resume_discussions: "PDF sans texte.",
+    });
+    expect(etapes.find((e) => e.cle === "pourparlers")?.ok).toBe(false);
+    expect(etapes.find((e) => e.cle === "pourparlers")?.dernierMessage).toBeNull();
+    expect(etapeCouranteTimeline(etapes)).toBe("pourparlers");
   });
 
   it("n’ouvre l’intégration qu’après Slack + email + codes, puis la checklist", () => {
@@ -179,7 +193,7 @@ describe("faitsDepuisApproche", () => {
 });
 
 describe("etapePropositionMessage", () => {
-  it("propose Talks tant qu’ils n’ont pas parlé", () => {
+  it("reste sur Talks tant que le contrat n’est pas parti", () => {
     expect(
       etapePropositionMessage({
         ...base,
@@ -188,20 +202,46 @@ describe("etapePropositionMessage", () => {
         dernier_message_at: null,
       }),
     ).toBe("pourparlers");
+    expect(etapePropositionMessage(base)).toBe("pourparlers");
   });
 
-  it("propose le contrat dès qu’ils ont répondu", () => {
-    expect(etapePropositionMessage(base)).toBe("contrat_envoye");
+  it("passe au contrat seulement après l’envoi", () => {
+    expect(etapePropositionMessage({ ...base, contrat_envoye_ok: true })).toBe("contrat_envoye");
   });
 
-  it("n’en propose plus après le contrat signé, ni pour un créateur", () => {
-    expect(etapePropositionMessage({ ...base, contrat_signe_ok: true })).toBeNull();
+  it("propose encore Talks après signature s’ils ont écrit, jamais pour un créateur", () => {
+    expect(
+      etapePropositionMessage({
+        ...base,
+        contrat_envoye_ok: true,
+        contrat_signe_ok: true,
+        statut: "hired",
+      }),
+    ).toBe("pourparlers");
+    expect(
+      etapePropositionMessage({
+        ...base,
+        contrat_envoye_ok: true,
+        contrat_signe_ok: true,
+        statut: "hired",
+        dernier_message: null,
+      }),
+    ).toBeNull();
     expect(etapePropositionMessage({ ...base, role: "createur" })).toBeNull();
+  });
+});
+
+describe("dernierMessageUtile", () => {
+  it("écarte le résumé et le point d’un PDF", () => {
+    expect(dernierMessageUtile(".")).toBeNull();
+    expect(dernierMessageUtile("Dispo tout de suite.")).toBe("Dispo tout de suite.");
+    expect(talksTermines(base)).toBe(false);
+    expect(talksTermines({ ...base, contrat_envoye_ok: true })).toBe(true);
   });
 });
 
 describe("avancement", () => {
   it("compte les étapes franchies pour l’aperçu replié", () => {
-    expect(avancement(timelineHm(base))).toEqual({ faites: 2, total: 7 });
+    expect(avancement(timelineHm(base))).toEqual({ faites: 1, total: 7 });
   });
 });

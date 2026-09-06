@@ -118,7 +118,7 @@ export function MessageEtape({
 
   return (
     <div className="mt-2 space-y-2 rounded-lg border border-dashed bg-muted/30 p-3">
-      {contratIci && (
+      {(talksIci || contratIci) && (
         <BlocContrat
           approche={approche}
           enFile={contratEnFile}
