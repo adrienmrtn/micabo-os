@@ -113,6 +113,15 @@ describe("totauxUpwork", () => {
       ],
     });
   });
+
+  it("n’invente pas un pays pour un contrat sans langue", () => {
+    const missions = [mission({ id: "1", famille: "hm", langue: "fr" })];
+    const contrats: UpworkContrat[] = [
+      contrat({ id: "c1", langue: "fr" }),
+      contrat({ id: "c2", langue: null }),
+    ];
+    expect(totauxUpwork(missions, contrats).parPays.map((p) => p.langue)).toEqual(["fr"]);
+  });
 });
 
 describe("filtres", () => {

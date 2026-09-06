@@ -81,7 +81,7 @@ export function timelineHm(f: FaitsApproche): TimelineEtape[] {
       cochable: true,
     },
     { cle: "contrat_signe", ok: f.contrat_signe_ok, source: "upwork" },
-    { cle: "acces_envoyes", ok: envoiOk, source: "upwork" },
+    { cle: "acces_envoyes", ok: envoiOk, source: "admin", cochable: true },
     {
       cle: "integration",
       ok: f.os_ok && f.slack_ok && f.upwork_ajoute_ok,

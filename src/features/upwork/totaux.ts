@@ -52,8 +52,14 @@ function totauxPour(
 export function totauxUpwork(missions: UpworkMission[], contrats: UpworkContrat[]): TotauxUpwork {
   const global = totauxPour(null, missions, contrats);
   const cles = new Set<string>();
-  for (const m of missions.filter((x) => missionOuverte(x.statut))) cles.add(langueCle(m.langue));
-  for (const c of contrats.filter((x) => contratActif(x.statut))) cles.add(langueCle(c.langue));
+  for (const m of missions.filter((x) => missionOuverte(x.statut))) {
+    const l = langueCle(m.langue);
+    if (l) cles.add(l);
+  }
+  for (const c of contrats.filter((x) => contratActif(x.statut))) {
+    const l = langueCle(c.langue);
+    if (l) cles.add(l);
+  }
 
   const parPays = [...cles]
     .sort((a, b) => rangPays(a) - rangPays(b))

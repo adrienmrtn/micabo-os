@@ -2228,10 +2228,10 @@ export const en = {
       messageAucunModele: "No template for this step. Write one from the Upwork page.",
       accesAutoTitre: "Access after contract signed",
       accesAutoAide:
-        "Automatic: once the contract is signed, the OS creates the recruiter (country language), writes the message (Slack managers link, OS codes, email request) and queues it for the next run.",
+        "Automatic: once the contract is signed, the OS creates the account, writes the message (Slack link to click, OS email + password, email request) and queues it. If it was already sent by hand, tick the step.",
       slackInviteTitre: "Slack managers link",
       slackInviteAide:
-        "Pasted into the HM access message. Without it, Slack waits — codes and email still go out.",
+        "Included as-is in the HM access message, with the OS codes. You can also tick the step by hand if it was already sent.",
       slackInvitePh: "https://join.slack.com/…",
       contratPreparer: "Prepare the contract",
       contratPreparerAide:
