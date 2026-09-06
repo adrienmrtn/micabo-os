@@ -309,6 +309,35 @@ const dash: UpworkDashboard = {
       premier_post_ok: false,
       synced_at: "2026-09-04T12:00:00Z",
     },
+    {
+      id: "a-manon",
+      job_posting_id: "job-fr-cr",
+      contract_id: "44450001",
+      upwork_proposal_id: "p-manon",
+      upwork_freelancer_id: "5",
+      upwork_profile_url: null,
+      photo_url: null,
+      nom: "Manon Leroy",
+      role: "createur",
+      statut: "hired",
+      resume_discussions: "Premier post publié.",
+      offre_finalize_url: null,
+      contrat_envoye_ok: true,
+      contrat_signe_ok: true,
+      slack_envoye_ok: true,
+      email_demande_ok: true,
+      codes_ok: true,
+      os_ok: true,
+      slack_ok: true,
+      upwork_ajoute_ok: false,
+      job_createur_id: null,
+      profile_id: "poster-manon",
+      tiktok_cree_ok: true,
+      tiktok_handle: "manon.examen872",
+      warmup_actif: true,
+      premier_post_ok: true,
+      synced_at: "2026-09-06T12:00:00Z",
+    },
   ],
   modeles: [
     {
@@ -341,6 +370,21 @@ const dash: UpworkDashboard = {
       "https://join.slack.com/t/micaboapp/shared_invite/zt-48nrw6z5x-Cdeo6CPVDldMYUBsQEzs8A",
     os_url: "https://os.micabo.app/login",
   },
+  surveillance: [
+    {
+      compte_id: "compte-manon",
+      poster_id: "poster-manon",
+      manager_id: "p-sara",
+      nom: "Manon Leroy",
+      handle: "manon.examen872",
+      posts_par_jour: 2,
+      posts_10j: 8,
+      prevus_10j: 20,
+      vues_10: 2000,
+      posts_mesures: 10,
+      elo: 48,
+    },
+  ],
 };
 
 vi.mock("@/features/upwork/api", () => ({
@@ -430,7 +474,9 @@ describe("pages Upwork", () => {
     expect(await screen.findByText("Sara Benamer")).toBeInTheDocument();
     expect(screen.getByText("Rose Vasquez")).toBeInTheDocument();
     expect(screen.getAllByText(/Phase 2/)).toHaveLength(3);
-    expect(screen.queryByText(/Phase 3/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Phase 3/)).toHaveLength(3);
+    expect(screen.getByText("Moyenne de l’équipe")).toBeInTheDocument();
+    expect(screen.queryByText("Manon Leroy")).not.toBeInTheDocument();
 
     expect(screen.queryByText("Hiring Manager sur une autre app.")).not.toBeInTheDocument();
     expect(screen.queryByText("Warmup actif")).not.toBeInTheDocument();
@@ -507,9 +553,11 @@ describe("pages Upwork", () => {
     toutDeplier();
 
     expect(screen.getByText("Arisoa Estelle Rajaobelina")).toBeInTheDocument();
-    expect(screen.getByText(/le HM gère/)).toBeInTheDocument();
+    expect(screen.getByText(/tu ne fais rien/)).toBeInTheDocument();
     expect(screen.queryByText("Accès envoyés : Slack + codes OS")).not.toBeInTheDocument();
+    expect(screen.queryByText(/je poste ton job créateurs/i)).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue(/ici {{hm_prenom}}/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^envoyer$/i })).not.toBeInTheDocument();
   });
 
   it("page France : le contrat HM passe par un brouillon, jamais par un envoi direct", async () => {
@@ -562,6 +610,24 @@ describe("pages Upwork", () => {
     expect(
       screen.getByDisplayValue("Bonjour {{prenom}}, on lance micabo sur {{pays}}."),
     ).toBeInTheDocument();
+  });
+
+  it("page France : phase 3 dès le premier post, avec alerte si le rythme ou les vues sont bas", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork/fr");
+    await screen.findByText("Sara Benamer");
+    toutDeplier();
+
+    expect(screen.getByText("Manon Leroy")).toBeInTheDocument();
+    expect(screen.getByText("Arisoa Estelle Rajaobelina")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /@manon.examen872/i })).toHaveAttribute(
+      "href",
+      "https://www.tiktok.com/@manon.examen872",
+    );
+    expect(screen.getAllByText("8 / 20").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/2\s?000/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/ELO 48/)).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Sous le seuil").length).toBeGreaterThan(0);
   });
 
   it("page France : « onboarding » a disparu de la chaîne", async () => {

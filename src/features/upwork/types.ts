@@ -167,6 +167,21 @@ export type UpworkCandidat = {
   invite_at: string | null;
 };
 
+/** Stats OS d’un compte créateur déjà passé en phase 3 (premier post). */
+export type LigneSurveillance = {
+  compte_id: string;
+  poster_id: string | null;
+  manager_id: string | null;
+  nom: string | null;
+  handle: string | null;
+  posts_par_jour: number;
+  posts_10j: number;
+  prevus_10j: number;
+  vues_10: number;
+  posts_mesures: number;
+  elo: number;
+};
+
 export type UpworkDashboard = {
   sync: UpworkSync | null;
   missions: UpworkMission[];
@@ -178,6 +193,7 @@ export type UpworkDashboard = {
   candidats: UpworkCandidat[];
   modeles: UpworkModele[];
   acces: { slack_invite_manager: string; os_url: string };
+  surveillance: LigneSurveillance[];
 };
 
 export type TotauxPays = {

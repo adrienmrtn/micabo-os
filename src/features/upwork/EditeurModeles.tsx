@@ -52,9 +52,7 @@ export function EditeurModeles({ modeles }: { modeles: UpworkModele[] }) {
               <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
                 {t(`upwork.modelesRole.${role}`)}
               </h3>
-              {ETAPES_AVEC_MESSAGE.filter(
-                (cle) => !(role === "hm" && cle === "acces_envoyes"),
-              ).map((cle) => {
+              {ETAPES_AVEC_MESSAGE.map((cle) => {
                 const versions = LANGUES_PLAYBOOK.map(({ code, cle: localeCle }) => ({
                   localeCle,
                   code,

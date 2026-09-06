@@ -12,14 +12,10 @@ export type UpworkModele = {
   maj_at: string;
 };
 
-/** Les seules étapes où proposer un message a du sens : on attend une réponse. */
+/** Messages et contrat : uniquement le recrutement HM. Après, on lit. */
 export const ETAPES_AVEC_MESSAGE: readonly EtapeTimelineCle[] = [
   "pourparlers",
   "contrat_envoye",
-  "acces_envoyes",
-  "integration",
-  "tiktok_cree",
-  "job_createur_poste",
 ] as const;
 
 export const VARIABLES_MODELE = [
