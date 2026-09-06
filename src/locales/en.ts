@@ -1390,6 +1390,7 @@ export const en = {
       captionHook: "Hook",
       captionAucune: "No caption recognized",
       captionPasEncore: "Not captioned yet",
+      captionTitre: "Caption:",
       captionEcrire: "Write",
       captionEditLabel: "Slide caption",
       captionPlaceholder: "What the photo shows",

@@ -251,20 +251,25 @@ function CaptionSlide({
   }
 
   return (
-    <div className="flex flex-wrap items-start gap-x-2">
-      <p className="min-w-0 flex-1 text-[11px] leading-snug text-muted-foreground">
-        {caption ??
-          (captionStatut === "aucune"
-            ? t("slideshows.captionAucune")
-            : t("slideshows.captionPasEncore"))}
+    <div className="flex items-start gap-2 rounded bg-muted/50 px-1.5 py-1">
+      <p className="min-w-0 flex-1 text-[11px] leading-snug">
+        <span className="font-medium">{t("slideshows.captionTitre")}</span>{" "}
+        <span className="text-muted-foreground">
+          {caption ??
+            (captionStatut === "aucune"
+              ? t("slideshows.captionAucune")
+              : t("slideshows.captionPasEncore"))}
+        </span>
       </p>
-      <button
-        type="button"
-        className="shrink-0 text-[11px] text-muted-foreground underline underline-offset-2"
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-6 shrink-0 gap-1 px-2 text-[11px]"
         onClick={ouvrir}
       >
+        <PenLine className="size-3" />
         {caption ? t("common.edit") : t("slideshows.captionEcrire")}
-      </button>
+      </Button>
     </div>
   );
 }

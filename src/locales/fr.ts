@@ -1393,6 +1393,7 @@ export const fr = {
       captionHook: "Hook",
       captionAucune: "Pas de caption reconnue",
       captionPasEncore: "Pas encore captionnée",
+      captionTitre: "Caption :",
       captionEcrire: "Écrire",
       captionEditLabel: "Caption de la slide",
       captionPlaceholder: "Ce qu’on voit sur la photo",
