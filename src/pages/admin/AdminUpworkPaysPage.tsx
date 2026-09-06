@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Briefcase, ExternalLink, OctagonX } from "lucide-react";
+import { ArrowLeft, Briefcase, ExternalLink, OctagonX, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link, Navigate, useParams } from "react-router-dom";
 
@@ -37,6 +37,13 @@ import {
   totauxUpwork,
 } from "@/features/upwork/totaux";
 import { ICONE_KPI } from "@/features/upwork/icones";
+import { CarteSurveillance, ResumeEquipe } from "@/features/upwork/Phase3";
+import {
+  alerteSurveillance,
+  createursPhase3,
+  encoreEnRecrutement,
+  moyenneEquipe,
+} from "@/features/upwork/surveillance";
 import {
   OBJECTIF_CREATEURS,
   avancement,
@@ -45,7 +52,12 @@ import {
   timelineCreateur,
   timelineHm,
 } from "@/features/upwork/timeline";
-import type { UpworkAction, UpworkApproche, UpworkMission } from "@/features/upwork/types";
+import type {
+  LigneSurveillance,
+  UpworkAction,
+  UpworkApproche,
+  UpworkMission,
+} from "@/features/upwork/types";
 import { cn } from "@/lib/utils";
 
 function Total({
@@ -242,37 +254,15 @@ function encartMessage(a: UpworkApproche, o: OutilsMessage, hmPrenom: string | n
     ) : null;
 }
 
-function CarteCreateur({
-  a,
-  outils,
-  onArreter,
-}: {
-  a: UpworkApproche;
-  outils: OutilsMessage;
-  onArreter: (proposalId: string, note: string | null) => void;
-}) {
+function CarteCreateur({ a }: { a: UpworkApproche }) {
   const etapes = timelineCreateur(faitsDepuisApproche(a));
-  const enAttente =
-    outils.actions.find(
-      (x) =>
-        x.upwork_proposal_id === a.upwork_proposal_id &&
-        x.type === "arreter_recrutement" &&
-        x.statut === "en_attente",
-    ) ?? null;
 
   return (
     <div className="rounded-lg border bg-background p-3">
       <Repliable entete={<EntetePersonne a={a} etapes={etapes} taille="sm" />}>
         <Deroule etapes={etapes} />
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
           <LienUpwork url={a.upwork_profile_url} label="Upwork" />
-          <BoutonArreter
-            nom={a.nom}
-            enAttente={enAttente}
-            disabled={outils.bloque}
-            onArreter={(note) => onArreter(a.upwork_proposal_id, note)}
-            onAnnuler={outils.onAnnuler}
-          />
         </div>
       </Repliable>
     </div>
@@ -284,16 +274,23 @@ function BandeauPhase({
   extra,
   children,
   verrouille,
+  alerte,
 }: {
   titre: string;
   extra?: string;
   children: ReactNode;
   verrouille?: boolean;
+  alerte?: boolean;
 }) {
   return (
     <section className={cn("rounded-xl border bg-muted/30 p-3", verrouille && "opacity-70")}>
       <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-semibold text-sm">{titre}</h3>
+        <h3 className="flex items-center gap-1.5 font-semibold text-sm">
+          {alerte && (
+            <TriangleAlert className="size-3.5 text-amber-600" aria-hidden />
+          )}
+          {titre}
+        </h3>
         {extra && <p className="text-muted-foreground text-xs tabular-nums">{extra}</p>}
       </div>
       {children}
@@ -311,6 +308,7 @@ function VieHm({
   onToggleUpwork,
   onToggleContrat,
   onToggleAcces,
+  lignes,
 }: {
   hm: UpworkApproche;
   jobCrea: UpworkMission | null;
@@ -321,11 +319,16 @@ function VieHm({
   onToggleUpwork: (proposalId: string, ok: boolean) => void;
   onToggleContrat: (proposalId: string, ok: boolean) => void;
   onToggleAcces: (proposalId: string, ok: boolean) => void;
+  lignes: LigneSurveillance[];
 }) {
   const { t } = useTranslation();
   const faits = faitsDepuisApproche(hm);
   const etapes = timelineHm(faits);
   const p1ok = phase1Terminee(faits);
+  const phase3 = createursPhase3(approchesCrea, lignes, hm.profile_id);
+  const encorePhase2 = approchesCrea.filter((a) => encoreEnRecrutement(a, phase3));
+  const moy = moyenneEquipe(phase3);
+  const alerteHm = Boolean(moy && alerteSurveillance(moy));
   const embauches = approchesCrea.filter((a) => a.statut === "hired").length;
   const n = Math.max(createursN, embauches);
   const opp = jobCrea ? opportunitesEnCours(approchesCrea, jobCrea.job_posting_id) : 0;
@@ -389,7 +392,7 @@ function VieHm({
                     {jobCrea?.titre ?? t("upwork.jobCreaVide")}
                   </span>
                   <span className="text-muted-foreground text-xs">
-                    {t("upwork.personnesRepondu", { n: approchesCrea.length })}
+                    {t("upwork.personnesRepondu", { n: encorePhase2.length })}
                   </span>
                 </span>
               }
@@ -408,21 +411,47 @@ function VieHm({
                     <LienUpwork url={jobCrea.job_url} label={t("upwork.lienJob")} />
                   </div>
                 )}
-                {approchesCrea.length === 0 ? (
+                {encorePhase2.length === 0 ? (
                   <p className="text-muted-foreground text-sm">{t("upwork.approcheVide")}</p>
                 ) : (
                   <div className="space-y-2">
-                    {approchesCrea.map((a) => (
-                      <CarteCreateur
-                        key={a.id}
-                        a={a}
-                        outils={outils}
-                        onArreter={onArreter}
-                      />
+                    {encorePhase2.map((a) => (
+                      <CarteCreateur key={a.id} a={a} />
                     ))}
                   </div>
                 )}
               </div>
+              </Repliable>
+            </>
+          )}
+        </BandeauPhase>
+
+        <BandeauPhase
+          titre={t("upwork.phase3")}
+          extra={phase3.length > 0 ? t("upwork.personnesRepondu", { n: phase3.length }) : undefined}
+          verrouille={!p1ok || phase3.length === 0}
+          alerte={alerteHm}
+        >
+          {!p1ok ? (
+            <p className="text-muted-foreground text-sm">{t("upwork.phase3Avant")}</p>
+          ) : phase3.length === 0 ? (
+            <p className="text-muted-foreground text-sm">{t("upwork.phase3Vide")}</p>
+          ) : (
+            <>
+              <p className="mb-2 text-muted-foreground text-xs">{t("upwork.phase3Aide")}</p>
+              <ResumeEquipe createurs={phase3} />
+              <Repliable
+                entete={
+                  <span className="text-sm font-medium">
+                    {t("upwork.personnesRepondu", { n: phase3.length })}
+                  </span>
+                }
+              >
+                <div className="space-y-2">
+                  {phase3.map((c) => (
+                    <CarteSurveillance key={c.cle} c={c} />
+                  ))}
+                </div>
               </Repliable>
             </>
           )}
@@ -641,6 +670,7 @@ export function AdminUpworkPaysPage() {
                     onToggleAcces={(proposalId, ok) =>
                       basculerAcces.mutate({ proposalId, ok })
                     }
+                    lignes={d.surveillance ?? []}
                   />
                 );
               })}

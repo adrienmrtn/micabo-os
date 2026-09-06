@@ -71,10 +71,15 @@ après le wipe du sync.
 
 Chaîne HM (phase 1) : contacté → pourparlers → contrat envoyé → contrat
 signé → accès envoyés → a rejoint (OS + Slack + Upwork) → job créateurs
-posté. Phase 2 (créateurs) : **lecture seule**, on n’intervient pas —
-pas de message, pas de contrat, pas d’accès. Le HM gère. On lit Upwork /
-l’OS : réponse, contrat signé, Slack, TikTok, warmup, premier post.
-Pas d'« onboarding » nulle part.
+posté. Le job créateurs, **c’est le HM qui le poste** depuis le compte
+Upwork Micabo — jamais l’admin, jamais l’agent. Phase 2 (créateurs) :
+**lecture seule**, on n’intervient pas — pas de message, pas de contrat,
+pas d’accès, pas de compte OS. Le HM gère. On lit Upwork / l’OS :
+réponse, contrat signé, Slack, TikTok, warmup, premier post.
+Dès le **premier post**, le créateur passe en phase 3 (surveillance) :
+lien TikTok, posts 10 j. / prévus, vues des 10 derniers, ELO. Le HM
+voit la moyenne de son équipe. Alerte (⚠️) si rythme < 80 % ou vues
+moy. < 500. Pas d'« onboarding » nulle part.
 
 - Org figé : `1990051114607612379` (Micabo). `list_accounts` d’abord ;
   si l’org n’est pas celle-là → stop. Jamais Maximilien / VIk Studios.

@@ -12,6 +12,7 @@ import type {
   UpworkDashboard,
   UpworkMission,
   UpworkSync,
+  LigneSurveillance,
 } from "./types";
 
 const MISSION_COLS =
@@ -49,6 +50,7 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
     candidatsRes,
     modelesRes,
     accesRes,
+    surveillanceRes,
   ] = await Promise.all([
       supabase
         .from("upwork_sync")
@@ -79,6 +81,7 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
         .order("propose_at", { ascending: false }),
       supabase.from("upwork_modeles").select(MODELE_COLS).order("cle"),
       supabase.rpc("upwork_acces_reglages"),
+      supabase.rpc("upwork_surveillance"),
     ]);
   if (syncRes.error) throw syncRes.error;
   if (missionsRes.error) throw missionsRes.error;
@@ -90,6 +93,7 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
   if (candidatsRes.error) throw candidatsRes.error;
   if (modelesRes.error) throw modelesRes.error;
   if (accesRes.error) throw accesRes.error;
+  if (surveillanceRes.error) throw surveillanceRes.error;
 
   const accesBrut = (accesRes.data ?? {}) as {
     slack_invite_manager?: string;
@@ -110,6 +114,7 @@ export async function chargerUpworkDashboard(): Promise<UpworkDashboard> {
       slack_invite_manager: accesBrut.slack_invite_manager ?? "",
       os_url: accesBrut.os_url ?? "https://os.micabo.app/login",
     },
+    surveillance: (surveillanceRes.data ?? []) as LigneSurveillance[],
   };
 }
 

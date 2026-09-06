@@ -77,9 +77,11 @@ export function MessageEtape({
         a.statut === "en_attente",
     ) ?? null;
 
+  if (approche.role !== "hm") return null;
+
   const contratIci = etape === "contrat_envoye";
-  const accesHm = etape === "acces_envoyes" && approche.role === "hm";
-  if (!ETAPES_AVEC_MESSAGE.includes(etape) && !contratIci) return null;
+  const accesHm = etape === "acces_envoyes";
+  if (!ETAPES_AVEC_MESSAGE.includes(etape) && !contratIci && !accesHm) return null;
 
   if (accesHm) {
     return (
