@@ -88,11 +88,15 @@ Ce clic **est** la validation humaine : il est tracé
 il pose l’état ; `upwork_campagnes_planifier()` en déduit la prochaine
 action et la met dans la file. Une seule action de campagne à la fois.
 
-    pas de job                    → publier_job_hm
+    pas de job (cette vague)      → publier_job_hm  (un post NEUF, même s'il en existe déjà)
     job publié, rien en attente   → sourcer_hm  (find_freelancers smart_search)
     des profils prêts             → inviter_hm  (invite_freelancer)
-    un HM embauché sur le pays    → campagne terminée, file purgée
+    un HM embauché sur CE job     → campagne terminée, file purgée
     job plus PUBLISHED            → campagne en pause
+
+Relancer après un HM déjà en place : ça se cumule. Chaque clic publie
+un nouveau job et recrute un HM de plus. On ne rattache jamais le job
+HM déjà ouvert du pays.
 
 `sourcer_hm` **n’invite personne** : il écrit des recommandations dans
 `upwork_candidats`. L’admin valide ou refuse dans l’OS. Sans réponse
@@ -105,9 +109,10 @@ elle rejoint la chaîne HM classique. Rien de spécial à faire.
 
 ### Messages et contrats
 
-Chaque étape a un message pré-écrit dans `upwork_modeles` (`cle` =
-l’étape, `role_cible`, `langue` = pays ou `*`). L’OS remplit les
-variables (`{{prenom}}`, `{{pays}}`, `{{hm_prenom}}`…), l’admin relit et
+`upwork_modeles` est le playbook de l’étape (la suite à couvrir), pas
+la lettre. L’OS compose un brouillon **par personne** : prénom, ce
+qu’elle a dit (`resume_discussions`), ce qu’il lui manque vraiment
+(Slack, OS, Upwork, TikTok…), puis le playbook. L’admin relit et
 envoie. L’action `envoyer_message` porte le texte **fini** dans sa
 colonne `message` : envoyer ce champ tel quel via `send_message`
 action=message_proposal. Ne rien réécrire, ne rien traduire, ne rien
