@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  approcheEncoreVisible,
   contratActif,
   jobCreateurPourHm,
   missionOuverte,
@@ -175,5 +176,31 @@ describe("jobCreateurPourHm", () => {
     expect(jobCreateurPourHm(sara, [jobCrea], hms, contrats)?.job_posting_id).toBe("job-fr-cr");
     expect(jobCreateurPourHm(rose, [jobCrea], hms, contrats)).toBeNull();
     expect(jobCreateurPourHm({ ...rose, job_createur_id: null }, [jobCrea], hms, contrats)).toBeNull();
+  });
+});
+
+describe("approcheEncoreVisible", () => {
+  const stop = {
+    upwork_proposal_id: "p-stop",
+    type: "arreter_recrutement" as const,
+    statut: "en_attente" as const,
+  };
+
+  it("garde la fiche tant que l’arrêt est en attente", () => {
+    expect(approcheEncoreVisible({ upwork_proposal_id: "p-stop", arrete_ok: true }, [stop])).toBe(
+      true,
+    );
+  });
+
+  it("la cache une fois archivée, plus d’action en file", () => {
+    expect(approcheEncoreVisible({ upwork_proposal_id: "p-stop", arrete_ok: true }, [])).toBe(
+      false,
+    );
+    expect(
+      approcheEncoreVisible(
+        { upwork_proposal_id: "p-stop", arrete_ok: true },
+        [{ ...stop, statut: "fait" }],
+      ),
+    ).toBe(false);
   });
 });

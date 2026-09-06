@@ -30,6 +30,7 @@ import type { DocSavoir } from "@/features/upwork/savoir";
 import { langueValide } from "@/features/upwork/langue";
 import { nomPays } from "@/features/upwork/pipeline";
 import {
+  approcheEncoreVisible,
   approchesDuJob,
   jobCreateurPourHm,
   langueCle,
@@ -591,8 +592,10 @@ export function AdminUpworkPaysPage() {
   );
   const jobsHm = jobs.filter((m) => m.famille === "hm");
   const jobsCrea = jobs.filter((m) => m.famille === "createur");
-  const approches = d?.approches ?? [];
   const actions = d?.actions ?? [];
+  const approches = (d?.approches ?? []).filter((a) =>
+    approcheEncoreVisible(a, actions),
+  );
   const hms = jobsHm
     .flatMap((j) => approchesDuJob(approches, j.job_posting_id))
     .filter((a) => a.role === "hm");

@@ -2291,7 +2291,7 @@ export const fr = {
       },
       arreter: "Arrêter le recrutement",
       arreterConfirm:
-        "Arrêter le recrutement de {{nom}} ? L’agent archivera son profil Upwork et supprimera son compte OS au prochain passage.\n\nContexte (facultatif) :",
+        "Arrêter le recrutement de {{nom}} ? Au prochain passage, l’agent archive la candidature sur Upwork et l’OS retire la fiche (compte compris s’il en a un).\n\nContexte (facultatif) :",
       actionEnAttente: "Arrêt demandé",
       actionAnnuler: "Annuler",
       actionCopier: "Copier le prompt",
