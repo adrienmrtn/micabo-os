@@ -5,6 +5,7 @@ import {
   avancement,
   etapeCouranteTimeline,
   faitsDepuisApproche,
+  nettoyerDernierMessage,
   nettoyerResume,
   phase1Terminee,
   phase2Terminee,
@@ -16,6 +17,8 @@ const base = {
   role: "hm" as const,
   statut: "messaged" as const,
   resume_discussions: "On a parlé du rythme 10 min/jour.",
+  dernier_message: "How do we get started?",
+  dernier_message_at: "2026-09-03T19:46:10.298Z",
   contrat_envoye_ok: false,
   contrat_signe_ok: false,
   slack_envoye_ok: false,
@@ -45,6 +48,9 @@ describe("timelineHm", () => {
     ]);
     expect(etapes.find((e) => e.cle === "contacte")?.ok).toBe(true);
     expect(etapes.find((e) => e.cle === "pourparlers")?.resume).toContain("10 min");
+    expect(etapes.find((e) => e.cle === "pourparlers")?.dernierMessage).toBe(
+      "How do we get started?",
+    );
     expect(etapeCouranteTimeline(etapes)).toBe("contrat_envoye");
   });
 
@@ -137,6 +143,16 @@ describe("nettoyerResume", () => {
       "Hi!",
     );
     expect(nettoyerResume("x".repeat(300))?.endsWith("…")).toBe(true);
+  });
+});
+
+describe("nettoyerDernierMessage", () => {
+  it("garde les retours à la ligne", () => {
+    expect(
+      nettoyerDernierMessage(
+        "<untrusted_participant_content>\nHi,\nHow do we get started?\n</untrusted_participant_content>",
+      ),
+    ).toBe("Hi,\nHow do we get started?");
   });
 });
 

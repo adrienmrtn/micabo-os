@@ -36,6 +36,8 @@ export type ContexteModele = Partial<Record<VariableModele, string | null>> & {
   role?: "hm" | "createur";
   etape?: EtapeTimelineCle;
   langue?: string | null;
+  /** Leurs mots, pas le résumé. La réponse Talks s'appuie là-dessus. */
+  dernier_message?: string | null;
 };
 
 export const MODELE_GENERIQUE = "*";
@@ -165,6 +167,7 @@ export function contexteDepuisApproche(
     pays: extras.pays,
     hm_prenom: extras.hmPrenom ?? null,
     resume: a.resume_discussions?.trim() || null,
+    dernier_message: a.dernier_message?.trim() || a.resume_discussions?.trim() || null,
     manques: manques.length ? manques.map((m) => `- ${m}`).join("\n") : null,
     role: a.role,
     etape: extras.etape,
@@ -196,14 +199,141 @@ function signaturePour(ctx: ContexteModele): string {
   return "Adrien";
 }
 
+export type IntentionTalks =
+  | "refus"
+  | "appel"
+  | "demarrage"
+  | "dispo"
+  | "interesse"
+  | "questions"
+  | "autre";
+
+/** Un point ou un fichier sans texte : on n'a rien à quoi répondre. */
+export function messageUtileTalks(texte: string | null | undefined): boolean {
+  if (!texte) return false;
+  return texte.replace(/[.\s]/g, "").length >= 8;
+}
+
+export function intentionTalks(texte: string): IntentionTalks {
+  const t = texte.toLowerCase();
+  if (
+    /another opportunity|not interested|i(?:'ll| will) pass|je (?:passe|décline)|no longer interested|decided to pursue/.test(
+      t,
+    )
+  ) {
+    return "refus";
+  }
+  if (/get on a call|on a call|schedule a (?:call|meeting)|zoom|visio|\bappel\b/.test(t)) {
+    return "appel";
+  }
+  if (
+    /how do we get started|how (?:do|can) (?:we|i) (?:get )?start|comment (?:on |je )?(?:d[eé]marre|commence)|next steps?|prochaine [eé]tape/.test(
+      t,
+    )
+  ) {
+    return "demarrage";
+  }
+  if (
+    /available right now|dispo tout de suite|ready to (?:start|begin)|je suis dispo/.test(t)
+  ) {
+    return "dispo";
+  }
+  if (/\?/.test(t)) return "questions";
+  if (/interested|int[eé]ress[eé]/.test(t)) return "interesse";
+  return "autre";
+}
+
+function extraireQuestion(texte: string): string | null {
+  const morceaux = texte.match(/[^.!?\n]+[?]/g);
+  const q = morceaux?.at(-1)?.trim();
+  return q || null;
+}
+
+function corpsReponseTalks(fr: boolean, dernier: string, intention: IntentionTalks): string {
+  switch (intention) {
+    case "refus":
+      return fr
+        ? "C'est noté, merci de m'avoir prévenu. Je clos le fil."
+        : "Understood — thanks for letting me know. I'll close the thread.";
+    case "appel":
+      return fr
+        ? "Pas besoin d'appel, on fait tout ici. Prochaine étape : je t'envoie le contrat Upwork."
+        : "No need for a call — we can do everything on this thread. Next I send the Upwork contract.";
+    case "demarrage":
+      return fr
+        ? "Tu demandes comment on démarre : je t'envoie le contrat Upwork. Tu acceptes, ensuite Slack + l'OS."
+        : "You asked how we get started — next I send the Upwork contract. You accept, then Slack and the OS follow.";
+    case "dispo":
+      return fr
+        ? "Tu es dispo : je t'envoie le contrat Upwork pour qu'on démarre."
+        : "You're available — I'll send the Upwork contract so we can start.";
+    case "interesse":
+      return fr
+        ? "Content que ça t'intéresse. Prochaine étape : je t'envoie le contrat Upwork."
+        : "Glad you're interested. Next I send the Upwork contract.";
+    case "questions": {
+      const q = extraireQuestion(dernier);
+      if (fr) {
+        return q
+          ? `Tu demandes : « ${q} »\n\nProchaine étape concrète : je t'envoie le contrat Upwork. On règle le reste ici.`
+          : "Prochaine étape concrète : je t'envoie le contrat Upwork. On règle le reste ici.";
+      }
+      return q
+        ? `You asked: "${q}"\n\nNext concrete step: I send the Upwork contract. We can settle the rest on this thread.`
+        : "Next concrete step: I send the Upwork contract. We can settle the rest on this thread.";
+    }
+    case "autre":
+      return fr
+        ? "Merci pour ton message. Prochaine étape : je t'envoie le contrat Upwork si tu veux avancer."
+        : "Thanks for the note. Next I send the Upwork contract if you want to move forward.";
+  }
+}
+
 /**
- * Un brouillon pour CETTE personne, dans SA langue : ce qu'elle a dit,
- * ce qu'il lui manque, puis le gabarit de l'étape.
+ * Talks : on répond à LEUR dernier message. Le playbook ne sert que s'ils
+ * n'ont rien dit d'utilisable.
+ */
+export function composerReponseTalks(
+  playbook: string,
+  ctx: ContexteModele,
+): { texte: string; manquantes: string[] } {
+  const fr = langueMessage(ctx.langue) === "fr";
+  const prenom = ctx.prenom?.trim() || "";
+  const dernier = (ctx.dernier_message ?? "").trim();
+  const rempli = remplirModele(playbook, {
+    ...ctx,
+    resume: ctx.resume ?? "",
+    manques: ctx.manques ?? "",
+  });
+  const suite = retirerSignature(retirerOuverture(rempli.texte, prenom || "x"));
+  const blocs: string[] = [];
+
+  if (prenom) blocs.push(fr ? `Bonjour ${prenom},` : `Hi ${prenom},`);
+  if (messageUtileTalks(dernier)) {
+    blocs.push("");
+    blocs.push(corpsReponseTalks(fr, dernier, intentionTalks(dernier)));
+  } else if (suite) {
+    blocs.push("");
+    blocs.push(suite);
+  }
+  blocs.push("");
+  blocs.push(signaturePour(ctx));
+
+  const texte = blocs.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  const manquantes = rempli.manquantes.filter((v) => v !== "resume" && v !== "manques");
+  return { texte, manquantes };
+}
+
+/**
+ * Un brouillon pour CETTE personne, dans SA langue. Talks = leur dernier
+ * message. Les autres étapes : ce qu'il manque, puis le gabarit.
  */
 export function composerMessage(
   corps: string,
   ctx: ContexteModele,
 ): { texte: string; manquantes: string[] } {
+  if (ctx.etape === "pourparlers") return composerReponseTalks(corps, ctx);
+
   const fr = langueMessage(ctx.langue) === "fr";
   const porteResume = /\{\{\s*resume\s*\}\}/.test(corps);
   const porteManques = /\{\{\s*manques\s*\}\}/.test(corps);

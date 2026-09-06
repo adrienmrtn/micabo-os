@@ -79,9 +79,12 @@ export function MessageEtape({
 
   if (approche.role !== "hm") return null;
 
+  const talksIci = etape === "pourparlers";
   const contratIci = etape === "contrat_envoye";
   const accesHm = etape === "acces_envoyes";
   if (!ETAPES_AVEC_MESSAGE.includes(etape) && !contratIci && !accesHm) return null;
+  const titreMessage = talksIci ? t("upwork.reponsePrete") : t("upwork.messageEtape");
+  const aideMessage = talksIci ? t("upwork.reponseAide") : t("upwork.messageAide");
 
   if (accesHm) {
     return (
@@ -128,7 +131,7 @@ export function MessageEtape({
       {modele ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-medium text-xs">{t("upwork.messageEtape")}</p>
+            <p className="font-medium text-xs">{titreMessage}</p>
             {messageEnFile ? (
               <span className="inline-flex items-center gap-2">
                 <Badge variant="warning" size="sm">
@@ -171,12 +174,12 @@ export function MessageEtape({
                   setBrouillon(e.target.value);
                 }}
                 className="text-xs leading-relaxed"
-                aria-label={t("upwork.messageEtape")}
+                aria-label={titreMessage}
               />
               <p className="text-muted-foreground text-[11px]">
                 {manquantes.length > 0 && !modifie
                   ? t("upwork.messageManque", { vars: manquantes.join(", ") })
-                  : t("upwork.messageAide")}
+                  : aideMessage}
               </p>
             </>
           )}

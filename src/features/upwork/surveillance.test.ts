@@ -38,6 +38,8 @@ const approche = (p: Partial<UpworkApproche> = {}): UpworkApproche =>
     role: "createur",
     statut: "hired",
     resume_discussions: null,
+    dernier_message: null,
+    dernier_message_at: null,
     offre_finalize_url: null,
     contrat_envoye_ok: true,
     contrat_signe_ok: true,
