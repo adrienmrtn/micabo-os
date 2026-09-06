@@ -2269,6 +2269,11 @@ export const en = {
       contratFinaliser: "Finalise on Upwork",
       contratFinaliserAide:
         "Review the terms and send. Then click the tick — or wait for the next run, Upwork will tick it.",
+      consigneTitre: "Prompt for the agent",
+      consigneAide:
+        "Style for Upwork messages and contracts. The OS applies it to drafts. e.g. add smileys; no em-dashes. Answers come from the documents.",
+      consigneDocs: "Edit the documents",
+      consignePh: "No em-dashes. Direct tone. One smiley max.",
       modelesTitre: "Step playbooks",
       modelesCompte: "{{n}} playbook(s)",
       modelesAide:

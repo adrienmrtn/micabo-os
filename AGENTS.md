@@ -156,9 +156,13 @@ eu lieu hors file, l’admin coche la pastille.
 `upwork_modeles` est le playbook des autres étapes (la suite à
 couvrir), pas la lettre. Sur **Talks / pourparlers**, l’OS affiche le
 **dernier message d’eux** (`dernier_message`) et compose une réponse
-qui dépend de ce message — pas un « Noted: » + gabarit. Le playbook
-ne sert que s’ils n’ont rien dit d’utilisable. **Français si le pays
-est la France, anglais sinon** — invitations et brouillons compris,
+**tirée des documents OS** (`reponses_upwork`, FAQ / guide manager) —
+pas un « Noted: » + gabarit inventé. Le playbook ne sert que s’ils
+n’ont rien dit, ou si aucun document ne colle. La **consigne de style**
+(page `/admin/upwork`, éditable) s’applique aux brouillons : smileys,
+pas de tirets cadratins, etc. Elle est aussi recopiée dans le prompt
+des actions `envoyer_message` et `preparer_contrat`. **Français si le
+pays est la France, anglais sinon** — invitations et brouillons compris,
 jamais l’espagnol / l’allemand / etc. L’admin relit et
 envoie. L’action `envoyer_message` porte le texte **fini** dans sa
 colonne `message` : envoyer ce champ tel quel via `send_message`

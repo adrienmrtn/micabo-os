@@ -379,7 +379,18 @@ const dash: UpworkDashboard = {
     slack_invite_manager:
       "https://join.slack.com/t/micaboapp/shared_invite/zt-48nrw6z5x-Cdeo6CPVDldMYUBsQEzs8A",
     os_url: "https://os.micabo.app/login",
+    consigne: "Pas de tirets cadratins. Ton direct. Un smiley max.",
   },
+  documents: [
+    {
+      cle: "reponses_upwork",
+      titre: "Réponses Upwork",
+      contenu:
+        "<h2>Je suis dispo / intéressé</h2><p>Parfait. Prochaine étape : le contrat Upwork. Tu acceptes, ensuite Slack et l'OS.</p>",
+      contenu_en:
+        "<h2>I'm available / interested</h2><p>Great. Next step: the Upwork contract.</p>",
+    },
+  ],
   surveillance: [
     {
       compte_id: "compte-manon",
@@ -450,6 +461,19 @@ describe("pages Upwork", () => {
     expect(await screen.findByRole("link", { name: /france/i })).toBeInTheDocument();
     expect(screen.getByText("HM")).toBeInTheDocument();
     expect(screen.getByText("Créateurs")).toBeInTheDocument();
+  });
+
+  it("dashboard : consigne de style éditable pour l’agent", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork");
+    expect(await screen.findByText("Consigne pour l’agent")).toBeInTheDocument();
+    expect(screen.getByLabelText("Consigne pour l’agent")).toHaveValue(
+      "Pas de tirets cadratins. Ton direct. Un smiley max.",
+    );
+    expect(screen.getByRole("link", { name: /modifier les documents/i })).toHaveAttribute(
+      "href",
+      "/admin/documents",
+    );
   });
 
   it("dashboard : champ pour le lien Slack managers", async () => {

@@ -26,6 +26,7 @@ import { Deroule, Jauge, Repliable, ResumeEtape } from "@/features/upwork/Deroul
 import { JobsHm } from "@/features/upwork/JobsHm";
 import { MessageEtape } from "@/features/upwork/MessageEtape";
 import { type UpworkModele, contexteDepuisApproche } from "@/features/upwork/modeles";
+import type { DocSavoir } from "@/features/upwork/savoir";
 import { langueValide } from "@/features/upwork/langue";
 import { nomPays } from "@/features/upwork/pipeline";
 import {
@@ -224,6 +225,8 @@ type OutilsMessage = {
   paysNom: string;
   actions: UpworkAction[];
   bloque: boolean;
+  documents: DocSavoir[];
+  consigne: string;
   onEnvoyer: (proposalId: string, corps: string) => void;
   onPreparerContrat: (proposalId: string) => void;
   onCocherContrat: (proposalId: string, ok: boolean) => void;
@@ -250,6 +253,8 @@ function encartMessage(a: UpworkApproche, o: OutilsMessage, hmPrenom: string | n
           hmPrenom,
           etape: etape.cle,
           langue: o.langue,
+          documents: o.documents,
+          consigne: o.consigne,
         })}
         actions={o.actions}
         bloque={o.bloque}
@@ -585,6 +590,8 @@ export function AdminUpworkPaysPage() {
     paysNom,
     actions,
     bloque: enCours,
+    documents: d?.documents ?? [],
+    consigne: d?.acces.consigne ?? "",
     onEnvoyer: (proposalId, corps) => envoyerMessage.mutate({ proposalId, corps }),
     onPreparerContrat: (proposalId) => preparerContrat.mutate(proposalId),
     onCocherContrat: (proposalId, ok) => basculerContrat.mutate({ proposalId, ok }),

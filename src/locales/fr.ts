@@ -2269,6 +2269,11 @@ export const fr = {
       contratFinaliser: "Finaliser sur Upwork",
       contratFinaliserAide:
         "Relis les termes et envoie. Clique ensuite la pastille — ou attends le prochain passage, Upwork la cochera.",
+      consigneTitre: "Consigne pour l’agent",
+      consigneAide:
+        "Style des messages et des contrats Upwork. L’OS l’applique aux brouillons. Ex. : ajoute des smileys ; pas de tirets cadratins. Les réponses viennent des documents.",
+      consigneDocs: "Modifier les documents",
+      consignePh: "Pas de tirets cadratins. Ton direct. Un smiley max.",
       modelesTitre: "Playbook des étapes",
       modelesCompte: "{{n}} playbook(s)",
       modelesAide:
