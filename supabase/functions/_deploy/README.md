@@ -17,4 +17,7 @@ npx esbuild supabase/functions/import-contenu/index.ts \
 3. Pousser, coller le SHA dans `import-contenu.loader.ts`, redéployer
    **uniquement** le chargeur (`verify_jwt: false`).
 
+Même recette pour `manage-users` (`manage-users.bundle.js` + `manage-users.loader.ts`).
+Le chargeur injecte `createClient` sous le nom `me`.
+
 Ne pas redéployer `papier-cm` depuis ce dépôt : la prod est en avance.
