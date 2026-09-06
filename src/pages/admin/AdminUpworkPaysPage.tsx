@@ -24,7 +24,7 @@ import { campagneDuPays, candidatsDeCampagne } from "@/features/upwork/campagne"
 import { Deroule, Jauge, Repliable, ResumeEtape } from "@/features/upwork/Deroule";
 import { JobsHm } from "@/features/upwork/JobsHm";
 import { MessageEtape } from "@/features/upwork/MessageEtape";
-import { type UpworkModele, contexteDepuisApproche, prenomDe } from "@/features/upwork/modeles";
+import { type UpworkModele, contexteDepuisApproche } from "@/features/upwork/modeles";
 import { nomPays } from "@/features/upwork/pipeline";
 import {
   approchesDuJob,
@@ -242,12 +242,10 @@ function encartMessage(a: UpworkApproche, o: OutilsMessage, hmPrenom: string | n
 
 function CarteCreateur({
   a,
-  hmPrenom,
   outils,
   onArreter,
 }: {
   a: UpworkApproche;
-  hmPrenom: string;
   outils: OutilsMessage;
   onArreter: (proposalId: string, note: string | null) => void;
 }) {
@@ -263,15 +261,7 @@ function CarteCreateur({
   return (
     <div className="rounded-lg border bg-background p-3">
       <Repliable entete={<EntetePersonne a={a} etapes={etapes} taille="sm" />}>
-        <Deroule
-          etapes={etapes}
-          role="createur"
-          cocheEnCours={outils.bloque}
-          onCocherEtape={(cle, ok) => {
-            if (cle === "contrat_envoye") outils.onCocherContrat(a.upwork_proposal_id, ok);
-          }}
-          encart={encartMessage(a, outils, hmPrenom)}
-        />
+        <Deroule etapes={etapes} />
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
           <LienUpwork url={a.upwork_profile_url} label="Upwork" />
           <BoutonArreter
@@ -352,7 +342,6 @@ function VieHm({
               <BandeauPhase titre={t("upwork.phase1")}>
                 <Deroule
                   etapes={etapes}
-                  role="hm"
                   cocheEnCours={outils.bloque}
                   onCocher={(cle, ok) => {
                     if (cle === "upwork") onToggleUpwork(hm.upwork_proposal_id, ok);
@@ -385,7 +374,9 @@ function VieHm({
           {!p1ok ? (
             <p className="text-muted-foreground text-sm">{t("upwork.phase2Avant")}</p>
           ) : (
-            <Repliable
+            <>
+              <p className="mb-2 text-muted-foreground text-xs">{t("upwork.phase2Aide")}</p>
+              <Repliable
               entete={
                 <span className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
                   <Briefcase className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
@@ -420,7 +411,6 @@ function VieHm({
                       <CarteCreateur
                         key={a.id}
                         a={a}
-                        hmPrenom={prenomDe(hm.nom)}
                         outils={outils}
                         onArreter={onArreter}
                       />
@@ -428,7 +418,8 @@ function VieHm({
                   </div>
                 )}
               </div>
-            </Repliable>
+              </Repliable>
+            </>
           )}
         </BandeauPhase>
       </CardContent>

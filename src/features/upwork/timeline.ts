@@ -11,9 +11,7 @@ export const ETAPES_TIMELINE_HM = [
 export const ETAPES_TIMELINE_CREATEUR = [
   "contacte",
   "pourparlers",
-  "contrat_envoye",
   "contrat_signe",
-  "acces_envoyes",
   "integration",
   "tiktok_cree",
   "warmup",
@@ -99,18 +97,10 @@ export function timelineHm(f: FaitsApproche): TimelineEtape[] {
 }
 
 export function timelineCreateur(f: FaitsApproche): TimelineEtape[] {
-  const envoiOk = f.slack_envoye_ok && f.codes_ok;
   return [
     { cle: "contacte", ok: true, source: "upwork" },
     { cle: "pourparlers", ok: aParle(f), source: "upwork", resume: f.resume_discussions },
-    {
-      cle: "contrat_envoye",
-      ok: f.contrat_envoye_ok,
-      source: "admin",
-      cochable: true,
-    },
     { cle: "contrat_signe", ok: f.contrat_signe_ok, source: "upwork" },
-    { cle: "acces_envoyes", ok: envoiOk, source: "upwork" },
     {
       cle: "integration",
       ok: f.os_ok && f.slack_ok,

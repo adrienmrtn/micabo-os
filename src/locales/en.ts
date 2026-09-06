@@ -2174,6 +2174,7 @@ export const en = {
       phase2: "Phase 2 — Creator recruiting",
       phase2Progress: "{{n}} / {{max}} creators",
       phase2Avant: "After the creator job is posted.",
+      phase2Aide: "Read-only: the HM runs it. No messages, no contract, no access.",
       statsPost:
         "{{inv}} invited · {{opp}} opportunities in progress · {{appl}} applicants · {{hired}} hired",
       approcheVide: "Nobody has replied yet.",

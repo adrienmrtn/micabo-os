@@ -18,7 +18,7 @@ import {
 } from "./modeles";
 import type { EtapeTimelineCle } from "./timeline";
 
-const ROLES = ["hm", "createur"] as const;
+const ROLES = ["hm"] as const;
 const LANGUES_PLAYBOOK = [
   { code: MODELE_FRANCE, cle: "fr" },
   { code: MODELE_GENERIQUE, cle: "en" },

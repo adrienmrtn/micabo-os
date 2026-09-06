@@ -53,14 +53,12 @@ function Source({ source }: { source: SourceVerite }) {
 /** Déroulé vertical : une ligne par étape, la courante mise en avant. */
 export function Deroule({
   etapes,
-  role,
   onCocher,
   onCocherEtape,
   cocheEnCours,
   encart,
 }: {
   etapes: TimelineEtape[];
-  role: "hm" | "createur";
   /** Bascule une case dont l'admin est la source de vérité. */
   onCocher?: (cle: TimelineCheck["cle"], ok: boolean) => void;
   onCocherEtape?: (cle: EtapeTimelineCle, ok: boolean) => void;
@@ -116,9 +114,7 @@ export function Deroule({
                   !e.ok && !ici && "text-muted-foreground",
                 )}
               >
-                {e.cle === "acces_envoyes" && role === "createur"
-                  ? t("upwork.timeline.acces_envoyes_crea")
-                  : t(`upwork.timeline.${e.cle}`)}
+                {t(`upwork.timeline.${e.cle}`)}
                 {ici && (
                   <span className="rounded-full bg-foreground px-1.5 py-px font-medium text-[10px] text-background uppercase tracking-wide">
                     {t("upwork.etapeCourante")}

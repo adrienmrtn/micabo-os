@@ -251,6 +251,35 @@ const dash: UpworkDashboard = {
       synced_at: "2026-09-04T12:00:00Z",
     },
     {
+      id: "a-leiliane",
+      job_posting_id: "job-fr-hm",
+      contract_id: null,
+      upwork_proposal_id: "p-leiliane",
+      upwork_freelancer_id: "4",
+      upwork_profile_url: null,
+      photo_url: null,
+      nom: "Leiliane De Saint Jores",
+      role: "hm",
+      statut: "messaged",
+      resume_discussions: "OK pour démarrer.",
+      offre_finalize_url: null,
+      contrat_envoye_ok: false,
+      contrat_signe_ok: false,
+      slack_envoye_ok: false,
+      email_demande_ok: false,
+      codes_ok: false,
+      os_ok: false,
+      slack_ok: false,
+      upwork_ajoute_ok: false,
+      job_createur_id: null,
+      profile_id: null,
+      tiktok_cree_ok: false,
+      tiktok_handle: null,
+      warmup_actif: false,
+      premier_post_ok: false,
+      synced_at: "2026-09-04T12:00:00Z",
+    },
+    {
       id: "a-ari",
       job_posting_id: "job-fr-cr",
       contract_id: null,
@@ -384,7 +413,7 @@ describe("pages Upwork", () => {
     wrap("/admin/upwork/fr");
     expect(await screen.findByText("Sara Benamer")).toBeInTheDocument();
     expect(screen.getByText("Rose Vasquez")).toBeInTheDocument();
-    expect(screen.getAllByText(/Phase 2/)).toHaveLength(2);
+    expect(screen.getAllByText(/Phase 2/)).toHaveLength(3);
     expect(screen.queryByText(/Phase 3/)).not.toBeInTheDocument();
 
     expect(screen.queryByText("Hiring Manager sur une autre app.")).not.toBeInTheDocument();
@@ -404,8 +433,8 @@ describe("pages Upwork", () => {
     expect(screen.getByText("Warmup actif")).toBeInTheDocument();
     expect(screen.getAllByText("Arisoa Estelle Rajaobelina")).toHaveLength(1);
 
-    // Rose n'a pas le job du pays : Sara le garde.
-    expect(screen.getByText(/Après le job créateurs/)).toBeInTheDocument();
+    // Rose et Leiliane n'ont pas le job : Sara le garde.
+    expect(screen.getAllByText(/Après le job créateurs/).length).toBeGreaterThan(0);
   });
 
   it("page France : bloc jobs HM avec profils à valider", async () => {
@@ -454,30 +483,40 @@ describe("pages Upwork", () => {
     expect(screen.queryByDisplayValue(/tes accès micabo/)).not.toBeInTheDocument();
   });
 
-  it("page France : le contrat passe par un brouillon, jamais par un envoi direct", async () => {
+  it("page France : phase 2 lecture seule, pas de contrat ni d’accès", async () => {
     await i18n.changeLanguage("fr");
     wrap("/admin/upwork/fr");
     await screen.findByText("Sara Benamer");
     toutDeplier();
 
-    // Arisoa en est au contrat : on prépare un brouillon, on n'envoie rien.
-    fireEvent.click(screen.getByRole("button", { name: /préparer le contrat/i }));
-    await waitFor(() => expect(preparerContratUpwork).toHaveBeenCalledWith("p2"));
+    expect(screen.getByText("Arisoa Estelle Rajaobelina")).toBeInTheDocument();
+    expect(screen.getByText(/le HM gère/)).toBeInTheDocument();
+    expect(screen.queryByText("Accès envoyés : Slack + codes OS")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue(/ici {{hm_prenom}}/)).not.toBeInTheDocument();
   });
 
-  it("page France : la pastille « contrat envoyé » se clique, sans interrupteur", async () => {
+  it("page France : le contrat HM passe par un brouillon, jamais par un envoi direct", async () => {
     await i18n.changeLanguage("fr");
     wrap("/admin/upwork/fr");
-    await screen.findByText("Sara Benamer");
+    await screen.findByText("Leiliane De Saint Jores");
     toutDeplier();
-    expect(screen.getByText("Arisoa Estelle Rajaobelina")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /préparer le contrat/i }));
+    await waitFor(() => expect(preparerContratUpwork).toHaveBeenCalledWith("p-leiliane"));
+  });
+
+  it("page France : la pastille « contrat envoyé » se clique sur le HM, sans interrupteur", async () => {
+    await i18n.changeLanguage("fr");
+    wrap("/admin/upwork/fr");
+    await screen.findByText("Leiliane De Saint Jores");
+    toutDeplier();
 
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
     const pastilles = screen.getAllByRole("button", { name: /^contrat envoyé$/i });
     const aFaire = pastilles.find((b) => b.getAttribute("aria-pressed") === "false");
     expect(aFaire).toBeTruthy();
     fireEvent.click(aFaire!);
-    await waitFor(() => expect(marquerContratEnvoye).toHaveBeenCalledWith("p2", true));
+    await waitFor(() => expect(marquerContratEnvoye).toHaveBeenCalledWith("p-leiliane", true));
   });
 
   it("dashboard : les modèles de messages s’éditent sur la page Upwork", async () => {
