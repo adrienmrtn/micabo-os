@@ -4,6 +4,7 @@ import type {
   FamilleMission,
   TotauxPays,
   TotauxUpwork,
+  UpworkAction,
   UpworkApproche,
   UpworkContrat,
   UpworkMission,
@@ -78,6 +79,20 @@ export function missionsFiltrees(
     if (famille !== "toutes" && m.famille !== famille) return false;
     return true;
   });
+}
+
+/** Stop demandé : encore visible tant que l'action n'est pas faite. Ensuite, plus là. */
+export function approcheEncoreVisible(
+  a: Pick<UpworkApproche, "upwork_proposal_id" | "arrete_ok">,
+  actions: Pick<UpworkAction, "upwork_proposal_id" | "type" | "statut">[],
+): boolean {
+  if (!a.arrete_ok) return true;
+  return actions.some(
+    (x) =>
+      x.upwork_proposal_id === a.upwork_proposal_id &&
+      x.type === "arreter_recrutement" &&
+      x.statut === "en_attente",
+  );
 }
 
 export function approchesDuJob(approches: UpworkApproche[], jobPostingId: string): UpworkApproche[] {

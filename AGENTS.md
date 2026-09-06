@@ -96,7 +96,13 @@ Missions **PUBLISHED seulement**. Aucun envoi.
 dans le payload, ils seraient écrasés. Pas de clé Apify ici, tout vient
 de l'OS. `upwork_ajoute_ok`, `slack_envoye_ok`, `email_demande_ok` et
 `codes_ok` sont conservés dans `upwork_admin_flags` et réappliqués
-après le wipe du sync.
+après le wipe du sync. `arrete_ok` aussi : stop demandé, puis archivé
+sur Upwork au passage suivant — le sync ne les ramène plus.
+
+Après **contrat signé**, `envoyer_acces_hm` **crée le hiring manager**
+dans l'OS (email `@micabo.app`, mot de passe dans le message) **au
+moment où les accès partent** (Slack + demande d'email + codes). Même
+chose si l'admin coche la pastille « accès envoyés ».
 
 Chaîne HM (phase 1) : contacté → pourparlers → contrat envoyé → contrat
 signé → accès envoyés → a rejoint (OS + Slack + Upwork) → job créateurs
@@ -220,8 +226,10 @@ Upwork + Supabase + Slack, projet `qkmiwnmiwsvwkttldqgb`) :
    `job_createur_id` = le job créateurs **de ce HM**, jamais le job
  du pays — un post = un HM).
  Ne pas envoyer `os_ok`, `tiktok_cree_ok`, `contrat_envoye_ok`,
- `upwork_ajoute_ok`, `slack_envoye_ok`, `email_demande_ok` ni
- `codes_ok` : l'OS les recalcule seul.
+ `upwork_ajoute_ok`, `slack_envoye_ok`, `email_demande_ok`,
+ `codes_ok` ni `arrete_ok` : l'OS les recalcule seul. Un stop
+ demandé (`arreter_recrutement`) s'exécute au même passage : decline
+ la candidature Upwork (archive), puis `upwork_action_terminer`.
 7. `select * from public.upwork_actions_en_attente()` : exécuter chaque
    `prompt` **tel quel**, puis
    `select public.upwork_action_terminer('<id>', '<résumé>')`.

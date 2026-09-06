@@ -102,6 +102,8 @@ export type UpworkApproche = {
   tiktok_handle: string | null;
   warmup_actif: boolean;
   premier_post_ok: boolean;
+  /** Stop demandé / archivé : le sync ne la ramène plus. */
+  arrete_ok?: boolean;
   synced_at: string;
 };
 

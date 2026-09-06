@@ -349,6 +349,38 @@ const dash: UpworkDashboard = {
       premier_post_ok: true,
       synced_at: "2026-09-06T12:00:00Z",
     },
+    {
+      id: "a-stoppe",
+      job_posting_id: "job-fr-hm",
+      contract_id: null,
+      upwork_proposal_id: "p-stoppe",
+      upwork_freelancer_id: "9",
+      upwork_profile_url: null,
+      photo_url: null,
+      nom: "Candidat Archivé",
+      role: "hm",
+      statut: "messaged",
+      resume_discussions: null,
+      dernier_message: null,
+      dernier_message_at: null,
+      offre_finalize_url: null,
+      contrat_envoye_ok: false,
+      contrat_signe_ok: false,
+      slack_envoye_ok: false,
+      email_demande_ok: false,
+      codes_ok: false,
+      os_ok: false,
+      slack_ok: false,
+      upwork_ajoute_ok: false,
+      job_createur_id: null,
+      profile_id: null,
+      tiktok_cree_ok: false,
+      tiktok_handle: null,
+      warmup_actif: false,
+      premier_post_ok: false,
+      arrete_ok: true,
+      synced_at: "2026-09-06T12:00:00Z",
+    },
   ],
   modeles: [
     {
@@ -516,6 +548,7 @@ describe("pages Upwork", () => {
     wrap("/admin/upwork/fr");
     expect(await screen.findByText("Sara Benamer")).toBeInTheDocument();
     expect(screen.getByText("Rose Vasquez")).toBeInTheDocument();
+    expect(screen.queryByText("Candidat Archivé")).not.toBeInTheDocument();
     expect(screen.getAllByText(/Phase 2/)).toHaveLength(3);
     expect(screen.getAllByText(/Phase 3/)).toHaveLength(3);
     expect(screen.getByText("Moyenne de l’équipe")).toBeInTheDocument();

@@ -2291,7 +2291,7 @@ export const en = {
       },
       arreter: "Stop recruiting",
       arreterConfirm:
-        "Stop recruiting {{nom}}? The agent will archive their Upwork profile and delete their OS account on its next run.\n\nContext (optional):",
+        "Stop recruiting {{nom}}? On the next run the agent archives the Upwork proposal and the OS drops the card (and their OS account if they have one).\n\nContext (optional):",
       actionEnAttente: "Stop requested",
       actionAnnuler: "Cancel",
       actionCopier: "Copy prompt",
