@@ -351,6 +351,7 @@ function VieHm({
   const etapes = timelineHm(faits);
   const etapeProp = etapePropositionMessage(faits);
   const dernier = dernierMessageUtile(hm.dernier_message);
+  const dernierDeNous = etapes.find((e) => e.cle === "pourparlers")?.dernierMessageDeNous;
   const p1ok = phase1Terminee(faits);
   const phase3 = createursPhase3(approchesCrea, lignes, hm.profile_id);
   const encorePhase2 = approchesCrea.filter((a) => encoreEnRecrutement(a, phase3));
@@ -407,6 +408,7 @@ function VieHm({
               <blockquote className="space-y-1 rounded-md border bg-background px-2.5 py-2">
                 <p className="font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
                   {t("upwork.dernierMessage")}
+                  {dernierDeNous ? ` · ${t("upwork.dernierMessageNous")}` : ""}
                 </p>
                 <p className="whitespace-pre-wrap text-xs leading-snug">{dernier}</p>
                 {hm.dernier_message_at && (

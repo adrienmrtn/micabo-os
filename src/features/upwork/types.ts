@@ -83,7 +83,7 @@ export type UpworkApproche = {
   role: "hm" | "createur";
   statut: "messaged" | "offered" | "hired";
   resume_discussions: string | null;
-  /** Dernier message d'eux, verbatim. Talks l'affiche et la réponse s'appuie dessus. */
+  /** Dernier message du fil (eux ou nous), verbatim. */
   dernier_message: string | null;
   dernier_message_at: string | null;
   /** Rendue par Upwork quand l'agent a préparé le brouillon d'offre. */
