@@ -5,6 +5,7 @@ import {
   extraireCaptionFal,
   estLabelHook,
   estLabelSysteme,
+  idsLabelsAssignables,
   idsPremiereSlide,
   mediaEstPremiereSlide,
   normaliserCaptionManuelle,
@@ -22,6 +23,16 @@ describe("estLabelSysteme / hook", () => {
     expect(estLabelSysteme({ slug: "alpha-male" })).toBe(false);
     expect(estLabelHook({ slug: "Hook" })).toBe(false);
     expect(estLabelHook({ slug: "hook" })).toBe(true);
+  });
+
+  it("exclut hook du pool d'assignation créateurs", () => {
+    expect(
+      idsLabelsAssignables([
+        { id: "hook-id", slug: "hook" },
+        { id: "ugc-id", slug: "ugc-ai-video" },
+        { id: "study", slug: "study-aes" },
+      ]),
+    ).toEqual(["study"]);
   });
 });
 

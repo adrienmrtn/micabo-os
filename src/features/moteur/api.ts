@@ -41,7 +41,12 @@ import {
   type ApplicationOs,
 } from "./applications";
 import { comptePrincipal, normaliserTypeCompte, resoudrePremierCompte } from "./comptesCm";
-import { estLabelSysteme, normaliserCaptionManuelle, SLUG_HOOK } from "./mediaCaption";
+import {
+  estLabelSysteme,
+  idsLabelsAssignables,
+  normaliserCaptionManuelle,
+  SLUG_HOOK,
+} from "./mediaCaption";
 import { fusionnerTexteSlide } from "./deckSlides";
 import {
   ELO_MANUEL_DEFAUT,
@@ -5080,7 +5085,8 @@ export async function listerLabelIdsAvecUgc(applicationId?: string | null): Prom
   if (applicationId) q = q.eq("contenus.application_id", applicationId);
   const { data, error } = await q;
   if (error) throw error;
-  return [...new Set((data ?? []).map((r) => r.label_id as string).filter(Boolean))];
+  const ids = [...new Set((data ?? []).map((r) => r.label_id as string).filter(Boolean))];
+  return filtrerIdsLabelsAssignables(ids);
 }
 
 export async function creerLabel(
@@ -5392,7 +5398,7 @@ export async function setLabelsHmUgcVideo(
     .delete()
     .eq("profile_id", profileId);
   if (delErr) throw delErr;
-  const uniques = [...new Set(labelIds.filter(Boolean))];
+  const uniques = await filtrerIdsLabelsAssignables(labelIds);
   if (uniques.length === 0) return;
   const { error } = await supabase.from("hm_ugc_video_labels").insert(
     uniques.map((label_id) => ({ profile_id: profileId, label_id })),
@@ -5448,16 +5454,28 @@ export async function labelsDuContenu(contenuId: string): Promise<string[]> {
   return (data ?? []).map((r) => r.label_id as string);
 }
 
+async function filtrerIdsLabelsAssignables(labelIds: string[]): Promise<string[]> {
+  const uniques = [...new Set(labelIds.filter(Boolean))];
+  if (uniques.length === 0) return [];
+  const { data, error } = await supabase
+    .from("labels")
+    .select("id, slug")
+    .in("id", uniques);
+  if (error) throw error;
+  return idsLabelsAssignables((data ?? []) as Array<{ id: string; slug: string }>);
+}
+
 async function syncLabels(
   table: "compte_labels" | "compte_reference_labels" | "contenu_labels",
   fk: string,
   fkValue: string,
   labelIds: string[],
 ): Promise<void> {
+  const niches = await filtrerIdsLabelsAssignables(labelIds);
   const { error: delErr } = await supabase.from(table).delete().eq(fk, fkValue);
   if (delErr) throw delErr;
-  if (labelIds.length === 0) return;
-  const rows = labelIds.map((label_id) => ({ [fk]: fkValue, label_id }));
+  if (niches.length === 0) return;
+  const rows = niches.map((label_id) => ({ [fk]: fkValue, label_id }));
   const { error } = await supabase.from(table).insert(rows);
   if (error) throw error;
 }
@@ -5482,7 +5500,7 @@ export async function setLabelsContenu(
   contenuId: string,
   labelIds: string[],
 ): Promise<void> {
-  const niches = labelIds.filter((id) => id !== undefined);
+  const niches = await filtrerIdsLabelsAssignables(labelIds);
   await syncLabels("contenu_labels", "contenu_id", contenuId, niches);
   // Propager aux images — le label Hook (1ʳᵉ slide) n'est pas une niche.
   const { data: medias } = await supabase

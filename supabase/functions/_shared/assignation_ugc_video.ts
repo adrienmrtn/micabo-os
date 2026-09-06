@@ -18,6 +18,7 @@ import { mergerVideosFal } from "./fal_merge_videos.ts";
 import { formaterVideoMeta, sonderVideoMeta } from "./fal_normaliser_video.ts";
 import { falHebergerOctets } from "./fal_queue.ts";
 import { cleanImage, generateTextFast } from "./gemini.ts";
+import { extraireLabelsAssignables } from "./labels_systeme.ts";
 import { mapPool } from "./parallel.ts";
 import { chargerPrompt, serviceClient } from "./supabase.ts";
 
@@ -108,10 +109,10 @@ async function labelsDuCompte(
 ): Promise<string[]> {
   const { data, error } = await supabase
     .from("compte_labels")
-    .select("label_id")
+    .select("label_id, labels(slug)")
     .eq("compte_id", compteId);
   if (error) throw error;
-  return (data ?? []).map((r) => r.label_id as string).filter(Boolean);
+  return extraireLabelsAssignables(data ?? []).labelIds;
 }
 
 async function reactionsUtilisees(
