@@ -6,13 +6,22 @@ export const CAPTION_MAX = 180;
 export type CaptionStatut = "ok" | "aucune";
 export type CaptionModele = "florence" | "moondream" | "none";
 
-export function estLabelSysteme(lab: { slug?: string | null }): boolean {
-  const slug = lab.slug ?? "";
+export function estLabelSysteme(lab: { slug?: string | null } | null | undefined): boolean {
+  const slug = lab?.slug ?? "";
   return slug === "ugc-ai-video" || slug === SLUG_HOOK;
 }
 
 export function estLabelHook(lab: { slug?: string | null }): boolean {
   return (lab.slug ?? "") === SLUG_HOOK;
+}
+
+/** Hook / ugc-ai-video : jamais une niche posée sur un créateur. */
+export function idsLabelsAssignables(
+  labels: Array<{ id?: string | null; slug?: string | null }>,
+): string[] {
+  return labels
+    .filter((l) => Boolean(l.id) && !estLabelSysteme(l))
+    .map((l) => l.id as string);
 }
 
 /** Réponses vision vides / placeholder → échec, on enchaîne le fallback. */

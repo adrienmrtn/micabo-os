@@ -6,6 +6,7 @@ import { assurerDeckPourLangue } from "./import_contenu.ts";
 import { LOT_IDS, lireParLots } from "./lots.ts";
 import { mapPool } from "./parallel.ts";
 import { serviceClient } from "./supabase.ts";
+import { extraireLabelsAssignables } from "./labels_systeme.ts";
 import {
   appliquerFaceSwapUgcPost,
   chargerPersonaUgc,
@@ -322,13 +323,9 @@ export async function assignerCompteJour(
 
   const { data: labelsCompte } = await supabase
     .from("compte_labels")
-    .select("label_id, labels(nom)")
+    .select("label_id, labels(nom, slug)")
     .eq("compte_id", compte.id);
-  const labelIds = (labelsCompte ?? []).map((l) => l.label_id as string);
-  // deno-lint-ignore no-explicit-any
-  const labelNoms = (labelsCompte ?? [])
-    .map((l: any) => l.labels?.nom as string | undefined)
-    .filter(Boolean) as string[];
+  const { labelIds, labelNoms } = extraireLabelsAssignables(labelsCompte ?? []);
   // Sans labels : impossible d'intersecter → baisse le quota à ce qui est déjà là.
   if (labelIds.length === 0) {
     log("Échec : aucun label sur le compte");
