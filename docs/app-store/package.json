@@ -1,0 +1,11 @@
+{
+  "name": "micabo-app-store-frames",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "render": "node render.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.17.0"
+  }
+}
