@@ -2893,7 +2893,7 @@ export async function lireReglages(): Promise<Reglages> {
       score_prior: 50,
       pertinence_seuil: 50,
       elo_seuil_import: 55,
-      elo_poids_vues: 0.9,
+      elo_poids_vues: 0.7,
       elo_vues_plafond: 80_000,
       elo_regularisation_k: 1,
       ...((map.get("scoring") as Partial<Reglages["scoring"]> | undefined) ?? {}),
