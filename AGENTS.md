@@ -156,9 +156,11 @@ eu lieu hors file, l’admin coche la pastille.
 `upwork_modeles` est le playbook des autres étapes (la suite à
 couvrir), pas la lettre. Quand c’est à l’admin d’écrire (Talks ou
 contrat, HM seulement), la **proposition à envoyer** est sur la carte,
-toujours visible, éditable, adaptée à l’échelon. Sur **Talks /
+toujours visible, éditable, adaptée à l’échelon. **Talks reste
+courant** tant que le contrat n’est pas parti : un premier « hi » ou
+un PDF vide ne saute pas à Contrat envoyé. Sur **Talks /
 pourparlers**, l’OS affiche le **dernier message d’eux**
-(`dernier_message`) et compose une réponse **tirée des documents OS**
+(`dernier_message` verbatim, jamais le résumé) et compose une réponse **tirée des documents OS**
 (`reponses_upwork`, FAQ / guide manager) — pas un « Noted: » + gabarit
 inventé. Le playbook ne sert que s’ils n’ont rien dit, ou si aucun
 document ne colle. Au contrat, c’est le playbook `contrat_envoye`,
@@ -199,8 +201,10 @@ Upwork + Supabase + Slack, projet `qkmiwnmiwsvwkttldqgb`) :
  `get_messages` `find_room` (context_type=proposal,
  context_id=proposal_id) + `list_messages` : le **dernier message
  d'eux** (`from_self` absent / false), verbatim, devient
- `dernier_message` + `dernier_message_at`. Pas le nôtre. Pas un
+ `dernier_message` + `dernier_message_at`. Aussi pour `hired` /
+ `offered`. Pas le nôtre. Pas un
  résumé. `resume_discussions` reste le résumé court.
+ Pour `sourcer_hm`, remplir `photo_url` dès qu'Upwork la donne.
 5. Slack : `slack_search_users` par nom / email. Si trouvé →
    `slack_ok=true` + `slack_user_id`.
 6. `select public.upwork_sync_appliquer($payload::jsonb)` :

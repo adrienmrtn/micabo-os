@@ -14,13 +14,22 @@ import type {
   UpworkMission,
 } from "./types";
 
-function Vignette({ nom, url }: { nom: string; url: string | null }) {
+function Vignette({
+  nom,
+  url,
+  taille = "md",
+}: {
+  nom: string;
+  url: string | null;
+  taille?: "sm" | "md";
+}) {
+  const dim = taille === "sm" ? "size-8 text-[10px]" : "size-14 text-sm";
   if (url) {
     return (
       <img
         src={url}
-        alt=""
-        className="size-9 shrink-0 rounded-full object-cover"
+        alt={nom}
+        className={cn("shrink-0 rounded-lg object-cover", dim)}
         referrerPolicy="no-referrer"
       />
     );
@@ -33,7 +42,10 @@ function Vignette({ nom, url }: { nom: string; url: string | null }) {
     .join("");
   return (
     <span
-      className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-[11px] text-muted-foreground"
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-lg bg-muted font-medium text-muted-foreground",
+        dim,
+      )}
       aria-hidden
     >
       {lettres || "?"}
@@ -79,7 +91,7 @@ function CarteCandidat({
 
   return (
     <div className="flex flex-wrap items-start gap-3 rounded-lg border bg-background p-3">
-      <Vignette nom={candidat.nom} url={candidat.photo_url} />
+      <Vignette nom={candidat.nom} url={candidat.photo_url} taille="md" />
       <div className="min-w-0 flex-1 space-y-1">
         <p className="flex flex-wrap items-center gap-2">
           <span className="font-medium text-sm">{candidat.nom}</span>
@@ -129,6 +141,7 @@ function LigneDecide({ candidat }: { candidat: UpworkCandidat }) {
     candidat.statut === "invite" ? "success" : candidat.statut === "refuse" ? "outline" : "info";
   return (
     <li className="flex flex-wrap items-center gap-2 py-1 text-sm">
+      <Vignette nom={candidat.nom} url={candidat.photo_url} taille="sm" />
       <span className="font-medium">{candidat.nom}</span>
       <Badge variant={variante} size="sm">
         {t(`upwork.candidatStatut.${candidat.statut}`)}

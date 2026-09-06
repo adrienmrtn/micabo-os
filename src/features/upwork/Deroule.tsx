@@ -123,13 +123,13 @@ export function Deroule({
                 {e.detail && <span className="text-muted-foreground text-xs">{e.detail}</span>}
               </p>
 
-              {e.cle === "pourparlers" && (e.dernierMessage || e.resume) && (
+              {e.cle === "pourparlers" && e.dernierMessage && (
                 <blockquote className="mt-1.5 space-y-1 rounded-md border bg-background px-2.5 py-2">
                   <p className="font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
                     {t("upwork.dernierMessage")}
                   </p>
                   <p className="whitespace-pre-wrap text-xs leading-snug">
-                    {e.dernierMessage || e.resume}
+                    {e.dernierMessage}
                   </p>
                   {e.dernierMessageAt && (
                     <time
@@ -140,6 +140,9 @@ export function Deroule({
                     </time>
                   )}
                 </blockquote>
+              )}
+              {e.cle === "pourparlers" && !e.dernierMessage && e.resume && (
+                <p className="mt-1.5 text-muted-foreground text-xs">{e.resume}</p>
               )}
 
               {e.checks && (
