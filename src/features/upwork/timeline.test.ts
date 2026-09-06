@@ -96,9 +96,7 @@ describe("timelineCreateur", () => {
     expect(etapes.map((e) => e.cle)).toEqual([
       "contacte",
       "pourparlers",
-      "contrat_envoye",
       "contrat_signe",
-      "acces_envoyes",
       "integration",
       "tiktok_cree",
       "warmup",

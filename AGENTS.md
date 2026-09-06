@@ -69,10 +69,11 @@ de l'OS. `upwork_ajoute_ok`, `slack_envoye_ok`, `email_demande_ok` et
 `codes_ok` sont conservés dans `upwork_admin_flags` et réappliqués
 après le wipe du sync.
 
-Chaîne HM : contacté → pourparlers → contrat envoyé → contrat signé →
-accès envoyés → a rejoint (OS + Slack + Upwork) → job créateurs posté.
-Chaîne créateur : … → accès envoyés → a rejoint (OS + Slack) →
-**compte TikTok créé** → warmup actif → premier post.
+Chaîne HM (phase 1) : contacté → pourparlers → contrat envoyé → contrat
+signé → accès envoyés → a rejoint (OS + Slack + Upwork) → job créateurs
+posté. Phase 2 (créateurs) : **lecture seule**, on n’intervient pas —
+pas de message, pas de contrat, pas d’accès. Le HM gère. On lit Upwork /
+l’OS : réponse, contrat signé, Slack, TikTok, warmup, premier post.
 Pas d'« onboarding » nulle part.
 
 - Org figé : `1990051114607612379` (Micabo). `list_accounts` d’abord ;
@@ -128,9 +129,9 @@ colonne `message` : envoyer ce champ tel quel via `send_message`
 action=message_proposal. Ne rien réécrire, ne rien traduire, ne rien
 ajouter. Si l’envoi échoue, le dire dans le résumé — pas de reformulation.
 
-Le contrat ne part **jamais** de l’agent : `manage_offers` ne sait faire
-qu’un brouillon. L’action `preparer_contrat` crée le draft, reprend les
-termes du dernier contrat signé du même rôle, et range la `finalize_url`
+Le contrat (HM, phase 1) ne part **jamais** de l’agent : `manage_offers`
+ne sait faire qu’un brouillon. L’action `preparer_contrat` crée le draft,
+reprend les termes du dernier contrat signé du même rôle, et range la `finalize_url`
 avec `upwork_contrat_lien()`. C’est l’admin qui ouvre le lien et envoie.
 La case « contrat envoyé » se clique comme « ajoutée à mon compte
 Upwork », et se coche aussi toute seule au sync suivant quand Upwork

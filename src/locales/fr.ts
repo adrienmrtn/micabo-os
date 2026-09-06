@@ -2173,6 +2173,7 @@ export const fr = {
       phase2: "Phase 2 — Recrutement des créateurs",
       phase2Progress: "{{n}} / {{max}} créateurs",
       phase2Avant: "Après le job créateurs.",
+      phase2Aide: "Lecture seule : le HM gère. Pas de message, pas de contrat, pas d’accès.",
       statsPost:
         "{{inv}} invités · {{opp}} opportunités en cours · {{appl}} candidatures · {{hired}} embauchés",
       approcheVide: "Personne n’a encore répondu.",
