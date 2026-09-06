@@ -2221,7 +2221,7 @@ export const fr = {
       messageEnvoyer: "Envoyer",
       messageEnFile: "Envoi demandé",
       messageAide:
-        "Relis, modifie si besoin : c’est ce texte exact que l’agent enverra sur Upwork.",
+        "Adapté à cette personne : ce qu’elle a dit, ce qu’il lui manque. Relis et corrige — c’est ce texte exact que l’agent enverra.",
       messageManque:
         "Il manque {{vars}} — complète le texte à la main avant d’envoyer.",
       messageAucunModele: "Pas de modèle pour cette étape. À écrire depuis la page Upwork.",
@@ -2232,10 +2232,10 @@ export const fr = {
       contratFinaliser: "Finaliser sur Upwork",
       contratFinaliserAide:
         "Relis les termes et envoie. Clique ensuite la pastille — ou attends le prochain passage, Upwork la cochera.",
-      modelesTitre: "Modèles de messages",
-      modelesCompte: "{{n}} modèle(s)",
+      modelesTitre: "Playbook des étapes",
+      modelesCompte: "{{n}} playbook(s)",
       modelesAide:
-        "Un message par étape, réutilisé pour chaque personne. Variables disponibles : {{vars}}",
+        "La suite à couvrir à cette étape — pas la lettre. L’OS ajoute le prénom, ce que la personne a dit, et ce qu’il lui manque. Variables : {{vars}}",
       modelesModifie: "Non enregistré",
       modelesRole: {
         hm: "Hiring managers",
@@ -2261,14 +2261,15 @@ export const fr = {
       campagneArreter: "Arrêter la campagne",
       campagneActive: "Campagne en cours",
       campagneAbsente:
-        "Aucune campagne sur {{pays}}. Lancer publie le job, sélectionne des profils et invite en boucle.",
+        "Aucune campagne en cours sur {{pays}}. Lancer publie un nouveau job HM — ça se cumule avec ceux déjà là.",
       campagneProchaine: "Prochain passage de l’agent : {{etape}}.",
       campagneAttente:
         "{{n}} profil(s) attendent ta validation — l’agent reprend ensuite tout seul.",
-      campagneTerminee: "Campagne terminée : le HM est recruté.",
-      campagneArretee: "Campagne arrêtée.",
+      campagneTerminee:
+        "{{n}} HM déjà en place. Relancer publie un nouveau job — ça se cumule.",
+      campagneArretee: "Campagne arrêtée. Relancer publie un nouveau job HM.",
       campagneConfirm:
-        "Lancer le recrutement HM sur {{pays}} ?\n\nAu prochain passage l’agent publiera le job si besoin, puis te proposera des profils à valider avant toute invitation.",
+        "Lancer un nouveau job HM sur {{pays}} ?\n\nÇa se cumule : les HM et les jobs déjà là restent. L’agent publiera un post neuf au prochain passage, puis te proposera des profils avant toute invitation.",
       candidatsAValider: "{{n}} profil(s) à valider",
       candidatsAide:
         "Sans réponse de ta part sous {{h}} h, ils sont invités automatiquement au passage suivant.",

@@ -148,6 +148,7 @@ export function JobsHm({
   candidats,
   actions,
   bloque,
+  hmEnPlace,
   onLancer,
   onArreter,
   onDecider,
@@ -158,6 +159,8 @@ export function JobsHm({
   candidats: UpworkCandidat[];
   actions: UpworkAction[];
   bloque: boolean;
+  /** HM déjà embauchés sur ce pays : relancer empile un job de plus. */
+  hmEnPlace: number;
   onLancer: () => void;
   onArreter: (id: string) => void;
   onDecider: (id: string, ok: boolean) => void;
@@ -182,7 +185,7 @@ export function JobsHm({
                   })
                 : t("upwork.campagneAttente", { n: etat.attenteAdmin })
               : etat.cle === "terminee"
-                ? t("upwork.campagneTerminee")
+                ? t("upwork.campagneTerminee", { n: hmEnPlace })
                 : etat.cle === "arretee"
                   ? t("upwork.campagneArretee")
                   : t("upwork.campagneAbsente", { pays: paysNom })}

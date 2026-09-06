@@ -437,14 +437,17 @@ describe("pages Upwork", () => {
     await screen.findByText("Rose Vasquez");
     toutDeplier();
 
-    // Rose bloque sur « Accès envoyés » : c'est ce message-là qu'on propose,
-    // et lui seul — pas ceux des étapes déjà passées.
-    const attendu = "Bonjour Rose, tes accès micabo pour France arrivent.";
-    expect(screen.getByDisplayValue(attendu)).toBeInTheDocument();
+    // Rose bloque sur « Accès envoyés » : brouillon composé pour ELLE
+    // (ce qu'elle a dit + Slack manquant), pas le gabarit brut.
+    const zone = screen.getByDisplayValue(/J'ai bien noté : Dispo tout de suite/) as HTMLTextAreaElement;
+    expect(zone.value).toContain("t'envoyer l'invitation Slack");
+    expect(zone.value).toContain("tes accès micabo pour France arrivent.");
     expect(screen.queryByDisplayValue(/on lance micabo/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button", { name: /^envoyer$/i })[0]!);
-    await waitFor(() => expect(envoyerMessageUpwork).toHaveBeenCalledWith("p-rose", attendu));
+    await waitFor(() =>
+      expect(envoyerMessageUpwork).toHaveBeenCalledWith("p-rose", (zone as HTMLTextAreaElement).value),
+    );
   });
 
   it("page France : le contrat passe par un brouillon, jamais par un envoi direct", async () => {
@@ -476,7 +479,7 @@ describe("pages Upwork", () => {
   it("dashboard : les modèles de messages s’éditent sur la page Upwork", async () => {
     await i18n.changeLanguage("fr");
     wrap("/admin/upwork");
-    expect(await screen.findByText("Modèles de messages")).toBeInTheDocument();
+    expect(await screen.findByText("Playbook des étapes")).toBeInTheDocument();
 
     // Le gabarit garde ses variables : c'est à l'affichage qu'elles se remplissent.
     expect(screen.queryByDisplayValue(/\{\{prenom\}\}/)).not.toBeInTheDocument();

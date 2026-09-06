@@ -12,8 +12,8 @@ import {
   type ContexteModele,
   type UpworkModele,
   messageEnvoyable,
+  composerMessage,
   modelePour,
-  remplirModele,
 } from "./modeles";
 import type { EtapeTimelineCle } from "./timeline";
 import type { UpworkAction, UpworkApproche } from "./types";
@@ -49,8 +49,8 @@ export function MessageEtape({
   const modele = modelePour(modeles, etape, approche.role, langue);
   const source = modele?.corps ?? "";
   const { texte, manquantes } = React.useMemo(
-    () => remplirModele(source, contexte),
-    [source, contexte],
+    () => composerMessage(source, { ...contexte, role: approche.role, etape }),
+    [source, contexte, approche.role, etape],
   );
 
   const [brouillon, setBrouillon] = React.useState(texte);

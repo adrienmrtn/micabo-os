@@ -24,7 +24,7 @@ import { campagneDuPays, candidatsDeCampagne } from "@/features/upwork/campagne"
 import { Deroule, Jauge, Repliable, ResumeEtape } from "@/features/upwork/Deroule";
 import { JobsHm } from "@/features/upwork/JobsHm";
 import { MessageEtape } from "@/features/upwork/MessageEtape";
-import { type ContexteModele, type UpworkModele, prenomDe } from "@/features/upwork/modeles";
+import { type UpworkModele, contexteDepuisApproche, prenomDe } from "@/features/upwork/modeles";
 import { nomPays } from "@/features/upwork/pipeline";
 import {
   approchesDuJob,
@@ -218,12 +218,6 @@ type OutilsMessage = {
 
 /** Le message ne s'affiche que sous l'étape en cours : une seule chose à faire. */
 function encartMessage(a: UpworkApproche, o: OutilsMessage, hmPrenom: string | null = null) {
-  const contexte: ContexteModele = {
-    prenom: prenomDe(a.nom),
-    nom: a.nom,
-    pays: o.paysNom,
-    hm_prenom: hmPrenom,
-  };
   return (etape: { cle: Parameters<typeof MessageEtape>[0]["etape"] }, courante: boolean) =>
     courante ? (
       <MessageEtape
@@ -231,7 +225,11 @@ function encartMessage(a: UpworkApproche, o: OutilsMessage, hmPrenom: string | n
         etape={etape.cle}
         modeles={o.modeles}
         langue={o.langue}
-        contexte={contexte}
+        contexte={contexteDepuisApproche(a, {
+          pays: o.paysNom,
+          hmPrenom,
+          etape: etape.cle,
+        })}
         actions={o.actions}
         bloque={o.bloque}
         onEnvoyer={o.onEnvoyer}
@@ -604,6 +602,7 @@ export function AdminUpworkPaysPage() {
             candidats={candidats}
             actions={actions}
             bloque={enCours}
+            hmEnPlace={hms.filter((h) => h.statut === "hired").length}
             onLancer={() => lancerCampagne.mutate({ langue, pays: paysNom })}
             onArreter={(id) => arreterCampagne.mutate(id)}
             onDecider={(id, ok) => deciderProfil.mutate({ id, ok })}

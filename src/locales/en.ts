@@ -2221,7 +2221,8 @@ export const en = {
       messageEtape: "Message for this step",
       messageEnvoyer: "Send",
       messageEnFile: "Send requested",
-      messageAide: "Read it over, edit if needed: this exact text is what the agent will send.",
+      messageAide:
+        "Adapted to this person: what they said, what they still need. Review and edit — this exact text is what the agent will send.",
       messageManque: "Missing {{vars}} — fill it in by hand before sending.",
       messageAucunModele: "No template for this step. Write one from the Upwork page.",
       contratPreparer: "Prepare the contract",
@@ -2231,10 +2232,10 @@ export const en = {
       contratFinaliser: "Finalise on Upwork",
       contratFinaliserAide:
         "Review the terms and send. Then click the tick — or wait for the next run, Upwork will tick it.",
-      modelesTitre: "Message templates",
-      modelesCompte: "{{n}} template(s)",
+      modelesTitre: "Step playbooks",
+      modelesCompte: "{{n}} playbook(s)",
       modelesAide:
-        "One message per step, reused for everyone. Available variables: {{vars}}",
+        "What to cover at this step — not the full letter. The OS adds their name, what they said, and what they still need. Variables: {{vars}}",
       modelesModifie: "Unsaved",
       modelesRole: {
         hm: "Hiring managers",
@@ -2260,13 +2261,14 @@ export const en = {
       campagneArreter: "Stop the campaign",
       campagneActive: "Campaign running",
       campagneAbsente:
-        "No campaign on {{pays}}. Starting one posts the job, shortlists profiles and invites on a loop.",
+        "No campaign running on {{pays}}. Starting one posts a new HM job — it stacks with the ones already there.",
       campagneProchaine: "Next agent run: {{etape}}.",
       campagneAttente: "{{n}} profile(s) waiting on you — the agent resumes on its own after that.",
-      campagneTerminee: "Campaign done: the HM is hired.",
-      campagneArretee: "Campaign stopped.",
+      campagneTerminee:
+        "{{n}} HM already in place. Starting again posts a new job — it stacks.",
+      campagneArretee: "Campaign stopped. Starting again posts a new HM job.",
       campagneConfirm:
-        "Start HM recruiting on {{pays}}?\n\nOn its next run the agent will post the job if needed, then shortlist profiles for you to approve before any invitation goes out.",
+        "Post a new HM job on {{pays}}?\n\nIt stacks: existing HMs and jobs stay. On its next run the agent will publish a fresh post, then shortlist profiles for you to approve before any invitation.",
       candidatsAValider: "{{n}} profile(s) to approve",
       candidatsAide:
         "If you don't answer within {{h}} h, they are invited automatically on the next run.",

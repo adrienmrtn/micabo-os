@@ -21,8 +21,8 @@ import type { EtapeTimelineCle } from "./timeline";
 const ROLES = ["hm", "createur"] as const;
 
 /**
- * Les modèles s'éditent là où on s'en sert. Un modèle par étape et par rôle ;
- * la version d'un pays se crée en repartant du générique.
+ * Playbook de l'étape, pas la lettre. L'OS compose le brouillon par
+ * personne (ce qu'elle a dit, ce qu'il lui manque) avant d'afficher.
  */
 export function EditeurModeles({ modeles }: { modeles: UpworkModele[] }) {
   const { t } = useTranslation();
