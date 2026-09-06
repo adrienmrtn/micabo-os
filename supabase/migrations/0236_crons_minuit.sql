@@ -116,7 +116,7 @@ end
 $fn$;
 
 comment on function public.crons_minuit_planifier() is
-   120|  'Planifie le pipeline minuit (assignation + filets + drain ELO) sur ce projet uniquement. À n''appeler qu''après un OK humain explicite — voir 0234_crons_minuit.sql.';
+   120|  'Planifie le pipeline minuit (assignation + filets + drain ELO) sur ce projet uniquement. À n''appeler qu''après un OK humain explicite — voir 0236_crons_minuit.sql.';
 
 revoke all on function public.crons_minuit_planifier() from public;
 revoke all on function public.crons_minuit_planifier() from anon, authenticated;

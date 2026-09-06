@@ -45,7 +45,7 @@ Une fois le OK donné, le pipeline minuit se remet par
 `select * from public.crons_minuit_planifier();` — jamais en recopiant la
 commande d’un job existant (`0163_cutover_assignation_vnext.sql` recopie
 l’hôte `mbikecieskoobeizixig`). Détails et vérifications :
-`supabase/migrations/0234_crons_minuit.sql`.
+`supabase/migrations/0236_crons_minuit.sql`.
 
 ## Upwork (Micabo seulement)
 
