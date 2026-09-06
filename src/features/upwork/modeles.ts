@@ -245,7 +245,7 @@ export function intentionTalks(texte: string): IntentionTalks {
 
 function extraireQuestion(texte: string): string | null {
   const morceaux = texte.match(/[^.!?\n]+[?]/g);
-  const q = morceaux?.at(-1)?.trim();
+  const q = morceaux?.[morceaux.length - 1]?.trim();
   return q || null;
 }
 
