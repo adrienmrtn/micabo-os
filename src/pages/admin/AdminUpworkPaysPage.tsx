@@ -229,6 +229,7 @@ function encartMessage(a: UpworkApproche, o: OutilsMessage, hmPrenom: string | n
           pays: o.paysNom,
           hmPrenom,
           etape: etape.cle,
+          langue: o.langue,
         })}
         actions={o.actions}
         bloque={o.bloque}

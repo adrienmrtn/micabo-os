@@ -65,7 +65,7 @@ export function MessageEtape({
     actions.find(
       (a) =>
         a.upwork_proposal_id === approche.upwork_proposal_id &&
-        a.type === "envoyer_message" &&
+        (a.type === "envoyer_message" || a.type === "envoyer_acces_hm") &&
         a.statut === "en_attente",
     ) ?? null;
 
@@ -78,7 +78,38 @@ export function MessageEtape({
     ) ?? null;
 
   const contratIci = etape === "contrat_envoye";
+  const accesHm = etape === "acces_envoyes" && approche.role === "hm";
   if (!ETAPES_AVEC_MESSAGE.includes(etape) && !contratIci) return null;
+
+  if (accesHm) {
+    return (
+      <div className="mt-2 space-y-2 rounded-lg border border-dashed bg-muted/30 p-3">
+        <p className="font-medium text-xs">{t("upwork.accesAutoTitre")}</p>
+        {messageEnFile ? (
+          <>
+            <span className="inline-flex items-center gap-2">
+              <Badge variant="warning" size="sm">
+                {t("upwork.messageEnFile")}
+              </Badge>
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={bloque}
+                onClick={() => onAnnuler(messageEnFile.id)}
+              >
+                {t("upwork.actionAnnuler")}
+              </Button>
+            </span>
+            <p className="whitespace-pre-wrap text-muted-foreground text-xs leading-relaxed">
+              {messageEnFile.message}
+            </p>
+          </>
+        ) : (
+          <p className="text-muted-foreground text-xs">{t("upwork.accesAutoAide")}</p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mt-2 space-y-2 rounded-lg border border-dashed bg-muted/30 p-3">

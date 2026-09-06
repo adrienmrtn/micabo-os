@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { drapeauLangue } from "@/features/moteur/langues";
-import { annulerActionUpwork, chargerUpworkDashboard } from "@/features/upwork/api";
+import { Input } from "@/components/ui/input";
+import { annulerActionUpwork, chargerUpworkDashboard, sauverAccesUpwork } from "@/features/upwork/api";
 import { Repliable } from "@/features/upwork/Deroule";
 import { EditeurModeles } from "@/features/upwork/EditeurModeles";
 import { UPWORK_ORG_NOM } from "@/features/upwork/org";
@@ -90,6 +91,51 @@ function CarteAction({
           </Button>
         </div>
       </Repliable>
+    </div>
+  );
+}
+
+function ChampSlack({
+  initial,
+  osUrl,
+}: {
+  initial: string;
+  osUrl: string;
+}) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [lien, setLien] = React.useState(initial);
+
+  React.useEffect(() => {
+    setLien(initial);
+  }, [initial]);
+
+  const sauver = useMutation({
+    mutationFn: () =>
+      sauverAccesUpwork({ slack_invite_manager: lien.trim(), os_url: osUrl }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["upwork-dashboard"] }),
+  });
+
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <p className="mb-1 font-medium text-sm">{t("upwork.slackInviteTitre")}</p>
+      <p className="mb-3 text-muted-foreground text-xs">{t("upwork.slackInviteAide")}</p>
+      <div className="flex flex-wrap items-end gap-2">
+        <Input
+          value={lien}
+          onChange={(e) => setLien(e.target.value)}
+          placeholder={t("upwork.slackInvitePh")}
+          className="max-w-xl"
+          aria-label={t("upwork.slackInviteTitre")}
+        />
+        <Button
+          size="sm"
+          disabled={sauver.isPending || lien.trim() === initial.trim()}
+          onClick={() => sauver.mutate()}
+        >
+          {sauver.isPending ? t("common.saving") : t("common.save")}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -198,6 +244,11 @@ export function AdminUpworkPage() {
               valeur={String(totaux.jobsCreateursOuverts)}
             />
           </div>
+
+          <ChampSlack
+            initial={d.acces.slack_invite_manager}
+            osUrl={d.acces.os_url}
+          />
 
           <EditeurModeles modeles={d.modeles} />
 

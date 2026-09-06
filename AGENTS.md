@@ -60,12 +60,14 @@ Missions **PUBLISHED seulement**. Aucun envoi.
 | `contrat_envoye_ok` | Upwork + admin | dérivé SQL (`offered` / contrat) **ou** clic sur la pastille |
 | `slack_ok` (« rejoint Slack ») | Slack MCP | payload du sweep |
 | `upwork_ajoute_ok` | admin | clic sur la pastille dans l'OS, jamais le sweep |
+| `slack_envoye_ok` / `email_demande_ok` / `codes_ok` | OS | après l'envoi auto des accès HM (`envoyer_acces_hm`) |
 
 `os_ok` et `tiktok_cree_ok` sont recalculés par le trigger
 `upwork_approches_relier_os` après chaque insert : **ne pas** les mettre
 dans le payload, ils seraient écrasés. Pas de clé Apify ici, tout vient
-de l'OS. `upwork_ajoute_ok` est conservé dans `upwork_admin_flags` et
-réappliqué après le wipe du sync.
+de l'OS. `upwork_ajoute_ok`, `slack_envoye_ok`, `email_demande_ok` et
+`codes_ok` sont conservés dans `upwork_admin_flags` et réappliqués
+après le wipe du sync.
 
 Chaîne HM : contacté → pourparlers → contrat envoyé → contrat signé →
 accès envoyés → a rejoint (OS + Slack + Upwork) → job créateurs posté.
@@ -109,10 +111,18 @@ elle rejoint la chaîne HM classique. Rien de spécial à faire.
 
 ### Messages et contrats
 
-`upwork_modeles` est le playbook de l’étape (la suite à couvrir), pas
-la lettre. L’OS compose un brouillon **par personne** : prénom, ce
-qu’elle a dit (`resume_discussions`), ce qu’il lui manque vraiment
-(Slack, OS, Upwork, TikTok…), puis le playbook. L’admin relit et
+Après **contrat signé** (HM), l’OS envoie les accès tout seul : il
+crée le recruiter (`hiring_manager`, langue du pays, email `@micabo.app`),
+compose le message (lien Slack managers + codes OS + demande d’email)
+et pose `envoyer_acces_hm` dans la file. L’agent envoie le champ
+`message` **tel quel**. Pas un gabarit.
+
+`upwork_modeles` est le playbook des autres étapes (la suite à
+couvrir), pas la lettre. L’OS compose un brouillon **par personne** :
+prénom, ce qu’elle a dit (`resume_discussions`), ce qu’il lui manque
+vraiment, puis le playbook. **Français si le pays est la France,
+anglais sinon** — invitations et brouillons compris, jamais
+l’espagnol / l’allemand / etc. L’admin relit et
 envoie. L’action `envoyer_message` porte le texte **fini** dans sa
 colonne `message` : envoyer ce champ tel quel via `send_message`
 action=message_proposal. Ne rien réécrire, ne rien traduire, ne rien
@@ -154,13 +164,15 @@ Upwork + Supabase + Slack, projet `qkmiwnmiwsvwkttldqgb`) :
    flags contrat / Slack / OS / warmup / premier_post ;
    `job_createur_id` = le job créateurs **de ce HM**, jamais le job
  du pays — un post = un HM).
- Ne pas envoyer `os_ok`, `tiktok_cree_ok`, `contrat_envoye_ok` ni
- `upwork_ajoute_ok` : l'OS les recalcule seul.
+ Ne pas envoyer `os_ok`, `tiktok_cree_ok`, `contrat_envoye_ok`,
+ `upwork_ajoute_ok`, `slack_envoye_ok`, `email_demande_ok` ni
+ `codes_ok` : l'OS les recalcule seul.
 7. `select * from public.upwork_actions_en_attente()` : exécuter chaque
    `prompt` **tel quel**, puis
    `select public.upwork_action_terminer('<id>', '<résumé>')`.
    Rien à inventer, le prompt contient déjà la cible et les garde-fous.
-   Cet appel replanifie les campagnes : c'est le seul point d'entrée.
+   Cet appel replanifie les campagnes **et** les accès HM après contrat
+   signé : c'est le seul point d'entrée.
    Terminer une action de campagne débloque la suivante au même passage,
    donc **relire la file** après chaque `upwork_action_terminer`.
 8. Ne **rien** envoyer d'autre. Pas de draft. Stop si hors Micabo.
