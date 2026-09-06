@@ -322,7 +322,7 @@ export function composerReponseTalks(
   if (prenom) blocs.push(fr ? `Bonjour ${prenom},` : `Hi ${prenom},`);
   if (messageUtileTalks(dernier)) {
     const intention = intentionTalks(dernier);
-    const depuisDocs = reponseDepuisDocuments(dernier, ctx.documents, ctx.langue);
+    const depuisDocs = reponseDepuisDocuments(dernier, ctx.documents, ctx.langue ?? null);
     blocs.push("");
     if (intention === "refus") {
       blocs.push(corpsReponseTalks(fr, dernier, intention));
