@@ -47,7 +47,9 @@ import {
 } from "@/features/upwork/surveillance";
 import {
   OBJECTIF_CREATEURS,
+  type EtapeTimelineCle,
   avancement,
+  etapePropositionMessage,
   faitsDepuisApproche,
   phase1Terminee,
   timelineCreateur,
@@ -233,36 +235,45 @@ type OutilsMessage = {
   onAnnuler: (id: string) => void;
 };
 
-/**
- * Talks : dernier message + réponse, tant que le contrat n'est pas signé.
- * Les autres encarts restent sous l'étape en cours.
- */
-function encartMessage(a: UpworkApproche, o: OutilsMessage, hmPrenom: string | null = null) {
-  return (etape: { cle: Parameters<typeof MessageEtape>[0]["etape"] }, courante: boolean) => {
-    const talksOuverts =
-      etape.cle === "pourparlers" && a.role === "hm" && !a.contrat_signe_ok;
-    if (!courante && !talksOuverts) return null;
-    return (
-      <MessageEtape
-        approche={a}
-        etape={etape.cle}
-        modeles={o.modeles}
-        langue={o.langue}
-        contexte={contexteDepuisApproche(a, {
-          pays: o.paysNom,
-          hmPrenom,
-          etape: etape.cle,
-          langue: o.langue,
-          documents: o.documents,
-          consigne: o.consigne,
-        })}
-        actions={o.actions}
-        bloque={o.bloque}
-        onEnvoyer={o.onEnvoyer}
-        onPreparerContrat={o.onPreparerContrat}
-        onAnnuler={o.onAnnuler}
-      />
-    );
+function composerEtape(
+  a: UpworkApproche,
+  etape: EtapeTimelineCle,
+  o: OutilsMessage,
+  hmPrenom: string | null = null,
+) {
+  return (
+    <MessageEtape
+      approche={a}
+      etape={etape}
+      modeles={o.modeles}
+      langue={o.langue}
+      contexte={contexteDepuisApproche(a, {
+        pays: o.paysNom,
+        hmPrenom,
+        etape,
+        langue: o.langue,
+        documents: o.documents,
+        consigne: o.consigne,
+      })}
+      actions={o.actions}
+      bloque={o.bloque}
+      onEnvoyer={o.onEnvoyer}
+      onPreparerContrat={o.onPreparerContrat}
+      onAnnuler={o.onAnnuler}
+    />
+  );
+}
+
+/** Accès auto et le reste : sous l'étape. La proposition à envoyer est sur la carte. */
+function encartMessage(
+  a: UpworkApproche,
+  o: OutilsMessage,
+  etapeProp: EtapeTimelineCle | null,
+  hmPrenom: string | null = null,
+) {
+  return (etape: { cle: EtapeTimelineCle }, courante: boolean) => {
+    if (etapeProp || !courante) return null;
+    return composerEtape(a, etape.cle, o, hmPrenom);
   };
 }
 
@@ -336,6 +347,8 @@ function VieHm({
   const { t } = useTranslation();
   const faits = faitsDepuisApproche(hm);
   const etapes = timelineHm(faits);
+  const etapeProp = etapePropositionMessage(faits);
+  const dernier = hm.dernier_message?.trim() || hm.resume_discussions?.trim() || null;
   const p1ok = phase1Terminee(faits);
   const phase3 = createursPhase3(approchesCrea, lignes, hm.profile_id);
   const encorePhase2 = approchesCrea.filter((a) => encoreEnRecrutement(a, phase3));
@@ -369,7 +382,7 @@ function VieHm({
                     if (cle === "contrat_envoye") onToggleContrat(hm.upwork_proposal_id, ok);
                     if (cle === "acces_envoyes") onToggleAcces(hm.upwork_proposal_id, ok);
                   }}
-                  encart={encartMessage(hm, outils)}
+                  encart={encartMessage(hm, outils, etapeProp)}
                 />
               </BandeauPhase>
             </Repliable>
@@ -385,6 +398,20 @@ function VieHm({
             />
           </div>
         </div>
+
+        {etapeProp && (
+          <div className="space-y-2">
+            {dernier && (
+              <blockquote className="space-y-1 rounded-md border bg-background px-2.5 py-2">
+                <p className="font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
+                  {t("upwork.dernierMessage")}
+                </p>
+                <p className="whitespace-pre-wrap text-xs leading-snug">{dernier}</p>
+              </blockquote>
+            )}
+            {composerEtape(hm, etapeProp, outils)}
+          </div>
+        )}
 
         <BandeauPhase
           titre={t("upwork.phase2")}

@@ -149,6 +149,14 @@ export function etapeCouranteTimeline(etapes: TimelineEtape[]): EtapeTimelineCle
   return prochaine?.cle ?? etapes[etapes.length - 1]!.cle;
 }
 
+/** Étape où l'admin doit envoyer un message HM. Sinon null : on attend. */
+export function etapePropositionMessage(f: FaitsApproche): EtapeTimelineCle | null {
+  if (f.role !== "hm" || f.contrat_signe_ok) return null;
+  const courante = etapeCouranteTimeline(timelineHm(f));
+  if (courante === "pourparlers" || courante === "contrat_envoye") return courante;
+  return null;
+}
+
 /** Combien d'étapes franchies : ce qu'on lit avant de déplier. */
 export function avancement(etapes: TimelineEtape[]): { faites: number; total: number } {
   return { faites: etapes.filter((e) => e.ok).length, total: etapes.length };

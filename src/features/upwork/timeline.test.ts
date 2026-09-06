@@ -4,6 +4,7 @@ import {
   OBJECTIF_CREATEURS,
   avancement,
   etapeCouranteTimeline,
+  etapePropositionMessage,
   faitsDepuisApproche,
   nettoyerDernierMessage,
   nettoyerResume,
@@ -174,6 +175,28 @@ describe("faitsDepuisApproche", () => {
       premier_post_ok: false,
     });
     expect(faits.job_createur_poste).toBe(true);
+  });
+});
+
+describe("etapePropositionMessage", () => {
+  it("propose Talks tant qu’ils n’ont pas parlé", () => {
+    expect(
+      etapePropositionMessage({
+        ...base,
+        resume_discussions: null,
+        dernier_message: null,
+        dernier_message_at: null,
+      }),
+    ).toBe("pourparlers");
+  });
+
+  it("propose le contrat dès qu’ils ont répondu", () => {
+    expect(etapePropositionMessage(base)).toBe("contrat_envoye");
+  });
+
+  it("n’en propose plus après le contrat signé, ni pour un créateur", () => {
+    expect(etapePropositionMessage({ ...base, contrat_signe_ok: true })).toBeNull();
+    expect(etapePropositionMessage({ ...base, role: "createur" })).toBeNull();
   });
 });
 

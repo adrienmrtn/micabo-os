@@ -2246,6 +2246,7 @@ export const fr = {
       messageEtape: "Message pour cette étape",
       dernierMessage: "Son dernier message",
       reponsePrete: "Réponse prête",
+      propositionEnvoyer: "Proposition à envoyer",
       reponseAide:
         "Répond à son dernier message, pas au playbook. Relis et corrige — c’est ce texte exact que l’agent enverra.",
       messageEnvoyer: "Envoyer",

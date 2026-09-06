@@ -359,6 +359,14 @@ const dash: UpworkDashboard = {
       maj_at: "2026-09-01T00:00:00Z",
     },
     {
+      id: "mod-hm-contrat",
+      cle: "contrat_envoye",
+      role_cible: "hm",
+      langue: "*",
+      corps: "Je t'envoie le contrat sur Upwork dans la foulée.",
+      maj_at: "2026-09-01T00:00:00Z",
+    },
+    {
       id: "mod-hm-acces",
       cle: "acces_envoyes",
       role_cible: "hm",
@@ -591,22 +599,24 @@ describe("pages Upwork", () => {
     expect(screen.queryByText("Accès envoyés : Slack + codes OS")).not.toBeInTheDocument();
     expect(screen.queryByText(/je poste ton job créateurs/i)).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue(/ici {{hm_prenom}}/)).not.toBeInTheDocument();
-    // Un seul Envoyer : Talks HM. Pas de Send sur les créateurs.
+    // Un seul Envoyer : HM à qui on doit écrire. Pas de Send sur les créateurs.
     expect(screen.getAllByRole("button", { name: /^envoyer$/i })).toHaveLength(1);
   });
 
-  it("page France : Talks montre le dernier message et une réponse qui en dépend", async () => {
+  it("page France : proposition à envoyer visible sans déplier, adaptée à l’échelon", async () => {
     await i18n.changeLanguage("fr");
     wrap("/admin/upwork/fr");
     await screen.findByText("Leiliane De Saint Jores");
-    toutDeplier();
 
-    expect(screen.getAllByText("Son dernier message").length).toBeGreaterThan(0);
     expect(screen.getByText("OK pour démarrer, je suis dispo cette semaine.")).toBeInTheDocument();
-    const reponse = (screen.getByLabelText("Réponse prête") as HTMLTextAreaElement).value;
-    expect(reponse).toMatch(/contrat Upwork/i);
-    expect(reponse).not.toMatch(/j'ai bien noté/i);
-    expect(reponse).not.toMatch(/on lance micabo/i);
+    expect(screen.getByText("Proposition à envoyer")).toBeInTheDocument();
+    const brouillon = screen.getByLabelText("Proposition à envoyer") as HTMLTextAreaElement;
+    expect(brouillon.value).toMatch(/contrat sur Upwork/i);
+    expect(brouillon.value).not.toMatch(/j'ai bien noté/i);
+    expect(screen.getAllByRole("button", { name: /^envoyer$/i })).toHaveLength(1);
+
+    toutDeplier();
+    expect(screen.getAllByRole("button", { name: /^envoyer$/i })).toHaveLength(1);
     expect(screen.getByText("I’m really interested in it. I live in France and available right now.")).toBeInTheDocument();
   });
 

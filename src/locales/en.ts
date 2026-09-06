@@ -2247,6 +2247,7 @@ export const en = {
       messageEtape: "Message for this step",
       dernierMessage: "Their last message",
       reponsePrete: "Reply ready",
+      propositionEnvoyer: "Draft to send",
       reponseAide:
         "Answers their last message, not the playbook. Review and edit — this exact text is what the agent will send.",
       messageEnvoyer: "Send",
