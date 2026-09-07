@@ -78,19 +78,16 @@ Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
 - `import-contenu` (v13) est le chargeur `_deploy` épinglé sur `217fdf3` : ce
  commit porte `relacherContenuApresPas`, donc le correctif imports coincés est
  déjà en prod. Rien à redéployer.
-- `assignation` et `minuit-vnext` (v6 du 28/08) sont en **retard** sur `main`,
- comparées fichier par fichier le 07/09 : aucune ligne de la prod n’est absente
- du dépôt. Il leur manque `extraireLabelsAssignables`, l’ELO 30/70 et le
- verdict pool. Les redéployer depuis ici n’est pas une régression, et
- l’avertissement papier ne s’y applique pas : le `papier_master.ts` de leur
- bundle est identique à celui du dépôt (seul `papier-cm` est en avance).
+- `assignation` et `minuit-vnext` sont en **v7** depuis le 07/09 : chargeurs
+ `_deploy` épinglés sur `b821612`, même recette que `import-contenu`. Le tree
+ source reste éditable ; ne pas redéployer le tree (MCP tronque). Comparaison
+ faite avant le déploiement : la v6 n’avait rien d’absent du dépôt
+ (`extraireLabelsAssignables`, ELO 30/70, verdict pool). L’avertissement
+ papier ne s’applique pas : le `papier_master.ts` de `minuit-vnext` est celui
+ du dépôt (seul `papier-cm` v11 est en avance).
 
 Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
 être en avance sur `main`.
-
-Ces deux-là ne passent pas par le MCP : leur tree fait 330 Ko / 520 Ko et
-`deploy_edge_function` tronque bien avant. Il faut le CLI
-(`SUPABASE_ACCESS_TOKEN`) ou la recette `supabase/functions/_deploy/README.md`.
 
 ## Upwork (Micabo seulement)
 
