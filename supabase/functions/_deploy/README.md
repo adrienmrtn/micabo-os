@@ -20,4 +20,12 @@ npx esbuild supabase/functions/import-contenu/index.ts \
 Même recette pour `manage-users` (`manage-users.bundle.js` + `manage-users.loader.ts`).
 Le chargeur injecte `createClient` sous le nom `me`.
 
+
+Même recette pour `assignation` et `minuit-vnext` (tree trop gros pour le MCP).
+Le chargeur injecte `createClient` sous le nom `se` (assignation) et `$e`
+(minuit-vnext) — relire le `import{createClient as …}` du bundle avant de
+l’effacer : esbuild change l’alias d’un rebuild à l’autre.
+
 Ne pas redéployer `papier-cm` depuis ce dépôt : la prod est en avance.
+Le `papier_master.ts` embarqué par `minuit-vnext` est celui du dépôt, pas
+celui de `papier-cm` v11.
