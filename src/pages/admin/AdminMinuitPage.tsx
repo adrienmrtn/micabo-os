@@ -295,12 +295,20 @@ function causesCompteIncomplet(
   return causes;
 }
 
-/** Charge le « pourquoi » réel (pool / labels / langue) pour un quota manquant. */
-function PourquoiQuota({ compteId }: { compteId: string }) {
+/** Charge le « pourquoi » réel (warmup / pool / labels) pour un quota manquant. */
+function PourquoiQuota({
+  compteId,
+  date,
+  manquants,
+}: {
+  compteId: string;
+  date: string;
+  manquants: number;
+}) {
   const { t } = useTranslation();
   const diag = useQuery({
-    queryKey: ["diag-quota", compteId],
-    queryFn: () => diagnostiquerQuotaCompte(compteId),
+    queryKey: ["diag-quota", compteId, date, manquants],
+    queryFn: () => diagnostiquerQuotaCompte(compteId, { date, manquants }),
     staleTime: 30_000,
   });
   if (diag.isPending) {
@@ -935,7 +943,11 @@ export function AdminMinuitPage() {
                                       quota: c.quota,
                                     })})
                                   </p>
-                                  <PourquoiQuota compteId={l.compteId} />
+                                  <PourquoiQuota
+                                    compteId={l.compteId}
+                                    date={date}
+                                    manquants={c.manquants}
+                                  />
                                 </li>
                               );
                             }
