@@ -48,6 +48,13 @@ commande d’un job existant (`0163_cutover_assignation_vnext.sql` recopie
 l’hôte `mbikecieskoobeizixig`). Détails et vérifications :
 `supabase/migrations/0236_crons_minuit.sql`.
 
+Le planificateur pose cinq jobs depuis `0242_cron_assignation_journee.sql` :
+minuit, ses deux filets de nuit, le drain ELO, et `minuit-vnext-journee`
+(horaire). Ce dernier existe parce que le warmup finit à n’importe quelle
+heure : sans lui, un créateur sorti de warmup après 06:00 Paris n’a aucun
+post ce jour-là (personne ne le voit sous quota) alors que l’ELO le pénalise
+déjà pour ne pas avoir publié. Une passe à vide ne fait rien.
+
 Toute commande cron appelle l’Edge via `public.kick_edge_micabo('<fn>', <jsonb>)` :
 lui seul tient l’hôte et le secret. Corps JSON avec `jsonb_build_object`, jamais
 un `'{"…":…}'::jsonb` écrit à la main — les guillemets ressortent échappés

@@ -101,11 +101,16 @@ Deno.serve(async (request) => {
       const lot = await assignerDrainLot(supabase, jour, opts);
       const quotasBaisses = synthetiserQuotasBaisses(lot.resultats);
       const crees = lot.resultats.reduce((n, r) => n + (r.crees ?? 0), 0);
-      await fusionnerDernierRun(supabase, jour, lot.resultats, quotasBaisses, {
-        drainGen,
-        traites: lot.traites,
-        restants: lot.restants,
-      });
+      // Passe à vide (filet horaire : tout le monde est au quota) — on ne
+      // réécrit pas `minuit_dernier_run`, sinon l'admin perd l'heure et le
+      // détail du dernier vrai passage.
+      if (lot.traites > 0) {
+        await fusionnerDernierRun(supabase, jour, lot.resultats, quotasBaisses, {
+          drainGen,
+          traites: lot.traites,
+          restants: lot.restants,
+        });
+      }
 
       if (lot.restants > 0 && drainGen < DRAIN_MAX_CHAIN) {
         kickAssignationDrain(request, {
