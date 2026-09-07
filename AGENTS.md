@@ -48,6 +48,17 @@ commande d’un job existant (`0163_cutover_assignation_vnext.sql` recopie
 l’hôte `mbikecieskoobeizixig`). Détails et vérifications :
 `supabase/migrations/0236_crons_minuit.sql`.
 
+Le planificateur pose cinq jobs depuis `0242_cron_assignation_journee.sql` :
+minuit, ses deux filets de nuit, le drain ELO, et `minuit-vnext-journee`
+(horaire). Ce dernier existe parce que le warmup finit à n’importe quelle
+heure : sans lui, un créateur sorti de warmup après 06:00 Paris n’a aucun
+post ce jour-là (personne ne le voit sous quota) alors que l’ELO le pénalise
+déjà pour ne pas avoir publié. Une passe à vide ne fait rien.
+
+Planifié le 07/09/2026 après test manuel : les cinq jobs sont actifs, tous en
+`kick_edge_micabo` sur l’hôte Micabo. Ne pas rejouer le planificateur sans
+nouveau OK — il désenfile et réenfile les cinq.
+
 Toute commande cron appelle l’Edge via `public.kick_edge_micabo('<fn>', <jsonb>)` :
 lui seul tient l’hôte et le secret. Corps JSON avec `jsonb_build_object`, jamais
 un `'{"…":…}'::jsonb` écrit à la main — les guillemets ressortent échappés
@@ -56,7 +67,7 @@ quand la migration passe par un outil, et le job casse en silence au tick.
 ## Prod ≠ dépôt (à savoir avant de déployer)
 
 Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
-`qkmiwnmiwsvwkttldqgb`. Vérifié le 06/09/2026 :
+`qkmiwnmiwsvwkttldqgb`. Vérifié le 07/09/2026 :
 
 - `papier-cm` (v11, déployée le 01/09) embarque sept modules `_shared/papier_*`
  absents d’ici et un `papier_master.ts` bien plus gros. La redéployer depuis ce
@@ -64,11 +75,22 @@ Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
 - `suivi-rc` (déployée le 03/09) lit les charts RevenueCat du projet **Sophia**
  (`proj3f496a80`, cache `rc_metrics_cache` id `sophia`) : hors cloisonnement,
  aucune source ici. Son cron 4 h est **non planifié** — ne pas le relancer.
-- `import-contenu` en prod est antérieure au correctif imports coincés
- (`relacherContenuApresPas`, dans `main` depuis le 02/09) : à redéployer.
+- `import-contenu` (v13) est le chargeur `_deploy` épinglé sur `217fdf3` : ce
+ commit porte `relacherContenuApresPas`, donc le correctif imports coincés est
+ déjà en prod. Rien à redéployer.
+- `assignation` et `minuit-vnext` (v6 du 28/08) sont en **retard** sur `main`,
+ comparées fichier par fichier le 07/09 : aucune ligne de la prod n’est absente
+ du dépôt. Il leur manque `extraireLabelsAssignables`, l’ELO 30/70 et le
+ verdict pool. Les redéployer depuis ici n’est pas une régression, et
+ l’avertissement papier ne s’y applique pas : le `papier_master.ts` de leur
+ bundle est identique à celui du dépôt (seul `papier-cm` est en avance).
 
 Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
 être en avance sur `main`.
+
+Ces deux-là ne passent pas par le MCP : leur tree fait 330 Ko / 520 Ko et
+`deploy_edge_function` tronque bien avant. Il faut le CLI
+(`SUPABASE_ACCESS_TOKEN`) ou la recette `supabase/functions/_deploy/README.md`.
 
 ## Upwork (Micabo seulement)
 

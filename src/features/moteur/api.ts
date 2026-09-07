@@ -25,7 +25,9 @@ import type {
 } from "./types";
 import type { LigneJournalOubli } from "./oubliSource";
 import { type MajSourcesRun } from "./majSequentielle";
-import { compteEnProcessus } from "./warmup";
+import { compteEnProcessus, statutWarmup } from "./warmup";
+// Source unique du verdict pool (partagée avec l'Edge minuit) — pur TS, pas de Deno.
+import { messagePool } from "../../../supabase/functions/_shared/quota_pool.ts";
 import { ugcVisages } from "./ugcVisages";
 import { corpsAssignationUgcVideoTest } from "./corpsAssignationUgcVideoTest";
 import { decouperEnLots, handleTiktokDepuisSaisie } from "./oubliSource";
@@ -4784,14 +4786,29 @@ export async function suiviAssignation(date: string): Promise<SuiviMinuit[]> {
     }));
 }
 
+/** Heure locale Paris d'un instant ISO — « 08:53 » pour un message admin. */
+function heureParis(iso: string): string {
+  return new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
 /**
- * Pourquoi minuit n'a pas rempli le quota d'un compte (même logique que l'Edge
- * `diagnostiquerPoolVide`) — sans créer de post.
+ * Pourquoi minuit n'a pas rempli le quota d'un compte pour un jour — sans créer
+ * de post. Même pool et même verdict que l'Edge (`diagnostiquerPoolVide` +
+ * `quota_pool.ts`) : warmup d'abord, puis pool jugé face au manque réel.
  */
-export async function diagnostiquerQuotaCompte(compteId: string): Promise<string> {
+export async function diagnostiquerQuotaCompte(
+  compteId: string,
+  opts: { date: string; manquants: number },
+): Promise<string> {
   const { data: compte, error: errC } = await supabase
     .from("comptes")
-    .select("id, langue, ugc_ai, ugc_ai_video, ugc_persona_id, posts_par_jour")
+    .select(
+      "id, langue, ugc_ai, ugc_ai_video, ugc_persona_id, posts_par_jour, application_id, warmup_started_at, warmup_ends_at",
+    )
     .eq("id", compteId)
     .maybeSingle();
   if (errC) throw errC;
@@ -4804,20 +4821,47 @@ export async function diagnostiquerQuotaCompte(compteId: string): Promise<string
     return "Compte UGC AI sans persona — assigne un persona UGC (4 angles) sur le créateur.";
   }
 
+  // Warmup : le compte n'entre dans le process qu'après. Tant qu'il y est,
+  // aucun passage ne l'assigne — le pool n'a rien à voir avec le manque.
+  const warmup = statutWarmup({
+    warmup_started_at: compte.warmup_started_at as string | null,
+    warmup_ends_at: compte.warmup_ends_at as string | null,
+  });
+  if (warmup === "attente") {
+    return (
+      "Warmup pas démarré — le créateur doit lancer son timer dans son calendrier. " +
+      "Hors process : minuit ne l'assigne pas."
+    );
+  }
+  if (warmup === "en_cours") {
+    return (
+      `Warmup en cours jusqu'à ${heureParis(compte.warmup_ends_at as string)} ` +
+      `(heure de Paris) — minuit n'assigne qu'à la fin du warmup.`
+    );
+  }
+
   const langue = (compte.langue as string) || "fr";
   const ugcAi = Boolean(compte.ugc_ai) && !compte.ugc_ai_video;
+  const applicationId = (compte.application_id as string | null) ?? null;
 
   const { data: labelsCompte, error: errL } = await supabase
     .from("compte_labels")
-    .select("label_id, labels(nom)")
+    .select("label_id, labels(nom, slug)")
     .eq("compte_id", compteId);
   if (errL) throw errL;
 
-  const labelIds = (labelsCompte ?? []).map((l) => l.label_id as string);
-  // deno-lint-ignore no-explicit-any
-  const labelNoms = (labelsCompte ?? [])
-    .map((l: any) => l.labels?.nom as string | undefined)
-    .filter(Boolean) as string[];
+  // Hook / ugc-ai-video ne sont pas des niches : minuit ne pioche pas dessus.
+  type LigneLabelCompte = {
+    label_id: string | null;
+    labels?: { nom?: string | null; slug?: string | null } | null;
+  };
+  const assignables = ((labelsCompte ?? []) as unknown as LigneLabelCompte[]).filter(
+    (l) => Boolean(l.label_id) && !estLabelSysteme(l.labels),
+  );
+  const labelIds = assignables.map((l) => l.label_id as string);
+  const labelNoms = assignables
+    .map((l) => l.labels?.nom)
+    .filter((nom): nom is string => Boolean(nom));
   const labelsTxt =
     labelNoms.length > 0 ? labelNoms.join(", ") : `${labelIds.length} label(s)`;
 
@@ -4834,13 +4878,15 @@ export async function diagnostiquerQuotaCompte(compteId: string): Promise<string
     return `Aucun slideshow tagué « ${labelsTxt} » dans la bibliothèque.`;
   }
 
-  const { data: prets } = await supabase
+  let requetePrets = supabase
     .from("contenus")
     .select("id")
     .eq("statut", "valide")
     .eq("import_statut", "done")
     .eq("ugc_compatible", ugcAi)
     .in("id", idsLabel);
+  if (applicationId) requetePrets = requetePrets.eq("application_id", applicationId);
+  const { data: prets } = await requetePrets;
   const idsPrets = (prets ?? []).map((c) => c.id as string);
   if (idsPrets.length === 0) {
     return (
@@ -4855,27 +4901,32 @@ export async function diagnostiquerQuotaCompte(compteId: string): Promise<string
     .select("contenu_id", { count: "exact", head: true })
     .eq("langue", langue)
     .in("contenu_id", idsPrets);
-  const nLangue = count ?? 0;
-  if (nLangue === 0) {
+  const candidats = count ?? 0;
+  if (candidats === 0) {
     return (
       `${idsPrets.length} slideshow(s) « ${labelsTxt} » prêts, mais aucun éligible en ` +
       `${langue.toUpperCase()} (pas de score ELO langue à l'import pour cette langue).`
     );
   }
 
-  if (nLangue >= 15) {
-    return (
-      `Pool « ${labelsTxt} » × ${langue.toUpperCase()} OK (${nLangue} candidat(s) ELO) — ` +
-      `minuit n'a probablement pas atteint ce compte (timeout batch). ` +
-      `Utilise « Réassigner incomplets » (parallèle) ; sinon baisse auto du quota.`
-    );
-  }
+  // Ce que le créateur a déjà consommé du pool ce jour-là : le reste est
+  // piochable, et c'est lui qu'on compare au manque.
+  const { data: passagesJour } = await supabase
+    .from("passages")
+    .select("contenu_id")
+    .eq("compte_id", compteId)
+    .eq("date_publication_prevue", opts.date);
+  const dejaAssignes = new Set(
+    (passagesJour ?? []).map((p) => p.contenu_id as string).filter(Boolean),
+  ).size;
 
-  return (
-    `Pool « ${labelsTxt} » × ${langue.toUpperCase()} trop mince ou déjà tout assigné ` +
-    `(${nLangue} candidat(s) ELO) — importe / labellise d'autres slideshows ` +
-    `(sinon minuit baisse automatiquement le quota du créateur).`
-  );
+  return messagePool({
+    labelsTxt,
+    langue,
+    candidats,
+    dejaAssignes,
+    manquants: opts.manquants,
+  });
 }
 
 /** Un pas de fabrication pour un post précis (avance le pipeline d'une étape). */
