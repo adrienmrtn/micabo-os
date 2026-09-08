@@ -58,6 +58,11 @@ import {
 } from "./creationManuelle";
 import { normaliserReglagesPapier } from "./papierReglages";
 import type { CompteIdentifiants, CompteResumePoster, TypeCompte } from "./types";
+import {
+  CLE_REMARQUES,
+  estHorsFile,
+  remarquesDepuisReglage,
+} from "@/features/reviews/fileQuotidienne";
 
 export type { EloImportRapport };
 export type { ApplicationOs };
@@ -649,7 +654,14 @@ export interface Review {
   note: number | null;
   created_at: string;
   seen_at: string | null;
+  post_id: string | null;
+  publie_url: string | null;
+  source_url: string | null;
+  handle_tiktok: string | null;
 }
+
+const REVIEW_COLONNES =
+  "id, poster_id, body, note, created_at, seen_at, post_id, publie_url, source_url, handle_tiktok";
 
 /** L'admin envoie une review (retour) à un poster : elle s'affichera en pop-up
  *  à sa prochaine connexion. */
@@ -661,11 +673,37 @@ export async function envoyerReview(posterId: string, body: string): Promise<voi
   if (error) throw error;
 }
 
+/** Review liée à un slideshow posté (file QA du jour). */
+export async function envoyerReviewPost(input: {
+  posterId: string;
+  postId: string;
+  passageId: string | null;
+  body: string;
+  publieUrl: string | null;
+  sourceUrl: string | null;
+  handleTiktok: string | null;
+}): Promise<void> {
+  const corps = input.body.trim();
+  if (!corps) throw new Error("Texte vide");
+  const { data: auth } = await supabase.auth.getUser();
+  const { error } = await supabase.from("reviews").insert({
+    poster_id: input.posterId,
+    body: corps,
+    admin_id: auth.user?.id ?? null,
+    post_id: input.postId,
+    passage_id: input.passageId,
+    publie_url: input.publieUrl,
+    source_url: input.sourceUrl,
+    handle_tiktok: input.handleTiktok,
+  });
+  if (error) throw error;
+}
+
 /** Toutes les reviews (admin), les plus récentes d'abord. */
 export async function listerReviews(): Promise<Review[]> {
   const { data, error } = await supabase
     .from("reviews")
-    .select("id, poster_id, body, note, created_at, seen_at")
+    .select(REVIEW_COLONNES)
     .order("created_at", { ascending: false })
     .limit(300);
   if (error) throw error;
@@ -676,11 +714,145 @@ export async function listerReviews(): Promise<Review[]> {
 export async function mesReviewsNonVues(): Promise<Review[]> {
   const { data, error } = await supabase
     .from("reviews")
-    .select("id, poster_id, body, note, created_at, seen_at")
+    .select(REVIEW_COLONNES)
     .is("seen_at", null)
     .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []) as Review[];
+}
+
+export interface ItemFileReviewJour {
+  postId: string;
+  passageId: string;
+  posterId: string;
+  posterNom: string;
+  handle: string | null;
+  publieUrl: string;
+  sourceUrl: string | null;
+  publieAt: string;
+  titre: string | null;
+  langue: string | null;
+}
+
+/** Slideshows assignés marqués publiés ce jour Paris, hors déjà reviewés / passés. */
+export async function listerFileReviewsJour(jour: string): Promise<ItemFileReviewJour[]> {
+  const depuis = new Date(Date.now() - 36 * 3600_000).toISOString();
+  const { data, error } = await supabase
+    .from("passages")
+    .select(
+      "id, post_id, publie_at, publie_url, langue, contenus(titre, source_url), comptes(poster_id, handle_tiktok, persona_nom, ugc_ai_video, profiles(prenom, nom)), posts(est_test)",
+    )
+    .eq("statut", "publie")
+    .not("publie_url", "is", null)
+    .gte("publie_at", depuis)
+    .order("publie_at", { ascending: true });
+  if (error) throw error;
+
+  const candidats: ItemFileReviewJour[] = [];
+  for (const row of data ?? []) {
+    const r = row as unknown as {
+      id: string;
+      post_id: string | null;
+      publie_at: string | null;
+      publie_url: string | null;
+      langue: string | null;
+      contenus:
+        | { titre: string | null; source_url: string | null }
+        | Array<{ titre: string | null; source_url: string | null }>
+        | null;
+      comptes:
+        | {
+            poster_id: string | null;
+            handle_tiktok: string | null;
+            persona_nom: string | null;
+            ugc_ai_video: boolean | null;
+            profiles:
+              | { prenom: string | null; nom: string | null }
+              | Array<{ prenom: string | null; nom: string | null }>
+              | null;
+          }
+        | Array<{
+            poster_id: string | null;
+            handle_tiktok: string | null;
+            persona_nom: string | null;
+            ugc_ai_video: boolean | null;
+            profiles:
+              | { prenom: string | null; nom: string | null }
+              | Array<{ prenom: string | null; nom: string | null }>
+              | null;
+          }>
+        | null;
+      posts: { est_test: boolean | null } | Array<{ est_test: boolean | null }> | null;
+    };
+    const contenus = Array.isArray(r.contenus) ? (r.contenus[0] ?? null) : r.contenus;
+    const comptes = Array.isArray(r.comptes) ? (r.comptes[0] ?? null) : r.comptes;
+    const posts = Array.isArray(r.posts) ? (r.posts[0] ?? null) : r.posts;
+    if (!r.post_id || !r.publie_url || !r.publie_at) continue;
+    if (posts?.est_test) continue;
+    if (comptes?.ugc_ai_video) continue;
+    if (!comptes?.poster_id) continue;
+    if (estHorsFile({ postId: r.post_id, publieAt: r.publie_at, jour, deja: new Set() })) continue;
+    const rawProfil = comptes.profiles;
+    const profil = Array.isArray(rawProfil) ? (rawProfil[0] ?? null) : (rawProfil ?? null);
+    const perso = [profil?.prenom, profil?.nom].filter(Boolean).join(" ");
+    candidats.push({
+      postId: r.post_id,
+      passageId: r.id,
+      posterId: comptes.poster_id,
+      posterNom: perso || comptes.persona_nom || (comptes.handle_tiktok ? `@${comptes.handle_tiktok}` : "—"),
+      handle: comptes.handle_tiktok,
+      publieUrl: r.publie_url,
+      sourceUrl: contenus?.source_url ?? null,
+      publieAt: r.publie_at,
+      titre: contenus?.titre ?? null,
+      langue: r.langue,
+    });
+  }
+
+  const ids = candidats.map((c) => c.postId);
+  const deja = new Set<string>();
+  if (ids.length > 0) {
+    const [{ data: rev, error: eRev }, { data: skips, error: eSkip }] = await Promise.all([
+      supabase.from("reviews").select("post_id").in("post_id", ids),
+      supabase.from("review_quotidienne_skips").select("post_id").eq("jour", jour).in("post_id", ids),
+    ]);
+    if (eRev) throw eRev;
+    if (eSkip) throw eSkip;
+    for (const r of rev ?? []) {
+      if (r.post_id) deja.add(r.post_id as string);
+    }
+    for (const s of skips ?? []) deja.add(s.post_id as string);
+  }
+
+  return candidats.filter((c) => !deja.has(c.postId));
+}
+
+export async function passerFileJour(postId: string, jour: string): Promise<void> {
+  const { data: auth } = await supabase.auth.getUser();
+  const { error } = await supabase.from("review_quotidienne_skips").upsert(
+    { post_id: postId, jour, admin_id: auth.user?.id ?? null },
+    { onConflict: "post_id,jour" },
+  );
+  if (error) throw error;
+}
+
+export async function lireRemarquesReviewJour(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("reglages")
+    .select("valeur")
+    .eq("cle", CLE_REMARQUES)
+    .maybeSingle();
+  if (error) throw error;
+  return remarquesDepuisReglage(data?.valeur);
+}
+
+export async function ameliorerReview(texte: string): Promise<string> {
+  const r = await invoke<{ ok?: boolean; texte?: string; error?: string }>("ameliorer-review", {
+    texte,
+  });
+  const out = (r.texte ?? "").trim();
+  if (!out) throw new Error(r.error || "Amélioration vide");
+  return out;
 }
 
 /** Le poster marque une review comme vue (referme le pop-up). */
