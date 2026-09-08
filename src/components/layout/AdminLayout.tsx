@@ -19,7 +19,6 @@ import {
   Settings,
   UserRound,
   Users,
-  Briefcase,
   Video,
 } from "lucide-react";
 
@@ -133,12 +132,6 @@ export function AdminLayout() {
               label: t("nav.referral"),
               icon: Gift,
               description: t("navDesc.referral"),
-            },
-            {
-              to: "/admin/upwork",
-              label: t("nav.upwork"),
-              icon: Briefcase,
-              description: t("navDesc.upwork"),
             },
           ],
         },
