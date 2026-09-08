@@ -23,9 +23,9 @@ cp .env.example .env   # VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
 npm run dev
 ```
 
-Les secrets moteur (`GEMINI`, `FAL`, `APIFY`, `CRON_SECRET`, `service_role`)
-restent **uniquement** dans les Edge Function Secrets du projet Supabase
-`qkmiwnmiwsvwkttldqgb`. Jamais sur Vercel.
+Les secrets moteur (`FAL_KEY`, `APIFY_TOKEN`, `CRON_SECRET`) restent
+**uniquement** dans les Edge Function Secrets du projet Supabase
+`qkmiwnmiwsvwkttldqgb`. Jamais sur Vercel. Le texte (Gemini) passe par Fal.
 
 ## Moteur
 

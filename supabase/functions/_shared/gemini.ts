@@ -1,6 +1,7 @@
 import { downloadImage } from "./apify.ts";
 import { messageErreur } from "./supabase.ts";
 import { dimensionsImage, effacerTexte, type Zone } from "./inpaint.ts";
+import { falLlmTexte } from "./fal_llm.ts";
 import { nettoyerViaFalTextRemoval } from "./fal_text_removal.ts";
 import { nettoyerViaReplicateTextRemoval } from "./replicate_text_removal.ts";
 import { upscaleViaSeedVr } from "./fal_seedvr_upscale.ts";
@@ -8,20 +9,14 @@ import { falHebergerOctets } from "./fal_queue.ts";
 import { serviceClient } from "./supabase.ts";
 import { retirerContentCredentials } from "./c2pa.ts";
 
-const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-
 /**
- * Modèles texte, par ordre de repli.
- *
- * gemini-2.5-pro et gemini-2.5-flash sont volontairement absents : ils
- * apparaissent dans la liste des modèles mais renvoient 404 « no longer
- * available to new users ». Google en retire régulièrement : la chaîne compte
- * donc plusieurs familles, et un 503 passager sur l'une bascule sur la suivante.
+ * Modèles texte via Fal OpenRouter (`google/<id>`), par ordre de repli.
+ * Plus d'appel direct à Google — FAL_KEY suffit.
  */
 export const TEXT_MODELS = [
-  "gemini-3.5-flash",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
   "gemini-2.0-flash",
-  "gemini-3.1-flash-lite",
 ];
 
 /**
@@ -45,44 +40,32 @@ interface Part {
   inlineData?: { mimeType: string; data: string };
 }
 
-function imageDataOf(parts: Part[]): string | null {
-  for (const part of parts) {
-    const data = part.inlineData?.data ?? part.inline_data?.data;
-    if (data) return data;
-  }
-  return null;
-}
-
-function apiKey(): string {
-  const key = Deno.env.get("GEMINI_API_KEY");
-  if (!key) throw new Error("GEMINI_API_KEY manquant");
-  return key;
-}
-
 interface GenConfig {
   temperature?: number;
-  // Les modèles d'image ne renvoient une image QUE si on la réclame
-  // explicitement ; sans ça ils décrivent la retouche en texte, ce que le
-  // reste du code prenait à tort pour un refus.
   responseModalities?: string[];
 }
 
-async function call(model: string, parts: Part[], config?: GenConfig): Promise<Part[]> {
-  const response = await fetch(`${BASE}/${model}:generateContent?key=${apiKey()}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts }],
-      ...(config ? { generationConfig: config } : {}),
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Gemini ${model} ${response.status}: ${(await response.text()).slice(0, 300)}`);
+function imagesDesParts(parts: Part[]): string[] {
+  const urls: string[] = [];
+  for (const part of parts) {
+    const data = part.inlineData?.data ?? part.inline_data?.data;
+    if (!data) continue;
+    const mime = part.inlineData?.mimeType ?? part.inline_data?.mime_type ?? "image/jpeg";
+    urls.push(`data:${mime};base64,${data}`);
   }
+  return urls;
+}
 
-  const data = await response.json();
-  return (data?.candidates?.[0]?.content?.parts ?? []) as Part[];
+async function call(model: string, parts: Part[], config?: GenConfig): Promise<Part[]> {
+  const prompt = textOf(parts);
+  const imageUrls = imagesDesParts(parts);
+  const output = await falLlmTexte({
+    prompt: prompt || " ",
+    model,
+    temperature: config?.temperature,
+    imageUrls: imageUrls.length ? imageUrls : undefined,
+  });
+  return [{ text: output }];
 }
 
 function textOf(parts: Part[]): string {

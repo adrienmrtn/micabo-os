@@ -5,11 +5,14 @@ import {
   extraireCaptionFal,
   estLabelHook,
   estLabelSysteme,
+  idsLabelsAssignables,
   idsPremiereSlide,
   mediaEstPremiereSlide,
+  normaliserCaptionManuelle,
   normaliserCaptionOk,
   pathEstPremiereSlide,
   raccourcirCaption,
+  CAPTION_MAX,
   SLUG_HOOK,
 } from "./mediaCaption";
 
@@ -20,6 +23,16 @@ describe("estLabelSysteme / hook", () => {
     expect(estLabelSysteme({ slug: "alpha-male" })).toBe(false);
     expect(estLabelHook({ slug: "Hook" })).toBe(false);
     expect(estLabelHook({ slug: "hook" })).toBe(true);
+  });
+
+  it("exclut hook du pool d'assignation créateurs", () => {
+    expect(
+      idsLabelsAssignables([
+        { id: "hook-id", slug: "hook" },
+        { id: "ugc-id", slug: "ugc-ai-video" },
+        { id: "study", slug: "study-aes" },
+      ]),
+    ).toEqual(["study"]);
   });
 });
 
@@ -79,6 +92,31 @@ describe("normaliserCaptionOk", () => {
     expect(normaliserCaptionOk("A detailed view of a kitchen counter.")).toBe(
       "A detailed view of a kitchen counter.",
     );
+  });
+});
+
+describe("normaliserCaptionManuelle", () => {
+  it("garde le texte de l'admin, même refusé par le filtre modèle", () => {
+    expect(normaliserCaptionManuelle("  Une   fiche de révision  ")).toEqual({
+      caption: "Une fiche de révision",
+      caption_statut: "ok",
+    });
+    expect(normaliserCaptionManuelle("n/a")).toEqual({
+      caption: "n/a",
+      caption_statut: "ok",
+    });
+  });
+
+  it("vide = plus de caption", () => {
+    expect(normaliserCaptionManuelle("   ")).toEqual({
+      caption: null,
+      caption_statut: "aucune",
+    });
+  });
+
+  it("plafonne à CAPTION_MAX", () => {
+    const r = normaliserCaptionManuelle("a".repeat(CAPTION_MAX + 50));
+    expect(r.caption).toHaveLength(CAPTION_MAX);
   });
 });
 

@@ -18,13 +18,16 @@ import type {
   Label,
   Contenu,
   ContenuLangue,
+  ContenuLangueSlide,
   ContenuSlide,
   EloImportRapport,
   Passage,
 } from "./types";
 import type { LigneJournalOubli } from "./oubliSource";
 import { type MajSourcesRun } from "./majSequentielle";
-import { compteEnProcessus } from "./warmup";
+import { compteEnProcessus, statutWarmup } from "./warmup";
+// Source unique du verdict pool (partagée avec l'Edge minuit) — pur TS, pas de Deno.
+import { messagePool } from "../../../supabase/functions/_shared/quota_pool.ts";
 import { ugcVisages } from "./ugcVisages";
 import { corpsAssignationUgcVideoTest } from "./corpsAssignationUgcVideoTest";
 import { decouperEnLots, handleTiktokDepuisSaisie } from "./oubliSource";
@@ -40,7 +43,13 @@ import {
   type ApplicationOs,
 } from "./applications";
 import { comptePrincipal, normaliserTypeCompte, resoudrePremierCompte } from "./comptesCm";
-import { estLabelSysteme, SLUG_HOOK } from "./mediaCaption";
+import {
+  estLabelSysteme,
+  idsLabelsAssignables,
+  normaliserCaptionManuelle,
+  SLUG_HOOK,
+} from "./mediaCaption";
+import { fusionnerTexteSlide } from "./deckSlides";
 import {
   ELO_MANUEL_DEFAUT,
   hookTexteDepuisDeck,
@@ -2574,6 +2583,61 @@ export async function captionnerMediaBiblio(
   return r;
 }
 
+/**
+ * Corrige à la main la caption détectée par les modèles. Texte vide = aucune
+ * caption. Le statut posé sort le média du rattrapage auto (qui ne prend que
+ * `caption_statut is null`) : la correction tient, seul « Captionner » relance
+ * un modèle par-dessus.
+ */
+export async function majCaptionMedia(
+  mediaId: string,
+  caption: string,
+): Promise<{ caption: string | null; caption_statut: "ok" | "aucune" }> {
+  const normalisee = normaliserCaptionManuelle(caption);
+  const { error } = await supabase
+    .from("media_library")
+    .update({
+      ...normalisee,
+      caption_modele: "manuel",
+      caption_le: new Date().toISOString(),
+    })
+    .eq("id", mediaId);
+  if (error) throw error;
+  return normalisee;
+}
+
+/**
+ * Corrige à la main le texte d'une slide dans un deck de langue.
+ *
+ * Sur le deck source, c'est l'OCR d'import qu'on corrige : les langues pas
+ * encore traduites partiront de la version corrigée. Sur un deck déjà traduit,
+ * `assurerDeckPourLangue` ne retraduit pas un deck qui a du texte — la
+ * correction tient jusqu'au post.
+ */
+export async function majTexteSlideDeck(
+  contenuLangueId: string,
+  position: number,
+  texte: string,
+): Promise<ContenuLangueSlide[]> {
+  const { data, error } = await supabase
+    .from("contenu_langues")
+    .select("slides")
+    .eq("id", contenuLangueId)
+    .single();
+  if (error) throw error;
+  const slides = fusionnerTexteSlide(
+    ((data?.slides ?? []) as ContenuLangueSlide[]),
+    position,
+    texte,
+  );
+  const { error: erreurMaj } = await supabase
+    .from("contenu_langues")
+    .update({ slides })
+    .eq("id", contenuLangueId);
+  if (erreurMaj) throw erreurMaj;
+  return slides;
+}
+
 export async function listerMediasARattraperCaption(): Promise<{
   total: number;
   captions: number;
@@ -2870,7 +2934,7 @@ export async function lireReglages(): Promise<Reglages> {
       score_prior: 50,
       pertinence_seuil: 50,
       elo_seuil_import: 55,
-      elo_poids_vues: 0.9,
+      elo_poids_vues: 0.7,
       elo_vues_plafond: 80_000,
       elo_regularisation_k: 1,
       ...((map.get("scoring") as Partial<Reglages["scoring"]> | undefined) ?? {}),
@@ -4722,14 +4786,29 @@ export async function suiviAssignation(date: string): Promise<SuiviMinuit[]> {
     }));
 }
 
+/** Heure locale Paris d'un instant ISO — « 08:53 » pour un message admin. */
+function heureParis(iso: string): string {
+  return new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
 /**
- * Pourquoi minuit n'a pas rempli le quota d'un compte (même logique que l'Edge
- * `diagnostiquerPoolVide`) — sans créer de post.
+ * Pourquoi minuit n'a pas rempli le quota d'un compte pour un jour — sans créer
+ * de post. Même pool et même verdict que l'Edge (`diagnostiquerPoolVide` +
+ * `quota_pool.ts`) : warmup d'abord, puis pool jugé face au manque réel.
  */
-export async function diagnostiquerQuotaCompte(compteId: string): Promise<string> {
+export async function diagnostiquerQuotaCompte(
+  compteId: string,
+  opts: { date: string; manquants: number },
+): Promise<string> {
   const { data: compte, error: errC } = await supabase
     .from("comptes")
-    .select("id, langue, ugc_ai, ugc_ai_video, ugc_persona_id, posts_par_jour")
+    .select(
+      "id, langue, ugc_ai, ugc_ai_video, ugc_persona_id, posts_par_jour, application_id, warmup_started_at, warmup_ends_at",
+    )
     .eq("id", compteId)
     .maybeSingle();
   if (errC) throw errC;
@@ -4742,20 +4821,47 @@ export async function diagnostiquerQuotaCompte(compteId: string): Promise<string
     return "Compte UGC AI sans persona — assigne un persona UGC (4 angles) sur le créateur.";
   }
 
+  // Warmup : le compte n'entre dans le process qu'après. Tant qu'il y est,
+  // aucun passage ne l'assigne — le pool n'a rien à voir avec le manque.
+  const warmup = statutWarmup({
+    warmup_started_at: compte.warmup_started_at as string | null,
+    warmup_ends_at: compte.warmup_ends_at as string | null,
+  });
+  if (warmup === "attente") {
+    return (
+      "Warmup pas démarré — le créateur doit lancer son timer dans son calendrier. " +
+      "Hors process : minuit ne l'assigne pas."
+    );
+  }
+  if (warmup === "en_cours") {
+    return (
+      `Warmup en cours jusqu'à ${heureParis(compte.warmup_ends_at as string)} ` +
+      `(heure de Paris) — minuit n'assigne qu'à la fin du warmup.`
+    );
+  }
+
   const langue = (compte.langue as string) || "fr";
   const ugcAi = Boolean(compte.ugc_ai) && !compte.ugc_ai_video;
+  const applicationId = (compte.application_id as string | null) ?? null;
 
   const { data: labelsCompte, error: errL } = await supabase
     .from("compte_labels")
-    .select("label_id, labels(nom)")
+    .select("label_id, labels(nom, slug)")
     .eq("compte_id", compteId);
   if (errL) throw errL;
 
-  const labelIds = (labelsCompte ?? []).map((l) => l.label_id as string);
-  // deno-lint-ignore no-explicit-any
-  const labelNoms = (labelsCompte ?? [])
-    .map((l: any) => l.labels?.nom as string | undefined)
-    .filter(Boolean) as string[];
+  // Hook / ugc-ai-video ne sont pas des niches : minuit ne pioche pas dessus.
+  type LigneLabelCompte = {
+    label_id: string | null;
+    labels?: { nom?: string | null; slug?: string | null } | null;
+  };
+  const assignables = ((labelsCompte ?? []) as unknown as LigneLabelCompte[]).filter(
+    (l) => Boolean(l.label_id) && !estLabelSysteme(l.labels),
+  );
+  const labelIds = assignables.map((l) => l.label_id as string);
+  const labelNoms = assignables
+    .map((l) => l.labels?.nom)
+    .filter((nom): nom is string => Boolean(nom));
   const labelsTxt =
     labelNoms.length > 0 ? labelNoms.join(", ") : `${labelIds.length} label(s)`;
 
@@ -4772,13 +4878,15 @@ export async function diagnostiquerQuotaCompte(compteId: string): Promise<string
     return `Aucun slideshow tagué « ${labelsTxt} » dans la bibliothèque.`;
   }
 
-  const { data: prets } = await supabase
+  let requetePrets = supabase
     .from("contenus")
     .select("id")
     .eq("statut", "valide")
     .eq("import_statut", "done")
     .eq("ugc_compatible", ugcAi)
     .in("id", idsLabel);
+  if (applicationId) requetePrets = requetePrets.eq("application_id", applicationId);
+  const { data: prets } = await requetePrets;
   const idsPrets = (prets ?? []).map((c) => c.id as string);
   if (idsPrets.length === 0) {
     return (
@@ -4793,27 +4901,32 @@ export async function diagnostiquerQuotaCompte(compteId: string): Promise<string
     .select("contenu_id", { count: "exact", head: true })
     .eq("langue", langue)
     .in("contenu_id", idsPrets);
-  const nLangue = count ?? 0;
-  if (nLangue === 0) {
+  const candidats = count ?? 0;
+  if (candidats === 0) {
     return (
       `${idsPrets.length} slideshow(s) « ${labelsTxt} » prêts, mais aucun éligible en ` +
       `${langue.toUpperCase()} (pas de score ELO langue à l'import pour cette langue).`
     );
   }
 
-  if (nLangue >= 15) {
-    return (
-      `Pool « ${labelsTxt} » × ${langue.toUpperCase()} OK (${nLangue} candidat(s) ELO) — ` +
-      `minuit n'a probablement pas atteint ce compte (timeout batch). ` +
-      `Utilise « Réassigner incomplets » (parallèle) ; sinon baisse auto du quota.`
-    );
-  }
+  // Ce que le créateur a déjà consommé du pool ce jour-là : le reste est
+  // piochable, et c'est lui qu'on compare au manque.
+  const { data: passagesJour } = await supabase
+    .from("passages")
+    .select("contenu_id")
+    .eq("compte_id", compteId)
+    .eq("date_publication_prevue", opts.date);
+  const dejaAssignes = new Set(
+    (passagesJour ?? []).map((p) => p.contenu_id as string).filter(Boolean),
+  ).size;
 
-  return (
-    `Pool « ${labelsTxt} » × ${langue.toUpperCase()} trop mince ou déjà tout assigné ` +
-    `(${nLangue} candidat(s) ELO) — importe / labellise d'autres slideshows ` +
-    `(sinon minuit baisse automatiquement le quota du créateur).`
-  );
+  return messagePool({
+    labelsTxt,
+    langue,
+    candidats,
+    dejaAssignes,
+    manquants: opts.manquants,
+  });
 }
 
 /** Un pas de fabrication pour un post précis (avance le pipeline d'une étape). */
@@ -5023,7 +5136,8 @@ export async function listerLabelIdsAvecUgc(applicationId?: string | null): Prom
   if (applicationId) q = q.eq("contenus.application_id", applicationId);
   const { data, error } = await q;
   if (error) throw error;
-  return [...new Set((data ?? []).map((r) => r.label_id as string).filter(Boolean))];
+  const ids = [...new Set((data ?? []).map((r) => r.label_id as string).filter(Boolean))];
+  return filtrerIdsLabelsAssignables(ids);
 }
 
 export async function creerLabel(
@@ -5335,7 +5449,7 @@ export async function setLabelsHmUgcVideo(
     .delete()
     .eq("profile_id", profileId);
   if (delErr) throw delErr;
-  const uniques = [...new Set(labelIds.filter(Boolean))];
+  const uniques = await filtrerIdsLabelsAssignables(labelIds);
   if (uniques.length === 0) return;
   const { error } = await supabase.from("hm_ugc_video_labels").insert(
     uniques.map((label_id) => ({ profile_id: profileId, label_id })),
@@ -5391,16 +5505,28 @@ export async function labelsDuContenu(contenuId: string): Promise<string[]> {
   return (data ?? []).map((r) => r.label_id as string);
 }
 
+async function filtrerIdsLabelsAssignables(labelIds: string[]): Promise<string[]> {
+  const uniques = [...new Set(labelIds.filter(Boolean))];
+  if (uniques.length === 0) return [];
+  const { data, error } = await supabase
+    .from("labels")
+    .select("id, slug")
+    .in("id", uniques);
+  if (error) throw error;
+  return idsLabelsAssignables((data ?? []) as Array<{ id: string; slug: string }>);
+}
+
 async function syncLabels(
   table: "compte_labels" | "compte_reference_labels" | "contenu_labels",
   fk: string,
   fkValue: string,
   labelIds: string[],
 ): Promise<void> {
+  const niches = await filtrerIdsLabelsAssignables(labelIds);
   const { error: delErr } = await supabase.from(table).delete().eq(fk, fkValue);
   if (delErr) throw delErr;
-  if (labelIds.length === 0) return;
-  const rows = labelIds.map((label_id) => ({ [fk]: fkValue, label_id }));
+  if (niches.length === 0) return;
+  const rows = niches.map((label_id) => ({ [fk]: fkValue, label_id }));
   const { error } = await supabase.from(table).insert(rows);
   if (error) throw error;
 }
@@ -5425,7 +5551,7 @@ export async function setLabelsContenu(
   contenuId: string,
   labelIds: string[],
 ): Promise<void> {
-  const niches = labelIds.filter((id) => id !== undefined);
+  const niches = await filtrerIdsLabelsAssignables(labelIds);
   await syncLabels("contenu_labels", "contenu_id", contenuId, niches);
   // Propager aux images — le label Hook (1ʳᵉ slide) n'est pas une niche.
   const { data: medias } = await supabase

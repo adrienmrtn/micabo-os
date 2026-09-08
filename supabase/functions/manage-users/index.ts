@@ -4,6 +4,7 @@ import {
   type ApplicationRow,
 } from "../_shared/applications.ts";
 import { retirerContentCredentialsBytes } from "../_shared/c2pa.ts";
+import { estLabelSysteme, idsLabelsAssignables } from "../_shared/labels_systeme.ts";
 import { appliquerIdentiteInstantanee } from "../_shared/persona.ts";
 import { estRoleManager } from "../_shared/roles.ts";
 import {
@@ -815,6 +816,65 @@ function normaliserFileLabelItemList(raw: unknown): FileLabelItem[] {
     .filter((it) => it.label_id);
 }
 
+async function idsLabelsNonAssignables(supabase: Supabase): Promise<Set<string>> {
+  const { data } = await supabase
+    .from("labels")
+    .select("id, slug")
+    .in("slug", ["hook", "ugc-ai-video"]);
+  return new Set(
+    (data ?? [])
+      .filter((l) => estLabelSysteme(l))
+      .map((l) => l.id as string)
+      .filter(Boolean),
+  );
+}
+
+function retirerLabelsNonAssignablesItems(
+  items: FileLabelItem[],
+  interdits: Set<string>,
+): FileLabelItem[] {
+  return items.filter((it) => !interdits.has(it.label_id));
+}
+
+function retirerLabelsNonAssignablesSlice(
+  slice: FileLabelsSlice,
+  interdits: Set<string>,
+): FileLabelsSlice {
+  const par_langue: Record<string, FileLabelItem[]> = {};
+  for (const [code, liste] of Object.entries(slice.par_langue)) {
+    const propre = retirerLabelsNonAssignablesItems(liste, interdits);
+    if (propre.length > 0) par_langue[code] = propre;
+  }
+  return {
+    items: retirerLabelsNonAssignablesItems(slice.items, interdits),
+    par_langue,
+  };
+}
+
+function fileFifoAChange(avant: FileLabelsSlice, apres: FileLabelsSlice): boolean {
+  if (avant.items.length !== apres.items.length) return true;
+  const langues = new Set([
+    ...Object.keys(avant.par_langue),
+    ...Object.keys(apres.par_langue),
+  ]);
+  for (const code of langues) {
+    if ((avant.par_langue[code]?.length ?? 0) !== (apres.par_langue[code]?.length ?? 0)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function filtrerIdsAssignables(
+  supabase: Supabase,
+  labelIds: string[],
+): Promise<string[]> {
+  const uniques = [...new Set(labelIds.filter(Boolean))];
+  if (uniques.length === 0) return [];
+  const { data } = await supabase.from("labels").select("id, slug").in("id", uniques);
+  return idsLabelsAssignables(data ?? []);
+}
+
 /** Normalise `{ items, par_langue }` (+ legacy `label_ids`). */
 function normaliserFileLabelsValeur(valeur: unknown): FileLabelsValeur {
   const v = (valeur ?? {}) as {
@@ -911,7 +971,15 @@ async function popLabelFile(
     .maybeSingle();
   const file = normaliserFileLabelsValeur(data?.valeur);
   const slug = application?.slug ?? "micabo";
-  const slice = sliceFileLabels(file, slug);
+  const interdits = await idsLabelsNonAssignables(supabase);
+  const sliceBrut = sliceFileLabels(file, slug);
+  const slice = retirerLabelsNonAssignablesSlice(sliceBrut, interdits);
+  if (fileFifoAChange(sliceBrut, slice)) {
+    await ecrireFileLabels(
+      supabase,
+      avecSliceApplication(file, slug, slice),
+    );
+  }
   const lang = String(langue ?? "").trim().toLowerCase();
 
   const fileLangue = lang ? (slice.par_langue[lang] ?? []) : [];
@@ -983,7 +1051,8 @@ async function remplacerHmUgcVideoLabels(
     .select("id")
     .in("id", labelIds)
     .eq("ugc_ai_video", true)
-    .neq("slug", "ugc-ai-video");
+    .neq("slug", "ugc-ai-video")
+    .neq("slug", "hook");
   const valides = (ok ?? []).map((r) => r.id as string);
   if (valides.length === 0) return;
   await supabase.from("hm_ugc_video_labels").insert(
@@ -1080,10 +1149,10 @@ async function labelMoinsUtiliseParLangue(
   if (opts.ugcOnly) {
     pool = await labelIdsAvecContenusUgc(supabase, opts.applicationId);
   } else {
-    let q = supabase.from("labels").select("id").eq("ugc_ai_video", false);
+    let q = supabase.from("labels").select("id, slug").eq("ugc_ai_video", false);
     if (opts.applicationId) q = q.eq("application_id", opts.applicationId);
     const { data: tous } = await q;
-    pool = (tous ?? []).map((l) => l.id as string).filter(Boolean);
+    pool = idsLabelsAssignables(tous ?? []);
   }
   if (pool.length === 0) return null;
 
@@ -1126,7 +1195,10 @@ async function labelIdsAvecContenusUgc(
     .eq("contenus.ugc_compatible", true);
   if (applicationId) q = q.eq("contenus.application_id", applicationId);
   const { data } = await q;
-  return [...new Set((data ?? []).map((r) => r.label_id as string).filter(Boolean))];
+  const ids = [...new Set((data ?? []).map((r) => r.label_id as string).filter(Boolean))];
+  if (ids.length === 0) return [];
+  const { data: labs } = await supabase.from("labels").select("id, slug").in("id", ids);
+  return idsLabelsAssignables(labs ?? []);
 }
 
 async function labelADesContenusUgc(supabase: Supabase, labelId: string): Promise<boolean> {
@@ -1302,25 +1374,29 @@ async function preparerCompte(
 
   let labelNom: string | null = null;
   if (ugcAiVideo) {
-    if (labelIdsVideo.length > 0) {
+    const videoAssignables = await filtrerIdsAssignables(supabase, labelIdsVideo);
+    if (videoAssignables.length > 0) {
       await supabase.from("compte_labels").insert(
-        labelIdsVideo.map((lid) => ({ compte_id: compte.id, label_id: lid })),
+        videoAssignables.map((lid) => ({ compte_id: compte.id, label_id: lid })),
       );
       const { data: lab } = await supabase
         .from("labels")
         .select("nom, slug")
-        .eq("id", labelIdsVideo[0]!)
+        .eq("id", videoAssignables[0]!)
         .maybeSingle();
       labelNom = (lab?.nom as string | undefined) ?? (lab?.slug as string | undefined) ?? null;
     }
   } else if (labelId) {
-    await supabase.from("compte_labels").insert({ compte_id: compte.id, label_id: labelId });
-    const { data: lab } = await supabase
-      .from("labels")
-      .select("nom, slug")
-      .eq("id", labelId)
-      .maybeSingle();
-    labelNom = (lab?.nom as string | undefined) ?? (lab?.slug as string | undefined) ?? null;
+    const ok = await filtrerIdsAssignables(supabase, [labelId]);
+    if (ok[0]) {
+      await supabase.from("compte_labels").insert({ compte_id: compte.id, label_id: ok[0] });
+      const { data: lab } = await supabase
+        .from("labels")
+        .select("nom, slug")
+        .eq("id", ok[0])
+        .maybeSingle();
+      labelNom = (lab?.nom as string | undefined) ?? (lab?.slug as string | undefined) ?? null;
+    }
   }
 
   if (avecPersona && personaUgc) {

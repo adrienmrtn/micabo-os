@@ -118,8 +118,8 @@ async function lireScoring(supabase: Supabase) {
     pertinence: v.pertinence_seuil ?? 50,
     /** Seuil ELO : en-dessous → langue non cuite ; si aucune langue → pas d'import. */
     eloSeuil: v.elo_seuil_import ?? 55,
-    /** Poids des vues dans la base ELO (reste = pertinence). Défaut 90 %. */
-    poidsVues: v.elo_poids_vues ?? 0.9,
+    /** Poids des vues dans la base ELO (reste = pertinence). Défaut 70 %. */
+    poidsVues: v.elo_poids_vues ?? 0.7,
     /**
      * Plafond des vues → score 100.
      * 80k : meilleure résolution dans la zone 1k–20k.
@@ -173,7 +173,7 @@ export interface EloRapport {
 
 /**
  * ELO cold-start par langue :
- *   base = (1−poidsVues)×pertinence + poidsVues×scoreVues   (défaut 10/90)
+ *   base = (1−poidsVues)×pertinence + poidsVues×scoreVues   (défaut 30/70)
  *   puis légère régularisation vers le prior (elo_regularisation_k, défaut 1),
  *   avec bonus langue d'origine (k/2 vs 2k).
  */
@@ -202,7 +202,7 @@ export function decomposerElo(opts: {
   vuesPlafond?: number;
   seuil?: number;
 }): EloLigneDetail & { poidsVues: number; vuesPlafond: number; vues: number } {
-  const poidsVues = Math.min(1, Math.max(0, opts.poidsVues ?? 0.9));
+  const poidsVues = Math.min(1, Math.max(0, opts.poidsVues ?? 0.7));
   const vuesPlafond = opts.vuesPlafond ?? 80_000;
   const vues = opts.vues ?? 0;
   const vuesScore = scoreDepuisVues(vues, vuesPlafond);

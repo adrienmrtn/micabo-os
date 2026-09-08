@@ -6,6 +6,13 @@ import { assurerDeckPourLangue } from "./import_contenu.ts";
 import { LOT_IDS, lireParLots } from "./lots.ts";
 import { mapPool } from "./parallel.ts";
 import { serviceClient } from "./supabase.ts";
+import { extraireLabelsAssignables } from "./labels_systeme.ts";
+import {
+  messagePool,
+  poolAutoriseBaisseQuota,
+  verdictPool,
+  type EtatPoolCompte,
+} from "./quota_pool.ts";
 import {
   appliquerFaceSwapUgcPost,
   chargerPersonaUgc,
@@ -322,13 +329,9 @@ export async function assignerCompteJour(
 
   const { data: labelsCompte } = await supabase
     .from("compte_labels")
-    .select("label_id, labels(nom)")
+    .select("label_id, labels(nom, slug)")
     .eq("compte_id", compte.id);
-  const labelIds = (labelsCompte ?? []).map((l) => l.label_id as string);
-  // deno-lint-ignore no-explicit-any
-  const labelNoms = (labelsCompte ?? [])
-    .map((l: any) => l.labels?.nom as string | undefined)
-    .filter(Boolean) as string[];
+  const { labelIds, labelNoms } = extraireLabelsAssignables(labelsCompte ?? []);
   // Sans labels : impossible d'intersecter → baisse le quota à ce qui est déjà là.
   if (labelIds.length === 0) {
     log("Échec : aucun label sur le compte");
@@ -358,6 +361,8 @@ export async function assignerCompteJour(
   /** Contenu IDs déjà pris / exclus cette session (choisirContenu filtre dessus). */
   const contenusSession: string[] = [];
   const maxTentatives = manquants + 8;
+  /** Decks / matérialisations impossibles : cause distincte d'un pool trop mince. */
+  let echecsDeck = 0;
 
   let persona = null;
   if (ugcAi && ugcPersonaId) {
@@ -401,10 +406,12 @@ export async function assignerCompteJour(
       slides = deck.slides;
       hashtagsDeck = deck.hashtags;
     } catch (e) {
+      echecsDeck += 1;
       log(`Deck échoué : ${e instanceof Error ? e.message : String(e)}`);
       continue;
     }
     if (!slides.length) {
+      echecsDeck += 1;
       log("Deck vide — contenu suivant");
       continue;
     }
@@ -450,6 +457,7 @@ export async function assignerCompteJour(
     } catch (e) {
       // Pas de transaction multi-tables : nettoyer le passage pour ne pas
       // bloquer le quota, puis piocher un autre contenu.
+      echecsDeck += 1;
       log(`Matérialisation échouée : ${e instanceof Error ? e.message : String(e)}`);
       await supabase.from("passages").delete().eq("id", passage.id);
       continue;
@@ -479,20 +487,23 @@ export async function assignerCompteJour(
   }
 
   if (crees.length < manquants) {
-    const diag = await diagnostiquerPoolVide(
-      supabase,
+    const totalAssignes = dejaLa + crees.length;
+    const { message: diag, baisseQuotaAutorisee } = await diagnostiquerPoolVide(supabase, {
       labelIds,
       labelNoms,
       langue,
       ugcAi,
       ignorerElo,
-    );
+      applicationId: (compte.application_id as string | null) ?? null,
+      dejaAssignes: totalAssignes,
+      manquants: manquants - crees.length,
+      echecsDeck,
+    });
     log(diag);
 
     // Fallback : baisser posts_par_jour au nombre réellement assigné aujourd'hui
     // (plancher 1 — jamais 0 : on doit toujours retenter au moins 1 post).
-    const totalAssignes = dejaLa + crees.length;
-    const quotaBaisse = estRaisonPoolPourBaisseQuota(diag)
+    const quotaBaisse = baisseQuotaAutorisee
       ? await baisserQuotaSiBesoin(
         supabase,
         compte.id as string,
@@ -526,21 +537,6 @@ export async function assignerCompteJour(
   }
   log(`Terminé : ${crees.length} passage(s)`);
   return { ids: crees };
-}
-
-/** Pool labels×langue trop mince / épuisé → candidat au fallback baisse de quota. */
-function estRaisonPoolPourBaisseQuota(diag: string): boolean {
-  // Ne pas baisser le quota si le pool est OK (timeout batch) — on doit réessayer.
-  if (/Pool « .+ » × .+ OK \(/i.test(diag) || /n'a probablement pas atteint/i.test(diag)) {
-    return false;
-  }
-  return (
-    /trop mince|épuisé|déjà tout assigné|importe \/ labellise/i.test(diag) ||
-    /aucun éligible|pas de ligne ELO|pas de score ELO/i.test(diag) ||
-    /aucun valide \+ import/i.test(diag) ||
-    /Aucun slideshow tagué/i.test(diag) ||
-    /Aucun label sur ce compte/i.test(diag)
-  );
 }
 
 /**
@@ -578,15 +574,38 @@ async function baisserQuotaSiBesoin(
   return { avant: quota, apres, raison: diag };
 }
 
-/** Explique pourquoi le pool labels ∩ langue est vide / trop petit. */
+interface DiagnosticPool {
+  message: string;
+  /** Pool réellement trop petit → minuit peut aligner `posts_par_jour` dessus. */
+  baisseQuotaAutorisee: boolean;
+}
+
+/**
+ * Explique pourquoi le quota n'est pas rempli, avec le même pool que
+ * `choisirContenu` (labels ∩ langue ∩ contenus prêts ∩ application).
+ *
+ * Le verdict est relatif au manque du créateur : un pool plus large que ce
+ * qu'il reste à créer n'est jamais la cause, et ne baisse donc pas son quota
+ * (voir `quota_pool.ts`).
+ */
 async function diagnostiquerPoolVide(
   supabase: Supabase,
-  labelIds: string[],
-  labelNoms: string[],
-  langue: string,
-  ugcAi = false,
-  ignorerElo = false,
-): Promise<string> {
+  args: {
+    labelIds: string[];
+    labelNoms: string[];
+    langue: string;
+    ugcAi?: boolean;
+    ignorerElo?: boolean;
+    applicationId?: string | null;
+    /** Slideshows déjà assignés à ce créateur pour ce jour. */
+    dejaAssignes: number;
+    /** Posts encore à créer. */
+    manquants: number;
+    echecsDeck?: number;
+  },
+): Promise<DiagnosticPool> {
+  const { labelIds, labelNoms, langue } = args;
+  const ugcAi = Boolean(args.ugcAi);
   const labelsTxt = labelNoms.length > 0 ? labelNoms.join(", ") : `${labelIds.length} label(s)`;
 
   const liens = await lireParLots<{ contenu_id: string }>(
@@ -596,70 +615,71 @@ async function diagnostiquerPoolVide(
   );
   const idsLabel = [...new Set(liens.map((l) => l.contenu_id))];
   if (idsLabel.length === 0) {
-    return `Aucun slideshow tagué « ${labelsTxt} » dans la bibliothèque.`;
+    return {
+      message: `Aucun slideshow tagué « ${labelsTxt} » dans la bibliothèque.`,
+      baisseQuotaAutorisee: true,
+    };
   }
 
   const prets = await lireParLots<{ id: string }>(
     idsLabel,
     "Diagnostic — slideshows prêts",
-    (lot) =>
-      supabase
+    (lot) => {
+      let q = supabase
         .from("contenus")
         .select("id")
         .eq("statut", "valide")
         .eq("import_statut", "done")
         .eq("ugc_compatible", ugcAi)
-        .in("id", lot),
+        .in("id", lot);
+      if (args.applicationId) q = q.eq("application_id", args.applicationId);
+      return q;
+    },
   );
   const idsPrets = prets.map((c) => c.id);
   if (idsPrets.length === 0) {
-    return (
-      `${idsLabel.length} slideshow(s) « ${labelsTxt} » mais aucun valide + import terminé` +
-      (ugcAi ? " + checkmark UGC" : " (non-UGC)") +
-      "."
-    );
+    return {
+      message: `${idsLabel.length} slideshow(s) « ${labelsTxt} » mais aucun valide + import terminé` +
+        (ugcAi ? " + checkmark UGC" : " (non-UGC)") +
+        ".",
+      baisseQuotaAutorisee: true,
+    };
   }
 
-  if (ignorerElo) {
-    return (
-      `Pool « ${labelsTxt} » × ${langue.toUpperCase()} épuisé (mode test sans filtre ELO) — ` +
-      `${idsPrets.length} slideshow(s) prêt(s), déjà tout assigné ou deck impossible.`
+  let candidats = idsPrets.length;
+  if (!args.ignorerElo) {
+    const eligibles = await lireParLots<{ contenu_id: string }>(
+      idsPrets,
+      "Diagnostic — lignes ELO",
+      (lot) =>
+        supabase
+          .from("contenu_langues")
+          .select("contenu_id")
+          .eq("langue", langue)
+          .in("contenu_id", lot),
     );
+    candidats = eligibles.length;
+    if (candidats === 0) {
+      return {
+        message: `${idsPrets.length} slideshow(s) « ${labelsTxt} » prêts, mais aucun éligible en ` +
+          `${langue.toUpperCase()} (pas de ligne ELO pour cette langue à l'import).`,
+        baisseQuotaAutorisee: true,
+      };
+    }
   }
 
-  const eligibles = await lireParLots<{ contenu_id: string }>(
-    idsPrets,
-    "Diagnostic — lignes ELO",
-    (lot) =>
-      supabase
-        .from("contenu_langues")
-        .select("contenu_id")
-        .eq("langue", langue)
-        .in("contenu_id", lot),
-  );
-  const nLangue = eligibles.length;
-  if (nLangue === 0) {
-    return (
-      `${idsPrets.length} slideshow(s) « ${labelsTxt} » prêts, mais aucun éligible en ` +
-      `${langue.toUpperCase()} (pas de ligne ELO pour cette langue à l'import).`
-    );
-  }
-
-  // Beaucoup de candidats ELO : le pool n'est PAS vide — minuit a souvent
-  // timeout avant d'atteindre ce compte (batch trop long).
-  if (nLangue >= 15) {
-    return (
-      `Pool « ${labelsTxt} » × ${langue.toUpperCase()} OK (${nLangue} candidat(s) ELO) — ` +
-      `minuit n'a probablement pas atteint ce compte (timeout batch). ` +
-      `Réassigne les incomplets (bouton parallèle) ; sinon baisse auto du quota.`
-    );
-  }
-
-  return (
-    `Pool « ${labelsTxt} » × ${langue.toUpperCase()} trop mince ou déjà tout assigné ` +
-    `(${nLangue} candidat(s) ELO) — importe / labellise d'autres slideshows ` +
-    `(sinon minuit baisse le quota du créateur).`
-  );
+  const etat: EtatPoolCompte = {
+    labelsTxt,
+    langue,
+    candidats,
+    dejaAssignes: args.dejaAssignes,
+    manquants: args.manquants,
+    echecsDeck: args.echecsDeck,
+  };
+  return {
+    message: messagePool(etat),
+    baisseQuotaAutorisee: poolAutoriseBaisseQuota(verdictPool(etat)),
+  };
 }
 
 interface SlideStructure {
