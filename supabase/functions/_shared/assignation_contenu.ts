@@ -17,6 +17,11 @@ import {
   appliquerFaceSwapUgcPost,
   chargerPersonaUgc,
 } from "./ugc_face_swap.ts";
+import {
+  estErreurQuotaPostsJour,
+  manquantsJusquaQuota,
+  quotaPostsParJour,
+} from "./assignation_quota.ts";
 
 /** Comptes traités en parallèle. Gemini (trad + Sophia) est dans assurerDeck —
  *  trop large → 429 ; trop petit → assignation lente. */
@@ -233,7 +238,7 @@ export async function assignerCompteJour(
   const brut = Number(compte.posts_par_jour ?? reglages.postsParJour ?? 1);
   // Toujours 1–3 : un compte actif doit TOUJOURS viser au moins 1 post/jour.
   // (L'ancien fallback « pool mince → 0 » est interdit.)
-  const quota = !Number.isFinite(brut) ? 1 : Math.min(3, Math.max(1, Math.round(brut)));
+  const quota = quotaPostsParJour(brut);
   const langue: string = compte.langue ?? "fr";
   const ugcAiVideo = Boolean(compte.ugc_ai_video);
   const ugcAi = Boolean(compte.ugc_ai) && !ugcAiVideo;
@@ -311,17 +316,17 @@ export async function assignerCompteJour(
 
   // Quota prod / test séparés : les posts `est_test` n'entrent pas dans le
   // calendrier ni le quota de minuit réel.
-  const { data: existants } = await supabase
-    .from("passages")
-    .select("id, posts!inner(est_test)")
-    .eq("compte_id", compte.id)
-    .eq("date_publication_prevue", jour)
-    .eq("posts.est_test", estTest);
-
-  const dejaLa = existants?.length ?? 0;
+  // On recompte aussi les posts : deux drains peuvent avoir déjà matérialisé
+  // pendant qu'on préparait le deck.
+  const dejaLa = await compterAssignationsJour(
+    supabase,
+    compte.id as string,
+    jour,
+    estTest,
+  );
   // Non-écrasement : on ne touche pas aux passages déjà là, on complète
   // seulement jusqu'au quota (1–3) du compte.
-  const manquants = forcer ? 1 : Math.max(0, quota - dejaLa);
+  const manquants = manquantsJusquaQuota(quota, dejaLa, forcer);
   log(`Passages déjà là : ${dejaLa}/${quota} → à créer : ${manquants}`);
   if (manquants <= 0) {
     return { ids: [], raison: `Quota déjà rempli (${dejaLa}/${quota} passage(s) ce jour).` };
@@ -379,6 +384,19 @@ export async function assignerCompteJour(
   }
 
   for (let t = 0; t < maxTentatives && crees.length < manquants; t += 1) {
+    // Course : un autre drain a pu finir 2 posts pendant le deck.
+    if (!forcer) {
+      const dejaMaintenant = await compterAssignationsJour(
+        supabase,
+        compte.id as string,
+        jour,
+        estTest,
+      );
+      if (dejaMaintenant >= quota) {
+        log(`Quota déjà rempli (${dejaMaintenant}/${quota}) — stop (course)`);
+        break;
+      }
+    }
     log(`Pioche contenu ${crees.length + 1}/${manquants} (tentative ${t + 1})…`);
     const choisi = await choisirContenu(
       supabase,
@@ -457,9 +475,13 @@ export async function assignerCompteJour(
     } catch (e) {
       // Pas de transaction multi-tables : nettoyer le passage pour ne pas
       // bloquer le quota, puis piocher un autre contenu.
-      echecsDeck += 1;
       log(`Matérialisation échouée : ${e instanceof Error ? e.message : String(e)}`);
       await supabase.from("passages").delete().eq("id", passage.id);
+      if (estErreurQuotaPostsJour(e)) {
+        log("Quota déjà rempli (course SQL) — stop");
+        break;
+      }
+      echecsDeck += 1;
       continue;
     }
     log(`Post ${postId.slice(0, 8)} créé`);
@@ -1024,10 +1046,31 @@ export async function listerComptesSousQuota(
   }
 
   return comptes.filter((c) => {
-    const brut = Number(c.posts_par_jour ?? 1);
-    const q = !Number.isFinite(brut) ? 1 : Math.min(3, Math.max(1, Math.round(brut)));
+    const q = quotaPostsParJour(c.posts_par_jour ?? 1);
     return (faits.get(c.id as string) ?? 0) < q;
   });
+}
+
+/** Passages liés + posts du jour (max) — les deux peuvent diverger en course. */
+async function compterAssignationsJour(
+  supabase: Supabase,
+  compteId: string,
+  jour: string,
+  estTest: boolean,
+): Promise<number> {
+  const { data: existants } = await supabase
+    .from("passages")
+    .select("id, posts!inner(est_test)")
+    .eq("compte_id", compteId)
+    .eq("date_publication_prevue", jour)
+    .eq("posts.est_test", estTest);
+  const { count: nPosts } = await supabase
+    .from("posts")
+    .select("id", { count: "exact", head: true })
+    .eq("compte_id", compteId)
+    .eq("date_publication_prevue", jour)
+    .eq("est_test", estTest);
+  return Math.max(existants?.length ?? 0, nPosts ?? 0);
 }
 
 /**
