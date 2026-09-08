@@ -46,7 +46,40 @@ export function ReviewPopup() {
             </div>
           </div>
         </DialogHeader>
-        <DialogPanel>
+        <DialogPanel className="space-y-3">
+          {(courante.publie_url || courante.source_url || courante.handle_tiktok) && (
+            <p className="text-xs text-muted-foreground">
+              {courante.handle_tiktok
+                ? t("reviews.popupPost", { handle: courante.handle_tiktok })
+                : t("reviews.popupPostSansHandle")}
+              {courante.publie_url ? (
+                <>
+                  {" · "}
+                  <a
+                    href={courante.publie_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline underline-offset-2"
+                  >
+                    {t("reviews.popupLienPoste")}
+                  </a>
+                </>
+              ) : null}
+              {courante.source_url ? (
+                <>
+                  {" · "}
+                  <a
+                    href={courante.source_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline underline-offset-2"
+                  >
+                    {t("reviews.popupLienOrigine")}
+                  </a>
+                </>
+              ) : null}
+            </p>
+          )}
           <p className="whitespace-pre-wrap rounded-lg bg-muted/50 p-4 text-sm leading-relaxed">
             {courante.body}
           </p>

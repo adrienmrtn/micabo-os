@@ -9,6 +9,7 @@ import {
   FlaskConical,
   Gauge,
   Gift,
+  GitCompare,
   Images,
   ListOrdered,
   MessageCircle,
@@ -126,6 +127,12 @@ export function AdminLayout() {
               label: t("nav.reviews"),
               icon: MessageSquareQuote,
               description: t("navDesc.reviews"),
+            },
+            {
+              to: "/admin/reviews-jour",
+              label: t("nav.reviewsJour"),
+              icon: GitCompare,
+              description: t("navDesc.reviewsJour"),
             },
             {
               to: "/admin/parrainages",
