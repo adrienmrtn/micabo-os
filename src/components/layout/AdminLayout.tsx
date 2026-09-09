@@ -5,6 +5,7 @@ import {
   BarChart3,
   BookOpen,
   CalendarDays,
+  CheckCheck,
   Clapperboard,
   FlaskConical,
   Gauge,
@@ -45,6 +46,12 @@ export function AdminLayout() {
               label: t("nav.calendrier"),
               icon: CalendarDays,
               description: t("navDesc.calendrier"),
+            },
+            {
+              to: "/admin/valider-jour",
+              label: t("nav.validerJour"),
+              icon: CheckCheck,
+              description: t("navDesc.validerJour"),
             },
             {
               to: "/admin/minuit",
