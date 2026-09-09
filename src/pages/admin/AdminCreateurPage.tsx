@@ -28,6 +28,7 @@ import {
   supprimerPost,
   type PostCalendrierAdmin,
 } from "@/features/moteur/api";
+import { EssaiBadge } from "@/features/moteur/EssaiBadge";
 import { nomLangue } from "@/features/moteur/langues";
 import { cn } from "@/lib/utils";
 
@@ -156,6 +157,7 @@ export function AdminCreateurPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-semibold tracking-tight">{nom}</h1>
               {!c.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
+              <EssaiBadge createdAt={c.created_at} />
               <Badge variant="outline">{nomLangue(c.langue)}</Badge>
               <Badge variant="secondary" title={t("adminCreateur.eloAide")}>
                 {t("adminCreateur.elo", { score: c.score.toFixed(1) })}

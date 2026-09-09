@@ -2192,6 +2192,7 @@ export interface CompteCreateurDetail {
   score: number;
   score_maj_at: string | null;
   is_active: boolean;
+  created_at: string | null;
   poster_prenom: string | null;
   poster_nom: string | null;
   poster_email: string | null;
@@ -2203,7 +2204,7 @@ export async function lireCompteCreateur(compteId: string): Promise<CompteCreate
   const { data, error } = await supabase
     .from("comptes")
     .select(
-      "id, poster_id, persona_nom, handle_tiktok, avatar_url, langue, score, score_maj_at, is_active, profiles(prenom, nom, email)",
+      "id, poster_id, persona_nom, handle_tiktok, avatar_url, langue, score, score_maj_at, is_active, created_at, profiles(prenom, nom, email)",
     )
     .eq("id", compteId)
     .maybeSingle();
@@ -2233,6 +2234,7 @@ export async function lireCompteCreateur(compteId: string): Promise<CompteCreate
     score: Number(data.score ?? 50),
     score_maj_at: (data.score_maj_at as string | null) ?? null,
     is_active: Boolean(data.is_active),
+    created_at: (data.created_at as string | null) ?? null,
     poster_prenom: profiles?.prenom ?? null,
     poster_nom: profiles?.nom ?? null,
     poster_email: profiles?.email ?? null,

@@ -49,6 +49,7 @@ import { LabelPicker } from "@/features/moteur/LabelPicker";
 import { useApplication } from "@/features/moteur/ApplicationContext";
 import { posterMatcheApplication, SLUG_MICABO } from "@/features/moteur/applications";
 import { drapeauLangue, langueInitiale, nomLangue } from "@/features/moteur/langues";
+import { EssaiBadge } from "@/features/moteur/EssaiBadge";
 import { WarmupBadge } from "@/features/moteur/WarmupBadge";
 import { phaseCreateur, type PhaseCreateur } from "@/features/moteur/warmup";
 import type { CompteAvecDetails, Label as LabelType, PosterProfil } from "@/features/moteur/types";
@@ -1065,6 +1066,7 @@ export function AdminPostersPage() {
                       {c.score != null && (
                         <span>{t("posters.eloCompte", { score: Number(c.score).toFixed(1) })}</span>
                       )}
+                      <EssaiBadge createdAt={c.created_at} />
                       {!estCompteCm(c) && (
                         <WarmupBadge
                           compteId={c.id}
@@ -1535,6 +1537,7 @@ export function AdminPostersPage() {
                                       })}
                                     </Badge>
                                   )}
+                                  <EssaiBadge createdAt={c.created_at} />
                                   {!estCompteCm(c) && (
                                     <span onClick={(e) => e.stopPropagation()}>
                                       <WarmupBadge
