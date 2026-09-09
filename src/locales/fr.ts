@@ -68,6 +68,7 @@ export const fr = {
       papier: "Papier CM",
       reviews: "Reviews",
       reviewsJour: "QA TikTok",
+      validerJour: "Valider le jour",
       essai: "Essai",
       tests: "Tests",
       hiring: "Recrutement",
@@ -104,6 +105,7 @@ export const fr = {
     navDesc: {
       pilotage: "Vue d'ensemble et lancement du pipeline",
       calendrier: "Posts prévus du jour, par créateur",
+      validerJour: "Pile des slideshows du jour vs original, texte en place",
       minuit: "Passages du jour (labels ∩ score), et les trous",
       assignSources: "Qui est assigné ensuite, par langue",
       contenus: "Pool de contenus et scores par langue",
@@ -481,6 +483,19 @@ export const fr = {
       envoyer: "Envoyer au créateur",
       videTitre: "File du jour vide",
       videAide: "Aucun slideshow publié aujourd'hui à reviewer — ou tout est déjà envoyé / passé.",
+    },
+    validerJour: {
+      title: "Valider les passages du jour",
+      subtitle:
+        "Slideshows assignés {{date}} (heure de Paris). Texte en place à côté de l'original. Valider retire de la pile.",
+      restants_one: "{{count}} passage à valider",
+      restants_other: "{{count}} passages à valider",
+      apercu: "Slideshow (texte en place)",
+      changerSlideshow: "Changer de slideshow",
+      plusTard: "Plus tard",
+      valider: "Valider",
+      videTitre: "Pile vide",
+      videAide: "Tous les passages du jour sont validés — ou rien n'est encore assigné.",
     },
     essai: {
       title: "Comptes en essai",

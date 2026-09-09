@@ -68,6 +68,7 @@ export const en = {
       papier: "CM paper",
       reviews: "Reviews",
       reviewsJour: "TikTok QA",
+      validerJour: "Validate today",
       essai: "Trial",
       tests: "Tests",
       hiring: "Recruiting",
@@ -104,6 +105,7 @@ export const en = {
     navDesc: {
       pilotage: "Overview and pipeline launch",
       calendrier: "Planned posts for the day, by creator",
+      validerJour: "Today's slideshows vs original, text in place",
       minuit: "Day's passages (labels ∩ score), and gaps",
       assignSources: "Who gets assigned next, per language",
       contenus: "Content pool and per-language scores",
@@ -481,6 +483,19 @@ export const en = {
       envoyer: "Send to creator",
       videTitre: "Today's queue is empty",
       videAide: "No slideshow published today to review — or everything is already sent / skipped.",
+    },
+    validerJour: {
+      title: "Validate today's passages",
+      subtitle:
+        "Slideshows assigned {{date}} (Paris time). Text in place next to the original. Marking OK removes it from the pile.",
+      restants_one: "{{count}} passage to check",
+      restants_other: "{{count}} passages to check",
+      apercu: "Slideshow (text in place)",
+      changerSlideshow: "Change slideshow",
+      plusTard: "Later",
+      valider: "Mark OK",
+      videTitre: "Nothing left to check",
+      videAide: "Every passage for today is validated — or nothing is assigned yet.",
     },
     essai: {
       title: "Trial accounts",
