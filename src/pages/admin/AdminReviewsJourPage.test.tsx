@@ -37,7 +37,11 @@ let file: ItemFileReviewJour[] = [];
 vi.mock("@/features/moteur/api", () => ({
   aujourdhuiParis: () => "2026-09-08",
   listerFileReviewsJour: vi.fn(async () => file),
-  lireRemarquesReviewJour: vi.fn(async () => ["Hook trop petit", "Rythme trop lent"]),
+  lireRemarquesReviewJour: vi.fn(async () => [
+    { titre: "Hook trop petit", corps: "Le hook est trop petit, on le lit trop tard" },
+    { titre: "Rythme trop lent", corps: "Rythme trop lent vs l'original" },
+  ]),
+  resoudreTiktok: vi.fn(async () => "111"),
   passerFileJour: vi.fn(async (postId: string) => {
     file = file.filter((x) => x.postId !== postId);
   }),
@@ -92,7 +96,9 @@ describe("AdminReviewsJourPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Hook trop petit" }));
     const zone = screen.getByLabelText(/Ton retour|Your note/i);
-    expect((zone as HTMLTextAreaElement).value).toBe("Hook trop petit");
+    expect((zone as HTMLTextAreaElement).value).toBe(
+      "Le hook est trop petit, on le lit trop tard",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /Envoyer au créateur|Send to creator/i }));
 
@@ -101,7 +107,7 @@ describe("AdminReviewsJourPage", () => {
         expect.objectContaining({
           posterId: "user-a",
           postId: "post-a",
-          body: "Hook trop petit",
+          body: "Le hook est trop petit, on le lit trop tard",
           handleTiktok: "ada_notes",
         }),
       );

@@ -1,7 +1,14 @@
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { ExternalLink } from "lucide-react";
 
-import { urlEmbedTikTok } from "@/features/reviews/fileQuotidienne";
+import { resoudreTiktok } from "@/features/moteur/api";
+import {
+  estLienCourtTiktok,
+  extraireIdTiktok,
+  urlEmbedTikTok,
+  urlEmbedTikTokDepuisId,
+} from "@/features/reviews/fileQuotidienne";
 
 export function TikTokEmbed({
   url,
@@ -11,12 +18,27 @@ export function TikTokEmbed({
   label: string;
 }) {
   const { t } = useTranslation();
-  const embed = urlEmbedTikTok(url);
+  const idDirect = extraireIdTiktok(url);
+  const court = Boolean(url && !idDirect && estLienCourtTiktok(url));
+  const resolu = useQuery({
+    queryKey: ["tiktok-id", url],
+    queryFn: () => resoudreTiktok(url!),
+    enabled: court,
+    staleTime: Infinity,
+    retry: 1,
+  });
+  const embed = idDirect
+    ? urlEmbedTikTok(url)
+    : urlEmbedTikTokDepuisId(resolu.data ?? null);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-2">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      {embed ? (
+      {court && resolu.isPending ? (
+        <div className="flex h-[520px] items-center justify-center rounded-lg border bg-muted/30 px-4 text-center text-sm text-muted-foreground">
+          {t("common.loading")}
+        </div>
+      ) : embed ? (
         <iframe
           title={label}
           src={embed}

@@ -62,6 +62,7 @@ import {
   CLE_REMARQUES,
   estHorsFile,
   remarquesDepuisReglage,
+  type RemarqueGenerique,
 } from "@/features/reviews/fileQuotidienne";
 
 export type { EloImportRapport };
@@ -836,7 +837,7 @@ export async function passerFileJour(postId: string, jour: string): Promise<void
   if (error) throw error;
 }
 
-export async function lireRemarquesReviewJour(): Promise<string[]> {
+export async function lireRemarquesReviewJour(): Promise<RemarqueGenerique[]> {
   const { data, error } = await supabase
     .from("reglages")
     .select("valeur")
@@ -844,6 +845,15 @@ export async function lireRemarquesReviewJour(): Promise<string[]> {
     .maybeSingle();
   if (error) throw error;
   return remarquesDepuisReglage(data?.valeur);
+}
+
+export async function resoudreTiktok(url: string): Promise<string> {
+  const r = await invoke<{ ok?: boolean; id?: string; error?: string }>("resoudre-tiktok", {
+    url,
+  });
+  const id = (r.id ?? "").trim();
+  if (!id) throw new Error(r.error || "Lien TikTok illisible");
+  return id;
 }
 
 export async function ameliorerReview(texte: string): Promise<string> {

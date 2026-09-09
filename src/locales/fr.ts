@@ -460,8 +460,9 @@ export const fr = {
       reglages: "Remarques génériques",
       remarquesTitre: "Remarques génériques",
       remarquesAide:
-        "Puces qui s'ajoutent au brouillon. Tu les crées, modifies ou supprimes ici — ça sert pour toutes les reviews du jour.",
-      remarqueNouvelle: "Nouvelle remarque…",
+        "Puces : tu cliques le titre, c'est le corps qui s'ajoute au brouillon. Titre et corps se règlent ici.",
+      remarqueTitre: "Titre (puce)",
+      remarqueCorps: "Corps envoyé au créateur…",
       ajouter: "Ajouter",
       origine: "TikTok d'origine",
       poste: "TikTok posté",

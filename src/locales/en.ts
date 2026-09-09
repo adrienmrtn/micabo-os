@@ -460,8 +460,9 @@ export const en = {
       reglages: "Generic remarks",
       remarquesTitre: "Generic remarks",
       remarquesAide:
-        "Chips that append to the draft. Create, edit or delete them here — they apply to every review today.",
-      remarqueNouvelle: "New remark…",
+        "Chips: click the title, the body is added to the draft. Title and body are edited here.",
+      remarqueTitre: "Title (chip)",
+      remarqueCorps: "Body sent to the creator…",
       ajouter: "Add",
       origine: "Original TikTok",
       poste: "Posted TikTok",

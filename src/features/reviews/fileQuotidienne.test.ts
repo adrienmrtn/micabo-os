@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { promptAmeliorerReview } from "../../../supabase/functions/_shared/ameliorer_review.ts";
 import {
+  estLienCourtTiktok,
+  extraireIdTiktok,
+} from "../../../supabase/functions/_shared/tiktok_lien.ts";
+import {
   collerRemarque,
   estHorsFile,
   jourParisDe,
@@ -48,19 +52,33 @@ describe("estHorsFile", () => {
 
 describe("remarques", () => {
   it("prend les défauts si le réglage est absent", () => {
-    expect(remarquesDepuisReglage(null)).toEqual([...REMARQUES_DEFAUT]);
-    expect(remarquesDepuisReglage(undefined)).toEqual([...REMARQUES_DEFAUT]);
+    expect(remarquesDepuisReglage(null)).toEqual(REMARQUES_DEFAUT);
+    expect(remarquesDepuisReglage(undefined)).toEqual(REMARQUES_DEFAUT);
   });
 
   it("accepte une liste vide (admin a tout retiré)", () => {
     expect(remarquesDepuisReglage([])).toEqual([]);
   });
 
-  it("déduit, coupe, déduplique", () => {
-    expect(normaliserRemarques(["  Hook  ", "hook", "", 12, "a".repeat(200)])).toEqual([
-      "Hook",
-      "12",
-      "a".repeat(160),
+  it("migre les anciennes chaînes : titre avant virgule, corps entier", () => {
+    expect(
+      normaliserRemarques(["Hook trop petit, on le lit trop tard", "Musique trop basse"]),
+    ).toEqual([
+      { titre: "Hook trop petit", corps: "Hook trop petit, on le lit trop tard" },
+      { titre: "Musique trop basse", corps: "Musique trop basse" },
+    ]);
+  });
+
+  it("garde titre / corps d'un objet, déduplique par titre", () => {
+    expect(
+      normaliserRemarques([
+        { titre: "Hook", corps: "Le hook est trop petit" },
+        { titre: "hook", corps: "doublon" },
+        { titre: "  Rythme  ", corps: "  Trop lent  " },
+      ]),
+    ).toEqual([
+      { titre: "Hook", corps: "Le hook est trop petit" },
+      { titre: "Rythme", corps: "Trop lent" },
     ]);
   });
 
@@ -80,6 +98,19 @@ describe("urlEmbedTikTok", () => {
       "https://www.tiktok.com/embed/v2/999",
     );
     expect(urlEmbedTikTok("https://www.tiktok.com/@x")).toBeNull();
+  });
+
+  it("lit item_id après redirection d'un lien court", () => {
+    expect(
+      extraireIdTiktok(
+        "https://www.tiktok.com/@x/photo/7683464897522437384?_r=1&item_id=111",
+      ),
+    ).toBe("7683464897522437384");
+    expect(extraireIdTiktok("https://www.tiktok.com/share?item_id=555")).toBe("555");
+    expect(estLienCourtTiktok("https://vt.tiktok.com/ZSqSYW3rS/")).toBe(true);
+    expect(estLienCourtTiktok("https://vm.tiktok.com/ZN82uCFrU/")).toBe(true);
+    expect(estLienCourtTiktok("https://www.tiktok.com/@x/photo/7123")).toBe(false);
+    expect(urlEmbedTikTok("https://vt.tiktok.com/ZSqSYW3rS/")).toBeNull();
   });
 });
 
