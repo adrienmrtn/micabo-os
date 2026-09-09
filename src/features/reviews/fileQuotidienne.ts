@@ -1,17 +1,30 @@
-import { idPostTiktokStrict } from "@/features/moteur/oubliSource";
+import {
+  estLienCourtTiktok,
+  extraireIdTiktok,
+  urlEmbedTikTokDepuisId,
+} from "../../../supabase/functions/_shared/tiktok_lien.ts";
+
+export { estLienCourtTiktok, extraireIdTiktok, urlEmbedTikTokDepuisId };
 
 export const CLE_REMARQUES = "review_quotidienne_remarques";
 
-export const REMARQUES_DEFAUT = [
-  "Hook trop petit, on le lit trop tard",
-  "Texte mal calé sur l'image",
-  "Rythme trop lent vs l'original",
-  "Les slides ne suivent pas l'original",
-  "Musique trop basse ou coupée",
-  "Bien calé — continue comme ça",
-] as const;
+export interface RemarqueGenerique {
+  titre: string;
+  corps: string;
+}
 
-export const REMARQUE_MAX = 160;
+export const REMARQUES_DEFAUT: RemarqueGenerique[] = [
+  { titre: "Hook trop petit", corps: "Hook trop petit, on le lit trop tard" },
+  { titre: "Texte mal calé", corps: "Texte mal calé sur l'image" },
+  { titre: "Rythme trop lent", corps: "Rythme trop lent vs l'original" },
+  { titre: "Slides différentes", corps: "Les slides ne suivent pas l'original" },
+  { titre: "Musique", corps: "Musique trop basse ou coupée" },
+  { titre: "Bien calé", corps: "Bien calé — continue comme ça" },
+];
+
+export const TITRE_MAX = 48;
+export const CORPS_MAX = 800;
+export const REMARQUE_MAX = CORPS_MAX;
 export const REMARQUES_MAX = 24;
 
 export function jourParisDe(iso: string | null | undefined): string | null {
@@ -22,25 +35,45 @@ export function jourParisDe(iso: string | null | undefined): string | null {
 }
 
 /** Réglage jamais posé → défauts. Tableau vide admin = aucune puce. */
-export function remarquesDepuisReglage(brut: unknown | null | undefined): string[] {
-  if (brut === undefined || brut === null) return [...REMARQUES_DEFAUT];
+export function remarquesDepuisReglage(brut: unknown | null | undefined): RemarqueGenerique[] {
+  if (brut === undefined || brut === null) return REMARQUES_DEFAUT.map((r) => ({ ...r }));
   return normaliserRemarques(brut);
 }
 
-export function normaliserRemarques(brut: unknown): string[] {
+export function normaliserRemarques(brut: unknown): RemarqueGenerique[] {
   if (!Array.isArray(brut)) return [];
-  const out: string[] = [];
+  const out: RemarqueGenerique[] = [];
   const vus = new Set<string>();
   for (const x of brut) {
-    const t = String(x ?? "").replace(/\s+/g, " ").trim().slice(0, REMARQUE_MAX);
-    if (!t) continue;
-    const cle = t.toLowerCase();
+    const r = remarqueDepuisBrut(x);
+    if (!r) continue;
+    const cle = r.titre.toLowerCase();
     if (vus.has(cle)) continue;
     vus.add(cle);
-    out.push(t);
+    out.push(r);
     if (out.length >= REMARQUES_MAX) break;
   }
   return out;
+}
+
+function compact(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
+
+function remarqueDepuisBrut(x: unknown): RemarqueGenerique | null {
+  if (typeof x === "string") {
+    const t = compact(x).slice(0, CORPS_MAX);
+    if (!t) return null;
+    const coupe = t.search(/[,—]/);
+    const titre = compact(coupe > 0 ? t.slice(0, coupe) : t).slice(0, TITRE_MAX);
+    return { titre: titre || t.slice(0, TITRE_MAX), corps: t };
+  }
+  if (!x || typeof x !== "object") return null;
+  const o = x as { titre?: unknown; corps?: unknown; title?: unknown; body?: unknown };
+  const corps = compact(String(o.corps ?? o.body ?? "")).slice(0, CORPS_MAX);
+  const titre = compact(String(o.titre ?? o.title ?? "")).slice(0, TITRE_MAX);
+  if (!titre && !corps) return null;
+  return { titre: titre || corps.slice(0, TITRE_MAX), corps: corps || titre };
 }
 
 export function collerRemarque(actuel: string, remarque: string): string {
@@ -53,9 +86,7 @@ export function collerRemarque(actuel: string, remarque: string): string {
 }
 
 export function urlEmbedTikTok(url: string | null | undefined): string | null {
-  const id = idPostTiktokStrict(url);
-  if (!id) return null;
-  return `https://www.tiktok.com/embed/v2/${id}`;
+  return urlEmbedTikTokDepuisId(extraireIdTiktok(url));
 }
 
 export function estHorsFile(opts: {

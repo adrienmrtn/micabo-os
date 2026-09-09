@@ -28,9 +28,11 @@ import { TikTokEmbed } from "@/features/reviews/TikTokEmbed";
 import {
   CLE_REMARQUES,
   collerRemarque,
+  CORPS_MAX,
   normaliserRemarques,
-  REMARQUE_MAX,
   REMARQUES_MAX,
+  TITRE_MAX,
+  type RemarqueGenerique,
 } from "@/features/reviews/fileQuotidienne";
 
 export function AdminReviewsJourPage() {
@@ -39,8 +41,11 @@ export function AdminReviewsJourPage() {
   const jour = aujourdhuiParis();
   const [texte, setTexte] = React.useState("");
   const [reglagesOuverts, setReglagesOuverts] = React.useState(false);
-  const [brouillonRemarques, setBrouillonRemarques] = React.useState<string[] | null>(null);
-  const [nouvelleRemarque, setNouvelleRemarque] = React.useState("");
+  const [brouillonRemarques, setBrouillonRemarques] = React.useState<
+    RemarqueGenerique[] | null
+  >(null);
+  const [nouveauTitre, setNouveauTitre] = React.useState("");
+  const [nouveauCorps, setNouveauCorps] = React.useState("");
 
   const file = useQuery({
     queryKey: ["reviews-file-jour", jour],
@@ -99,9 +104,11 @@ export function AdminReviewsJourPage() {
   });
 
   const sauverRemarques = useMutation({
-    mutationFn: (liste: string[]) => ecrireReglage(CLE_REMARQUES, liste),
+    mutationFn: (liste: RemarqueGenerique[]) => ecrireReglage(CLE_REMARQUES, liste),
     onSuccess: () => {
       setBrouillonRemarques(null);
+      setNouveauTitre("");
+      setNouveauCorps("");
       void queryClient.invalidateQueries({ queryKey: ["reviews-remarques"] });
     },
   });
@@ -146,17 +153,32 @@ export function AdminReviewsJourPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {(edition ? puces : (remarquesQ.data ?? [])).map((r, i) => (
-              <div key={`${i}-${r.slice(0, 12)}`} className="flex gap-2">
-                <Input
-                  value={r}
-                  maxLength={REMARQUE_MAX}
-                  disabled={!edition || sauverRemarques.isPending}
-                  onChange={(e) => {
-                    const suite = [...puces];
-                    suite[i] = e.target.value;
-                    setBrouillonRemarques(suite);
-                  }}
-                />
+              <div key={`${i}-${r.titre}`} className="flex gap-2">
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <Input
+                    value={r.titre}
+                    maxLength={TITRE_MAX}
+                    disabled={!edition || sauverRemarques.isPending}
+                    placeholder={t("reviewsJour.remarqueTitre")}
+                    onChange={(e) => {
+                      const suite = [...puces];
+                      suite[i] = { ...suite[i], titre: e.target.value };
+                      setBrouillonRemarques(suite);
+                    }}
+                  />
+                  <Textarea
+                    value={r.corps}
+                    maxLength={CORPS_MAX}
+                    rows={2}
+                    disabled={!edition || sauverRemarques.isPending}
+                    placeholder={t("reviewsJour.remarqueCorps")}
+                    onChange={(e) => {
+                      const suite = [...puces];
+                      suite[i] = { ...suite[i], corps: e.target.value };
+                      setBrouillonRemarques(suite);
+                    }}
+                  />
+                </div>
                 {edition && (
                   <Button
                     size="icon"
@@ -171,33 +193,40 @@ export function AdminReviewsJourPage() {
               </div>
             ))}
             {edition && puces.length < REMARQUES_MAX && (
-              <div className="flex gap-2">
+              <div className="space-y-1.5">
                 <Input
-                  value={nouvelleRemarque}
-                  maxLength={REMARQUE_MAX}
-                  placeholder={t("reviewsJour.remarqueNouvelle")}
-                  onChange={(e) => setNouvelleRemarque(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter") return;
-                    e.preventDefault();
-                    const t0 = nouvelleRemarque.trim();
-                    if (!t0) return;
-                    setBrouillonRemarques([...puces, t0]);
-                    setNouvelleRemarque("");
-                  }}
+                  value={nouveauTitre}
+                  maxLength={TITRE_MAX}
+                  placeholder={t("reviewsJour.remarqueTitre")}
+                  onChange={(e) => setNouveauTitre(e.target.value)}
                 />
-                <Button
-                  variant="outline"
-                  disabled={!nouvelleRemarque.trim()}
-                  onClick={() => {
-                    const t0 = nouvelleRemarque.trim();
-                    if (!t0) return;
-                    setBrouillonRemarques([...puces, t0]);
-                    setNouvelleRemarque("");
-                  }}
-                >
-                  {t("reviewsJour.ajouter")}
-                </Button>
+                <div className="flex gap-2">
+                  <Textarea
+                    value={nouveauCorps}
+                    maxLength={CORPS_MAX}
+                    rows={2}
+                    placeholder={t("reviewsJour.remarqueCorps")}
+                    onChange={(e) => setNouveauCorps(e.target.value)}
+                  />
+                  <Button
+                    variant="outline"
+                    className="self-end"
+                    disabled={!nouveauTitre.trim() && !nouveauCorps.trim()}
+                    onClick={() => {
+                      const titre = nouveauTitre.trim();
+                      const corps = nouveauCorps.trim() || titre;
+                      if (!titre && !corps) return;
+                      setBrouillonRemarques([
+                        ...puces,
+                        { titre: titre || corps.slice(0, TITRE_MAX), corps },
+                      ]);
+                      setNouveauTitre("");
+                      setNouveauCorps("");
+                    }}
+                  >
+                    {t("reviewsJour.ajouter")}
+                  </Button>
+                </div>
               </div>
             )}
             <div className="flex flex-wrap gap-2">
@@ -214,7 +243,8 @@ export function AdminReviewsJourPage() {
                     disabled={sauverRemarques.isPending}
                     onClick={() => {
                       setBrouillonRemarques(null);
-                      setNouvelleRemarque("");
+                      setNouveauTitre("");
+                      setNouveauCorps("");
                     }}
                   >
                     {t("common.cancel")}
@@ -272,14 +302,15 @@ export function AdminReviewsJourPage() {
               <div className="flex flex-wrap gap-1.5">
                 {(remarquesQ.data ?? []).map((r) => (
                   <Button
-                    key={r}
+                    key={r.titre}
                     type="button"
                     size="sm"
                     variant="outline"
                     className="h-7 text-xs"
-                    onClick={() => setTexte((a) => collerRemarque(a, r))}
+                    title={r.corps}
+                    onClick={() => setTexte((a) => collerRemarque(a, r.corps))}
                   >
-                    {r}
+                    {r.titre}
                   </Button>
                 ))}
               </div>
