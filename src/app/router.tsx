@@ -23,6 +23,7 @@ import { AdminReglagesPage } from "@/pages/admin/AdminReglagesPage";
 import { AdminPromptsPage } from "@/pages/admin/AdminPromptsPage";
 import { AdminAnalyticsPage } from "@/pages/admin/AdminAnalyticsPage";
 import { AdminReviewsPage } from "@/pages/admin/AdminReviewsPage";
+import { AdminEssaiPage } from "@/pages/admin/AdminEssaiPage";
 import { AdminReviewsJourPage } from "@/pages/admin/AdminReviewsJourPage";
 import { AdminReferralsPage } from "@/pages/admin/AdminReferralsPage";
 import { AdminCalendrierPage } from "@/pages/admin/AdminCalendrierPage";
@@ -78,6 +79,7 @@ export function AppRouter() {
             <Route path="/admin/posters" element={<AdminPostersPage />} />
             <Route path="/admin/reviews" element={<AdminReviewsPage />} />
             <Route path="/admin/reviews-jour" element={<AdminReviewsJourPage />} />
+            <Route path="/admin/essai" element={<AdminEssaiPage />} />
             <Route path="/admin/parrainages" element={<AdminReferralsPage />} />
             <Route path="/admin/bibliotheque" element={<AdminBibliothequePage />} />
             <Route path="/admin/tests" element={<AdminTestsPage />} />

@@ -95,6 +95,8 @@ export interface Compte {
   ugc_ai_video: boolean;
   /** Persona UGC (4 angles) associé à ce créateur. */
   ugc_persona_id: string | null;
+  /** Création du compte OS — fenêtre d'essai admin = created_at + 5 × 24 h. */
+  created_at?: string | null;
 }
 
 export interface CompteAvecDetails extends Compte {

@@ -10,6 +10,7 @@ import {
   Gauge,
   Gift,
   GitCompare,
+  Hourglass,
   Images,
   ListOrdered,
   MessageCircle,
@@ -133,6 +134,12 @@ export function AdminLayout() {
               label: t("nav.reviewsJour"),
               icon: GitCompare,
               description: t("navDesc.reviewsJour"),
+            },
+            {
+              to: "/admin/essai",
+              label: t("nav.essai"),
+              icon: Hourglass,
+              description: t("navDesc.essai"),
             },
             {
               to: "/admin/parrainages",
