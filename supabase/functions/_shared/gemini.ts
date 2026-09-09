@@ -474,7 +474,11 @@ Ne remplace jamais la slide 1 (couverture). Le placement de ${input.marque === "
 UNIQUEMENT : ${autoriseesTxt}. Écris 3 variantes qui remplacent son texte.
 Chaque variante DOIT :
 ${input.marque === "micabo"
-    ? `- MENTION DE micabo (toujours en minuscules) selon le TON des slides, sans formule publicitaire.`
+    ? `- MENTION DE micabo.app (toujours en minuscules, avec .app) selon le TON des slides, sans formule publicitaire.${
+        code === "tr"
+          ? `\n- TURC : micabo.app est un SITE, jamais une appli. Écris « micabo.app sitesi / sitesiyle / sitesini / sitesine ». INTERDIT : uygulama, indir, App Store, « site micabo.app » (mot site avant le nom), « micabo.app ile » sans sitesi.`
+          : ""
+      }`
     : `- MENTION DE SOPHIA selon le TON des slides : si elles TUTOIENT (2e personne du
   singulier, « tu / ton / tes / tes... »), la mention doit être INDIRECTE — n'écris
   JAMAIS « utilise l'appli Sophia » ni « télécharge Sophia » ; écris plutôt une
