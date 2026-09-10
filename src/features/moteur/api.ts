@@ -33,6 +33,7 @@ import {
   type MotifEchecNettoyage,
   type SlideANettoyer,
 } from "./echecsNettoyage";
+import { cheminVideoRemarque } from "@/features/reviews/videoRemarque";
 import { ugcVisages } from "./ugcVisages";
 import { corpsAssignationUgcVideoTest } from "./corpsAssignationUgcVideoTest";
 import { decouperEnLots, handleTiktokDepuisSaisie } from "./oubliSource";
@@ -67,6 +68,8 @@ import {
   CLE_REMARQUES,
   estHorsFile,
   remarquesDepuisReglage,
+  snapshotRemarques,
+  type RemarqueEnvoyee,
   type RemarqueGenerique,
 } from "@/features/reviews/fileQuotidienne";
 
@@ -664,10 +667,12 @@ export interface Review {
   publie_url: string | null;
   source_url: string | null;
   handle_tiktok: string | null;
+  /** Copie figée des puces employées, vidéo comprise (`0248`). */
+  remarques: RemarqueEnvoyee[] | null;
 }
 
 const REVIEW_COLONNES =
-  "id, poster_id, body, note, created_at, seen_at, post_id, publie_url, source_url, handle_tiktok";
+  "id, poster_id, body, note, created_at, seen_at, post_id, publie_url, source_url, handle_tiktok, remarques";
 
 /** L'admin envoie une review (retour) à un poster : elle s'affichera en pop-up
  *  à sa prochaine connexion. */
@@ -688,6 +693,8 @@ export async function envoyerReviewPost(input: {
   publieUrl: string | null;
   sourceUrl: string | null;
   handleTiktok: string | null;
+  /** Puces employées : leur vidéo passera avant le texte chez le créateur. */
+  remarques?: RemarqueGenerique[];
 }): Promise<void> {
   const corps = input.body.trim();
   if (!corps) throw new Error("Texte vide");
@@ -701,8 +708,37 @@ export async function envoyerReviewPost(input: {
     publie_url: input.publieUrl,
     source_url: input.sourceUrl,
     handle_tiktok: input.handleTiktok,
+    // Copie, pas référence : retoucher la puce plus tard ne doit pas réécrire
+    // un retour déjà parti (même raison que publie_url / source_url).
+    remarques: snapshotRemarques(input.remarques ?? []),
   });
   if (error) throw error;
+}
+
+/**
+ * Dépose la vidéo d'une puce générique. Un fichier par puce (`<id>.mp4`), donc
+ * un nouveau dépôt remplace l'ancien — d'où le cache-buster sur l'URL.
+ */
+export async function televerserVideoRemarque(
+  remarqueId: string,
+  blob: Blob,
+  contentType: string,
+): Promise<{ path: string; url: string }> {
+  const path = cheminVideoRemarque(remarqueId);
+  const { error } = await supabase.storage.from("medias").upload(path, blob, {
+    contentType,
+    upsert: true,
+    cacheControl: "3600",
+  });
+  if (error) throw new Error(error.message);
+  const pub = supabase.storage.from("medias").getPublicUrl(path).data.publicUrl;
+  return { path, url: `${pub}?v=${Date.now()}` };
+}
+
+/** Retire le fichier. Les reviews déjà parties gardent leur copie de l'URL. */
+export async function supprimerVideoRemarque(path: string): Promise<void> {
+  const { error } = await supabase.storage.from("medias").remove([path]);
+  if (error) throw new Error(error.message);
 }
 
 /** Toutes les reviews (admin), les plus récentes d'abord. */

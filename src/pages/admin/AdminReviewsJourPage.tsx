@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Pencil, Send, SkipForward, Sparkles, Trash2 } from "lucide-react";
+import { Pencil, Send, SkipForward, Sparkles, Trash2, Video, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,10 +25,12 @@ import {
   passerFileJour,
 } from "@/features/moteur/api";
 import { TikTokEmbed } from "@/features/reviews/TikTokEmbed";
+import { VideoRemarqueChamp } from "@/features/reviews/VideoRemarqueChamp";
 import {
   CLE_REMARQUES,
   collerRemarque,
   CORPS_MAX,
+  idDepuisTitre,
   normaliserRemarques,
   REMARQUES_MAX,
   TITRE_MAX,
@@ -46,6 +48,9 @@ export function AdminReviewsJourPage() {
   >(null);
   const [nouveauTitre, setNouveauTitre] = React.useState("");
   const [nouveauCorps, setNouveauCorps] = React.useState("");
+  // Puces employées pour CE retour : c'est ce qui porte les vidéos jusqu'au
+  // créateur. Le texte du retour, lui, reste librement modifiable.
+  const [employees, setEmployees] = React.useState<string[]>([]);
 
   const file = useQuery({
     queryKey: ["reviews-file-jour", jour],
@@ -61,6 +66,7 @@ export function AdminReviewsJourPage() {
 
   React.useEffect(() => {
     setTexte("");
+    setEmployees([]);
   }, [courant?.postId]);
 
   const rafraichir = () => {
@@ -79,10 +85,12 @@ export function AdminReviewsJourPage() {
         publieUrl: courant.publieUrl,
         sourceUrl: courant.sourceUrl,
         handleTiktok: courant.handle,
+        remarques: jointes,
       });
     },
     onSuccess: () => {
       setTexte("");
+      setEmployees([]);
       rafraichir();
     },
   });
@@ -94,6 +102,7 @@ export function AdminReviewsJourPage() {
     },
     onSuccess: () => {
       setTexte("");
+      setEmployees([]);
       rafraichir();
     },
   });
@@ -115,6 +124,15 @@ export function AdminReviewsJourPage() {
 
   const puces = brouillonRemarques ?? remarquesQ.data ?? [];
   const edition = brouillonRemarques !== null;
+  // Seules les puces illustrées font une étape chez le créateur : inutile de
+  // trimballer les autres, leur texte est déjà dans le corps du retour.
+  const jointes = React.useMemo(
+    () =>
+      (remarquesQ.data ?? []).filter(
+        (r) => employees.includes(r.id) && Boolean(r.videoUrl),
+      ),
+    [remarquesQ.data, employees],
+  );
   const occupé = envoyer.isPending || passer.isPending;
   const dateLabel = new Date(`${jour}T12:00:00`).toLocaleDateString(i18n.language, {
     weekday: "long",
@@ -178,6 +196,19 @@ export function AdminReviewsJourPage() {
                       setBrouillonRemarques(suite);
                     }}
                   />
+                  {edition && (
+                    <VideoRemarqueChamp
+                      remarqueId={r.id}
+                      videoUrl={r.videoUrl}
+                      videoPath={r.videoPath}
+                      disabled={sauverRemarques.isPending}
+                      onChange={(v) => {
+                        const suite = [...puces];
+                        suite[i] = { ...suite[i], ...v };
+                        setBrouillonRemarques(suite);
+                      }}
+                    />
+                  )}
                 </div>
                 {edition && (
                   <Button
@@ -216,9 +247,14 @@ export function AdminReviewsJourPage() {
                       const titre = nouveauTitre.trim();
                       const corps = nouveauCorps.trim() || titre;
                       if (!titre && !corps) return;
+                      const nom = titre || corps.slice(0, TITRE_MAX);
                       setBrouillonRemarques([
                         ...puces,
-                        { titre: titre || corps.slice(0, TITRE_MAX), corps },
+                        {
+                          id: idDepuisTitre(nom) || `remarque-${puces.length + 1}`,
+                          titre: nom,
+                          corps,
+                        },
                       ]);
                       setNouveauTitre("");
                       setNouveauCorps("");
@@ -300,19 +336,55 @@ export function AdminReviewsJourPage() {
 
             {(remarquesQ.data ?? []).length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-                {(remarquesQ.data ?? []).map((r) => (
-                  <Button
-                    key={r.titre}
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    title={r.corps}
-                    onClick={() => setTexte((a) => collerRemarque(a, r.corps))}
-                  >
-                    {r.titre}
-                  </Button>
-                ))}
+                {(remarquesQ.data ?? []).map((r) => {
+                  const retenue = employees.includes(r.id);
+                  return (
+                    <Button
+                      key={r.id}
+                      type="button"
+                      size="sm"
+                      variant={retenue && r.videoUrl ? "default" : "outline"}
+                      className="h-7 text-xs"
+                      title={r.corps}
+                      onClick={() => {
+                        setTexte((a) => collerRemarque(a, r.corps));
+                        setEmployees((e) => (e.includes(r.id) ? e : [...e, r.id]));
+                      }}
+                    >
+                      {r.videoUrl && <Video className="size-3" />}
+                      {r.titre}
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+
+            {jointes.length > 0 && (
+              <div className="space-y-1.5 rounded-md border bg-muted/30 px-3 py-2">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("reviewsJour.videosJointes", { count: jointes.length })}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {jointes.map((r) => (
+                    <Badge key={r.id} variant="secondary" className="gap-1">
+                      <Video className="size-3" />
+                      {r.titre}
+                      <button
+                        type="button"
+                        className="ml-0.5 opacity-60 hover:opacity-100"
+                        aria-label={t("common.delete")}
+                        onClick={() =>
+                          setEmployees((e) => e.filter((id) => id !== r.id))
+                        }
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {t("reviewsJour.videosJointesAide")}
+                </p>
               </div>
             )}
 

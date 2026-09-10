@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { MessageSquareQuote } from "lucide-react";
@@ -13,11 +14,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { marquerReviewVue, mesReviewsNonVues } from "@/features/moteur/api";
+import { etapesReview } from "@/features/reviews/fileQuotidienne";
+import { LecteurRemarque } from "@/features/reviews/LecteurRemarque";
 
 /**
  * Pop-up de review pour le poster : à sa connexion, s'il a une (ou plusieurs)
  * review non vue, elle s'affiche par-dessus tout. « Compris » la marque vue et
  * enchaîne sur la suivante s'il y en a. Rien à afficher → rien ne se monte.
+ *
+ * Deux niveaux d'enchaînement, à ne pas confondre : à l'intérieur d'un retour,
+ * chaque puce illustrée passe sa vidéo avant le texte ; puis on enchaîne sur le
+ * retour suivant. Une review sans vidéo garde exactement l'écran d'avant.
  */
 export function ReviewPopup() {
   const { t } = useTranslation();
@@ -30,7 +37,24 @@ export function ReviewPopup() {
   });
 
   const courante = (data ?? [])[0];
+  const [index, setIndex] = React.useState(0);
+  const [vue, setVue] = React.useState(false);
+
+  // Retour suivant : on repart de sa première étape.
+  React.useEffect(() => {
+    setIndex(0);
+    setVue(false);
+  }, [courante?.id]);
+
+  const marquerVue = React.useCallback(() => setVue(true), []);
+
   if (!courante) return null;
+
+  const etapes = etapesReview(courante);
+  const etape = etapes[Math.min(index, etapes.length - 1)];
+  const derniere = index >= etapes.length - 1;
+  // Sur une étape vidéo, « Suivant » attend la fin de la lecture (ou son échec).
+  const bloque = etape.type === "video" && !vue;
 
   return (
     <Dialog open disablePointerDismissal>
@@ -80,19 +104,48 @@ export function ReviewPopup() {
               ) : null}
             </p>
           )}
-          <p className="whitespace-pre-wrap rounded-lg bg-muted/50 p-4 text-sm leading-relaxed">
-            {courante.body}
-          </p>
+          {etape.type === "video" ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">{etape.titre}</p>
+              <LecteurRemarque key={etape.id} url={etape.videoUrl} onVue={marquerVue} />
+              <p className="whitespace-pre-wrap rounded-lg bg-muted/50 p-3 text-sm leading-relaxed">
+                {etape.corps}
+              </p>
+            </div>
+          ) : (
+            <p className="whitespace-pre-wrap rounded-lg bg-muted/50 p-4 text-sm leading-relaxed">
+              {etape.body}
+            </p>
+          )}
         </DialogPanel>
-        <DialogFooter>
-          <Button
-            className="w-full sm:w-auto"
-            size="lg"
-            loading={marquer.isPending}
-            onClick={() => marquer.mutate(courante.id)}
-          >
-            {marquer.isPending ? t("common.saving") : t("reviews.compris")}
-          </Button>
+        <DialogFooter className="items-center">
+          {etapes.length > 1 && (
+            <span className="mr-auto text-xs text-muted-foreground">
+              {t("reviews.etape", { n: index + 1, total: etapes.length })}
+            </span>
+          )}
+          {derniere ? (
+            <Button
+              className="w-full sm:w-auto"
+              size="lg"
+              loading={marquer.isPending}
+              onClick={() => marquer.mutate(courante.id)}
+            >
+              {marquer.isPending ? t("common.saving") : t("reviews.compris")}
+            </Button>
+          ) : (
+            <Button
+              className="w-full sm:w-auto"
+              size="lg"
+              disabled={bloque}
+              onClick={() => {
+                setIndex((i) => i + 1);
+                setVue(false);
+              }}
+            >
+              {bloque ? t("reviews.suivantApresVideo") : t("reviews.suivant")}
+            </Button>
+          )}
         </DialogFooter>
       </DialogPopup>
     </Dialog>
