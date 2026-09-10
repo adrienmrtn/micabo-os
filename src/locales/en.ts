@@ -1236,6 +1236,12 @@ export const en = {
       compteur_other: "{{count}} visuals still have text to clean.",
       nettoyerTout_one: "Clean the text visual",
       nettoyerTout_other: "Clean the {{count}} text visuals",
+      echecsBouton: "Re-clean failures",
+      echecsAide:
+        "Picks up EVERY photo the audit rejected (text still visible), across all pages — not just the ones shown here.",
+      echecsVide: "No failed cleaning in the library.",
+      echecsConfirm:
+        "Re-clean the {{count}} photo(s) whose cleaning failed? Keep the tab open.",
       c2paTout_one: "Strip Content Credentials ({{count}})",
       c2paTout_other: "Strip Content Credentials ({{count}})",
       c2paEnCours: "C2PA… {{fait}}/{{total}}",
@@ -1501,6 +1507,23 @@ export const en = {
         "Reimporting {{count}} photo(s) ({{pool}} in parallel)…",
       reimportLot: "Reimport… {{fait}}/{{total}}",
       reimportFin: "Done — ok={{ok}} · failed={{echecs}}",
+      echecsBouton: "Re-clean failures",
+      echecsAide:
+        "Replays cleaning for the slides whose image import actually failed: no media, or attempts exhausted. Slideshows still queued or below the ELO threshold are left alone — no point burning credit on photos never attempted.",
+      echecsScan: "Looking for failed image imports…",
+      echecsVide: "No failed image import.",
+      echecsConfirm:
+        "Re-clean the {{count}} photo(s) whose import failed? Text unchanged — images also replaced on already-assigned posts.",
+      formatBouton: "Even out formats",
+      formatAide:
+        "Crops the photos that stray from their slideshow's dominant format: TikTok shows them all in a single frame, and a slide at the wrong ratio makes the image jump. Storage cropping only — no provider called, no Fal credit. New imports already do it on their own.",
+      formatScan: "Looking for slideshows to even out…",
+      formatVide: "No validated slideshow to process.",
+      formatConfirm:
+        "Review the {{count}} validated slideshow(s) and crop off-format photos? Already-assigned posts follow along.",
+      formatDebut:
+        "Evening out {{count}} slideshow(s) ({{pool}} in parallel)…",
+      formatFin: "Done — cropped={{recadrees}} · failed={{echecs}}",
       ugc: "UGC",
       ugcBadge: "UGC",
       manuelBadge: "Manual",

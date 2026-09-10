@@ -398,6 +398,8 @@ export interface ContenuSlide {
   pinned?: boolean;
   /** Mots-clés caption (sujet + ton) pour résoudre l'image à l'assignation. */
   critere?: string | null;
+  /** Essais de nettoyage consommés (`nettoyageFile.ts`) — absent = zéro. */
+  tentatives?: number;
 }
 
 /** Slide traduite + placement Sophia (par langue). */

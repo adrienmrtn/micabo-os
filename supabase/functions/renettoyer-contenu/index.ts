@@ -3,6 +3,7 @@ import {
   mimeDepuisBase64,
   type EvenementEtape,
 } from "../_shared/gemini.ts";
+import { uniformiserFormatsContenu } from "../_shared/format_media.ts";
 import {
   attacherLabelsAuMedia,
   mediaPropreMemeLabel,
@@ -45,6 +46,42 @@ async function lierMedia(
     console.warn(
       `[renettoyer-contenu] propagation posts ${contenuId}#${position}: ${messageErreur(e)}`,
     );
+  }
+}
+
+/**
+ * Réaligne la slide qu'on vient de refaire sur le format du diaporama.
+ * Renvoie l'URL à afficher — l'ancienne si rien n'a bougé.
+ */
+async function realignerFormat(
+  supabase: ReturnType<typeof serviceClient>,
+  contenuId: string,
+  position: number,
+  url: string,
+  emit?: (e: Record<string, unknown>) => void,
+): Promise<string> {
+  try {
+    const rapport = await uniformiserFormatsContenu(supabase, contenuId, {
+      positions: [position],
+    });
+    const ligne = rapport.lignes.find((l) => l.position === position);
+    if (ligne?.statut !== "recadre") return url;
+    emit?.({
+      etape: "log",
+      statut: "info",
+      detail:
+        `format aligné ${ligne.avant?.largeur}×${ligne.avant?.hauteur} → ` +
+        `${ligne.apres?.largeur}×${ligne.apres?.hauteur}`,
+    });
+    const { data } = await supabase
+      .from("media_library")
+      .select("url")
+      .eq("id", ligne.mediaId)
+      .maybeSingle();
+    return (data?.url as string | undefined) ?? url;
+  } catch (e) {
+    console.warn(`[renettoyer-contenu] format ${contenuId}#${position}: ${messageErreur(e)}`);
+    return url;
   }
 }
 
@@ -109,7 +146,9 @@ Deno.serve(async (request) => {
 
     try {
       const onEtape = emit ? (e: EvenementEtape) => emit(e) : undefined;
-      const propre = await cleanImage(sourceUrl, onEtape);
+      // Même recette que l'import, upscale compris : sans lui la slide
+      // re-nettoyée sortait à la moitié de la taille de ses voisines.
+      const propre = await cleanImage(sourceUrl, onEtape, { upscaleAvantStrip: true });
 
       // Pas de résultat provider → réutiliser un propre orphelin, sinon biblio.
       if (!propre?.base64) {
@@ -216,6 +255,12 @@ Deno.serve(async (request) => {
         );
       }
 
+      // Le text-removal recale sa sortie sur ses propres paliers : la slide
+      // refaite peut revenir dans un autre ratio que ses voisines. On ne
+      // réaligne qu'elle, le ratio dominant étant lu sur tout le diaporama.
+      // Échec non bloquant : la slide est déjà liée et publiable.
+      const urlFinale = await realignerFormat(supabase, contenu.id, position, url, emit);
+
       emit?.({
         etape: "ready",
         statut: "ok",
@@ -223,14 +268,14 @@ Deno.serve(async (request) => {
         nettoyee: true,
         moteur: propre.moteur,
         mediaId: media.id,
-        url,
+        url: urlFinale,
       });
       return {
         ok: true as const,
         nettoyee: true,
         moteur: propre.moteur,
         mediaId: media.id,
-        url,
+        url: urlFinale,
         etapes: propre.etapes,
       };
     } catch (error) {

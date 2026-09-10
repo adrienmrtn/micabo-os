@@ -28,6 +28,7 @@ import { type MajSourcesRun } from "./majSequentielle";
 import { compteEnProcessus, statutWarmup } from "./warmup";
 // Source unique du verdict pool (partagée avec l'Edge minuit) — pur TS, pas de Deno.
 import { messagePool } from "../../../supabase/functions/_shared/quota_pool.ts";
+import { MAX_TENTATIVES_NETTOYAGE, tentativesSlide } from "./nettoyageFile";
 import { ugcVisages } from "./ugcVisages";
 import { corpsAssignationUgcVideoTest } from "./corpsAssignationUgcVideoTest";
 import { decouperEnLots, handleTiktokDepuisSaisie } from "./oubliSource";
@@ -2398,6 +2399,119 @@ export function jobsReimportDepuisSlides(
   }
   return jobs;
 }
+
+/**
+ * Slides dont l'import d'image a réellement échoué.
+ *
+ * Une slide sans `media_id` n'est un échec que si le pipeline en a fini avec
+ * elle : celles d'un contenu encore en file (`pending` sur pertinence) n'ont
+ * pas été tentées, et celles d'un contenu sous seuil ELO ont été écartées
+ * exprès — les rejouer brûlerait du crédit Fal pour rien. On y ajoute les
+ * slides qui ont épuisé leurs tentatives (`nettoyage_file.ts`), même si un
+ * repli leur a depuis donné un média.
+ */
+export async function listerJobsRenettoyageEchecs(): Promise<JobReimportPhoto[]> {
+  const jobs: JobReimportPhoto[] = [];
+  const pageSize = 200;
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from("contenus")
+      .select("id, statut, import_statut, import_etape, structure_slides")
+      .in("import_statut", ["done", "failed"])
+      // `neq` seul écarterait les `import_etape` NULL (logique ternaire SQL) —
+      // or un échec au premier pas les laisse NULL : ce sont justement des
+      // échecs à reprendre.
+      .or("import_etape.is.null,import_etape.neq.elo_insuffisant")
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    for (const row of batch) {
+      const slides = (row.structure_slides ?? []) as ContenuSlide[];
+      for (const s of slides) {
+        const epuisee = tentativesSlide(s) >= MAX_TENTATIVES_NETTOYAGE;
+        if (!s.media_id || epuisee) {
+          if (s.raw_url || s.reference_url) {
+            jobs.push({ contenuId: row.id as string, position: s.position });
+          }
+        }
+      }
+    }
+    if (batch.length < pageSize) break;
+    from += pageSize;
+  }
+  return jobs;
+}
+
+/**
+ * Photos de la bibliothèque rangées en `propre/` mais que l'audit a retoquées
+ * (texte encore visible) : le nettoyage a rendu un résultat inutilisable.
+ * Toutes pages confondues, contrairement au « Nettoyer tout » de la page.
+ */
+export async function listerMediasEchecNettoyage(
+  applicationId?: string | null,
+): Promise<Media[]> {
+  const medias: Media[] = [];
+  const pageSize = 500;
+  let from = 0;
+  for (;;) {
+    let q = supabase
+      .from("media_library")
+      .select("*")
+      .like("storage_path", "propre/%")
+      .eq("texte_restant", true)
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (applicationId) q = q.eq("application_id", applicationId);
+    const { data, error } = await q;
+    if (error) throw error;
+    const batch = (data ?? []) as Media[];
+    medias.push(...batch);
+    if (batch.length < pageSize) break;
+    from += pageSize;
+  }
+  return medias;
+}
+
+/**
+ * Ids des slideshows validés — cible du rattrapage « uniformiser les formats ».
+ * Le pipeline le fait désormais à l'import ; ceci reprend le stock d'avant.
+ */
+export async function listerContenusValidesIds(): Promise<string[]> {
+  const ids: string[] = [];
+  const pageSize = 500;
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from("contenus")
+      .select("id")
+      .eq("statut", "valide")
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    ids.push(...batch.map((r) => r.id as string));
+    if (batch.length < pageSize) break;
+    from += pageSize;
+  }
+  return ids;
+}
+
+/** Aligne les photos d'un slideshow sur le ratio dominant du diaporama. */
+export const normaliserFormatContenu = (contenuId: string, positions?: number[]) =>
+  invoke<{
+    ok: boolean;
+    contenuId: string;
+    ratio: number | null;
+    recadrees: number;
+    lignes: Array<{
+      position: number;
+      statut: "recadre" | "deja" | "emprunte" | "echec";
+      motif?: string;
+    }>;
+    error?: string;
+  }>("normaliser-format", positions?.length ? { contenuId, positions } : { contenuId });
 
 /**
  * Toutes les slides des contenus `valide` qui ont une URL source (brut TikTok).
