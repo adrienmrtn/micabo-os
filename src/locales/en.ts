@@ -1509,11 +1509,18 @@ export const en = {
       reimportFin: "Done — ok={{ok}} · failed={{echecs}}",
       echecsBouton: "Re-clean failures",
       echecsAide:
-        "Replays cleaning for the slides whose image import actually failed: no media, or attempts exhausted. Slideshows still queued or below the ELO threshold are left alone — no point burning credit on photos never attempted.",
+        "Replays cleaning for the slides whose image import failed — including those carrying a visual borrowed from another slideshow, the stand-in the pipeline drops in when it can't clean the original. Slideshows still queued or below the ELO threshold are left alone.",
       echecsScan: "Looking for failed image imports…",
       echecsVide: "No failed image import.",
       echecsConfirm:
-        "Re-clean the {{count}} photo(s) whose import failed? Text unchanged — images also replaced on already-assigned posts.",
+        "Re-clean the {{count}} photo(s) whose import failed? We start over from the TikTok raw: a slide that succeeds gets its real image back instead of the stand-in. Text unchanged — images also replaced on already-assigned posts.",
+      motif: {
+        substitue: "borrowed visual (cleaning failed)",
+        texte_restant: "raw fallback, text still visible",
+        sans_media: "no image",
+        tentatives_epuisees: "attempts exhausted",
+        media_introuvable: "media deleted",
+      },
       formatBouton: "Even out formats",
       formatAide:
         "Crops the photos that stray from their slideshow's dominant format: TikTok shows them all in a single frame, and a slide at the wrong ratio makes the image jump. Storage cropping only — no provider called, no Fal credit. New imports already do it on their own.",
