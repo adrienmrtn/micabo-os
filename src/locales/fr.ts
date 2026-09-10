@@ -454,6 +454,12 @@ export const fr = {
       popupLienPoste: "ton post",
       popupLienOrigine: "l'original",
       compris: "Compris, merci",
+      suivant: "Suivant",
+      suivantApresVideo: "Regarde la vidéo…",
+      etape: "{{n}} / {{total}}",
+      videoMuette: "Vidéo sans son — regarde jusqu’au bout pour continuer.",
+      videoRejouer: "Revoir",
+      videoErreur: "Vidéo illisible — tu peux continuer.",
     },
     reviewsJour: {
       title: "QA TikTok du jour",
@@ -466,6 +472,18 @@ export const fr = {
       remarquesAide:
         "Puces : tu cliques le titre, c'est le corps qui s'ajoute au brouillon. Titre et corps se règlent ici.",
       remarqueTitre: "Titre (puce)",
+      videoAjouter: "Vidéo d’explication",
+      videoRemplacer: "Remplacer la vidéo",
+      videoAide:
+        "Capture d’écran courte (5‑15 s), sans son : elle se lance toute seule chez le créateur. Recompressée au dépôt, rattachée à la puce quand tu enregistres.",
+      videoEnvoi: "Envoi…",
+      videoPrete: "Prête ({{taille}})",
+      videoTropGros: "Fichier trop lourd (max {{max}}) — raccourcis la capture.",
+      videoPasUneVideo: "Ce fichier n’est pas une vidéo.",
+      videosJointes_one: "{{count}} vidéo part avec ce retour",
+      videosJointes_other: "{{count}} vidéos partent avec ce retour",
+      videosJointesAide:
+        "Le créateur les regarde une par une avant de lire le texte. Retire-en une avec la croix.",
       remarqueCorps: "Corps envoyé au créateur…",
       ajouter: "Ajouter",
       origine: "TikTok d'origine",
