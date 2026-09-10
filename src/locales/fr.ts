@@ -1239,6 +1239,12 @@ export const fr = {
       compteur_other: "{{count}} visuels portent encore du texte à nettoyer.",
       nettoyerTout_one: "Nettoyer le visuel à texte",
       nettoyerTout_other: "Nettoyer les {{count}} visuels à texte",
+      echecsBouton: "Re-nettoyer les échecs",
+      echecsAide:
+        "Reprend TOUTES les photos que l’audit a retoquées (texte encore visible), toutes pages confondues — pas seulement celles affichées ici.",
+      echecsVide: "Aucun nettoyage raté dans la bibliothèque.",
+      echecsConfirm:
+        "Re-nettoyer les {{count}} photo(s) dont le nettoyage a raté ? Laisse l’onglet ouvert.",
       c2paTout_one: "Retirer Content Credentials ({{count}})",
       c2paTout_other: "Retirer Content Credentials ({{count}})",
       c2paEnCours: "C2PA… {{fait}}/{{total}}",
@@ -1504,6 +1510,23 @@ export const fr = {
         "Réimport de {{count}} photo(s) ({{pool}} en parallèle)…",
       reimportLot: "Réimport… {{fait}}/{{total}}",
       reimportFin: "Terminé — ok={{ok}} · échecs={{echecs}}",
+      echecsBouton: "Re-nettoyer les échecs",
+      echecsAide:
+        "Rejoue le nettoyage des seules slides dont l’import d’image a échoué : sans média, ou tentatives épuisées. Les slideshows encore en file et ceux sous seuil ELO sont laissés tranquilles — inutile de brûler du crédit sur des photos jamais tentées.",
+      echecsScan: "Recherche des imports d’image en échec…",
+      echecsVide: "Aucun import d’image en échec.",
+      echecsConfirm:
+        "Re-nettoyer les {{count}} photo(s) dont l’import a échoué ? Texte inchangé — images remplacées aussi sur les posts déjà assignés.",
+      formatBouton: "Uniformiser les formats",
+      formatAide:
+        "Recadre les photos qui s’écartent du format dominant de leur diaporama : TikTok les affiche dans un cadre unique, et une slide au mauvais ratio fait sauter l’image. Recadrage Storage uniquement — aucun provider appelé, aucun crédit Fal. Les nouveaux imports le font déjà tout seuls.",
+      formatScan: "Recherche des slideshows à uniformiser…",
+      formatVide: "Aucun slideshow validé à traiter.",
+      formatConfirm:
+        "Passer les {{count}} slideshow(s) validés en revue et recadrer les photos hors format ? Les posts déjà assignés suivent.",
+      formatDebut:
+        "Uniformisation de {{count}} slideshow(s) ({{pool}} en parallèle)…",
+      formatFin: "Terminé — recadrées={{recadrees}} · échecs={{echecs}}",
       ugc: "UGC",
       ugcBadge: "UGC",
       manuelBadge: "Manuel",

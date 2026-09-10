@@ -38,6 +38,7 @@ import {
   lireReglages,
   listerBibliothequePage,
   listerLabelsBiblio,
+  listerMediasEchecNettoyage,
   nettoyerMedia,
   statutRattrapageCaption,
   stripC2paMedia,
@@ -347,14 +348,15 @@ export function AdminBibliothequePage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  /** Nettoie tous les visuels à texte via un pool d'agents parallèles. */
-  async function nettoyerTout() {
-    setLot({ fait: 0, total: aNettoyerListe.length });
+  /** Rejoue le nettoyage d'une liste de visuels via un pool d'agents parallèles. */
+  async function lancerLotNettoyage(liste: Media[]) {
+    if (liste.length === 0) return;
+    setLot({ fait: 0, total: liste.length });
     setEtapesLot(
-      Object.fromEntries(aNettoyerListe.map((m) => [m.id, etapesInitiales(premier)])),
+      Object.fromEntries(liste.map((m) => [m.id, etapesInitiales(premier)])),
     );
     await executerEnLot(
-      aNettoyerListe,
+      liste,
       (media) =>
         nettoyerMedia(media.id, (ev) => {
           setEtapesLot((prev) => ({
@@ -373,6 +375,32 @@ export function AdminBibliothequePage() {
     setLot(null);
     setEtapesLot({});
     rafraichir();
+  }
+
+  /** Nettoie tous les visuels à texte de la page affichée. */
+  const nettoyerTout = () => lancerLotNettoyage(aNettoyerListe);
+
+  /**
+   * Reprend TOUS les nettoyages ratés de la bibliothèque, pages comprises —
+   * une image retoquée par l'audit n'est pas forcément sur celle qu'on regarde.
+   */
+  async function nettoyerTousEchecs() {
+    if (lotEnCours) return;
+    let echecs: Media[];
+    try {
+      echecs = await listerMediasEchecNettoyage(applicationId);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    if (echecs.length === 0) {
+      window.alert(t("bibliotheque.echecsVide"));
+      return;
+    }
+    if (!window.confirm(t("bibliotheque.echecsConfirm", { count: echecs.length }))) {
+      return;
+    }
+    await lancerLotNettoyage(echecs);
   }
 
   /** Supprime toutes les vignettes sélectionnées, en parallèle. */
@@ -631,8 +659,18 @@ export function AdminBibliothequePage() {
                   : t("bibliotheque.upscaleTout", { count: aUpscaler })}
               </Button>
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={lotEnCours}
+              onClick={() => void nettoyerTousEchecs()}
+              title={t("bibliotheque.echecsAide")}
+            >
+              <Sparkles className="size-4" />
+              {t("bibliotheque.echecsBouton")}
+            </Button>
             {aNettoyer > 0 && (
-              <Button size="sm" disabled={lotEnCours} onClick={nettoyerTout}>
+              <Button size="sm" disabled={lotEnCours} onClick={() => void nettoyerTout()}>
                 <Sparkles />
                 {lot
                   ? t("adminPost.lotEnCours", { fait: lot.fait, total: lot.total })

@@ -7,7 +7,18 @@ import {
 } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router-dom";
-import { Check, ImageUp, PenLine, RefreshCw, Rocket, ScanText, Sparkles, Trash2, X } from "lucide-react";
+import {
+  Check,
+  Crop,
+  ImageUp,
+  PenLine,
+  RefreshCw,
+  Rocket,
+  ScanText,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,8 +49,11 @@ import {
   forcerImportEloContenu,
   jobsReimportDepuisSlides,
   kickImportWorkers,
+  listerContenusValidesIds,
   listerJobsReimportPhotosValides,
+  listerJobsRenettoyageEchecs,
   listerMediasPourContenu,
+  normaliserFormatContenu,
   majCaptionMedia,
   majTexteSlideDeck,
   majMediaSlideContenu,
@@ -1978,14 +1992,17 @@ export function AdminSlideshowsPage() {
     }
   }
 
-  /** Re-nettoie toutes les photos des slideshows valides (brut → propre qualité
-   *  actuelle). Texte / OCR / decks / passages inchangés. */
-  async function reimporterPhotosValides() {
+  /** Scan → confirmation chiffrée → lot parallèle. Partagé par les deux
+   *  boutons : seule la liste de slides à rejouer change. */
+  async function lancerLotPhotos(
+    scan: () => Promise<JobReimportPhoto[]>,
+    cles: { scan: string; vide: string; confirm: string },
+  ) {
     if (reimport) return;
-    setReimportLogs([t("slideshows.reimportScan")]);
-    let jobs;
+    setReimportLogs([t(cles.scan)]);
+    let jobs: JobReimportPhoto[];
     try {
-      jobs = await listerJobsReimportPhotosValides();
+      jobs = await scan();
     } catch (e) {
       setReimportLogs([
         `✗ ${e instanceof Error ? e.message : String(e)}`,
@@ -1993,14 +2010,10 @@ export function AdminSlideshowsPage() {
       return;
     }
     if (jobs.length === 0) {
-      setReimportLogs([t("slideshows.reimportVide")]);
+      setReimportLogs([t(cles.vide)]);
       return;
     }
-    if (
-      !window.confirm(
-        t("slideshows.reimportConfirm", { count: jobs.length }),
-      )
-    ) {
+    if (!window.confirm(t(cles.confirm, { count: jobs.length }))) {
       setReimportLogs([]);
       return;
     }
@@ -2028,6 +2041,93 @@ export function AdminSlideshowsPage() {
     void queryClient.invalidateQueries({ queryKey: ["medias-biblio"] });
   }
 
+  /** Re-nettoie toutes les photos des slideshows valides (brut → propre qualité
+   *  actuelle). Texte / OCR / decks / passages inchangés. */
+  const reimporterPhotosValides = () =>
+    lancerLotPhotos(listerJobsReimportPhotosValides, {
+      scan: "slideshows.reimportScan",
+      vide: "slideshows.reimportVide",
+      confirm: "slideshows.reimportConfirm",
+    });
+
+  /** Ne rejoue que les slides dont l'import d'image a échoué — pas tout le
+   *  stock, donc pas de crédit Fal brûlé sur des photos déjà propres. */
+  const renettoyerEchecs = () =>
+    lancerLotPhotos(listerJobsRenettoyageEchecs, {
+      scan: "slideshows.echecsScan",
+      vide: "slideshows.echecsVide",
+      confirm: "slideshows.echecsConfirm",
+    });
+
+  /**
+   * Rattrape les formats du stock déjà importé : depuis cette version le
+   * pipeline aligne les slides à l'import, mais les slideshows d'avant gardent
+   * leur hook carré au milieu de slides 3:4. Aucun provider appelé — juste le
+   * recadrage Storage, donc pas de crédit Fal.
+   */
+  async function uniformiserFormats() {
+    if (reimport) return;
+    setReimportLogs([t("slideshows.formatScan")]);
+    let ids: string[];
+    try {
+      ids = await listerContenusValidesIds();
+    } catch (e) {
+      setReimportLogs([`✗ ${e instanceof Error ? e.message : String(e)}`]);
+      return;
+    }
+    if (ids.length === 0) {
+      setReimportLogs([t("slideshows.formatVide")]);
+      return;
+    }
+    if (!window.confirm(t("slideshows.formatConfirm", { count: ids.length }))) {
+      setReimportLogs([]);
+      return;
+    }
+
+    setReimport({ fait: 0, total: ids.length });
+    setReimportLogs([
+      t("slideshows.formatDebut", { count: ids.length, pool: AGENTS_REIMPORT_PHOTOS }),
+    ]);
+    let recadrees = 0;
+    let echecs = 0;
+    await executerEnLot(
+      ids,
+      async (id) => {
+        try {
+          const r = await normaliserFormatContenu(id);
+          recadrees += r.recadrees ?? 0;
+          if (r.recadrees > 0) {
+            setReimportLogs((prev) => [
+              ...prev.slice(-80),
+              `✓ ${id.slice(0, 8)} — ${r.recadrees} recadrée(s) · ratio ${
+                r.ratio?.toFixed(3) ?? "?"
+              }`,
+            ]);
+          }
+        } catch (e) {
+          echecs += 1;
+          setReimportLogs((prev) => [
+            ...prev.slice(-80),
+            `✗ ${id.slice(0, 8)} — ${e instanceof Error ? e.message : String(e)}`,
+          ]);
+        }
+      },
+      {
+        largeur: AGENTS_REIMPORT_PHOTOS,
+        onProgres: (fait, total) => setReimport({ fait, total }),
+      },
+    );
+    setReimportLogs((prev) => [
+      ...prev,
+      t("slideshows.formatFin", { recadrees, echecs }),
+    ]);
+    setReimport(null);
+    void queryClient.invalidateQueries({ queryKey: ["slideshows"] });
+    void queryClient.invalidateQueries({ queryKey: ["slideshow"] });
+    void queryClient.invalidateQueries({ queryKey: ["medias"] });
+    void queryClient.invalidateQueries({ queryKey: ["medias-biblio"] });
+  }
+
   return (
     <div className="space-y-4">
       <Card>
@@ -2043,6 +2143,26 @@ export function AdminSlideshowsPage() {
                 <PenLine className="size-4" />
                 {t("labels.creerPost")}
               </Link>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={reimport !== null}
+              onClick={() => void renettoyerEchecs()}
+              title={t("slideshows.echecsAide")}
+            >
+              <Sparkles className="size-4" />
+              {t("slideshows.echecsBouton")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={reimport !== null}
+              onClick={() => void uniformiserFormats()}
+              title={t("slideshows.formatAide")}
+            >
+              <Crop className="size-4" />
+              {t("slideshows.formatBouton")}
             </Button>
             <Button
               size="sm"

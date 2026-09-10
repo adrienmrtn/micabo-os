@@ -7,7 +7,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "217fdf30e138f65bc4a778543adc89a0f55a85a1";
+const SHA = "066e7d6107fb370a6b913a4c1e21d208c9e603eb";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/import-contenu.bundle.js`;
 
@@ -19,4 +19,6 @@ const src = await res.text();
 if (!src.includes("clockworks~tiktok-scraper") || !src.includes("Deno.serve")) {
   throw new Error("import-contenu bundle illisible ou tronqué");
 }
-new Function("Me", src)(createClient);
+// esbuild renomme l'alias d'un rebuild à l'autre : relire le
+// `import{createClient as …}` du bundle avant de l'effacer, et reporter le nom ici.
+new Function("qe", src)(createClient);

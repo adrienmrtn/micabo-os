@@ -50,6 +50,7 @@ import {
   partagerFichiers,
   peutPartager,
   recupererFichier,
+  recupererVisuelsUniformises,
   telechargerFichier,
 } from "@/features/moteur/telechargement";
 import type { Media, Post, PostSlide } from "@/features/moteur/types";
@@ -368,22 +369,22 @@ export function PosterPostPage() {
   const liste = React.useMemo(() => slides.data ?? [], [slides.data]);
 
   // Préchargement des visuels : `navigator.share` doit être appelé dans la
-  // foulée du tap, il ne peut pas attendre un fetch.
+  // foulée du tap, il ne peut pas attendre un fetch. C'est aussi ici que les
+  // slides sont ramenées au même format — un post peut mélanger plusieurs
+  // TikToks sources quand l'assignation a pioché un visuel de secours.
   const fichiers = useQuery({
     queryKey: ["fichiers", id, liste.map((s) => s.media_library?.url).join("|")],
     enabled: liste.length > 0,
     staleTime: Infinity,
-    queryFn: async () => {
-      const resultats: File[] = [];
-      for (const slide of liste) {
+    queryFn: () =>
+      recupererVisuelsUniformises(
         // On ne précharge que les photos nettoyées : enregistrer un visuel au
         // texte encore incrusté reviendrait à le faire publier tel quel.
-        if (!estPropre(slide)) continue;
-        const url = slide.media_library!.url;
-        resultats.push(await recupererFichier(url, nomFichier(id!, slide.position)));
-      }
-      return resultats;
-    },
+        liste.filter(estPropre).map((slide) => ({
+          url: slide.media_library!.url,
+          nom: nomFichier(id!, slide.position),
+        })),
+      ),
   });
 
   const rafraichir = () => {

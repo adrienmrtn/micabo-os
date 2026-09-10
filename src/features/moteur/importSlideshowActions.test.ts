@@ -48,6 +48,8 @@ describe("statutApresPasImport", () => {
     expect(statutApresPasImport("pertinence")).toBe("pending");
     expect(statutApresPasImport("ocr")).toBe("pending");
     expect(statutApresPasImport("nettoyage")).toBe("pending");
+    // Alignement des formats : un pas de plus, pas une fin de pipeline.
+    expect(statutApresPasImport("format")).toBe("pending");
   });
 
   it("ne touche pas un pas terminal ou un échec", () => {

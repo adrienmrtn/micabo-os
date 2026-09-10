@@ -15,6 +15,10 @@ import {
   translateSlideshow,
 } from "./gemini.ts";
 import {
+  uniformiserFormatsContenu,
+  type RapportFormatVisuel,
+} from "./format_media.ts";
+import {
   assurerHookMedia,
   captionnerMedia,
   slidesSansCaption,
@@ -76,6 +80,8 @@ const SLIDES_PAR_PASSAGE = 2;
 const SLIDES_CAPTION_PAR_PASSAGE = 2;
 /** 1 slide / passage nettoyage : Fal≤90s + store doit tenir sous le mur Edge ~150s. */
 const SLIDES_NETTOYAGE_PAR_PASSAGE = 1;
+/** Étapes qui prouvent que l'alignement des formats a déjà eu lieu. */
+const ETAPES_APRES_FORMAT = new Set(["format", "caption", "done"]);
 /**
  * Apify `resultsPerPage` pour le listing d'un profil. À 100, un compte qui a
  * publié 150 slideshows n'en révélait que la première tranche : le reste était
@@ -864,6 +870,8 @@ export interface AvancerImportResultat {
   elo?: EloRapport;
   /** Présent sur l'étape nettoyage. */
   nettoyage?: NettoyageRapport;
+  /** Présent sur l'étape format. */
+  format?: RapportFormatVisuel;
   /** Présent sur l'étape caption. */
   captions?: CaptionRapport;
 }
@@ -1142,6 +1150,25 @@ async function executerPasImport(
           .join("\n"),
       };
       return { etape: "nettoyage", nettoyage, progres };
+    }
+
+    // 5c — Diaporama complet : on aligne les formats une bonne fois.
+    // Une source TikTok mélange couramment un hook presque carré et des slides
+    // 3:4, et le text-removal recale encore sa sortie sur ses propres paliers :
+    // sans cette passe, le créateur reçoit des images qui sautent d'une slide à
+    // l'autre. Idempotente, mais gardée par `import_etape` pour ne pas repayer
+    // la mesure à chaque passage caption.
+    if (!ETAPES_APRES_FORMAT.has(String(contenu.import_etape ?? ""))) {
+      let format: RapportFormatVisuel | undefined;
+      try {
+        format = await uniformiserFormatsContenu(supabase, contenu.id);
+      } catch (e) {
+        // Un cadrage raté ne vaut pas un import perdu : le `catch` englobant
+        // basculerait le contenu en `failed` alors que les slides sont bonnes.
+        console.warn(`[import format] contenu=${contenu.id}: ${messageErreur(e)}`);
+      }
+      await marquer(supabase, contenu.id, { import_etape: "format" });
+      return { etape: "format", format, progres: true };
     }
 
     // 6 — Caption visuelle (Florence → Moondream → aucune) + Hook 1ʳᵉ slide
