@@ -28,7 +28,11 @@ import { type MajSourcesRun } from "./majSequentielle";
 import { compteEnProcessus, statutWarmup } from "./warmup";
 // Source unique du verdict pool (partagée avec l'Edge minuit) — pur TS, pas de Deno.
 import { messagePool } from "../../../supabase/functions/_shared/quota_pool.ts";
-import { MAX_TENTATIVES_NETTOYAGE, tentativesSlide } from "./nettoyageFile";
+import {
+  motifEchecNettoyage,
+  type MotifEchecNettoyage,
+  type SlideANettoyer,
+} from "./echecsNettoyage";
 import { ugcVisages } from "./ugcVisages";
 import { corpsAssignationUgcVideoTest } from "./corpsAssignationUgcVideoTest";
 import { decouperEnLots, handleTiktokDepuisSaisie } from "./oubliSource";
@@ -2384,6 +2388,8 @@ export async function nettoyerMedia(
 export type JobReimportPhoto = {
   contenuId: string;
   position: number;
+  /** Renseigné par le scan des échecs — absent sur un réimport de masse. */
+  motif?: MotifEchecNettoyage;
 };
 
 /** Jobs réimport pour un contenu (slides avec brut source). */
@@ -2401,24 +2407,27 @@ export function jobsReimportDepuisSlides(
 }
 
 /**
- * Slides dont l'import d'image a réellement échoué.
+ * Slides dont l'import d'image a échoué — y compris celles que le pipeline a
+ * déjà maquillées avec un visuel de secours (voir `echecsNettoyage.ts`).
  *
- * Une slide sans `media_id` n'est un échec que si le pipeline en a fini avec
- * elle : celles d'un contenu encore en file (`pending` sur pertinence) n'ont
- * pas été tentées, et celles d'un contenu sous seuil ELO ont été écartées
- * exprès — les rejouer brûlerait du crédit Fal pour rien. On y ajoute les
- * slides qui ont épuisé leurs tentatives (`nettoyage_file.ts`), même si un
- * repli leur a depuis donné un média.
+ * On écarte les contenus qui n'ont pas encore été tentés (`pending` sur
+ * pertinence), ceux passés sous le seuil ELO, et les rejetés : aucun ne partira
+ * chez un créateur, et les rejouer brûlerait du crédit Fal pour rien.
+ *
+ * Deux requêtes : les slides d'abord, puis les médias qu'elles pointent —
+ * c'est `media_library.contenu_id` qui trahit une substitution, et il n'est
+ * pas dans `structure_slides`.
  */
 export async function listerJobsRenettoyageEchecs(): Promise<JobReimportPhoto[]> {
-  const jobs: JobReimportPhoto[] = [];
+  const candidates: SlideANettoyer[] = [];
   const pageSize = 200;
   let from = 0;
   for (;;) {
     const { data, error } = await supabase
       .from("contenus")
-      .select("id, statut, import_statut, import_etape, structure_slides")
+      .select("id, creation_mode, import_statut, import_etape, structure_slides")
       .in("import_statut", ["done", "failed"])
+      .neq("statut", "rejete")
       // `neq` seul écarterait les `import_etape` NULL (logique ternaire SQL) —
       // or un échec au premier pas les laisse NULL : ce sont justement des
       // échecs à reprendre.
@@ -2428,18 +2437,46 @@ export async function listerJobsRenettoyageEchecs(): Promise<JobReimportPhoto[]>
     if (error) throw error;
     const batch = data ?? [];
     for (const row of batch) {
-      const slides = (row.structure_slides ?? []) as ContenuSlide[];
-      for (const s of slides) {
-        const epuisee = tentativesSlide(s) >= MAX_TENTATIVES_NETTOYAGE;
-        if (!s.media_id || epuisee) {
-          if (s.raw_url || s.reference_url) {
-            jobs.push({ contenuId: row.id as string, position: s.position });
-          }
-        }
+      for (const s of (row.structure_slides ?? []) as ContenuSlide[]) {
+        candidates.push({
+          contenuId: row.id as string,
+          position: s.position,
+          mediaId: s.media_id ?? null,
+          tentatives: s.tentatives,
+          aSource: Boolean(s.raw_url || s.reference_url),
+          creationManuelle: row.creation_mode === "manuel",
+          media: null,
+        });
       }
     }
     if (batch.length < pageSize) break;
     from += pageSize;
+  }
+
+  // Les médias par lots : l'URL PostgREST déborde bien avant le millier d'ids.
+  const ids = [...new Set(candidates.map((c) => c.mediaId).filter(Boolean))] as string[];
+  const parId = new Map<string, { contenuId: string | null; texteRestant: boolean }>();
+  for (const lot of decouperEnLots(ids, 200)) {
+    const { data, error } = await supabase
+      .from("media_library")
+      .select("id, contenu_id, texte_restant")
+      .in("id", lot);
+    if (error) throw error;
+    for (const m of data ?? []) {
+      parId.set(m.id as string, {
+        contenuId: (m.contenu_id as string | null) ?? null,
+        texteRestant: m.texte_restant === true,
+      });
+    }
+  }
+
+  const jobs: JobReimportPhoto[] = [];
+  for (const c of candidates) {
+    const motif = motifEchecNettoyage({
+      ...c,
+      media: c.mediaId ? (parId.get(c.mediaId) ?? null) : null,
+    });
+    if (motif) jobs.push({ contenuId: c.contenuId, position: c.position, motif });
   }
   return jobs;
 }

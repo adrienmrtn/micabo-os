@@ -1512,11 +1512,18 @@ export const fr = {
       reimportFin: "Terminé — ok={{ok}} · échecs={{echecs}}",
       echecsBouton: "Re-nettoyer les échecs",
       echecsAide:
-        "Rejoue le nettoyage des seules slides dont l’import d’image a échoué : sans média, ou tentatives épuisées. Les slideshows encore en file et ceux sous seuil ELO sont laissés tranquilles — inutile de brûler du crédit sur des photos jamais tentées.",
+        "Rejoue le nettoyage des seules slides dont l’import d’image a échoué — y compris celles qui portent un visuel emprunté à un autre slideshow, le secours que le pipeline pose quand il n’arrive pas à nettoyer l’image d’origine. Les slideshows encore en file et ceux sous seuil ELO sont laissés tranquilles.",
       echecsScan: "Recherche des imports d’image en échec…",
       echecsVide: "Aucun import d’image en échec.",
       echecsConfirm:
-        "Re-nettoyer les {{count}} photo(s) dont l’import a échoué ? Texte inchangé — images remplacées aussi sur les posts déjà assignés.",
+        "Re-nettoyer les {{count}} photo(s) dont l’import a échoué ? On repart du brut TikTok : une slide qui réussit récupère sa vraie image à la place du visuel de secours. Texte inchangé — images remplacées aussi sur les posts déjà assignés.",
+      motif: {
+        substitue: "visuel emprunté (nettoyage raté)",
+        texte_restant: "repli brut, texte encore visible",
+        sans_media: "aucune image",
+        tentatives_epuisees: "tentatives épuisées",
+        media_introuvable: "média supprimé",
+      },
       formatBouton: "Uniformiser les formats",
       formatAide:
         "Recadre les photos qui s’écartent du format dominant de leur diaporama : TikTok les affiche dans un cadre unique, et une slide au mauvais ratio fait sauter l’image. Recadrage Storage uniquement — aucun provider appelé, aucun crédit Fal. Les nouveaux imports le font déjà tout seuls.",

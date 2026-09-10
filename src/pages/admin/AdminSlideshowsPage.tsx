@@ -76,6 +76,10 @@ import {
   type ProviderNettoyage,
 } from "@/features/moteur/nettoyageEtapes";
 import { useApplication } from "@/features/moteur/ApplicationContext";
+import {
+  resumerMotifs,
+  type MotifEchecNettoyage,
+} from "@/features/moteur/echecsNettoyage";
 import { peutForcerImportElo } from "@/features/moteur/importSlideshowActions";
 import { nomLangue } from "@/features/moteur/langues";
 import { TEXTE_SLIDE_MAX } from "@/features/moteur/deckSlides";
@@ -2013,7 +2017,17 @@ export function AdminSlideshowsPage() {
       setReimportLogs([t(cles.vide)]);
       return;
     }
-    if (!window.confirm(t(cles.confirm, { count: jobs.length }))) {
+    // Le détail des motifs avant la confirmation : « 113 photos » ne dit pas
+    // qu'il s'agit surtout de visuels empruntés faute d'avoir pu nettoyer.
+    const parMotif = resumerMotifs(
+      jobs.map((j) => j.motif).filter((m): m is MotifEchecNettoyage => Boolean(m)),
+    );
+    const detail = Object.entries(parMotif)
+      .sort((a, b) => b[1] - a[1])
+      .map(([motif, n]) => `${t(`slideshows.motif.${motif}`)} : ${n}`)
+      .join(" · ");
+    if (detail) setReimportLogs([t(cles.scan), detail]);
+    if (!window.confirm(`${t(cles.confirm, { count: jobs.length })}${detail ? `\n\n${detail}` : ""}`)) {
       setReimportLogs([]);
       return;
     }
