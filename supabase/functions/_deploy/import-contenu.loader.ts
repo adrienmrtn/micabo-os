@@ -19,4 +19,6 @@ const src = await res.text();
 if (!src.includes("clockworks~tiktok-scraper") || !src.includes("Deno.serve")) {
   throw new Error("import-contenu bundle illisible ou tronqué");
 }
-new Function("Me", src)(createClient);
+// esbuild renomme l'alias d'un rebuild à l'autre : relire le
+// `import{createClient as …}` du bundle avant de l'effacer, et reporter le nom ici.
+new Function("qe", src)(createClient);

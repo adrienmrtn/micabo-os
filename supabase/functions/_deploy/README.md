@@ -26,6 +26,13 @@ Le chargeur injecte `createClient` sous le nom `se` (assignation) et `$e`
 (minuit-vnext) — relire le `import{createClient as …}` du bundle avant de
 l’effacer : esbuild change l’alias d’un rebuild à l’autre.
 
+`renettoyer-contenu` est passé au chargeur le 10/09/2026 : 158 Ko sur 18
+fichiers, au-dessus des 108 Ko de `manage-users` qui suivait déjà cette recette.
+L’enjeu n’est pas la taille brute mais `gemini.ts` (52 Ko de prompts) : recopié
+à la main dans un appel MCP, un caractère qui saute ne se voit pas. Alias
+courant : `H`. Attention, esbuild place l’`import{createClient …}` **au milieu**
+du bundle, pas forcément en tête — le chercher, ne pas supposer la 1ʳᵉ ligne.
+
 Ne pas redéployer `papier-cm` depuis ce dépôt : la prod est en avance.
 Le `papier_master.ts` embarqué par `minuit-vnext` est celui du dépôt, pas
 celui de `papier-cm` v11.
