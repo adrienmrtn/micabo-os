@@ -454,6 +454,12 @@ export const en = {
       popupLienPoste: "your post",
       popupLienOrigine: "the original",
       compris: "Got it, thanks",
+      suivant: "Next",
+      suivantApresVideo: "Watch the video…",
+      etape: "{{n}} / {{total}}",
+      videoMuette: "Silent video — watch it through to continue.",
+      videoRejouer: "Replay",
+      videoErreur: "Video won’t play — you can continue.",
     },
     reviewsJour: {
       title: "Today's TikTok QA",
@@ -466,6 +472,18 @@ export const en = {
       remarquesAide:
         "Chips: click the title, the body is added to the draft. Title and body are edited here.",
       remarqueTitre: "Title (chip)",
+      videoAjouter: "Explainer video",
+      videoRemplacer: "Replace video",
+      videoAide:
+        "Short screen recording (5‑15 s), silent: it autoplays for the creator. Recompressed on upload, attached to the chip when you save.",
+      videoEnvoi: "Uploading…",
+      videoPrete: "Ready ({{taille}})",
+      videoTropGros: "File too heavy (max {{max}}) — shorten the recording.",
+      videoPasUneVideo: "That file is not a video.",
+      videosJointes_one: "{{count}} video goes with this note",
+      videosJointes_other: "{{count}} videos go with this note",
+      videosJointesAide:
+        "The creator watches them one by one before reading the text. Remove one with the cross.",
       remarqueCorps: "Body sent to the creator…",
       ajouter: "Add",
       origine: "Original TikTok",
