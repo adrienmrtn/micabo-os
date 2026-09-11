@@ -19,4 +19,4 @@ const src = await res.text();
 if (!src.includes("Deno.serve") || !src.includes("warmup fini")) {
   throw new Error("assignation bundle illisible ou tronqué");
 }
-new Function("se", src)(createClient);
+new Function("le", src)(createClient);
