@@ -63,10 +63,11 @@ export function messagePool(etat: EtatPoolCompte): string {
 
   const suite = etat.echecsDeck
     ? `deck impossible sur ${etat.echecsDeck} slideshow(s) (traduction / Sophia). ` +
-      `Quota inchangé — relance l'assignation de ce créateur.`
-    : `soit aucun passage n'a tourné pour ce créateur (warmup fini après les ` +
-      `passes de minuit, ou drain interrompu), soit les decks n'ont pas pu être ` +
-      `fabriqués (traduction / Sophia). Quota inchangé — clique « Assigner ».`;
+      `Relance l'assignation de ce créateur.`
+    : `le créateur est sorti de warmup après les passes de minuit — le filet ` +
+      `horaire le prend au prochain top de l'heure —, le drain a été interrompu, ` +
+      `ou les decks n'ont pas pu être fabriqués (traduction / Sophia). ` +
+      `Clique « Assigner » pour ne pas attendre.`;
 
   return (
     `${entete} suffisant (${dispo} slideshow(s) dispo pour ${etat.manquants} ` +

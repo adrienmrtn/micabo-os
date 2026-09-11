@@ -5109,6 +5109,8 @@ export interface SuiviMinuit {
   avatar_url: string | null;
   langue: string;
   quota: number;
+  /** Fin du warmup — un créateur sorti en journée attend le filet horaire. */
+  warmupEndsAt: string | null;
   posts: Array<{
     id: string;
     passage_id: string | null;
@@ -5187,6 +5189,7 @@ export async function suiviAssignation(date: string): Promise<SuiviMinuit[]> {
       avatar_url: c.avatar_url,
       langue: c.langue,
       quota: c.posts_par_jour ?? quotaGlobal,
+      warmupEndsAt: (c.warmup_ends_at as string | null) ?? null,
       posts: parCompte.get(c.id) ?? [],
     }));
 }

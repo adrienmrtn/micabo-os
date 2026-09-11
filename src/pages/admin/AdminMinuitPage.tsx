@@ -293,22 +293,81 @@ function BriefRattrapageElo({
 
 type CauseIncomplet =
   | { kind: "manquant"; manquants: number; faits: number; quota: number }
+  | {
+      kind: "attenteFilet";
+      manquants: number;
+      faits: number;
+      quota: number;
+      finWarmup: string;
+      prochainTick: string;
+    }
   | { kind: "echec"; postId: string; erreur: string | null }
   | { kind: "raisonAssign"; texte: string };
+
+/** « 18:00 » — prochain passage du filet horaire d'assignation. */
+function prochainTopHeure(now = new Date()): string {
+  const d = new Date(now);
+  d.setMinutes(0, 0, 0);
+  d.setHours(d.getHours() + 1);
+  return new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
+
+function heureParisCourte(iso: string): string {
+  return new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+/**
+ * Un créateur sorti de warmup en journée n'a rien raté : les passes de minuit
+ * ne le voyaient pas encore, et le filet horaire le prendra au prochain top.
+ * On ne le range pas avec les vrais trous.
+ */
+function attendLeFiletHoraire(ligne: SuiviMinuit, date: string): boolean {
+  if (!ligne.warmupEndsAt || date !== aujourdhuiParis()) return false;
+  const fin = new Date(ligne.warmupEndsAt);
+  if (Number.isNaN(fin.getTime()) || fin.getTime() > Date.now()) return false;
+  const jourFin = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(fin);
+  if (jourFin !== date) return false;
+  // Après 06:00 Paris : les trois passes de nuit (00 h, 03 h, 06 h) sont passées.
+  const heure = Number(
+    new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", hour12: false })
+      .format(fin),
+  );
+  return heure >= 6;
+}
 
 function causesCompteIncomplet(
   ligne: SuiviMinuit,
   raisonRelance?: string | null,
+  date: string = aujourdhuiParis(),
 ): CauseIncomplet[] {
   const causes: CauseIncomplet[] = [];
   const manquants = Math.max(0, ligne.quota - ligne.posts.length);
   if (manquants > 0) {
-    causes.push({
-      kind: "manquant",
-      manquants,
-      faits: ligne.posts.length,
-      quota: ligne.quota,
-    });
+    causes.push(
+      attendLeFiletHoraire(ligne, date)
+        ? {
+            kind: "attenteFilet",
+            manquants,
+            faits: ligne.posts.length,
+            quota: ligne.quota,
+            finWarmup: heureParisCourte(ligne.warmupEndsAt as string),
+            prochainTick: prochainTopHeure(),
+          }
+        : {
+            kind: "manquant",
+            manquants,
+            faits: ligne.posts.length,
+            quota: ligne.quota,
+          },
+    );
   }
   for (const p of ligne.posts) {
     if (p.pipeline_statut === "failed") {
@@ -635,9 +694,19 @@ export function AdminMinuitPage() {
     )
     .map((l) => ({
       ligne: l,
-      causes: causesCompteIncomplet(l, raisonParCompte.get(l.compteId) || null),
+      causes: causesCompteIncomplet(l, raisonParCompte.get(l.compteId) || null, date),
     }));
-  const comptesEnEchec = comptesIncomplets.length;
+  // Un créateur qui attend simplement le filet horaire n'est pas « en échec » :
+  // il est listé, mais il ne fait pas sonner la tuile rouge.
+  const comptesEnEchec = comptesIncomplets.filter((c) =>
+    c.causes.some((cause) => cause.kind !== "attenteFilet"),
+  ).length;
+  const comptesEnAttenteFilet = comptesIncomplets.length - comptesEnEchec;
+  const aideIncomplets = comptesEnAttenteFilet
+    ? `${t("minuit.comptesIncompletsAide")} · ${t("minuit.comptesAttenteFilet", {
+        count: comptesEnAttenteFilet,
+      })}`
+    : t("minuit.comptesIncompletsAide");
 
   return (
     <div className="space-y-6">
@@ -898,11 +967,11 @@ export function AdminMinuitPage() {
               icon={AlertTriangle}
               valeur={comptesEnEchec}
               label={t("minuit.comptesIncomplets")}
-              aide={t("minuit.comptesIncompletsAide")}
+              aide={aideIncomplets}
               ton={comptesEnEchec > 0 ? "echec" : "neutre"}
               actif={detailIncompletsOuvert}
               onClick={
-                comptesEnEchec > 0
+                comptesIncomplets.length > 0
                   ? () => setDetailIncompletsOuvert((o) => !o)
                   : undefined
               }
@@ -976,6 +1045,22 @@ export function AdminMinuitPage() {
                                     date={date}
                                     manquants={c.manquants}
                                   />
+                                </li>
+                              );
+                            }
+                            if (c.kind === "attenteFilet") {
+                              return (
+                                <li key={`w-${i}`} className="text-muted-foreground">
+                                  <span className="font-medium">
+                                    {t("minuit.causeWarmupTitre")}
+                                  </span>
+                                  {" — "}
+                                  {t("minuit.causeWarmupDetail", {
+                                    fin: c.finWarmup,
+                                    tick: c.prochainTick,
+                                  })}
+                                  {" "}
+                                  ({t("minuit.faitSur", { faits: c.faits, quota: c.quota })})
                                 </li>
                               );
                             }
