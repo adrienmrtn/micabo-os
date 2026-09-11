@@ -16,7 +16,7 @@ const res = await fetch(url, {
 });
 if (!res.ok) throw new Error(`minuit-vnext bundle ${res.status} (${url})`);
 const src = await res.text();
-if (!src.includes("Deno.serve") || !src.includes("warmup fini")) {
+if (!src.includes("Deno.serve") || !src.includes("date_publication_prevue")) {
   throw new Error("minuit-vnext bundle illisible ou tronqué");
 }
 new Function("ke", src)(createClient);
