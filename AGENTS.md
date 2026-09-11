@@ -78,16 +78,23 @@ commande d’un job existant (`0163_cutover_assignation_vnext.sql` recopie
 l’hôte `mbikecieskoobeizixig`). Détails et vérifications :
 `supabase/migrations/0236_crons_minuit.sql`.
 
-Le planificateur pose cinq jobs depuis `0242_cron_assignation_journee.sql` :
-minuit, ses deux filets de nuit, le drain ELO, et `minuit-vnext-journee`
-(horaire). Ce dernier existe parce que le warmup finit à n’importe quelle
-heure : sans lui, un créateur sorti de warmup après 06:00 Paris n’a aucun
-post ce jour-là (personne ne le voit sous quota) alors que l’ELO le pénalise
-déjà pour ne pas avoir publié. Une passe à vide ne fait rien.
+Le planificateur pose cinq jobs (`0242_cron_assignation_journee.sql`, révisé
+par `0251_filet_assignation_15min.sql`) : minuit, ses deux filets de nuit, le
+drain ELO, et `minuit-vnext-journee` — **toutes les 15 minutes**. Ce dernier
+existe parce que le warmup finit à n'importe quelle minute : sans lui, un
+créateur sorti de warmup après 06:00 Paris n'a aucun post ce jour-là (personne
+ne le voit sous quota) alors que l'ELO le pénalise déjà pour ne pas avoir
+publié. Une passe à vide ne fait rien — c'est ce qui permet de tourner au
+quart d'heure sans coût.
 
 Planifié le 07/09/2026 après test manuel : les cinq jobs sont actifs, tous en
 `kick_edge_micabo` sur l’hôte Micabo. Ne pas rejouer le planificateur sans
 nouveau OK — il désenfile et réenfile les cinq.
+
+Le 11/09/2026, après OK explicite, `minuit-vnext-journee` est passé de
+`0 * * * *` à `*/15 * * * *` — par un `cron.schedule` sur ce seul nom (jobid 44
+conservé), pas en rejouant le planificateur : les quatre autres jobs n'ont pas
+été touchés. Préférer toujours cette voie pour changer un seul job.
 
 Toute commande cron appelle l’Edge via `public.kick_edge_micabo('<fn>', <jsonb>)` :
 lui seul tient l’hôte et le secret. Corps JSON avec `jsonb_build_object`, jamais
