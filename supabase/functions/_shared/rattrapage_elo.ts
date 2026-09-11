@@ -1,17 +1,28 @@
 /**
- * Rattrapage ELO sur une fenêtre courte (défaut 4 jours Paris).
+ * Rattrapage sur une fenêtre courte (défaut 4 jours Paris).
  *
  * 1) Relève stats TikTok des passages publiés (publie_url) — vues/likes…
- * 2) ELO langue : deltas ↑/↓ incrémentaux (signal = vues seules), idempotents
- *    via passages.elo_maj_at — contourne PAUSE_ELO_RUNTIME.
+ * 2) Reposts bonus : tout passage > 50 000 vues est replanifié à J+7 sur le
+ *    même compte.
  * 3) ELO compte : moyenne pondérée récence des ≤10 derniers posts mesurés.
+ * 4) En fin de file : requalification tierlist des slideshows dont le cycle est
+ *    terminé (`_shared/requalification.ts`) + snapshot des vues globales.
+ *
+ * Les slideshows n'ont plus d'ELO par langue : leur tier ne bouge qu'à la
+ * requalification, sur la moyenne des vues d'un cycle complet.
  *
  * Renvoie aussi `logs` (trace) + `brief` (résumé UI).
  */
 import { scrapePost, scrapeStats, type ScrapedPost } from "./apify.ts";
 import {
+  abandonnerRepostsEnRetard,
+  planifierRepostsBonus,
+  requalifierContenus,
+  type RequalificationDetail,
+  type RequalificationResultat,
+} from "./requalification.ts";
+import {
   chargerScoring,
-  performanceNormalisee,
   performancePassage,
   type Supabase,
 } from "./scoring.ts";
@@ -20,10 +31,6 @@ import { aujourdhuiParis } from "./supabase.ts";
 export const RATTRAPAGE_JOURS_DEFAUT = 4;
 /** Profil TikTok scrapé — garder bas pour rester sous le timeout Edge 150s / compte. */
 const POSTS_RELEVES = 12;
-/** Sensibilité ELO langue (plus fort que l'EWMA comptes 0.3). */
-const LR_LANGUE = 0.4;
-/** Plafond |Δ| par passage pour éviter les coups trop violents. */
-const MAX_DELTA_LANGUE = 18;
 const COMPTE_MAX_POSTS = 10;
 const COMPTE_DECAY = 0.85;
 /** Fenêtre (±h) pour matcher le « dernier post » profil vs date attendue. */
@@ -46,22 +53,7 @@ export interface RattrapageOpts {
   compteId?: string | null;
   /** Nombre de jours Paris inclus (aujourd'hui inclus). Défaut 4. */
   jours?: number;
-  /** Réapplique l'ELO même si elo_maj_at est déjà posé (recalcule depuis score actuel). */
-  forcer?: boolean;
   dryRun?: boolean;
-}
-
-export interface EloLangueDetail {
-  passageId: string;
-  contenuId: string;
-  compteId: string;
-  handle: string | null;
-  langue: string;
-  date: string | null;
-  vues: number;
-  avant: number;
-  apres: number;
-  delta: number;
 }
 
 export interface EloCompteDetail {
@@ -87,14 +79,14 @@ export interface RattrapageBrief {
     fallbackCoherence: number;
     erreurs: number;
   };
-  eloLangue: {
-    appliques: number;
-    ignores: number;
-    deltaNet: number;
-    hausses: number;
-    baisses: number;
-    top: EloLangueDetail[];
+  requalif: {
+    examines: number;
+    requalifies: number;
+    montees: number;
+    descentes: number;
+    top: RequalificationDetail[];
   };
+  repostsBonus: number;
   eloCompte: {
     maj: number;
     top: EloCompteDetail[];
@@ -111,14 +103,8 @@ export interface RattrapageResultat {
     sansMatch: number;
     erreurs: Array<{ compteId: string; handle?: string | null; erreur: string }>;
   };
-  eloLangue: {
-    appliques: number;
-    ignores: number;
-    deltas: number;
-    hausses: number;
-    baisses: number;
-    details: EloLangueDetail[];
-  };
+  requalif: RequalificationResultat;
+  repostsBonus: { planifies: number; details: Array<{ passageId: string; jour: string; vues: number }> };
   eloCompte: { maj: number; details: EloCompteDetail[] };
   brief: RattrapageBrief;
   logs: RattrapageLog[];
@@ -252,10 +238,8 @@ type PassageFenetre = {
   likes: number | null;
   commentaires: number | null;
   partages: number | null;
-  elo_maj_at: string | null;
   slides: unknown;
   /** Stats relues dans ce run → ELO langue doit suivre même si déjà maj. */
-  statsFresh?: boolean;
 };
 
 async function chargerPassagesFenetre(
@@ -266,7 +250,7 @@ async function chargerPassagesFenetre(
   let q = supabase
     .from("passages")
     .select(
-      "id, contenu_id, compte_id, langue, publie_url, publie_at, date_publication_prevue, vues, likes, commentaires, partages, elo_maj_at, slides",
+      "id, contenu_id, compte_id, langue, publie_url, publie_at, date_publication_prevue, vues, likes, commentaires, partages, slides",
     )
     .eq("statut", "publie")
     .in("date_publication_prevue", dates)
@@ -435,9 +419,6 @@ async function releverStatsFenetre(
         passage.likes = match.stats.likes;
         passage.commentaires = match.stats.commentaires;
         passage.partages = match.stats.partages;
-        // Marque pour que l'ELO langue re-applique avec les vues fraîches
-        // (sinon elo_maj_at du matin bloque le re-run du soir).
-        passage.statsFresh = true;
         out.releves += 1;
         relevesCompte += 1;
         if (via === "fallbackUrl") out.fallbackUrl += 1;
@@ -460,151 +441,6 @@ async function releverStatsFenetre(
       journal.push("error", `@${handle} — erreur scrape`, erreur);
     }
   }
-
-  return out;
-}
-
-async function appliquerEloLangue(
-  supabase: Supabase,
-  passages: PassageFenetre[],
-  opts: { forcer: boolean; dryRun: boolean },
-  handles: Map<string, string | null>,
-  journal: Journal,
-): Promise<RattrapageResultat["eloLangue"]> {
-  const scoring = await chargerScoring(supabase);
-  const out: RattrapageResultat["eloLangue"] = {
-    appliques: 0,
-    ignores: 0,
-    deltas: 0,
-    hausses: 0,
-    baisses: 0,
-    details: [],
-  };
-
-  const ordonnés = [...passages].sort((a, b) => {
-    const ta = a.publie_at ?? `${a.date_publication_prevue ?? ""}T00:00:00Z`;
-    const tb = b.publie_at ?? `${b.date_publication_prevue ?? ""}T00:00:00Z`;
-    if (ta !== tb) return ta < tb ? -1 : 1;
-    return a.id < b.id ? -1 : 1;
-  });
-
-  const compteIds = [...new Set(ordonnés.map((p) => p.compte_id))];
-  const { data: comptesRows } = await supabase
-    .from("comptes")
-    .select("id, score")
-    .in("id", compteIds.length ? compteIds : ["00000000-0000-0000-0000-000000000000"]);
-  const scoreCompte = new Map(
-    (comptesRows ?? []).map((c) => [c.id as string, (c.score as number) ?? scoring.score_prior]),
-  );
-
-  const scoreLangue = new Map<string, { id: string; score: number; nb: number }>();
-  journal.push("info", `ELO langue — ${ordonnés.length} passage(s) à examiner`);
-
-  for (const p of ordonnés) {
-    if (p.vues == null) {
-      out.ignores += 1;
-      journal.push(
-        "warn",
-        `ELO langue ignoré (pas de vues)`,
-        `${p.date_publication_prevue ?? "?"} · ${p.langue} · ${p.id.slice(0, 8)}`,
-      );
-      continue;
-    }
-    // Déjà scorés : on ignore SAUF forcer admin, ou stats fraîches ce run
-    // (re-run Relancer le soir doit reprendre les posts du jour).
-    const rejouer = Boolean(opts.forcer || p.statsFresh);
-    if (p.elo_maj_at && !rejouer) {
-      out.ignores += 1;
-      continue;
-    }
-
-    const key = `${p.contenu_id}::${p.langue}`;
-    let cl = scoreLangue.get(key);
-    if (!cl) {
-      const { data: row } = await supabase
-        .from("contenu_langues")
-        .select("id, score, nb_passages")
-        .eq("contenu_id", p.contenu_id)
-        .eq("langue", p.langue)
-        .maybeSingle();
-      if (!row) {
-        out.ignores += 1;
-        journal.push(
-          "warn",
-          `ELO langue — pas de contenu_langues`,
-          `${p.contenu_id.slice(0, 8)} · ${p.langue}`,
-        );
-        continue;
-      }
-      cl = {
-        id: row.id as string,
-        score: (row.score as number) ?? scoring.score_prior,
-        nb: (row.nb_passages as number) ?? 0,
-      };
-      scoreLangue.set(key, cl);
-    }
-
-    const avant = cl.score;
-    const perf = performanceNormalisee(
-      performancePassage(p.vues, scoring.elo_vues_plafond),
-      scoreCompte.get(p.compte_id) ?? scoring.score_prior,
-      scoring.score_prior,
-    );
-    const brut = LR_LANGUE * (perf - cl.score);
-    const delta = clamp(brut, -MAX_DELTA_LANGUE, MAX_DELTA_LANGUE);
-    const next = clamp(cl.score + delta, 0, 100);
-    // Rejeu (forcer / stats fraîches) : ne pas recompter le passage.
-    const nb = p.elo_maj_at && rejouer ? cl.nb : cl.nb + 1;
-
-    if (!opts.dryRun) {
-      await supabase
-        .from("contenu_langues")
-        .update({
-          score: next,
-          nb_passages: nb,
-          score_maj_at: new Date().toISOString(),
-        })
-        .eq("id", cl.id);
-      await supabase
-        .from("passages")
-        .update({ elo_maj_at: new Date().toISOString() })
-        .eq("id", p.id);
-    }
-
-    cl.score = next;
-    cl.nb = nb;
-    p.elo_maj_at = new Date().toISOString();
-    out.appliques += 1;
-    out.deltas += delta;
-    if (delta > 0.05) out.hausses += 1;
-    else if (delta < -0.05) out.baisses += 1;
-
-    const detail: EloLangueDetail = {
-      passageId: p.id,
-      contenuId: p.contenu_id,
-      compteId: p.compte_id,
-      handle: handles.get(p.compte_id) ?? null,
-      langue: p.langue,
-      date: p.date_publication_prevue,
-      vues: p.vues,
-      avant,
-      apres: next,
-      delta,
-    };
-    out.details.push(detail);
-
-    const handle = detail.handle ? `@${detail.handle}` : p.compte_id.slice(0, 8);
-    journal.push(
-      delta >= 0 ? "ok" : "warn",
-      `ELO ${p.langue.toUpperCase()} ${handle} ${signe(delta)} → ${fmt(next)}`,
-      `${p.date_publication_prevue ?? "?"} · ${p.vues} vues · ${fmt(avant)} → ${fmt(next)}`,
-    );
-  }
-
-  journal.push(
-    "info",
-    `ELO langue — ${out.appliques} appliqué(s), ${out.ignores} ignoré(s), Δnet ${signe(out.deltas)} (${out.hausses}↑ ${out.baisses}↓)`,
-  );
 
   return out;
 }
@@ -797,12 +633,13 @@ function construireBrief(
   fenetre: { debut: string; fin: string; jours: number },
   passages: number,
   stats: RattrapageResultat["stats"],
-  eloLangue: RattrapageResultat["eloLangue"],
+  requalif: RequalificationResultat,
+  repostsBonus: number,
   eloCompte: RattrapageResultat["eloCompte"],
   dryRun: boolean,
 ): RattrapageBrief {
-  const topLangue = [...eloLangue.details]
-    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+  const topRequalif = [...requalif.details]
+    .sort((a, b) => (b.m ?? -1) - (a.m ?? -1))
     .slice(0, BRIEF_TOP);
   const topCompte = [...eloCompte.details]
     .sort((a, b) => Math.abs(b.apres - b.avant) - Math.abs(a.apres - a.avant))
@@ -811,8 +648,9 @@ function construireBrief(
   const resume =
     `${dryRun ? "[dry-run] " : ""}` +
     `${fenetre.debut}→${fenetre.fin} · ${stats.releves} stats · ` +
-    `${eloLangue.appliques} ELO langue (${eloLangue.hausses}↑ ${eloLangue.baisses}↓, Δ ${signe(eloLangue.deltas)}) · ` +
+    `${requalif.requalifies} requalif (${requalif.montees}↑ ${requalif.descentes}↓) · ` +
     `${eloCompte.maj} ELO compte` +
+    (repostsBonus ? ` · ${repostsBonus} repost(s) J+7` : "") +
     (stats.sansMatch ? ` · ${stats.sansMatch} sans match` : "") +
     (stats.erreurs.length ? ` · ${stats.erreurs.length} erreur(s)` : "");
 
@@ -828,18 +666,50 @@ function construireBrief(
       fallbackCoherence: stats.fallbackCoherence,
       erreurs: stats.erreurs.length,
     },
-    eloLangue: {
-      appliques: eloLangue.appliques,
-      ignores: eloLangue.ignores,
-      deltaNet: eloLangue.deltas,
-      hausses: eloLangue.hausses,
-      baisses: eloLangue.baisses,
-      top: topLangue,
+    requalif: {
+      examines: requalif.examines,
+      requalifies: requalif.requalifies,
+      montees: requalif.montees,
+      descentes: requalif.descentes,
+      top: topRequalif,
     },
+    repostsBonus,
     eloCompte: {
       maj: eloCompte.maj,
       top: topCompte,
     },
+  };
+}
+
+/** Trace lisible de la requalification dans le journal du run. */
+function journalRequalif(journal: Journal, r: RequalificationResultat): void {
+  journal.push(
+    "info",
+    `Requalification — ${r.examines} cycle(s) ouvert(s), ${r.requalifies} requalifié(s)`,
+    `${r.montees}↑ ${r.descentes}↓ ${r.inchanges}=` +
+      (r.cyclesVides ? ` · ${r.cyclesVides} cycle(s) sans mesure` : ""),
+  );
+  for (const d of r.details.slice(0, BRIEF_TOP)) {
+    const fleche = d.avant === d.apres ? "=" : `${d.avant} → ${d.apres}`;
+    journal.push(
+      d.apres === d.avant ? "info" : "ok",
+      `Tier ${fleche} · ${(d.titre ?? d.contenuId).slice(0, 40)}`,
+      `m=${d.m == null ? "—" : Math.round(d.m)} vues sur ${d.passagesMesures}/${d.passagesCible}` +
+        ` passage(s)${d.timeout ? " · timeout 14 j" : ""} → ${d.nouveauCible} passage(s) à faire`,
+    );
+  }
+}
+
+/** Résultat de requalification vide (runs qui ne la déclenchent pas). */
+function requalifVide(): RequalificationResultat {
+  return {
+    examines: 0,
+    requalifies: 0,
+    montees: 0,
+    descentes: 0,
+    inchanges: 0,
+    cyclesVides: 0,
+    details: [],
   };
 }
 
@@ -1065,14 +935,8 @@ export async function rattrapageElo(
         sansMatch: 0,
         erreurs: [],
       },
-      eloLangue: {
-        appliques: 0,
-        ignores: 0,
-        deltas: 0,
-        hausses: 0,
-        baisses: 0,
-        details: [],
-      },
+      requalif: requalifVide(),
+      repostsBonus: { planifies: 0, details: [] },
       eloCompte: { maj: 0, details: [] },
       brief: construireBrief(
         { debut, fin, jours: dates.length },
@@ -1085,14 +949,8 @@ export async function rattrapageElo(
           sansMatch: 0,
           erreurs: [],
         },
-        {
-          appliques: 0,
-          ignores: 0,
-          deltas: 0,
-          hausses: 0,
-          baisses: 0,
-          details: [],
-        },
+        requalifVide(),
+        0,
         { maj: 0, details: [] },
         false,
       ),
@@ -1104,13 +962,12 @@ export async function rattrapageElo(
 
   const jours = Math.max(1, Math.min(14, opts.jours ?? RATTRAPAGE_JOURS_DEFAUT));
   const dryRun = Boolean(opts.dryRun);
-  const forcer = Boolean(opts.forcer);
   const { debut, fin, dates } = joursFenetreParis(jours);
   const handles = new Map<string, string | null>();
 
   journal.push(
     "info",
-    `Démarrage rattrapage ELO${dryRun ? " (dry-run)" : ""}${forcer ? " (forcer)" : ""}`,
+    `Démarrage rattrapage${dryRun ? " (dry-run)" : ""}`,
     `fenêtre ${debut} → ${fin} (${jours}j)` +
       (opts.compteId ? ` · compte ${opts.compteId.slice(0, 8)}` : " · tous comptes"),
   );
@@ -1173,21 +1030,22 @@ export async function rattrapageElo(
         sansMatch: 0,
         erreurs: [] as RattrapageResultat["stats"]["erreurs"],
       };
-      const eloVide = {
-        appliques: 0,
-        ignores: 0,
-        deltas: 0,
-        hausses: 0,
-        baisses: 0,
-        details: [] as EloLangueDetail[],
-      };
       const compteVide = { maj: 0, details: [] as EloCompteDetail[] };
-      const brief = construireBrief({ debut, fin, jours }, 0, vide, eloVide, compteVide, dryRun);
+      const brief = construireBrief(
+        { debut, fin, jours },
+        0,
+        vide,
+        requalifVide(),
+        0,
+        compteVide,
+        dryRun,
+      );
       journal.push("ok", "Terminé (warmup)", brief.resume);
       return {
         fenetre: { debut, fin, jours },
         stats: vide,
-        eloLangue: eloVide,
+        requalif: requalifVide(),
+        repostsBonus: { planifies: 0, details: [] },
         eloCompte: compteVide,
         brief,
         logs: journal.lines,
@@ -1197,7 +1055,23 @@ export async function rattrapageElo(
   }
 
   const stats = await releverStatsFenetre(supabase, passages, dryRun, handles, journal);
-  const eloLangue = await appliquerEloLangue(supabase, passages, { forcer, dryRun }, handles, journal);
+
+  // Carton (> 50 000 vues) → le même post repart sur le même compte à J+7.
+  const repostsBonus = await planifierRepostsBonus(
+    supabase,
+    passages.map((p) => ({
+      id: p.id,
+      contenu_id: p.contenu_id,
+      compte_id: p.compte_id,
+      langue: p.langue,
+      publie_at: p.publie_at,
+      vues: p.vues,
+    })),
+    { dryRun },
+  );
+  for (const r of repostsBonus.details) {
+    journal.push("ok", `Repost bonus planifié le ${r.jour}`, `${r.vues} vues`);
+  }
 
   // ELO compte : tous les actifs en process (pénalité no-post même sans passage publié).
   let compteIds: string[];
@@ -1226,17 +1100,28 @@ export async function rattrapageElo(
     journal,
   );
 
+  // Requalification tierlist + snapshot : uniquement sur un run « tous comptes »
+  // (un run compte isolé ne voit qu'une partie des passages d'un cycle).
+  let requalif = requalifVide();
   let snapshot: Awaited<ReturnType<typeof snapshotVuesGlobales>> | undefined;
-  // Snapshot global seulement sur un run « tous comptes » (pas un compte isolé).
-  if (!dryRun && !opts.compteId) {
-    snapshot = await snapshotVuesGlobales(supabase, journal);
+  if (!opts.compteId) {
+    requalif = await requalifierContenus(supabase, { dryRun });
+    journalRequalif(journal, requalif);
+    if (!dryRun) {
+      const abandons = await abandonnerRepostsEnRetard(supabase);
+      if (abandons > 0) {
+        journal.push("warn", `${abandons} repost(s) bonus abandonné(s) (J+7 dépassé)`);
+      }
+      snapshot = await snapshotVuesGlobales(supabase, journal);
+    }
   }
 
   const brief = construireBrief(
     { debut, fin, jours },
     passages.length,
     stats,
-    eloLangue,
+    requalif,
+    repostsBonus.planifies,
     eloCompte,
     dryRun,
   );
@@ -1245,7 +1130,8 @@ export async function rattrapageElo(
   return {
     fenetre: { debut, fin, jours },
     stats,
-    eloLangue,
+    requalif,
+    repostsBonus,
     eloCompte,
     brief,
     logs: journal.lines,
@@ -1359,7 +1245,6 @@ export async function rattrapageEloDrainLot(
   opts: {
     offset?: number;
     jours?: number;
-    forcer?: boolean;
     dryRun?: boolean;
   } = {},
 ): Promise<{
@@ -1370,6 +1255,7 @@ export async function rattrapageEloDrainLot(
   comptes: string[];
   erreurs: Array<{ compteId: string; handle: string; erreur: string }>;
   snapshot?: Awaited<ReturnType<typeof snapshotVuesGlobales>>;
+  requalif?: RequalificationResultat;
 }> {
   const offset = Math.max(0, Math.floor(opts.offset ?? 0));
   const tous = await listerComptesRattrapageElo(supabase);
@@ -1381,7 +1267,6 @@ export async function rattrapageEloDrainLot(
       await rattrapageElo(supabase, {
         compteId: c.id,
         jours: opts.jours,
-        forcer: opts.forcer,
         dryRun: opts.dryRun,
       });
     } catch (e) {
@@ -1407,6 +1292,22 @@ export async function rattrapageEloDrainLot(
     }
   }
 
+  // Fin de file : tous les comptes ont livré leurs vues du jour, on peut
+  // requalifier les cycles terminés (et solder les reposts bonus en retard).
+  let requalif: RequalificationResultat | undefined;
+  if (restants === 0 && !opts.dryRun) {
+    try {
+      requalif = await requalifierContenus(supabase);
+      console.log(
+        `[rattrapage-elo] requalification ${requalif.requalifies}/${requalif.examines}` +
+          ` (${requalif.montees}↑ ${requalif.descentes}↓)`,
+      );
+      await abandonnerRepostsEnRetard(supabase);
+    } catch (e) {
+      console.error("[rattrapage-elo] requalifierContenus", e);
+    }
+  }
+
   return {
     traites: lot.length,
     restants,
@@ -1415,6 +1316,7 @@ export async function rattrapageEloDrainLot(
     comptes: lot.map((c) => c.handle_tiktok),
     erreurs,
     snapshot,
+    requalif,
   };
 }
 

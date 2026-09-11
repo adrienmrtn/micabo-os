@@ -87,12 +87,12 @@ Deno.serve(async (request) => {
       return json({ ok: true, deja: r.deja, etat: tick.etat ?? r.etat });
     }
 
-    // Relance manuelle : boost ELO au seuil puis file nettoyage.
+    // Relance manuelle : entrée forcée en tier C puis file nettoyage.
     if (body?.forcerElo && body?.contenuId) {
       const r = await forcerImportElo(supabase, String(body.contenuId));
       if (!r.ok) return json({ ok: false, error: r.erreur }, 400);
       kickWorkers(request, 2);
-      return json({ ok: true, contenuId: String(body.contenuId), elo: r.elo, langues: r.langues });
+      return json({ ok: true, contenuId: String(body.contenuId), elo: r.elo, tier: r.tier });
     }
 
     // Enfile toutes les URLs d'un compte (listing rapide, pas de scrape lourd).

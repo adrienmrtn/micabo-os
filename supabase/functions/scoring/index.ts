@@ -1,31 +1,26 @@
 import { majScoresDepuisPassages } from "../_shared/scoring.ts";
-import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
+import { assertAuthorised, json, messageErreur } from "../_shared/supabase.ts";
 
 /**
- * MAJ des scores v-next à partir des passages récemment relevés.
+ * Ancienne MAJ des scores `contenu_langues`.
  *
- *   {}             → tous les passages des ~36 dernières heures
- *   { compteId }   → restreint à ce compte
- *   { depuisHeures }
+ * Retirée au passage en tierlist : les slideshows n'ont plus de score par
+ * langue. La fonction répond toujours (cron / appels historiques) mais ne
+ * touche plus rien — la requalification se fait dans `rattrapage-elo`.
  */
 Deno.serve(async (request) => {
   const denied = await assertAuthorised(request);
   if (denied) return denied;
 
-  const supabase = serviceClient();
-  // deno-lint-ignore no-explicit-any
-  let body: any = {};
+  // Corps ignoré : la fonction ne fait plus rien.
   try {
-    body = await request.json();
+    await request.json();
   } catch {
     // vide
   }
 
   try {
-    const r = await majScoresDepuisPassages(supabase, {
-      compteId: body?.compteId ?? null,
-      depuisHeures: body?.depuisHeures ?? 36,
-    });
+    const r = majScoresDepuisPassages();
     return json({ ok: true, ...r });
   } catch (error) {
     return json({ ok: false, error: messageErreur(error) }, 500);

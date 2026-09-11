@@ -12,6 +12,36 @@ révision ~10 min/jour.
 - File Settings / least-used : jamais de label `ugc_ai_video` (ex. `test`)
   sur un créateur slideshow.
 
+## Tierlist des slideshows (depuis 0250)
+
+Un slideshow porte **un tier** (`contenus.tier` : D, C, B, A, S, S+) et un
+nombre de passages à effectuer (`passages_cible` : 0/1/2/4/8/16). Il n'y a plus
+d'ELO par langue — `contenu_langues.score` est **gelé** (historique) et n'est
+plus lu par le moteur.
+
+- Import : note /100 = 30 % pertinence + 70 % vues source, régularisée
+  (`kk = k/2`). <55 → non importé · 55–60 C · 60–70 B · ≥70 A.
+  Une seule ligne `contenu_langues` est créée (langue source) ; les autres
+  langues arrivent à la demande, à l'assignation (`assurerDeckPourLangue`).
+- Cycle : les passages du cycle sont ceux créés depuis `tier_maj_at`, hors
+  reposts bonus et hors posts test. Quand ils sont tous publiés **et** mesurés
+  (3 jours après publication), minuit requalifie sur `m` = moyenne des vues :
+  bandes absolues (<600 D · <1 000 C · <5 000 B · <30 000 A · <150 000 S ·
+  sinon S+), jamais plus d'un cran de descente, et il faut 1 000 vues pour
+  sortir de D. Cycle qui traîne → requalification forcée à 14 jours.
+- Assignation : tirage **au hasard** parmi les slideshows du pool (labels ∩,
+  toutes langues) qui ont encore des passages dus. Plus de softmax, plus de
+  pénalité de saturation, plus de « jamais deux fois le même post » (mais
+  jamais deux fois le même jour sur le même compte). S'il n'y a pas assez de
+  passages dus, un slideshow en D est repêché avec un cycle d'un passage.
+- Le quota d'un créateur (`posts_par_jour`) **ne baisse plus jamais**.
+- Repost bonus : un passage > 50 000 vues rejoue le même post sur le même
+  compte à J+7 (`reposts_bonus`). Hors cycle, mais dans le quota du jour ;
+  abandonné si le créneau est passé.
+
+L'**ELO compte** (`comptes.score`) est inchangé : moyenne pondérée des ≤10
+derniers posts mesurés, −5 par jour actif sans publication, skip warmup.
+
 ## Cloisonnement (non négociable)
 
 Tu travailles **uniquement** dans `adrienmrtn/micabo-os`.

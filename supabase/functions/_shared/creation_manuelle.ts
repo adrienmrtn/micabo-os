@@ -4,9 +4,9 @@
  */
 
 import { generateTextCreative } from "./gemini.ts";
-import { LANGUES_CIBLES } from "./import_contenu.ts";
 import { decouperEnLots } from "./oubli_source_cible.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
+import { passagesPourTier, tierDepuisEloLegacy } from "./tierlist.ts";
 
 /** Au-delà, PostgREST répond 400 Bad Request (URL `.in()` trop longue). */
 const LOT_IN = 80;
@@ -451,6 +451,8 @@ export async function validerSlideshowManuel(
     });
 
   const elo = normaliserEloManuel(opts.elo);
+  // La note admin 0–100 sert de premier placement dans la tierlist.
+  const tier = tierDepuisEloLegacy(elo);
   const titre = (opts.hook || hookSlide.texte || "Sans titre").slice(0, 160);
 
   const { data: contenu, error } = await supabase
@@ -465,6 +467,10 @@ export async function validerSlideshowManuel(
       musique_titre: musique.musique_titre,
       musique_plateforme: musique.musique_plateforme,
       pertinence_score: elo,
+      tier,
+      passages_cible: passagesPourTier(tier),
+      tier_maj_at: new Date().toISOString(),
+      tier_note_import: elo,
       statut: "valide",
       import_statut: "done",
       import_etape: "done",
@@ -491,15 +497,14 @@ export async function validerSlideshowManuel(
       position_sophia: false,
     }));
 
-  const langues = LANGUES_CIBLES.map((langue) => ({
+  // Une seule ligne de langue : la source. Les autres langues sont créées à la
+  // demande par `assurerDeckPourLangue`, à l'assignation.
+  const { error: errL } = await supabase.from("contenu_langues").insert({
     contenu_id: contenu.id,
-    langue,
-    slides: langue === musique.langue_source ? deckSource : [],
-    score: elo,
+    langue: musique.langue_source,
+    slides: deckSource,
     nb_passages: 0,
-    score_maj_at: new Date().toISOString(),
-  }));
-  const { error: errL } = await supabase.from("contenu_langues").insert(langues);
+  });
   if (errL) throw errL;
 
   return { id: contenu.id };

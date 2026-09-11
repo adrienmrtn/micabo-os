@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { indexTier, type Tier } from "@/features/moteur/tierlist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -309,17 +310,15 @@ function vignette(c: ContenuListe): string | null {
   return first?.raw_url ?? first?.reference_url ?? null;
 }
 
-type TriSlideshow = "recent" | "elo" | "posts" | "compte";
+type TriSlideshow = "recent" | "tier" | "posts" | "compte";
 /** null = tous ; "__none__" = sans label ; sinon id label */
 type FiltreLabel = string | null;
 /** null = tous ; "__none__" = source oubliée ; sinon id compte_reference */
 type FiltreCompte = string | null;
 type FiltreUgc = "tous" | "oui" | "non";
 
-function eloMax(c: ContenuListe): number {
-  const scores = c.scores ?? [];
-  if (scores.length === 0) return -1;
-  return Math.max(...scores.map((s) => s.score));
+function rangTier(c: ContenuListe): number {
+  return c.tier ? indexTier(c.tier) : -1;
 }
 
 function filtreSlideshows(
@@ -356,9 +355,9 @@ function trierSlideshows(
   const parDate = (a: ContenuListe, b: ContenuListe) =>
     b.created_at.localeCompare(a.created_at);
   switch (tri) {
-    case "elo":
+    case "tier":
       return arr.sort((a, b) => {
-        const diff = eloMax(b) - eloMax(a);
+        const diff = rangTier(b) - rangTier(a);
         return diff !== 0 ? diff : parDate(a, b);
       });
     case "posts":
@@ -405,6 +404,42 @@ function Chip({
     >
       {children}
     </button>
+  );
+}
+
+/** Tier + avancement du cycle de passages d'un slideshow. */
+function TierBadge({
+  tier,
+  faits,
+  cible,
+}: {
+  tier: Tier | null;
+  faits: number;
+  cible: number;
+}) {
+  const { t } = useTranslation();
+  if (!tier) {
+    return (
+      <Badge variant="outline" className="text-[10px]">
+        {t("slideshows.tierAbsent")}
+      </Badge>
+    );
+  }
+  const fort = tier === "S" || tier === "S+" || tier === "A";
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Badge
+        variant={tier === "D" ? "outline" : fort ? "success" : "secondary"}
+        className="text-[10px] font-semibold"
+      >
+        {tier}
+      </Badge>
+      <span className="text-[10px] tabular-nums text-muted-foreground">
+        {cible > 0
+          ? t("slideshows.tierCycle", { faits: Math.min(faits, cible), cible })
+          : t("slideshows.tierDormant")}
+      </span>
+    </span>
   );
 }
 
@@ -1620,8 +1655,29 @@ function DetailSlideshow({
 
             <section className="space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("slideshows.elo")}
+                {t("slideshows.tier")}
               </h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <TierBadge
+                  tier={d.tier ?? null}
+                  faits={d.passages_cycle ?? 0}
+                  cible={d.passages_cible ?? 0}
+                />
+                {d.tier_maj_at && (
+                  <span className="text-xs text-muted-foreground">
+                    {t("slideshows.tierDepuis", {
+                      date: new Date(d.tier_maj_at).toLocaleDateString(),
+                    })}
+                  </span>
+                )}
+                {d.tier_note_import != null && (
+                  <span className="text-xs text-muted-foreground">
+                    {t("slideshows.tierNoteImport", {
+                      note: d.tier_note_import.toFixed(1),
+                    })}
+                  </span>
+                )}
+              </div>
               {d.import_elo_rapport?.texte && (
                 <details className="rounded border bg-muted/30 px-2.5 py-2">
                   <summary className="cursor-pointer text-[11px] font-medium">
@@ -1634,37 +1690,6 @@ function DetailSlideshow({
                     {d.import_elo_rapport.texte}
                   </pre>
                 </details>
-              )}
-              {langues.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  {detail.isFetching
-                    ? t("common.loading")
-                    : t("slideshows.eloVide")}
-                </p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {langues.map((l) => (
-                    <li
-                      key={l.id}
-                      className="flex items-center justify-between rounded border px-2.5 py-1.5 text-sm"
-                    >
-                      <span>
-                        {nomLangue(l.langue)}
-                        {l.langue === d.langue_source ? (
-                          <span className="ml-1 text-[10px] text-muted-foreground">
-                            ({t("slideshows.origine")})
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="tabular-nums">
-                        <span className="font-semibold">{l.score.toFixed(1)}</span>
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          {t("slideshows.nbPassages", { count: l.nb_passages })}
-                        </span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
               )}
             </section>
 
@@ -1694,7 +1719,6 @@ function DetailSlideshow({
                         )}
                       >
                         {l.langue.toUpperCase()}
-                        <span className="ml-1 opacity-80">{l.score.toFixed(0)}</span>
                       </button>
                     ))}
                   </div>
@@ -2374,7 +2398,7 @@ export function AdminSlideshowsPage() {
                   {t("slideshows.triLabel")}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {(["recent", "elo", "posts", "compte"] as const).map((k) => (
+                  {(["recent", "tier", "posts", "compte"] as const).map((k) => (
                     <Chip key={k} actif={tri === k} onClick={() => setTri(k)}>
                       {t(`slideshows.tri.${k}`)}
                     </Chip>
@@ -2526,19 +2550,12 @@ export function AdminSlideshowsPage() {
                         ))
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-1">
-                      {(c.scores ?? [])
-                        .slice()
-                        .sort((a, b) => b.score - a.score)
-                        .slice(0, 4)
-                        .map((s) => (
-                          <span
-                            key={s.langue}
-                            className="rounded border px-1 py-0.5 text-[10px] tabular-nums"
-                          >
-                            {s.langue.toUpperCase()} {s.score.toFixed(0)}
-                          </span>
-                        ))}
+                    <div className="flex flex-wrap items-center gap-1">
+                      <TierBadge
+                        tier={c.tier ?? null}
+                        faits={c.passages_cycle ?? 0}
+                        cible={c.passages_cible ?? 0}
+                      />
                     </div>
                     <div className="flex flex-wrap items-center gap-1">
                       <Badge

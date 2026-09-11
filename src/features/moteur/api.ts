@@ -28,6 +28,7 @@ import { type MajSourcesRun } from "./majSequentielle";
 import { compteEnProcessus, statutWarmup } from "./warmup";
 // Source unique du verdict pool (partagée avec l'Edge minuit) — pur TS, pas de Deno.
 import { messagePool } from "../../../supabase/functions/_shared/quota_pool.ts";
+import { type Tier } from "./tierlist";
 import {
   motifEchecNettoyage,
   type MotifEchecNettoyage,
@@ -4085,6 +4086,20 @@ export type RattrapageEloLog = {
   detail?: string;
 };
 
+/** Une ligne de requalification tierlist (brief du rattrapage). */
+export type RequalificationDetail = {
+  contenuId: string;
+  titre: string | null;
+  avant: Tier;
+  apres: Tier;
+  /** Moyenne des vues mesurées du cycle (null = cycle sans mesure). */
+  m: number | null;
+  passagesMesures: number;
+  passagesCible: number;
+  nouveauCible: number;
+  timeout: boolean;
+};
+
 export type RattrapageEloBrief = {
   resume: string;
   fenetre: string;
@@ -4097,25 +4112,15 @@ export type RattrapageEloBrief = {
     fallbackCoherence: number;
     erreurs: number;
   };
-  eloLangue: {
-    appliques: number;
-    ignores: number;
-    deltaNet: number;
-    hausses: number;
-    baisses: number;
-    top: Array<{
-      passageId: string;
-      contenuId: string;
-      compteId: string;
-      handle: string | null;
-      langue: string;
-      date: string | null;
-      vues: number;
-      avant: number;
-      apres: number;
-      delta: number;
-    }>;
+  requalif: {
+    examines: number;
+    requalifies: number;
+    montees: number;
+    descentes: number;
+    top: RequalificationDetail[];
   };
+  /** Reposts J+7 planifiés pendant ce run (passages > 50 000 vues). */
+  repostsBonus: number;
   eloCompte: {
     maj: number;
     top: Array<{
@@ -4128,11 +4133,13 @@ export type RattrapageEloBrief = {
   };
 };
 
-/** Rattrapage ELO (4 jours Paris) : stats → deltas langue (vues) → ELO compte ≤10 posts. */
+/**
+ * Rattrapage (4 jours Paris) : stats → reposts bonus J+7 → ELO compte ≤10 posts,
+ * puis requalification tierlist des slideshows en fin de file.
+ */
 export const lancerRattrapageElo = (opts?: {
   compteId?: string;
   jours?: number;
-  forcer?: boolean;
   dryRun?: boolean;
   /** Figé seulement vues_globales_jour (fin de run live). */
   snapshot?: boolean;
@@ -4148,13 +4155,14 @@ export const lancerRattrapageElo = (opts?: {
       sansMatch: number;
       erreurs: Array<{ compteId: string; handle?: string | null; erreur: string }>;
     };
-    eloLangue: {
-      appliques: number;
-      ignores: number;
-      deltas: number;
-      hausses: number;
-      baisses: number;
+    requalif: {
+      examines: number;
+      requalifies: number;
+      montees: number;
+      descentes: number;
+      details: RequalificationDetail[];
     };
+    repostsBonus: { planifies: number };
     eloCompte: { maj: number };
     brief: RattrapageEloBrief;
     logs: RattrapageEloLog[];
@@ -4169,7 +4177,6 @@ export const lancerRattrapageElo = (opts?: {
   }>("rattrapage-elo", {
     compteId: opts?.compteId ?? null,
     jours: opts?.jours ?? 4,
-    forcer: opts?.forcer ?? false,
     dryRun: opts?.dryRun ?? false,
     snapshot: opts?.snapshot ?? false,
   });
@@ -4243,14 +4250,14 @@ function fusionnerBriefs(
       fallbackCoherence: 0,
       erreurs,
     },
-    eloLangue: {
-      appliques: 0,
-      ignores: 0,
-      deltaNet: 0,
-      hausses: 0,
-      baisses: 0,
+    requalif: {
+      examines: 0,
+      requalifies: 0,
+      montees: 0,
+      descentes: 0,
       top: [],
     },
+    repostsBonus: 0,
     eloCompte: { maj: 0, top: [] },
   };
   const agg = parts.reduce((a, b) => {
@@ -4260,30 +4267,29 @@ function fusionnerBriefs(
     a.stats.sansMatch += b.stats.sansMatch;
     a.stats.fallbackUrl += b.stats.fallbackUrl;
     a.stats.fallbackCoherence += b.stats.fallbackCoherence;
-    a.eloLangue.appliques += b.eloLangue.appliques;
-    a.eloLangue.ignores += b.eloLangue.ignores;
-    a.eloLangue.deltaNet += b.eloLangue.deltaNet;
-    a.eloLangue.hausses += b.eloLangue.hausses;
-    a.eloLangue.baisses += b.eloLangue.baisses;
-    a.eloLangue.top.push(...b.eloLangue.top);
+    a.requalif.examines += b.requalif.examines;
+    a.requalif.requalifies += b.requalif.requalifies;
+    a.requalif.montees += b.requalif.montees;
+    a.requalif.descentes += b.requalif.descentes;
+    a.requalif.top.push(...b.requalif.top);
+    a.repostsBonus += b.repostsBonus;
     a.eloCompte.maj += b.eloCompte.maj;
     a.eloCompte.top.push(...b.eloCompte.top);
     return a;
   }, empty);
 
-  agg.eloLangue.top = [...agg.eloLangue.top]
-    .sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta))
+  agg.requalif.top = [...agg.requalif.top]
+    .sort((x, y) => (y.m ?? -1) - (x.m ?? -1))
     .slice(0, 12);
   agg.eloCompte.top = [...agg.eloCompte.top]
     .sort((x, y) => Math.abs(y.apres - y.avant) - Math.abs(x.apres - x.avant))
     .slice(0, 12);
 
-  const delta = Math.round(agg.eloLangue.deltaNet * 10) / 10;
-  const deltaStr = delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1);
   agg.resume =
     `${agg.fenetre} · ${agg.stats.releves} stats · ` +
-    `${agg.eloLangue.appliques} ELO langue (${agg.eloLangue.hausses}↑ ${agg.eloLangue.baisses}↓, Δ ${deltaStr}) · ` +
+    `${agg.requalif.requalifies} requalif (${agg.requalif.montees}↑ ${agg.requalif.descentes}↓) · ` +
     `${agg.eloCompte.maj} ELO compte` +
+    (agg.repostsBonus ? ` · ${agg.repostsBonus} repost(s) J+7` : "") +
     (agg.stats.sansMatch ? ` · ${agg.stats.sansMatch} sans match` : "") +
     (erreurs ? ` · ${erreurs} erreur(s)` : "");
   agg.stats.erreurs = erreurs;
@@ -4311,7 +4317,6 @@ async function sleepMs(ms: number): Promise<void> {
 async function lancerRattrapageEloCompteRobuste(opts: {
   compteId: string;
   jours: number;
-  forcer: boolean;
 }): Promise<RattrapageEloResultat> {
   try {
     return await lancerRattrapageElo(opts);
@@ -4321,7 +4326,6 @@ async function lancerRattrapageEloCompteRobuste(opts: {
     return await lancerRattrapageElo({
       compteId: opts.compteId,
       jours: Math.min(2, opts.jours),
-      forcer: opts.forcer,
     });
   }
 }
@@ -4333,19 +4337,18 @@ async function lancerRattrapageEloCompteRobuste(opts: {
  */
 export async function lancerRattrapageEloLive(opts?: {
   jours?: number;
-  forcer?: boolean;
   onProgress?: (p: RattrapageEloProgress) => void;
 }): Promise<{
   ok: boolean;
   brief: RattrapageEloBrief;
   logs: RattrapageEloLog[];
   stats: RattrapageEloResultat["stats"];
-  eloLangue: RattrapageEloResultat["eloLangue"];
+  requalif: RattrapageEloResultat["requalif"];
+  repostsBonus: number;
   eloCompte: { maj: number };
   fenetre: { debut: string; fin: string; jours: number };
 }> {
   const jours = opts?.jours ?? 4;
-  const forcer = opts?.forcer ?? false;
   const onProgress = opts?.onProgress;
 
   const comptes = await comptesPourRattrapage(jours);
@@ -4357,13 +4360,14 @@ export async function lancerRattrapageEloLive(opts?: {
   let sansMatch = 0;
   let fallbackUrl = 0;
   let fallbackCoherence = 0;
-  let eloLangue = {
-    appliques: 0,
-    ignores: 0,
-    deltas: 0,
-    hausses: 0,
-    baisses: 0,
+  const requalif = {
+    examines: 0,
+    requalifies: 0,
+    montees: 0,
+    descentes: 0,
+    details: [] as RequalificationDetail[],
   };
+  let repostsBonus = 0;
   let eloCompteMaj = 0;
 
   const pushLog = (level: RattrapageEloLog["level"], message: string, detail?: string) => {
@@ -4372,7 +4376,7 @@ export async function lancerRattrapageEloLive(opts?: {
 
   pushLog(
     "info",
-    `Rattrapage ELO live — ${comptes.length} compte(s) actifs (${jours}j)`,
+    `Rattrapage live — ${comptes.length} compte(s) actifs (${jours}j)`,
   );
   onProgress?.({
     index: 0,
@@ -4400,7 +4404,8 @@ export async function lancerRattrapageEloLive(opts?: {
         sansMatch: 0,
         erreurs: [],
       },
-      eloLangue,
+      requalif,
+      repostsBonus: 0,
       eloCompte: { maj: 0 },
       fenetre,
     };
@@ -4423,7 +4428,6 @@ export async function lancerRattrapageEloLive(opts?: {
       const r = await lancerRattrapageEloCompteRobuste({
         compteId: c.id,
         jours,
-        forcer,
       });
       fenetre = r.fenetre;
       for (const l of r.logs ?? []) logs.push(l);
@@ -4433,16 +4437,12 @@ export async function lancerRattrapageEloLive(opts?: {
       fallbackUrl += r.stats.fallbackUrl;
       fallbackCoherence += r.stats.fallbackCoherence;
       erreurs.push(...(r.stats.erreurs ?? []));
-      eloLangue.appliques += r.eloLangue.appliques;
-      eloLangue.ignores += r.eloLangue.ignores;
-      eloLangue.deltas += r.eloLangue.deltas;
-      eloLangue.hausses += r.eloLangue.hausses ?? 0;
-      eloLangue.baisses += r.eloLangue.baisses ?? 0;
+      repostsBonus += r.repostsBonus?.planifies ?? 0;
       eloCompteMaj += r.eloCompte.maj;
       pushLog(
         "ok",
         `[${i + 1}/${comptes.length}] @${c.handle ?? "?"} — OK`,
-        `${r.stats.releves} stats · ${r.eloLangue.appliques} langue · ${r.eloCompte.maj} compte`,
+        `${r.stats.releves} stats · ${r.eloCompte.maj} compte`,
       );
       onProgress?.({
         index: i + 1,
@@ -4471,6 +4471,26 @@ export async function lancerRattrapageEloLive(opts?: {
         erreur: detail,
       });
     }
+  }
+
+  // Requalification tierlist : après la boucle, quand toutes les vues du jour
+  // sont relevées (un run compte isolé ne requalifie pas).
+  try {
+    pushLog("info", "Requalification tierlist…");
+    const req = await lancerRattrapageElo({ jours });
+    for (const l of req.logs ?? []) logs.push(l);
+    requalif.examines += req.requalif?.examines ?? 0;
+    requalif.requalifies += req.requalif?.requalifies ?? 0;
+    requalif.montees += req.requalif?.montees ?? 0;
+    requalif.descentes += req.requalif?.descentes ?? 0;
+    requalif.details.push(...(req.requalif?.details ?? []));
+    if (req.brief) briefs.push(req.brief);
+  } catch (e) {
+    pushLog(
+      "warn",
+      "Requalification échouée",
+      e instanceof Error ? e.message : String(e),
+    );
   }
 
   // Snapshot vues globales (Pilotage : courbe Δ j0−j1).
@@ -4508,7 +4528,8 @@ export async function lancerRattrapageEloLive(opts?: {
       sansMatch,
       erreurs,
     },
-    eloLangue,
+    requalif,
+    repostsBonus,
     eloCompte: { maj: eloCompteMaj },
     fenetre,
   };
@@ -5979,7 +6000,10 @@ export async function propagerLabelsSource(compteReferenceId: string): Promise<n
 
 export interface ContenuListe extends Contenu {
   labels?: Label[];
+  /** Legacy ELO par langue — gelé depuis la tierlist, gardé pour l'historique. */
   scores?: Array<{ langue: string; score: number; nb_passages: number }>;
+  /** Passages déjà effectués sur le cycle tierlist courant. */
+  passages_cycle?: number;
   /** Nombre de passages / posts assignés sur ce slideshow. */
   nb_posts?: number;
   /** URL des visuels nettoyés indexés par media_id. */
@@ -6179,7 +6203,10 @@ async function enrichirContenusListe(contenus: Contenu[]): Promise<ContenuListe[
         .from("contenu_langues")
         .select("contenu_id, langue, score, nb_passages")
         .in("contenu_id", ids),
-      supabase.from("passages").select("contenu_id").in("contenu_id", ids),
+      supabase
+        .from("passages")
+        .select("contenu_id, created_at, bonus_repost")
+        .in("contenu_id", ids),
       metasMediasPropres(contenus),
     ]);
 
@@ -6198,9 +6225,19 @@ async function enrichirContenusListe(contenus: Contenu[]): Promise<ContenuListe[
     scoresPar.set(s.contenu_id, list);
   }
   const postsPar = new Map<string, number>();
+  const debutCycle = new Map(
+    contenus
+      .filter((c) => c.tier_maj_at)
+      .map((c) => [c.id, Date.parse(c.tier_maj_at as string)]),
+  );
+  const cyclePar = new Map<string, number>();
   for (const p of passages ?? []) {
     const cid = p.contenu_id as string;
     postsPar.set(cid, (postsPar.get(cid) ?? 0) + 1);
+    if (p.bonus_repost) continue;
+    const debut = debutCycle.get(cid);
+    if (debut == null || Date.parse(p.created_at as string) < debut) continue;
+    cyclePar.set(cid, (cyclePar.get(cid) ?? 0) + 1);
   }
 
   return contenus.map((c) => {
@@ -6222,6 +6259,7 @@ async function enrichirContenusListe(contenus: Contenu[]): Promise<ContenuListe[
       ugc_compatible: Boolean((c as Contenu).ugc_compatible),
       labels: labelsPar.get(c.id) ?? [],
       scores: scoresPar.get(c.id) ?? [],
+      passages_cycle: cyclePar.get(c.id) ?? 0,
       nb_posts: postsPar.get(c.id) ?? 0,
       mediaUrls: urls,
       mediaVisages: visages,
@@ -6321,7 +6359,7 @@ export async function lireSlideshow(id: string): Promise<SlideshowDetail | null>
       supabase
         .from("passages")
         .select(
-          "id, contenu_id, compte_id, langue, date_publication_prevue, statut, publie_url, vues, likes, commentaires, partages, post_id, comptes(handle_tiktok, persona_nom, langue)",
+          "id, contenu_id, compte_id, langue, date_publication_prevue, statut, publie_url, vues, likes, commentaires, partages, post_id, created_at, bonus_repost, comptes(handle_tiktok, persona_nom, langue)",
         )
         .eq("contenu_id", id)
         .order("date_publication_prevue", { ascending: false }),
@@ -6357,6 +6395,12 @@ export async function lireSlideshow(id: string): Promise<SlideshowDetail | null>
       score: l.score,
       nb_passages: l.nb_passages,
     })),
+    passages_cycle: (passages ?? []).filter((p) => {
+      const row = p as unknown as { created_at?: string; bonus_repost?: boolean };
+      if (row.bonus_repost) return false;
+      if (!c.tier_maj_at || !row.created_at) return false;
+      return Date.parse(row.created_at) >= Date.parse(c.tier_maj_at);
+    }).length,
     langues: (langues ?? []) as ContenuLangue[],
     passages: (passages ?? []) as unknown as SlideshowDetail["passages"],
     source,

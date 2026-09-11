@@ -1,4 +1,5 @@
 import type { PapierFalUsage, ReglagesPapier } from "./papierReglages";
+import type { Tier } from "./tierlist";
 
 export type PipelineStatut = "pending" | "running" | "done" | "failed";
 export type SujetStatut = "propose" | "retenu" | "rejete" | "utilise";
@@ -419,9 +420,16 @@ export interface EloImportRapport {
   vuesPlafond: number;
   prior: number;
   k: number;
+  kk?: number;
+  base?: number;
+  /** Note /100 du premier placement. */
+  note?: number;
+  /** Tier d'entrée (null = sous le seuil). */
+  tier?: Tier | null;
   seuil: number;
   langueSource: string;
-  lignes: Array<{
+  /** Legacy : détail par langue des imports d'avant la tierlist. */
+  lignes?: Array<{
     langue: string;
     estSource: boolean;
     pertinence: number;
@@ -457,6 +465,14 @@ export interface Contenu {
   import_tentatives: number;
   /** Rapport ELO détaillé (persistant pour historique / logs). */
   import_elo_rapport?: EloImportRapport | null;
+  /** Tierlist : D → S+ (null tant que l'import n'a pas placé le slideshow). */
+  tier?: Tier | null;
+  /** Passages à effectuer sur le cycle courant (0 en D). */
+  passages_cible?: number;
+  /** Début du cycle courant = dernière requalification. */
+  tier_maj_at?: string | null;
+  /** Note /100 du premier placement (trace). */
+  tier_note_import?: number | null;
   /** Scores plancherés au seuil (relance manuelle admin). */
   import_elo_force_seuil?: boolean;
   parent_id: string | null;

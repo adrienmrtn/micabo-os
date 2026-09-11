@@ -1,18 +1,16 @@
-import { lireParLots } from "./lots.ts";
 import { serviceClient } from "./supabase.ts";
 
 export type Supabase = ReturnType<typeof serviceClient>;
 
 /**
- * PAUSE temporaire — ne plus faire évoluer `contenu_langues.score` / EWMA
- * comptes à partir des stats TikTok fetchées au minuit runtime.
- * L'assignation midnight continue d'utiliser les scores d'import (ELO cold-start).
- * Le rattrapage admin (`rattrapage-elo` / etape minuit `rattrapage`) contourne
- * cette pause volontairement.
+ * Historique : l'ELO runtime par langue a d'abord été mis en pause, puis retiré
+ * au passage en tierlist. Ce drapeau reste `true` — les slideshows n'ont plus
+ * de score par langue, seul l'ELO **compte** vit encore (rattrapage).
  */
 export const PAUSE_ELO_RUNTIME = true;
 
 export interface ScoringReglages {
+  /** Lissage EWMA — conservé pour l'historique, plus lu par l'ELO compte. */
   ewma_alpha: number;
   regularisation_k: number;
   transfert_inter_langue: number;
@@ -52,174 +50,23 @@ export function performancePassage(
 }
 
 /**
- * Normalise par la « forme » du compte : une réussite sur un petit score
- * (peu attendu) pousse plus qu'une réussite sur un gros score.
+ * Ancienne MAJ des scores `contenu_langues` depuis les stats.
+ *
+ * Retirée avec le passage en tierlist : un slideshow n'a plus de score par
+ * langue, son tier bouge à la requalification (`_shared/requalification.ts`),
+ * une fois son cycle de passages terminé. La fonction reste en place pour
+ * l'étape `scores` (minuit / Edge `scoring`), qui ne fait donc plus rien.
  */
-export function performanceNormalisee(perf: number, scoreCompte: number, prior: number): number {
-  const forme = Math.max(scoreCompte, 1);
-  const facteur = prior / forme;
-  return Math.min(100, Math.max(0, prior + (perf - prior) * facteur));
-}
-
-/**
- * MAJ des scores après relevé de stats.
- * Recalcul idempotent par contenu×langue à partir de tous les passages publiés
- * mesurés (évite d'inflater nb_passages à chaque minuit).
- * Ordre : contenu[langue postée] → transfert léger → EWMA comptes.
- */
-export async function majScoresDepuisPassages(
-  supabase: Supabase,
-  opts: { depuisHeures?: number; compteId?: string | null } = {},
-): Promise<{ contenus: number; comptes: number; saute?: boolean; raison?: string }> {
-  if (PAUSE_ELO_RUNTIME) {
-    return {
-      contenus: 0,
-      comptes: 0,
-      saute: true,
-      raison: "PAUSE_ELO_RUNTIME — évolution ELO langue depuis stats désactivée",
-    };
-  }
-
-  const scoring = await chargerScoring(supabase);
-  const depuis = new Date(
-    Date.now() - (opts.depuisHeures ?? 36) * 3600_000,
-  ).toISOString();
-
-  // Passages fraîchement relevés → quels contenus recalculer
-  let q = supabase
-    .from("passages")
-    .select("contenu_id, compte_id")
-    .eq("statut", "publie")
-    .not("vues", "is", null)
-    .gte("stats_maj_at", depuis);
-
-  if (opts.compteId) q = q.eq("compte_id", opts.compteId);
-
-  const { data: recents, error } = await q;
-  if (error) throw error;
-  if (!recents || recents.length === 0) return { contenus: 0, comptes: 0 };
-
-  const contenuIds = [...new Set(recents.map((p) => p.contenu_id as string))];
-  const compteIdsTouchés = [...new Set(recents.map((p) => p.compte_id as string))];
-
-  const { data: comptesRows } = await supabase.from("comptes").select("id, score");
-  const scoreCompte = new Map(
-    (comptesRows ?? []).map((c) => [c.id as string, (c.score as number) ?? scoring.score_prior]),
-  );
-
-  // Tous les passages mesurés de ces contenus (recalcul complet)
-  const tous = await lireParLots<{
-    contenu_id: string;
-    compte_id: string;
-    langue: string;
-    vues: number | null;
-  }>(contenuIds, "Passages mesurés", (lot) =>
-    supabase
-      .from("passages")
-      .select("contenu_id, compte_id, langue, vues")
-      .in("contenu_id", lot)
-      .eq("statut", "publie")
-      .not("vues", "is", null));
-
-  type Agg = { perfs: number[] };
-  const parContenuLangue = new Map<string, Agg>();
-  for (const p of tous ?? []) {
-    const key = `${p.contenu_id}::${p.langue}`;
-    const perf = performanceNormalisee(
-      performancePassage(p.vues, scoring.elo_vues_plafond),
-      scoreCompte.get(p.compte_id) ?? scoring.score_prior,
-      scoring.score_prior,
-    );
-    let agg = parContenuLangue.get(key);
-    if (!agg) {
-      agg = { perfs: [] };
-      parContenuLangue.set(key, agg);
-    }
-    agg.perfs.push(perf);
-  }
-
-  let contenusMaj = 0;
-  const transferJobs: Array<{ contenuId: string; langue: string; score: number }> = [];
-  const k = scoring.regularisation_k;
-
-  for (const [key, agg] of parContenuLangue) {
-    const [contenuId, langue] = key.split("::");
-    const n = agg.perfs.length;
-    const sum = agg.perfs.reduce((a, b) => a + b, 0);
-    const score = (k * scoring.score_prior + sum) / (k + n);
-
-    const { data: cl } = await supabase
-      .from("contenu_langues")
-      .select("id")
-      .eq("contenu_id", contenuId)
-      .eq("langue", langue)
-      .maybeSingle();
-    if (!cl) continue;
-
-    await supabase
-      .from("contenu_langues")
-      .update({
-        score,
-        nb_passages: n,
-        score_maj_at: new Date().toISOString(),
-      })
-      .eq("id", cl.id);
-
-    transferJobs.push({ contenuId, langue, score });
-    contenusMaj += 1;
-  }
-
-  const coef = scoring.transfert_inter_langue;
-  if (coef > 0) {
-    for (const job of transferJobs) {
-      const { data: autres } = await supabase
-        .from("contenu_langues")
-        .select("id, score, langue")
-        .eq("contenu_id", job.contenuId)
-        .neq("langue", job.langue);
-      for (const a of autres ?? []) {
-        const nudged = (a.score as number) + coef * (job.score - (a.score as number));
-        await supabase
-          .from("contenu_langues")
-          .update({ score: nudged, score_maj_at: new Date().toISOString() })
-          .eq("id", a.id);
-      }
-    }
-  }
-
-  // EWMA comptes : moyenne des perfs récentes de CE compte, puis lissage
-  const { data: passagesCompte } = await supabase
-    .from("passages")
-    .select("compte_id, vues")
-    .in("compte_id", compteIdsTouchés)
-    .eq("statut", "publie")
-    .not("vues", "is", null)
-    .gte("stats_maj_at", depuis);
-
-  const perfParCompte = new Map<string, number[]>();
-  for (const p of passagesCompte ?? []) {
-    const perf = performanceNormalisee(
-      performancePassage(p.vues, scoring.elo_vues_plafond),
-      scoreCompte.get(p.compte_id) ?? scoring.score_prior,
-      scoring.score_prior,
-    );
-    const list = perfParCompte.get(p.compte_id) ?? [];
-    list.push(perf);
-    perfParCompte.set(p.compte_id, list);
-  }
-
-  let comptesMaj = 0;
-  const alpha = scoring.ewma_alpha;
-  for (const [cid, perfs] of perfParCompte) {
-    const old = scoreCompte.get(cid) ?? scoring.score_prior;
-    const moy = perfs.reduce((a, b) => a + b, 0) / perfs.length;
-    const next = alpha * moy + (1 - alpha) * old;
-    await supabase
-      .from("comptes")
-      .update({ score: next, score_maj_at: new Date().toISOString() })
-      .eq("id", cid);
-    comptesMaj += 1;
-  }
-
-  return { contenus: contenusMaj, comptes: comptesMaj };
+export function majScoresDepuisPassages(): {
+  contenus: number;
+  comptes: number;
+  saute: true;
+  raison: string;
+} {
+  return {
+    contenus: 0,
+    comptes: 0,
+    saute: true,
+    raison: "Étape retirée — les slideshows suivent la tierlist (requalification à minuit).",
+  };
 }
