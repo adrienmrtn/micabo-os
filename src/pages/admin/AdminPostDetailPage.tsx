@@ -14,6 +14,7 @@ import {
   apercuSujet,
   avancerUnPost,
   compteReferenceDuPost,
+  contenuDuPost,
   lancerPreparation,
   lirePost,
   lireReglages,
@@ -97,6 +98,11 @@ export function AdminPostDetailPage() {
   const refId = useQuery({
     queryKey: ["post-ref", id],
     queryFn: () => compteReferenceDuPost(id!),
+    enabled: Boolean(id),
+  });
+  const contenuId = useQuery({
+    queryKey: ["post-contenu", id],
+    queryFn: () => contenuDuPost(id!),
     enabled: Boolean(id),
   });
 
@@ -351,6 +357,7 @@ export function AdminPostDetailPage() {
           slide={slide}
           postId={id!}
           compteReferenceId={refId.data ?? null}
+          contenuId={contenuId.data ?? null}
           premier={premier}
           etapesLot={etapesLot[slide.id] ?? null}
         />

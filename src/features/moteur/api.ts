@@ -3206,6 +3206,19 @@ export async function compteReferenceDuPost(postId: string): Promise<string | nu
   return (data as any)?.comptes?.compte_reference_id ?? null;
 }
 
+/** Slideshow v-next ponté au post (via passages) — biblio de remplacement. */
+export async function contenuDuPost(postId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("passages")
+    .select("contenu_id")
+    .eq("post_id", postId)
+    .not("contenu_id", "is", null)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.contenu_id as string | null) ?? null;
+}
+
 export async function sujetsDisponibles(): Promise<Array<{ id: string; titre: string }>> {
   const { data, error } = await supabase
     .from("sujets")
