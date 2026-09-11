@@ -11,6 +11,7 @@ import { AdminValiderJourPage } from "./AdminValiderJourPage";
 const itemA: ItemValidationJour = {
   postId: "post-a",
   passageId: "pas-a",
+  contenuId: "contenu-a",
   compteId: "c-a",
   posterNom: "Ada Lovelace",
   handle: "ada_notes",
@@ -25,6 +26,7 @@ const itemA: ItemValidationJour = {
 const itemB: ItemValidationJour = {
   postId: "post-b",
   passageId: "pas-b",
+  contenuId: "contenu-b",
   compteId: "c-b",
   posterNom: "Marie Curie",
   handle: "marie_revise",
@@ -69,6 +71,15 @@ vi.mock("@/features/moteur/api", async () => {
     aujourdhuiParis: () => "2026-09-10",
     listerSlides: vi.fn(async () => [slide]),
     compteReferenceDuPost: vi.fn(async () => null),
+    listerMediasPourContenu: vi.fn(async () => [
+      {
+        id: "m-biblio",
+        url: "https://example.com/biblio.jpg",
+        storage_path: "propre/y.jpg",
+      },
+    ]),
+    listerMedias: vi.fn(async () => []),
+    majMediaSlide: vi.fn(async () => undefined),
     lireReglages: vi.fn(async () => ({
       nettoyage: { provider_principal: "fal" },
     })),
@@ -144,6 +155,43 @@ describe("AdminValiderJourPage", () => {
     renderPage();
     await waitFor(() => {
       expect(screen.getByText(/Pile vide|Nothing left to check/)).toBeInTheDocument();
+    });
+  });
+
+  it("Replace the photo reste cliquable sans compte de référence", async () => {
+    const { listerMediasPourContenu, majMediaSlide } = await import(
+      "@/features/moteur/api"
+    );
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    });
+    const bouton = screen.getByRole("button", {
+      name: /Remplacer la photo|Replace the photo/i,
+    });
+    expect(bouton).not.toBeDisabled();
+    fireEvent.click(bouton);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Choisir une photo|Choose a photo/i),
+      ).toBeInTheDocument();
+    });
+    expect(listerMediasPourContenu).toHaveBeenCalledWith("contenu-a");
+
+    const mini = await waitFor(() => {
+      const photos = screen.getAllByRole("button");
+      const found = photos.find((el) =>
+        el.querySelector("img[src='https://example.com/biblio.jpg']"),
+      );
+      expect(found).toBeTruthy();
+      return found!;
+    });
+    fireEvent.click(mini);
+
+    await waitFor(() => {
+      expect(majMediaSlide).toHaveBeenCalledWith("slide-1", "m-biblio");
     });
   });
 });

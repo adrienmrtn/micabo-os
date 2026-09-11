@@ -37,7 +37,7 @@ export async function listerFileValidationJour(jour: string): Promise<ItemValida
   const slidesParPost = new Map<string, { nb: number; media: number }>();
   const passageParPost = new Map<
     string,
-    { id: string; titre: string | null; sourceUrl: string | null }
+    { id: string; contenuId: string | null; titre: string | null; sourceUrl: string | null }
   >();
   if (ids.length > 0) {
     const chunk = 80;
@@ -47,7 +47,7 @@ export async function listerFileValidationJour(jour: string): Promise<ItemValida
         supabase.from("post_slides").select("post_id, media_id").in("post_id", slice),
         supabase
           .from("passages")
-          .select("id, post_id, contenus(titre, source_url)")
+          .select("id, post_id, contenu_id, contenus(titre, source_url)")
           .in("post_id", slice),
       ]);
       if (e3) throw e3;
@@ -63,12 +63,14 @@ export async function listerFileValidationJour(jour: string): Promise<ItemValida
         const p = raw as {
           id: string;
           post_id: string | null;
+          contenu_id: string | null;
           contenus: ContenuJoin | ContenuJoin[] | null;
         };
         if (!p.post_id || passageParPost.has(p.post_id)) continue;
         const contenu = un(p.contenus);
         passageParPost.set(p.post_id, {
           id: p.id,
+          contenuId: p.contenu_id ?? null,
           titre: contenu?.titre ?? null,
           sourceUrl: contenu?.source_url ?? null,
         });
@@ -125,6 +127,7 @@ export async function listerFileValidationJour(jour: string): Promise<ItemValida
     out.push({
       postId: r.id,
       passageId: passage?.id ?? null,
+      contenuId: passage?.contenuId ?? null,
       compteId: r.compte_id,
       posterNom:
         perso || comptes?.persona_nom || (comptes?.handle_tiktok ? `@${comptes.handle_tiktok}` : "—"),

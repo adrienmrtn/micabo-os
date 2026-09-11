@@ -1,6 +1,8 @@
 export interface ItemValidationJour {
   postId: string;
   passageId: string | null;
+  /** Slideshow v-next : biblio de remplacement (labels + source), pas le compte poster. */
+  contenuId: string | null;
   compteId: string;
   posterNom: string;
   handle: string | null;

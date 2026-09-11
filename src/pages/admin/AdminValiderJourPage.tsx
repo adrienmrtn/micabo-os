@@ -221,6 +221,7 @@ export function AdminValiderJourPage() {
                     slide={slide}
                     postId={courant.postId}
                     compteReferenceId={refId.data ?? null}
+                    contenuId={courant.contenuId}
                     premier={premier}
                     texteEnPlace
                   />

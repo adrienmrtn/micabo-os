@@ -10,6 +10,7 @@ import { NettoyageEtapes } from "@/components/moteur/NettoyageEtapes";
 import { UpscaleMediaControl } from "@/components/moteur/UpscaleMediaControl";
 import {
   listerMedias,
+  listerMediasPourContenu,
   majMediaSlide,
   majTexteSlide,
   renettoyerSlide,
@@ -83,6 +84,7 @@ export function SlideAdmin({
   slide,
   postId,
   compteReferenceId,
+  contenuId = null,
   premier,
   etapesLot,
   texteEnPlace = false,
@@ -90,6 +92,8 @@ export function SlideAdmin({
   slide: PostSlide;
   postId: string;
   compteReferenceId: string | null;
+  /** Slideshow v-next : ouvre la biblio labels + source, même si le poster n'a pas de compte_reference. */
+  contenuId?: string | null;
   premier: ProviderNettoyage;
   /** Timeline fournie par un nettoyage en lot (sinon locale). */
   etapesLot?: EvenementEtape[] | null;
@@ -110,15 +114,19 @@ export function SlideAdmin({
     void queryClient.invalidateQueries({ queryKey: ["slides", postId] });
     void queryClient.invalidateQueries({ queryKey: ["medias"] });
     void queryClient.invalidateQueries({ queryKey: ["medias-biblio"] });
+    void queryClient.invalidateQueries({ queryKey: ["medias-remplacement"] });
   };
   const texteModifie = texte !== (slide.texte_overlay ?? "");
   const etapes = etapesLocales ?? etapesLot ?? null;
   const dejaUpscale = Boolean(slide.media_library?.upscale_le);
 
   const bibliotheque = useQuery({
-    queryKey: ["medias", compteReferenceId],
-    queryFn: () => listerMedias(compteReferenceId ?? undefined),
-    enabled: picker && Boolean(compteReferenceId),
+    queryKey: ["medias-remplacement", contenuId, compteReferenceId],
+    queryFn: () =>
+      contenuId
+        ? listerMediasPourContenu(contenuId)
+        : listerMedias(compteReferenceId ?? undefined),
+    enabled: picker,
   });
 
   const enregistrerTexte = useMutation({
@@ -244,7 +252,7 @@ export function SlideAdmin({
           <Button
             size="sm"
             variant="outline"
-            disabled={remplacer.isPending || !compteReferenceId}
+            disabled={remplacer.isPending}
             onClick={() => setPicker(true)}
           >
             <ImageUp />
