@@ -1414,6 +1414,7 @@ export const en = {
       sansTitre: "Untitled",
       variation: "Variation",
       filtre: {
+        actifs: "Without rejected",
         tous: "All",
         valide: "Valid",
         rejete: "Rejected",

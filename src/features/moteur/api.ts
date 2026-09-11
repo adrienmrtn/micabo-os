@@ -6113,6 +6113,8 @@ export async function listerContenus(opts?: {
   compteReferenceId?: string | null;
   /** Slideshows dont la source a déjà été oubliée (FK nulle). */
   sansCompte?: boolean;
+  /** Masque les slideshows rejetés (vue « sans les rejetés »). */
+  exclureRejetes?: boolean;
   applicationId?: string | null;
 }): Promise<ContenuListe[]> {
   const limit = opts?.limit ?? 80;
@@ -6154,6 +6156,7 @@ export async function listerContenus(opts?: {
     .order("created_at", { ascending: false })
     .limit(limit);
   if (opts?.statut) q = q.eq("statut", opts.statut);
+  if (opts?.exclureRejetes) q = q.neq("statut", "rejete");
   if (opts?.compteReferenceId) q = q.eq("compte_reference_id", opts.compteReferenceId);
   if (opts?.sansCompte) q = q.is("compte_reference_id", null);
   if (opts?.applicationId) q = q.eq("application_id", opts.applicationId);
@@ -6169,6 +6172,7 @@ export async function listerContenus(opts?: {
         .in("id", slice)
         .order("created_at", { ascending: false });
       if (opts?.statut) qChunk = qChunk.eq("statut", opts.statut);
+      if (opts?.exclureRejetes) qChunk = qChunk.neq("statut", "rejete");
       if (opts?.compteReferenceId) qChunk = qChunk.eq("compte_reference_id", opts.compteReferenceId);
       if (opts?.sansCompte) qChunk = qChunk.is("compte_reference_id", null);
       if (opts?.applicationId) qChunk = qChunk.eq("application_id", opts.applicationId);
