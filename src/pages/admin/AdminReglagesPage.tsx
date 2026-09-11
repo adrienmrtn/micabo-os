@@ -20,6 +20,7 @@ import {
   listerLabels,
 } from "@/features/moteur/api";
 import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
+import { PASSAGES_PAR_TIER, TIERS } from "@/features/moteur/tierlist";
 import { VOIX_PAPIER, type DureeClipReglage } from "@/features/moteur/papierReglages";
 import {
   SCHEMA_ASSIGNATION,
@@ -400,30 +401,23 @@ export function AdminReglagesPage() {
           </section>
 
           <section className="space-y-3">
-            <h3 className="text-sm font-medium">{t("reglages.eloRuntimePause")}</h3>
-            <p className="text-xs text-muted-foreground">{t("reglages.eloRuntimePauseAide")}</p>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <ChampNombre
-                id="ewma"
-                label={t("reglages.ewma")}
-                step={0.05}
-                valeur={reglages.scoring.ewma_alpha}
-                onChange={(n) => majScoring({ ewma_alpha: n })}
-              />
-              <ChampNombre
-                id="regk"
-                label={t("reglages.regularisation")}
-                valeur={reglages.scoring.regularisation_k}
-                onChange={(n) => majScoring({ regularisation_k: n })}
-              />
-              <ChampNombre
-                id="transfert"
-                label={t("reglages.transfert")}
-                step={0.05}
-                valeur={reglages.scoring.transfert_inter_langue}
-                onChange={(n) => majScoring({ transfert_inter_langue: n })}
-              />
-            </div>
+            <h3 className="text-sm font-medium">{t("reglages.tierlistTitre")}</h3>
+            <p className="text-xs text-muted-foreground">{t("reglages.tierlistAide")}</p>
+            <ul className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+              {TIERS.slice()
+                .reverse()
+                .map((tier) => (
+                  <li key={tier} className="flex items-center gap-2">
+                    <Badge
+                      variant={tier === "D" ? "outline" : "secondary"}
+                      className="w-10 justify-center text-[10px] font-semibold"
+                    >
+                      {tier}
+                    </Badge>
+                    {t("reglages.tierlistPassages", { n: PASSAGES_PAR_TIER[tier] })}
+                  </li>
+                ))}
+            </ul>
           </section>
         </CardContent>
       </Card>
@@ -469,35 +463,8 @@ export function AdminReglagesPage() {
                 valeur={reglages.frequence.posts_par_jour}
                 onChange={(n) => maj({ frequence: { posts_par_jour: n } })}
               />
-              <ChampNombre
-                id="topk"
-                label={t("reglages.topK")}
-                min={1}
-                valeur={reglages.scoring.top_k}
-                onChange={(n) => majScoring({ top_k: n })}
-              />
-              <ChampNombre
-                id="temp"
-                label={t("reglages.temperature")}
-                step={0.1}
-                valeur={reglages.scoring.temperature}
-                onChange={(n) => majScoring({ temperature: n })}
-              />
-              <ChampNombre
-                id="satj"
-                label={t("reglages.saturationJours")}
-                min={1}
-                valeur={reglages.scoring.saturation_jours}
-                onChange={(n) => majScoring({ saturation_jours: n })}
-              />
-              <ChampNombre
-                id="satp"
-                label={t("reglages.saturationPenalite")}
-                step={0.05}
-                valeur={reglages.scoring.saturation_penalite}
-                onChange={(n) => majScoring({ saturation_penalite: n })}
-              />
             </div>
+            <p className="text-xs text-muted-foreground">{t("reglages.assignationTirageAide")}</p>
           </section>
 
           <section className="space-y-3">

@@ -13,19 +13,17 @@ import {
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 /**
- * Rattrapage ELO (admin / cron minuit / cron minute) — fenêtre Paris (défaut 4 jours) :
+ * Rattrapage (admin / cron minuit / cron minute) — fenêtre Paris (défaut 4 jours) :
  *   1) stats TikTok des passages publiés (publie_url)
- *   2) ELO langue en deltas ↑/↓ (vues seules), idempotent
+ *   2) reposts bonus J+7 pour les passages > 50 000 vues
  *   3) ELO compte = moyenne pondérée ≤10 posts mesurés
- *   4) snapshot vues_globales_jour (fin de drain + tous les 10 comptes)
- *
- * Contourne PAUSE_ELO_RUNTIME.
+ *   4) fin de file : requalification tierlist des slideshows + snapshot vues
  *
  *   {} | { drain: true }     → 1 compte / invoke ; reprend elo_dernier_run si !done
  *                              (cron `rattrapage-elo-drain` * * * * * = filet)
  *   { drain: true, offset }  → force le curseur (kick auto-chaîne)
  *   { restart: true }        → repart de offset 0 (minuit)
- *   { compteId, jours, forcer, dryRun }
+ *   { compteId, jours, dryRun }
  *   { snapshot: true }       → fige seulement vues_globales_jour
  *   { backfillJour: "YYYY-MM-DD" }
  */
@@ -49,7 +47,6 @@ Deno.serve(async (request) => {
     }
 
     const joursBody = typeof body?.jours === "number" ? body.jours : undefined;
-    const forcer = Boolean(body?.forcer);
     const dryRun = Boolean(body?.dryRun);
     const compteId = body?.compteId ? String(body.compteId) : null;
     const restart = body?.restart === true || body?.restart === "true";
@@ -125,7 +122,6 @@ Deno.serve(async (request) => {
         lot = await rattrapageEloDrainLot(supabase, {
           offset,
           jours,
-          forcer,
           dryRun,
         });
       } catch (error) {
@@ -169,7 +165,6 @@ Deno.serve(async (request) => {
           drainGen: drainGen + 1,
           offset: lot.nextOffset,
           jours,
-          forcer,
           dryRun,
           source,
         });
@@ -194,7 +189,6 @@ Deno.serve(async (request) => {
     const r = await rattrapageElo(supabase, {
       compteId,
       jours: joursBody,
-      forcer,
       dryRun,
       snapshot: Boolean(body?.snapshot),
     });

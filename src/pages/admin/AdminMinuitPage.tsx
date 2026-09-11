@@ -140,17 +140,19 @@ function BriefRattrapageElo({
           )}
         </div>
         <div className="rounded-md border bg-background/60 p-2.5">
-          <p className="text-xs font-medium text-muted-foreground">{t("minuit.rattrapageEloLangues")}</p>
+          <p className="text-xs font-medium text-muted-foreground">{t("minuit.requalifTitre")}</p>
           <p className="mt-1 text-sm">
-            {t("minuit.rattrapageEloDeltaNet", {
-              delta: fmtDelta(brief.eloLangue.deltaNet),
-              up: brief.eloLangue.hausses,
-              down: brief.eloLangue.baisses,
+            {t("minuit.requalifResume", {
+              n: brief.requalif.requalifies,
+              up: brief.requalif.montees,
+              down: brief.requalif.descentes,
             })}
           </p>
           <p className="text-xs text-muted-foreground">
-            {brief.eloLangue.appliques} ·{" "}
-            {t("minuit.rattrapageEloIgnore", { n: brief.eloLangue.ignores })}
+            {t("minuit.requalifCycles", { n: brief.requalif.examines })}
+            {brief.repostsBonus > 0
+              ? ` · ${t("minuit.repostsBonus", { n: brief.repostsBonus })}`
+              : ""}
           </p>
         </div>
         <div className="rounded-md border bg-background/60 p-2.5">
@@ -161,27 +163,38 @@ function BriefRattrapageElo({
         </div>
       </div>
 
-      {brief.eloLangue.top.length > 0 && (
+      {brief.requalif.top.length > 0 && (
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">
-            {t("minuit.rattrapageEloTopLangues")}
+            {t("minuit.requalifTop")}
           </p>
           <ul className="space-y-0.5 text-xs">
-            {brief.eloLangue.top.map((d) => (
-              <li key={d.passageId} className="flex flex-wrap items-baseline gap-x-2">
-                <span className="font-medium uppercase">{d.langue}</span>
-                <span className="text-muted-foreground">
-                  {d.handle ? `@${d.handle}` : d.compteId.slice(0, 8)}
-                  {d.date ? ` · ${d.date}` : ""}
-                </span>
-                <span className={d.delta >= 0 ? "text-success" : "text-warning"}>
-                  {fmtDelta(d.delta)} → {fmtScore(d.apres)}
-                </span>
-                <span className="text-muted-foreground">
-                  {t("minuit.rattrapageEloVues", { n: d.vues })}
-                </span>
-              </li>
-            ))}
+            {brief.requalif.top.map((d) => {
+              const monte = d.apres !== d.avant;
+              return (
+                <li key={d.contenuId} className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-medium">
+                    {d.avant === d.apres ? d.apres : `${d.avant} → ${d.apres}`}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {(d.titre ?? d.contenuId).slice(0, 40)}
+                  </span>
+                  <span className={monte ? "text-success" : "text-muted-foreground"}>
+                    {t("minuit.rattrapageEloVues", {
+                      n: d.m == null ? 0 : Math.round(d.m),
+                    })}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {t("minuit.requalifPassages", {
+                      faits: d.passagesMesures,
+                      cible: d.passagesCible,
+                      suite: d.nouveauCible,
+                    })}
+                    {d.timeout ? ` · ${t("minuit.requalifTimeout")}` : ""}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -486,8 +499,6 @@ export function AdminMinuitPage() {
     });
     const data = await lancerRattrapageEloLive({
       jours,
-      // Rejoue l'ELO langue sur les posts déjà scorés (vues du jour à jour).
-      forcer: true,
       onProgress: (p) => {
         const label = p.handle
           ? t("minuit.rattrapageEloProgress", {
@@ -829,14 +840,14 @@ export function AdminMinuitPage() {
                       fallbackCoherence: 0,
                       erreurs: 0,
                     },
-                    eloLangue: {
-                      appliques: 0,
-                      ignores: 0,
-                      deltaNet: 0,
-                      hausses: 0,
-                      baisses: 0,
+                    requalif: {
+                      examines: 0,
+                      requalifies: 0,
+                      montees: 0,
+                      descentes: 0,
                       top: [],
                     },
+                    repostsBonus: 0,
                     eloCompte: { maj: 0, top: [] },
                   }}
                   logs={eloLive.logs}

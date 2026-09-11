@@ -33,7 +33,7 @@ const POSTS_RELEVES = 30;
 /**
  * Minuit v-next (manuel ou cron — l'heure importe peu) :
  *   1) FETCH stats des passages publiés (via publie_url) — optionnel
- *   2) MAJ ELO langue depuis stats — PAUSE (PAUSE_ELO_RUNTIME)
+ *   2) MAJ ELO langue depuis stats — RETIRÉ (tierlist)
  *   3) ASSIGNATION labels ∩ + score langue (import) + top-K + softmax
  *
  * Règles d'assignation (par compte actif, jour Paris) :
@@ -49,7 +49,7 @@ const POSTS_RELEVES = 30;
  *
  *   {}  → kick rattrapage-elo (async) + assignation + upscale + ugc
  *   { etapes?: ['stats'|'scores'|'assignation'|'upscale'|'variations'|'rattrapage'|'ugc_ai_video'|'papier_cm'|'papier_assign'], compteId?, date?, forcer? }
- *   etape `rattrapage` : stats 4j + ELO langue/compte + snapshot vues (contourne PAUSE_ELO_RUNTIME)
+ *   etape `rattrapage` : stats 4j + reposts bonus + ELO compte, puis requalification tierlist + snapshot vues
  *                        — kick async si tous comptes (évite timeout cron)
  *   etape `upscale` : SeedVR Fal sur photos assignées du jour sans upscale_le
  *                     (strip C2PA en fin dans le drain — pas de double strip)
@@ -98,9 +98,9 @@ Deno.serve(async (request) => {
       }
     }
 
-    // Défaut : rattrapage ELO (vues + scores) en kick async — plus de scrape
+    // Défaut : rattrapage (vues + reposts bonus + ELO compte, puis
+    // requalification tierlist en fin de file) en kick async — plus de scrape
     // synchrone « stats » qui faisait timeout Edge avant snapshot/assign.
-    // scores runtime reste en pause (PAUSE_ELO_RUNTIME) ; le rattrapage contourne.
     // ugc_ai_video : TOUJOURS en dernier (après slideshow + upscale).
     const etapes: string[] = Array.isArray(body?.etapes)
       ? body.etapes
@@ -111,13 +111,13 @@ Deno.serve(async (request) => {
     const out: Record<string, unknown> = { ok: true, jour };
 
     if (etapes.includes("rattrapage")) {
-      // Contourne PAUSE_ELO_RUNTIME — vues + ELO langue/compte + snapshot Pilotage.
+      // Vues + reposts bonus + ELO compte ; requalification tierlist et
+      // snapshot Pilotage en fin de file (drain « tous comptes »).
       if (compteId) {
         // Compte isolé (manuel) : synchrone, résultat dans la réponse.
         out.rattrapage = await rattrapageElo(supabase, {
           compteId,
           jours: typeof body?.jours === "number" ? body.jours : undefined,
-          forcer: Boolean(body?.forcerElo),
           dryRun: Boolean(body?.dryRun),
         });
       } else {
@@ -151,7 +151,6 @@ Deno.serve(async (request) => {
           drainGen: 0,
           offset: 0,
           jours,
-          forcer: Boolean(body?.forcerElo),
           dryRun: Boolean(body?.dryRun),
           source,
         });
@@ -160,7 +159,7 @@ Deno.serve(async (request) => {
           kick: true,
           drain: true,
           detail:
-            "drain ELO enfilé (1 compte/tick + cron minute rattrapage-elo-drain → snapshot Pilotage)",
+            "drain enfilé (1 compte/tick + cron minute rattrapage-elo-drain → requalification tierlist + snapshot Pilotage)",
         };
       }
     } else if (etapes.includes("stats")) {
@@ -171,8 +170,8 @@ Deno.serve(async (request) => {
       }
     }
     if (etapes.includes("scores")) {
-      // No-op si PAUSE_ELO_RUNTIME (voir _shared/scoring.ts).
-      out.scores = await majScoresDepuisPassages(supabase, { compteId });
+      // Étape retirée avec la tierlist (voir _shared/scoring.ts).
+      out.scores = majScoresDepuisPassages();
     }
     if (etapes.includes("assignation")) {
       // Un seul compte : await synchrone. Tous les comptes : drain auto-chaîné

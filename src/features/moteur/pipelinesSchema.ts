@@ -121,21 +121,13 @@ export function schemaCleaning(
   };
 }
 
-/** Update ELO — rattrapage (chemin actif) + runtime (pause). */
+/** Rattrapage : vues → reposts bonus → ELO compte → requalification tierlist. */
 export const SCHEMA_UPDATE_ELO: PipelineAction = {
   id: "update_elo",
   edge: "rattrapage-elo · cron rattrapage-elo-drain (* * * * *) · minuit kick",
   description:
-    "Update ELO = drain 1 compte/tick (scrapeStats sans images) + filet pg_cron minute. Contourne PAUSE_ELO_RUNTIME. Snapshot Pilotage en fin (+ tous les 10).",
+    "Rattrapage = drain 1 compte/tick (scrapeStats sans images) + filet pg_cron minute. Fin de file : requalification tierlist des slideshows + snapshot Pilotage (aussi tous les 10 comptes).",
   steps: [
-    {
-      id: "gate_pause",
-      label: "PAUSE_ELO_RUNTIME",
-      kind: "gate",
-      api: "_shared/scoring.ts → majScoresDepuisPassages",
-      detail: "true → no-op sur l'étape minuit « scores »",
-      onFail: "Utiliser rattrapage (ci-dessous)",
-    },
     {
       id: "drain_cron",
       rang: "⓪",
@@ -173,13 +165,13 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
       onFail: "Passage sans match (stats non relevées)",
     },
     {
-      id: "elo_langue",
+      id: "repost_bonus",
       rang: "④",
-      label: "ELO langue — deltas ↑/↓ (vues seules)",
-      kind: "logic",
-      api: "rattrapage_elo.appliquerEloLangue",
-      detail: "Idempotent via passages.elo_maj_at",
-      reglage: "scoring (performanceNormalisee / plafond vues)",
+      label: "Repost bonus J+7 (> 50 000 vues)",
+      kind: "persist",
+      api: "requalification.planifierRepostsBonus",
+      detail:
+        "Même post, même compte, 7 jours plus tard · hors cycle mais dans le quota du jour",
     },
     {
       id: "elo_compte",
@@ -192,8 +184,17 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
       reglage: "scoring.elo_vues_plafond · elo_regularisation_k",
     },
     {
-      id: "snapshot",
+      id: "requalif",
       rang: "⑥",
+      label: "Requalification tierlist (fin de file)",
+      kind: "logic",
+      api: "requalification.requalifierContenus",
+      detail:
+        "Cycle complet + tous les passages mesurés (J+3) → m = moyenne des vues → nouveau tier + nouveau cycle. Timeout 14 j sur les cycles qui traînent.",
+    },
+    {
+      id: "snapshot",
+      rang: "⑦",
       label: "Snapshot vues_globales_jour",
       kind: "persist",
       detail: "Δ = total j0 − total j1 (Pilotage)",
@@ -201,8 +202,9 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
   ],
   constants: [
     { cle: "RATTRAPAGE_JOURS_DEFAUT", valeur: "4", detail: "Jours Paris (fenêtre)" },
-    { cle: "LR_LANGUE", valeur: "0.4", detail: "Learning rate deltas langue" },
-    { cle: "MAX_DELTA_LANGUE", valeur: "±18", detail: "Plafond |Δ| par passage" },
+    { cle: "MESURE_JOURS", valeur: "3", detail: "Vues stabilisées avant de compter un passage" },
+    { cle: "CYCLE_TIMEOUT_JOURS", valeur: "14", detail: "Cycle qui traîne → requalif forcée" },
+    { cle: "VUES_REPOST_BONUS", valeur: "50 000", detail: "Seuil du repost J+7" },
     { cle: "COMPTE_MAX_POSTS", valeur: "10", detail: "Derniers posts mesurés seulement" },
     { cle: "COMPTE_DECAY", valeur: "0.85" },
     {
@@ -246,41 +248,33 @@ export const SCHEMA_ASSIGNATION: PipelineAction = {
       kind: "api",
       api: "elo_dernier_run done=false → kick rattrapage-elo (1 compte)",
       detail:
-        "Minuit enfile le drain ; cron minute rattrapage-elo-drain reprend si le kick meurt. Contourne PAUSE_ELO_RUNTIME.",
+        "Minuit enfile le drain ; cron minute rattrapage-elo-drain reprend si le kick meurt. La requalification tierlist tombe en fin de file.",
       onFail: "Cron minute reprend ; sinon Relancer / Rattrapage ELO (4j)",
     },
     {
-      id: "scores",
-      rang: "—",
-      label: "MAJ ELO runtime (scores)",
-      kind: "gate",
-      detail: "PAUSE_ELO_RUNTIME = true → no-op (le rattrapage ① fait l’ELO)",
-      api: "majScoresDepuisPassages",
+      id: "reposts",
+      rang: "②",
+      label: "Reposts bonus dus (J+7)",
+      kind: "persist",
+      api: "assignation_contenu.assignerRepostsBonusDuJour",
+      detail: "Rejoue le même deck sur le même compte · occupe un créneau du jour",
     },
     {
       id: "pool",
-      rang: "②",
+      rang: "③",
       label: "Pool candidats",
       kind: "logic",
       detail:
-        "labels compte ∩ contenu · valide · import done · contenu_langues[langue]",
-    },
-    {
-      id: "rank",
-      rang: "③",
-      label: "Score = ELO langue − pénalité saturation",
-      kind: "logic",
-      reglage: "scoring.saturation_jours · saturation_penalite",
-      detail: "pénalité × (#comptes récents) × 10",
+        "labels compte ∩ contenu · valide · import done · toutes langues (deck traduit à la demande) · pas déjà sorti aujourd'hui sur ce compte",
     },
     {
       id: "pick",
       rang: "④",
-      label: "Tirage softmax top-K",
+      label: "Tirage au hasard parmi les passages dus",
       kind: "logic",
-      reglage: "scoring.top_k · temperature",
-      detail: "Préfère jamais posté sur ce compte ; sinon plus ancien",
-      onFail: "Aucun candidat → trou (pas de filler)",
+      detail:
+        "passages dus = passages_cible − passages du cycle · un S+ sort plus souvent parce qu'il en doit 16",
+      onFail: "Aucun passage dû → repêchage d'un slideshow en D (cycle d'1 passage)",
     },
     {
       id: "deck",

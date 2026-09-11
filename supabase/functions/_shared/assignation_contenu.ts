@@ -3,16 +3,12 @@ import {
   type SlideStructureManuel,
 } from "./creation_manuelle.ts";
 import { assurerDeckPourLangue } from "./import_contenu.ts";
+import { estTier, type Tier } from "./tierlist.ts";
 import { LOT_IDS, lireParLots } from "./lots.ts";
 import { mapPool } from "./parallel.ts";
 import { serviceClient } from "./supabase.ts";
 import { extraireLabelsAssignables } from "./labels_systeme.ts";
-import {
-  messagePool,
-  poolAutoriseBaisseQuota,
-  verdictPool,
-  type EtatPoolCompte,
-} from "./quota_pool.ts";
+import { messagePool, type EtatPoolCompte } from "./quota_pool.ts";
 import {
   appliquerFaceSwapUgcPost,
   chargerPersonaUgc,
@@ -37,10 +33,6 @@ export type Supabase = ReturnType<typeof serviceClient>;
 
 export interface AssignationReglages {
   postsParJour: number;
-  top_k: number;
-  temperature: number;
-  saturation_jours: number;
-  saturation_penalite: number;
 }
 
 export async function chargerAssignationReglages(
@@ -51,13 +43,8 @@ export async function chargerAssignationReglages(
   const frequence = (map.get("frequence") ?? { posts_par_jour: 1 }) as {
     posts_par_jour?: number;
   };
-  const scoring = (map.get("scoring") ?? {}) as Record<string, number>;
   return {
     postsParJour: Math.min(3, Math.max(1, frequence.posts_par_jour ?? 1)),
-    top_k: scoring.top_k ?? 5,
-    temperature: scoring.temperature ?? 0.7,
-    saturation_jours: scoring.saturation_jours ?? 7,
-    saturation_penalite: scoring.saturation_penalite ?? 0.2,
   };
 }
 
@@ -81,13 +68,14 @@ function hashtagsPour(langue: string, seed: string): string {
 
 interface Candidat {
   contenuId: string;
-  score: number;
-  slides: unknown;
+  tier: Tier | null;
+  /** Passages encore à effectuer sur le cycle courant. */
+  restants: number;
   musique_url: string | null;
   musique_titre: string | null;
   musique_plateforme: string | null;
-  dejaPoste: boolean;
-  derniereDate: string | null;
+  /** Repêché en D faute de passages dus (cycle d'1 passage ouvert au vol). */
+  repeche: boolean;
 }
 
 interface ContenuCandidat {
@@ -96,6 +84,9 @@ interface ContenuCandidat {
   musique_titre: string | null;
   musique_plateforme: string | null;
   ugc_compatible: boolean | null;
+  tier: string | null;
+  passages_cible: number | null;
+  tier_maj_at: string | null;
 }
 
 /** PostgREST rend l'embed `posts(...)` en objet ou en tableau selon la relation. */
@@ -113,32 +104,19 @@ interface PassageHisto {
   posts?: PostLie;
 }
 
-interface PassageRecent {
-  contenu_id: string;
-  compte_id: string;
-  posts?: PostLie;
-}
-
-/** Tirage top-K pondéré (softmax). */
-export function echantillonnerTopK(
-  candidats: Candidat[],
-  topK: number,
-  temperature: number,
-): Candidat | null {
+/**
+ * Tirage uniforme.
+ *
+ * Plus de softmax sur un score : le tier ne pondère pas le tirage, il fixe le
+ * NOMBRE de passages dus. Un S+ sort donc plus souvent qu'un C parce qu'il a
+ * 16 passages en attente contre 1, pas parce qu'il est mieux noté.
+ */
+export function tirerAuHasard<T>(candidats: T[]): T | null {
   if (candidats.length === 0) return null;
-  const slice = candidats.slice(0, Math.max(1, topK));
-  const t = Math.max(temperature, 0.05);
-  const maxS = Math.max(...slice.map((c) => c.score));
-  const poids = slice.map((c) => Math.exp((c.score - maxS) / t));
-  const total = poids.reduce((a, b) => a + b, 0);
-  let r = Math.random() * total;
-  for (let i = 0; i < slice.length; i += 1) {
-    r -= poids[i];
-    if (r <= 0) return slice[i];
-  }
-  return slice[slice.length - 1];
+  return candidats[Math.floor(Math.random() * candidats.length)] ?? null;
 }
 
+/** Legacy — plus jamais produit depuis la tierlist. */
 export interface QuotaBaisse {
   avant: number;
   apres: number;
@@ -150,7 +128,10 @@ export interface AssignationCompteDetail {
   ids: string[];
   /** Motif si rien (ou pas assez) n'a pu être créé — pour l'UI admin. */
   raison?: string;
-  /** Quota posts_par_jour baissé pour coller au pool disponible. */
+  /**
+   * Legacy : le quota d'un créateur ne baisse plus (tierlist + repêchage D).
+   * Le champ reste pour ne pas casser les réponses Edge / UI historiques.
+   */
   quotaBaisse?: QuotaBaisse;
 }
 
@@ -159,7 +140,7 @@ export interface AssignationOpts {
   forcer?: boolean;
   /** Posts `est_test` — hors calendriers créateurs. */
   test?: boolean;
-  /** Ignore le filtre `contenu_langues` (seuil ELO à l'import). */
+  /** Ignore les cycles tierlist : pioche n'importe quel slideshow prêt (mode test). */
   ignorerElo?: boolean;
   /** Ignore `warmup_ends_at` (compte hors process OK). */
   ignorerWarmup?: boolean;
@@ -214,8 +195,9 @@ async function purgerAssignationIncomplete(
 }
 
 /**
- * Assignation v-next pour un compte : labels ∩, score langue, top-K,
- * pénalité saturation, non-écrasement, fallbacks.
+ * Assignation v-next pour un compte : reposts bonus dus, puis tirage au hasard
+ * parmi les slideshows du pool qui ont encore des passages dus (tierlist).
+ * Non-écrasement : on complète seulement jusqu'au quota du jour.
  */
 // deno-lint-ignore no-explicit-any
 export async function assignerCompteJour(
@@ -316,6 +298,16 @@ export async function assignerCompteJour(
     await purgerAssignationIncomplete(supabase, compte.id as string, jour);
   }
 
+  // Reposts bonus d'abord : ils occupent un créneau du jour.
+  if (!estTest) {
+    try {
+      const bonus = await assignerRepostsBonusDuJour(supabase, compte.id as string, jour, log);
+      if (bonus.length > 0) log(`${bonus.length} repost(s) bonus assigné(s)`);
+    } catch (e) {
+      log(`Reposts bonus ignorés : ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   // Quota prod / test séparés : les posts `est_test` n'entrent pas dans le
   // calendrier ni le quota de minuit réel.
   // On recompte aussi les posts : deux drains peuvent avoir déjà matérialisé
@@ -339,27 +331,15 @@ export async function assignerCompteJour(
     .select("label_id, labels(nom, slug)")
     .eq("compte_id", compte.id);
   const { labelIds, labelNoms } = extraireLabelsAssignables(labelsCompte ?? []);
-  // Sans labels : impossible d'intersecter → baisse le quota à ce qui est déjà là.
+  // Sans labels : impossible d'intersecter. Le quota reste intact (le
+  // remplissage en D garantit qu'il y a toujours de quoi servir dès qu'un
+  // label est posé).
   if (labelIds.length === 0) {
     log("Échec : aucun label sur le compte");
-    const diag =
-      "Aucun label sur ce compte — ajoute un label (Bibliothèque / Compte) pour piocher.";
-    const quotaBaisse = await baisserQuotaSiBesoin(
-      supabase,
-      compte.id as string,
-      quota,
-      dejaLa,
-      diag,
-      estTest,
-      forcer,
-      log,
-    );
     return {
       ids: [],
-      raison: quotaBaisse
-        ? `Lowered quota ${quotaBaisse.avant}→${quotaBaisse.apres} — ${diag}`
-        : diag,
-      quotaBaisse,
+      raison:
+        "Aucun label sur ce compte — ajoute un label (Bibliothèque / Compte) pour piocher.",
     };
   }
   log(`Labels : ${labelNoms.length ? labelNoms.join(", ") : `${labelIds.length} id(s)`}`);
@@ -403,10 +383,8 @@ export async function assignerCompteJour(
     const choisi = await choisirContenu(
       supabase,
       compte.id,
-      langue,
       labelIds,
       jour,
-      reglages,
       contenusSession,
       ugcAi,
       { ignorerElo, exclureTestsHisto: true },
@@ -416,7 +394,11 @@ export async function assignerCompteJour(
       break;
     }
     contenusSession.push(choisi.contenuId);
-    log(`Contenu ${choisi.contenuId.slice(0, 8)} (score≈${Math.round(choisi.score)}) — deck ${langue}…`);
+    log(
+      `Contenu ${choisi.contenuId.slice(0, 8)} · tier ${choisi.tier ?? "?"}` +
+        (choisi.repeche ? " (repêché en D pour remplir)" : ` · ${choisi.restants} passage(s) dû(s)`) +
+        ` — deck ${langue}…`,
+    );
 
     // Traduction + Sophia à la demande (hors langue source) — pas à l'import.
     let slides: SlideLangue[];
@@ -512,12 +494,11 @@ export async function assignerCompteJour(
 
   if (crees.length < manquants) {
     const totalAssignes = dejaLa + crees.length;
-    const { message: diag, baisseQuotaAutorisee } = await diagnostiquerPoolVide(supabase, {
+    const diag = await diagnostiquerPoolVide(supabase, {
       labelIds,
       labelNoms,
       langue,
       ugcAi,
-      ignorerElo,
       applicationId: (compte.application_id as string | null) ?? null,
       dejaAssignes: totalAssignes,
       manquants: manquants - crees.length,
@@ -525,38 +506,18 @@ export async function assignerCompteJour(
     });
     log(diag);
 
-    // Fallback : baisser posts_par_jour au nombre réellement assigné aujourd'hui
-    // (plancher 1 — jamais 0 : on doit toujours retenter au moins 1 post).
-    const quotaBaisse = baisseQuotaAutorisee
-      ? await baisserQuotaSiBesoin(
-        supabase,
-        compte.id as string,
-        quota,
-        totalAssignes,
-        diag,
-        estTest,
-        forcer,
-        log,
-      )
-      : undefined;
-
-    const quotaEffectif = quotaBaisse?.apres ?? quota;
-    if (totalAssignes >= quotaEffectif) {
-      return {
-        ids: crees,
-        quotaBaisse,
-        raison: quotaBaisse
-          ? `Lowered quota ${quotaBaisse.avant}→${quotaBaisse.apres} — pool trop mince / déjà assigné.`
-          : undefined,
-      };
+    // Le quota du créateur ne baisse plus jamais : s'il n'y a pas assez de
+    // passages dus, `choisirContenu` repêche un slideshow en D pour remplir.
+    // Un trou vient donc d'un deck impossible ou d'un pool réellement vide.
+    if (totalAssignes >= quota) {
+      return { ids: crees };
     }
     if (crees.length === 0) {
-      return { ids: [], raison: diag, quotaBaisse };
+      return { ids: [], raison: diag };
     }
     return {
       ids: crees,
       raison: `${crees.length}/${manquants} créé(s). ${diag}`,
-      quotaBaisse,
     };
   }
   log(`Terminé : ${crees.length} passage(s)`);
@@ -564,53 +525,11 @@ export async function assignerCompteJour(
 }
 
 /**
- * Aligne posts_par_jour sur le nombre de posts réellement assignés ce jour.
- * Plancher strict = 1 (jamais 0) : un jour sans post ne doit pas désactiver
- * le compte pour les jours suivants.
- */
-async function baisserQuotaSiBesoin(
-  supabase: Supabase,
-  compteId: string,
-  quota: number,
-  totalAssignes: number,
-  diag: string,
-  estTest: boolean,
-  forcer: boolean,
-  log: (detail: string) => void,
-): Promise<QuotaBaisse | undefined> {
-  if (estTest || forcer || totalAssignes >= quota) return undefined;
-  // 0 assigné → on ne touche pas au quota (reste ≥1 pour retenter demain).
-  if (totalAssignes <= 0) {
-    log(`Quota inchangé (${quota}) — 0 assigné aujourd'hui, plancher 1 conservé`);
-    return undefined;
-  }
-  const apres = Math.min(3, Math.max(1, totalAssignes));
-  if (apres >= quota) return undefined;
-  const { error: errQ } = await supabase
-    .from("comptes")
-    .update({ posts_par_jour: apres })
-    .eq("id", compteId);
-  if (errQ) {
-    log(`Quota non baissé : ${errQ.message}`);
-    return undefined;
-  }
-  log(`Quota baissé ${quota}→${apres} (pool trop mince, plancher 1)`);
-  return { avant: quota, apres, raison: diag };
-}
-
-interface DiagnosticPool {
-  message: string;
-  /** Pool réellement trop petit → minuit peut aligner `posts_par_jour` dessus. */
-  baisseQuotaAutorisee: boolean;
-}
-
-/**
  * Explique pourquoi le quota n'est pas rempli, avec le même pool que
- * `choisirContenu` (labels ∩ langue ∩ contenus prêts ∩ application).
+ * `choisirContenu` (labels ∩ slideshows prêts ∩ application).
  *
- * Le verdict est relatif au manque du créateur : un pool plus large que ce
- * qu'il reste à créer n'est jamais la cause, et ne baisse donc pas son quota
- * (voir `quota_pool.ts`).
+ * Le quota du créateur ne bouge plus : ce texte sert uniquement au diagnostic
+ * admin (page Minuit / logs d'assignation).
  */
 async function diagnostiquerPoolVide(
   supabase: Supabase,
@@ -619,7 +538,6 @@ async function diagnostiquerPoolVide(
     labelNoms: string[];
     langue: string;
     ugcAi?: boolean;
-    ignorerElo?: boolean;
     applicationId?: string | null;
     /** Slideshows déjà assignés à ce créateur pour ce jour. */
     dejaAssignes: number;
@@ -627,7 +545,7 @@ async function diagnostiquerPoolVide(
     manquants: number;
     echecsDeck?: number;
   },
-): Promise<DiagnosticPool> {
+): Promise<string> {
   const { labelIds, labelNoms, langue } = args;
   const ugcAi = Boolean(args.ugcAi);
   const labelsTxt = labelNoms.length > 0 ? labelNoms.join(", ") : `${labelIds.length} label(s)`;
@@ -639,19 +557,16 @@ async function diagnostiquerPoolVide(
   );
   const idsLabel = [...new Set(liens.map((l) => l.contenu_id))];
   if (idsLabel.length === 0) {
-    return {
-      message: `Aucun slideshow tagué « ${labelsTxt} » dans la bibliothèque.`,
-      baisseQuotaAutorisee: true,
-    };
+    return `Aucun slideshow tagué « ${labelsTxt} » dans la bibliothèque.`;
   }
 
-  const prets = await lireParLots<{ id: string }>(
+  const prets = await lireParLots<{ id: string; tier: string | null }>(
     idsLabel,
     "Diagnostic — slideshows prêts",
     (lot) => {
       let q = supabase
         .from("contenus")
-        .select("id")
+        .select("id, tier")
         .eq("statut", "valide")
         .eq("import_statut", "done")
         .eq("ugc_compatible", ugcAi)
@@ -660,50 +575,23 @@ async function diagnostiquerPoolVide(
       return q;
     },
   );
-  const idsPrets = prets.map((c) => c.id);
-  if (idsPrets.length === 0) {
-    return {
-      message: `${idsLabel.length} slideshow(s) « ${labelsTxt} » mais aucun valide + import terminé` +
-        (ugcAi ? " + checkmark UGC" : " (non-UGC)") +
-        ".",
-      baisseQuotaAutorisee: true,
-    };
-  }
-
-  let candidats = idsPrets.length;
-  if (!args.ignorerElo) {
-    const eligibles = await lireParLots<{ contenu_id: string }>(
-      idsPrets,
-      "Diagnostic — lignes ELO",
-      (lot) =>
-        supabase
-          .from("contenu_langues")
-          .select("contenu_id")
-          .eq("langue", langue)
-          .in("contenu_id", lot),
+  if (prets.length === 0) {
+    return (
+      `${idsLabel.length} slideshow(s) « ${labelsTxt} » mais aucun valide + import terminé` +
+      (ugcAi ? " + checkmark UGC" : " (non-UGC)") +
+      "."
     );
-    candidats = eligibles.length;
-    if (candidats === 0) {
-      return {
-        message: `${idsPrets.length} slideshow(s) « ${labelsTxt} » prêts, mais aucun éligible en ` +
-          `${langue.toUpperCase()} (pas de ligne ELO pour cette langue à l'import).`,
-        baisseQuotaAutorisee: true,
-      };
-    }
   }
 
   const etat: EtatPoolCompte = {
     labelsTxt,
     langue,
-    candidats,
+    candidats: prets.length,
     dejaAssignes: args.dejaAssignes,
     manquants: args.manquants,
     echecsDeck: args.echecsDeck,
   };
-  return {
-    message: messagePool(etat),
-    baisseQuotaAutorisee: poolAutoriseBaisseQuota(verdictPool(etat)),
-  };
+  return messagePool(etat);
 }
 
 interface SlideStructure {
@@ -850,24 +738,189 @@ async function materialiserPostDepuisPassage(
   return post.id as string;
 }
 
+/**
+ * Reposts bonus dus pour ce créateur : un post qui a dépassé 50 000 vues est
+ * rejoué à l'identique sur le MÊME compte 7 jours plus tard.
+ *
+ * Hors pool (pas besoin de label, de tier ni de passages dus) et hors cycle de
+ * requalification, mais DANS le quota du jour : le repost occupe un des posts
+ * quotidiens du créateur.
+ */
+export async function assignerRepostsBonusDuJour(
+  supabase: Supabase,
+  compteId: string,
+  jour: string,
+  log: (detail: string) => void,
+): Promise<string[]> {
+  const { data: dus, error } = await supabase
+    .from("reposts_bonus")
+    .select("id, passage_source_id, contenu_id, langue, vues_declencheur")
+    .eq("compte_id", compteId)
+    .eq("statut", "prevu")
+    .lte("jour_prevu", jour);
+  if (error) throw error;
+  if (!dus || dus.length === 0) return [];
+
+  const crees: string[] = [];
+  for (const repost of dus) {
+    const { data: source } = await supabase
+      .from("passages")
+      .select("id, slides, hashtags, musique_url, musique_titre, musique_plateforme, langue")
+      .eq("id", repost.passage_source_id)
+      .maybeSingle();
+    if (!source) {
+      await supabase
+        .from("reposts_bonus")
+        .update({ statut: "abandonne", raison: "Passage source introuvable" })
+        .eq("id", repost.id);
+      continue;
+    }
+
+    const slides = (source.slides ?? []) as SlideLangue[];
+    if (!Array.isArray(slides) || slides.length === 0) {
+      await supabase
+        .from("reposts_bonus")
+        .update({ statut: "abandonne", raison: "Deck source vide" })
+        .eq("id", repost.id);
+      continue;
+    }
+
+    const langue = (source.langue as string) ?? (repost.langue as string);
+    const { data: passage, error: errP } = await supabase
+      .from("passages")
+      .insert({
+        contenu_id: repost.contenu_id,
+        compte_id: compteId,
+        langue,
+        date_publication_prevue: jour,
+        statut: "assigne",
+        slides,
+        musique_url: source.musique_url,
+        musique_titre: source.musique_titre,
+        musique_plateforme: source.musique_plateforme,
+        hashtags: source.hashtags,
+        bonus_repost: true,
+      })
+      .select("id")
+      .single();
+    if (errP || !passage) {
+      log(`Repost bonus échoué : ${errP?.message ?? "insert passage"}`);
+      continue;
+    }
+
+    try {
+      await materialiserPostDepuisPassage(supabase, {
+        passageId: passage.id,
+        compteId,
+        contenuId: repost.contenu_id as string,
+        jour,
+        slides,
+        musique_url: source.musique_url,
+        musique_titre: source.musique_titre,
+        musique_plateforme: source.musique_plateforme,
+        hashtags: (source.hashtags as string | null) ?? "",
+        estTest: false,
+      });
+    } catch (e) {
+      await supabase.from("passages").delete().eq("id", passage.id);
+      if (estErreurQuotaPostsJour(e)) {
+        log("Repost bonus : quota du jour déjà plein — reporté");
+        break;
+      }
+      log(`Repost bonus non matérialisé : ${e instanceof Error ? e.message : String(e)}`);
+      continue;
+    }
+
+    await supabase
+      .from("reposts_bonus")
+      .update({ statut: "fait", passage_id: passage.id })
+      .eq("id", repost.id);
+    crees.push(passage.id);
+    log(
+      `Repost bonus J+7 (${repost.vues_declencheur ?? "?"} vues) — slideshow ` +
+        `${String(repost.contenu_id).slice(0, 8)} rejoué à l'identique`,
+    );
+  }
+  return crees;
+}
+
+/**
+ * Passages restants d'un cycle, par contenu.
+ * Cycle = passages créés depuis `tier_maj_at`, hors reposts bonus et hors tests.
+ */
+async function restantsParContenu(
+  supabase: Supabase,
+  cycles: Array<{ id: string; passages_cible: number; tier_maj_at: string | null }>,
+): Promise<Map<string, number>> {
+  const ouverts = cycles.filter((c) => c.passages_cible > 0 && c.tier_maj_at);
+  const restants = new Map<string, number>();
+  if (ouverts.length === 0) return restants;
+
+  const debut = ouverts
+    .map((c) => c.tier_maj_at as string)
+    .reduce((a, b) => (a < b ? a : b));
+  const faits = await lireParLots<{
+    contenu_id: string;
+    created_at: string;
+    bonus_repost: boolean | null;
+    posts?: PostLie;
+  }>(
+    ouverts.map((c) => c.id),
+    "Passages du cycle",
+    (lot) =>
+      supabase
+        .from("passages")
+        .select("contenu_id, created_at, bonus_repost, posts(est_test)")
+        .in("contenu_id", lot)
+        .gte("created_at", debut),
+  );
+
+  const compte = new Map<string, number>();
+  const debutCycle = new Map(ouverts.map((c) => [c.id, Date.parse(c.tier_maj_at as string)]));
+  for (const f of faits) {
+    if (f.bonus_repost) continue;
+    if (estPassageDeTest(f.posts)) continue;
+    const dc = debutCycle.get(f.contenu_id);
+    if (dc == null || Date.parse(f.created_at) < dc) continue;
+    compte.set(f.contenu_id, (compte.get(f.contenu_id) ?? 0) + 1);
+  }
+  for (const c of ouverts) {
+    restants.set(c.id, Math.max(0, c.passages_cible - (compte.get(c.id) ?? 0)));
+  }
+  return restants;
+}
+
+/**
+ * Pioche le slideshow du prochain post d'un créateur.
+ *
+ * 1. pool = labels du créateur ∩ slideshows prêts (famille UGC, application) ;
+ * 2. candidats = ceux dont le cycle a encore des passages dus → tirage uniforme ;
+ * 3. si plus aucun passage dû dans le pool : repêchage d'un slideshow en D au
+ *    hasard, avec un cycle d'1 passage ouvert au vol (« pas assez de posts à
+ *    faire → on remet quelques posts en D pour remplir »).
+ *
+ * Un même slideshow peut repasser sur un compte qui l'a déjà posté un autre
+ * jour ; il ne peut pas sortir deux fois le MÊME jour sur le même compte.
+ * La langue ne filtre plus rien : le deck est traduit à la demande.
+ */
 async function choisirContenu(
   supabase: Supabase,
   compteId: string,
-  langue: string,
   labelIds: string[],
   jour: string,
-  reglages: AssignationReglages,
   dejaCreesCetteSession: string[],
   ugcAi = false,
   opts: { ignorerElo?: boolean; exclureTestsHisto?: boolean } = {},
 ): Promise<Candidat | null> {
-  const ignorerElo = Boolean(opts.ignorerElo);
+  // Mode test : on ignore les cycles (n'importe quel slideshow prêt fait l'affaire).
+  const ignorerCycles = Boolean(opts.ignorerElo);
   const { data: compteApp } = await supabase
     .from("comptes")
     .select("application_id")
     .eq("id", compteId)
     .maybeSingle();
   const applicationId = (compteApp?.application_id as string | undefined) ?? null;
+
   // Contenu IDs portant au moins un label du compte
   const liens = await lireParLots<{ contenu_id: string }>(
     labelIds,
@@ -884,7 +937,9 @@ async function choisirContenu(
     (lot) => {
       let q = supabase
         .from("contenus")
-        .select("id, musique_url, musique_titre, musique_plateforme, ugc_compatible")
+        .select(
+          "id, musique_url, musique_titre, musique_plateforme, ugc_compatible, tier, passages_cible, tier_maj_at",
+        )
         .eq("statut", "valide")
         .eq("import_statut", "done")
         .eq("ugc_compatible", ugcAi)
@@ -895,104 +950,75 @@ async function choisirContenu(
   );
   if (contenus.length === 0) return null;
 
-  const contenuIds = contenus.map((c) => c.id);
-  const meta = new Map(contenus.map((c) => [c.id, c]));
-
-  const langues = await lireParLots<{ contenu_id: string; score: number | null }>(
-    contenuIds,
-    "Lignes ELO",
-    (lot) =>
-      supabase
-        .from("contenu_langues")
-        .select("contenu_id, score, slides")
-        .eq("langue", langue)
-        .in("contenu_id", lot),
-  );
-  const scoreParContenu = new Map(
-    langues.map((cl) => [cl.contenu_id, Number(cl.score ?? 50)]),
-  );
-
-  // Historique passages de CE compte (hors posts test si demandé).
-  const hist = await lireParLots<PassageHisto>(contenuIds, "Historique des passages", (lot) =>
-    supabase
-      .from("passages")
-      .select("contenu_id, date_publication_prevue, posts(est_test)")
-      .eq("compte_id", compteId)
-      .in("contenu_id", lot),
-  );
-  const derniere = new Map<string, string>();
-  for (const h of hist) {
-    if (opts.exclureTestsHisto && estPassageDeTest(h.posts)) continue;
-    const d = h.date_publication_prevue ?? "";
-    const prev = derniere.get(h.contenu_id);
-    if (!prev || d > prev) derniere.set(h.contenu_id, d);
-  }
-
-  // Saturation réseau : nb de comptes distincts (hors tests) ayant posté récemment
-  const depuis = new Date(`${jour}T00:00:00Z`);
-  depuis.setUTCDate(depuis.getUTCDate() - reglages.saturation_jours);
-  const seuil = depuis.toISOString().slice(0, 10);
-  const recents = await lireParLots<PassageRecent>(
-    contenuIds,
-    "Passages récents (saturation)",
+  // Déjà sorti aujourd'hui sur ce compte : les posts d'un même jour doivent
+  // être différents (un même slideshow peut revenir un autre jour).
+  const dujour = await lireParLots<PassageHisto>(
+    contenus.map((c) => c.id),
+    "Passages du jour",
     (lot) =>
       supabase
         .from("passages")
-        .select("contenu_id, compte_id, posts(est_test)")
-        .in("contenu_id", lot)
-        .gte("date_publication_prevue", seuil)
-        .in("statut", ["assigne", "valide_par_poster", "publie"]),
+        .select("contenu_id, date_publication_prevue, posts(est_test)")
+        .eq("compte_id", compteId)
+        .eq("date_publication_prevue", jour)
+        .in("contenu_id", lot),
   );
-  const saturation = new Map<string, Set<string>>();
-  for (const r of recents) {
-    if (estPassageDeTest(r.posts)) continue;
-    let set = saturation.get(r.contenu_id);
-    if (!set) {
-      set = new Set();
-      saturation.set(r.contenu_id, set);
-    }
-    set.add(r.compte_id);
+  const exclus = new Set<string>(dejaCreesCetteSession);
+  for (const h of dujour) {
+    if (opts.exclureTestsHisto && estPassageDeTest(h.posts)) continue;
+    exclus.add(h.contenu_id);
   }
 
-  const frais: Candidat[] = [];
-  const deja: Candidat[] = [];
+  const pool = contenus.filter((c) => !exclus.has(c.id));
+  if (pool.length === 0) return null;
 
-  const idsCandidats = ignorerElo ? contenuIds : langues.map((cl) => cl.contenu_id);
+  const versCandidat = (c: ContenuCandidat, restants: number, repeche: boolean): Candidat => ({
+    contenuId: c.id,
+    tier: estTier(c.tier) ? c.tier : null,
+    restants,
+    musique_url: c.musique_url,
+    musique_titre: c.musique_titre,
+    musique_plateforme: c.musique_plateforme,
+    repeche,
+  });
 
-  for (const cid of idsCandidats) {
-    if (dejaCreesCetteSession.includes(cid)) continue;
-    // Sans ignorerElo : ligne `contenu_langues` = ELO ≥ seuil à l'import.
-    // Mode test : on pioche aussi les contenus sans ligne ELO (score 50).
-
-    const m = meta.get(cid);
-    if (!m) continue;
-    const sat = saturation.get(cid)?.size ?? 0;
-    const base = scoreParContenu.get(cid) ?? 50;
-    const score = base - reglages.saturation_penalite * sat * 10;
-    const candidat: Candidat = {
-      contenuId: cid,
-      score,
-      slides: null,
-      musique_url: m.musique_url,
-      musique_titre: m.musique_titre,
-      musique_plateforme: m.musique_plateforme,
-      dejaPoste: derniere.has(cid),
-      derniereDate: derniere.get(cid) ?? null,
-    };
-    if (candidat.dejaPoste) deja.push(candidat);
-    else frais.push(candidat);
+  if (ignorerCycles) {
+    const pick = tirerAuHasard(pool);
+    return pick ? versCandidat(pick, 0, false) : null;
   }
 
-  frais.sort((a, b) => b.score - a.score);
-  const pickFrais = echantillonnerTopK(frais, reglages.top_k, reglages.temperature);
-  if (pickFrais) return pickFrais;
+  const restants = await restantsParContenu(
+    supabase,
+    pool.map((c) => ({
+      id: c.id,
+      passages_cible: Number(c.passages_cible ?? 0),
+      tier_maj_at: (c.tier_maj_at as string | null) ?? null,
+    })),
+  );
 
-  // Fallback 1 : déjà posté, le moins récemment
-  deja.sort((a, b) => (a.derniereDate ?? "").localeCompare(b.derniereDate ?? ""));
-  if (deja.length > 0) return deja[0];
+  const dus = pool.filter((c) => (restants.get(c.id) ?? 0) > 0);
+  const pick = tirerAuHasard(dus);
+  if (pick) return versCandidat(pick, restants.get(pick.id) ?? 0, false);
 
-  // Fallback final : laisse vide (pas de bouche-trou)
-  return null;
+  // Remplissage : pas assez de passages dus → on repêche un slideshow en D
+  // (ou jamais placé) et on lui ouvre un cycle d'un passage.
+  const repechables = pool.filter(
+    (c) => !estTier(c.tier) || c.tier === "D" || Number(c.passages_cible ?? 0) === 0,
+  );
+  const repeche = tirerAuHasard(repechables);
+  if (!repeche) return null;
+
+  const { error } = await supabase
+    .from("contenus")
+    .update({
+      tier: estTier(repeche.tier) ? repeche.tier : "D",
+      passages_cible: 1,
+      tier_maj_at: new Date().toISOString(),
+    })
+    .eq("id", repeche.id);
+  if (error) throw error;
+
+  return versCandidat(repeche, 1, true);
 }
 
 /** Assigne tous les comptes actifs pour un jour. */
