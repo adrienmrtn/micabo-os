@@ -40,6 +40,12 @@ donc tout le moteur — le tree d'`assignation` faisait déjà 337 Ko. Chaque
 chargeur vérifie une sentinelle **ASCII** du bundle : esbuild échappe les
 accents (`é` → `\u00e9`), une sentinelle accentuée ne matcherait jamais.
 
+La sentinelle anti-troncature d'un chargeur doit être **structurelle** (nom de
+colonne, id d'acteur Apify), jamais une phrase d'interface : le 11/09/2026 la
+réécriture d'un message a fait disparaître « warmup fini » des bundles, et les
+chargeurs auraient refusé de démarrer. `assignation`, `minuit-vnext` et
+`assignation-contenu` vérifient désormais `date_publication_prevue`.
+
 Ne pas redéployer `papier-cm` depuis ce dépôt : la prod est en avance.
 Le `papier_master.ts` embarqué par `minuit-vnext` est celui du dépôt, pas
 celui de `papier-cm` v11.

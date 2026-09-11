@@ -587,6 +587,10 @@ export const fr = {
       causeManquantTitre: "Posts manquants",
       causePourquoiTitre: "Pourquoi minuit n’a pas complété",
       causePourquoiChargement: "Diagnostic du pool…",
+      comptesAttenteFilet: "{{count}} en attente du filet horaire (sortie de warmup)",
+      causeWarmupTitre: "Sorti de warmup en journée",
+      causeWarmupDetail:
+        "warmup terminé à {{fin}} — le filet horaire l’assigne à {{tick}}, ou clique « Assigner » pour ne pas attendre.",
       causeEchecTitre: "Post en échec",
       causeEchecSansDetail: "Échec pipeline (pas de détail)",
       causeRaisonTitre: "Raison assignation",

@@ -587,6 +587,10 @@ export const en = {
       causeManquantTitre: "Missing posts",
       causePourquoiTitre: "Why midnight didn’t fill the quota",
       causePourquoiChargement: "Diagnosing the pool…",
+      comptesAttenteFilet: "{{count}} waiting for the hourly net (just left warm-up)",
+      causeWarmupTitre: "Left warm-up during the day",
+      causeWarmupDetail:
+        "warm-up ended at {{fin}} — the hourly net assigns it at {{tick}}, or click “Assign” to skip the wait.",
       causeEchecTitre: "Failed post",
       causeEchecSansDetail: "Pipeline failure (no detail)",
       causeRaisonTitre: "Assignment reason",

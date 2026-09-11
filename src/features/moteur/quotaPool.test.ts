@@ -42,10 +42,26 @@ describe("poolDisponible", () => {
 });
 
 describe("messagePool", () => {
-  it("ne menace plus de baisser le quota du créateur", () => {
-    for (const etat of [base, { ...base, candidats: 1 }, { ...base, dejaAssignes: 11 }]) {
-      expect(messagePool(etat)).not.toContain("quota");
+  // Le quota d'un créateur ne baisse plus (tierlist + repêchage D) : aucun
+  // message ne doit plus en parler. Comparaison insensible à la casse — la
+  // première version de ce test cherchait « quota » et laissait passer
+  // « Quota inchangé », resté trois heures en prod.
+  it("ne parle plus jamais du quota du créateur", () => {
+    const cas = [
+      base,
+      { ...base, candidats: 1, manquants: 2 },
+      { ...base, candidats: 2, dejaAssignes: 2 },
+      { ...base, echecsDeck: 3 },
+    ];
+    for (const etat of cas) {
+      expect(messagePool(etat).toLowerCase()).not.toContain("quota");
     }
+  });
+
+  it("dit quoi faire quand le pool n'est pas la cause", () => {
+    const msg = messagePool(base);
+    expect(msg).toContain("filet");
+    expect(msg).toContain("Assigner");
   });
 
   it("distingue un deck impossible d'un pool trop mince", () => {
