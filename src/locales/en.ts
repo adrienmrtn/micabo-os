@@ -557,15 +557,15 @@ export const en = {
       titre: "Midnight assignment",
       desc: "Picks from the slideshow library (account labels ∩ language score), translates + micabo, then assigns — no more Recycled / Reworked / New types.",
       jour: "Day",
-      relancer: "Re-run (ELO → assignment)",
+      relancer: "Re-run (catch-up → assignment)",
       relancerAide:
-        "1) ELO refresh (scrape + scores) → Analytics updated · 2) Manual assignment. Does not change the auto-pause toggle.",
+        "1) Catch-up (view scrape, account ELO, tier requalification) → Analytics updated · 2) Manual assignment. Does not change the auto-pause toggle.",
       enCours: "Assigning…",
       assignProgress: "Assignment {{i}}/{{n}} — {{nom}}",
       assignErreur: "Assignment failed",
-      lance: "ELO then assignment: {{crees}} passage(s) created. Decks already translated + micabo — the tracker refreshes on its own.",
+      lance: "Catch-up then assignment: {{crees}} passage(s) created. Decks already translated + micabo — the tracker refreshes on its own.",
       lanceZero:
-        "No passage created — empty pool (labels / slideshows / language ELO). See detail below.",
+        "No passage created. Reason returned by the assignment:",
       quotasBaisses:
         "Lowered quota — thin pool: {{detail}}",
       quotasBaissesDernier:

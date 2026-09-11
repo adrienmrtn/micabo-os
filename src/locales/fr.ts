@@ -120,7 +120,7 @@ export const fr = {
       posters: "Accès des posters et rôles (recruteur)",
       bibliotheque: "Photos nettoyées, par label",
       testNettoyage: "Tester le nettoyage sans rien modifier",
-      reglages: "Actions moteur — cleaning, ELO, assignation",
+      reglages: "Actions moteur — cleaning, rattrapage, assignation",
       prompts: "Éditer les prompts de l'IA (traduction, placement micabo…)",
       reviews: "Retours aux créateurs (pop-up à leur connexion)",
       reviewsJour: "Posté vs original, un retour par TikTok du jour",
@@ -261,7 +261,7 @@ export const fr = {
     simMinuitCompte: {
       title: "Test assignation (1 créateur)",
       subtitle:
-        "Simule l’assignation de minuit pour UNE personne — sans rattrapage ELO, posts test invisibles sur les calendriers. Annule pour tout effacer.",
+        "Simule l’assignation de minuit pour UNE personne — sans rattrapage, posts test invisibles sur les calendriers. Annule pour tout effacer.",
       date: "Date d'assignation",
       compte: "Créateur",
       lancer: "Lancer le test",
@@ -557,15 +557,15 @@ export const fr = {
       titre: "Assignation de minuit",
       desc: "Pioche dans la bibliothèque de slideshows (labels du compte ∩ score langue), traduit + micabo, puis assigne — plus de types Recyclé / Remanié / Nouveau.",
       jour: "Journée",
-      relancer: "Relancer (ELO → assignation)",
+      relancer: "Relancer (rattrapage → assignation)",
       relancerAide:
-        "1) ELO refresh (scrape + scores) → Analytics mis à jour · 2) Assignation manuelle. Ne change pas le toggle pause auto.",
+        "1) Rattrapage (scrape des vues, ELO compte, requalification tierlist) → Analytics mis à jour · 2) Assignation manuelle. Ne change pas le toggle pause auto.",
       enCours: "Assignation…",
       assignProgress: "Assignation {{i}}/{{n}} — {{nom}}",
       assignErreur: "Échec de l’assignation",
-      lance: "ELO puis assignation : {{crees}} passage(s) créé(s). Decks déjà traduits + micabo — le suivi se met à jour tout seul.",
+      lance: "Rattrapage puis assignation : {{crees}} passage(s) créé(s). Decks déjà traduits + micabo — le suivi se met à jour tout seul.",
       lanceZero:
-        "Aucun passage créé — pool vide (labels / slideshows / langue ELO). Voir le détail ci-dessous.",
+        "Aucun passage créé. Raison renvoyée par l’assignation :",
       quotasBaisses:
         "Lowered quota — pool trop mince : {{detail}}",
       quotasBaissesDernier:
@@ -603,7 +603,7 @@ export const fr = {
       pauseAide:
         "Cron minuit + rattrapage auto actifs. Ce toggle est le seul moyen de couper l’auto — Relancer ne le change pas.",
       pauseBanner:
-        "Process auto en pause — le cron de minuit ne tourne pas. Relancer reste manuel (ELO → assignation) sans réactiver l’auto.",
+        "Process auto en pause — le cron de minuit ne tourne pas. Relancer reste manuel (rattrapage → assignation) sans réactiver l’auto.",
       pauseOn: "En pause (manuel seul)",
       pauseOff: "Auto actif",
       vnextInactifBanner:
@@ -708,7 +708,7 @@ export const fr = {
       vuesDesc:
         "Total des vues (tous comptes) à chaque snapshot ELO. Survole un point pour le nombre exact.",
       vuesVide:
-        "Pas encore de snapshot — lance un Rattrapage ELO depuis Assignation de minuit.",
+        "Pas encore de snapshot — lance un Rattrapage depuis Assignation de minuit.",
       vuesSansDelta:
         "Snapshot présent, mais pas encore de Δ (il faut au moins deux jours). Relance un rattrapage ELO pour figer la suite.",
       vuesExactes: "{{n}} vues",
@@ -782,14 +782,14 @@ export const fr = {
       histForcerEnCours: "Forçage…",
       histForcerOk: "ELO planché au seuil — nettoyage relancé en arrière-plan.",
       histForcerAide:
-        "Monte l'ELO de chaque langue jusqu'au seuil d'import, puis lance le nettoyage.",
+        "Force l'entrée du TikTok en tier C (plancher), puis lance le nettoyage.",
 
       langue: "Langue",
       langueOrigine: "Langue du TikTok",
       langueChoisir: "Choisir la langue…",
       langueRequis: "Indique la langue d'origine du TikTok.",
       langueAide:
-        "Langue réelle du contenu (pas forcément le français). C'est elle qui reçoit le boost ELO à l'import.",
+        "Langue réelle du contenu (pas forcément le français). C'est elle qui porte la note d'import.",
       add: "Ajouter",
       voix: "Prompt adapté (voix / ton de traduction)",
       voixPlaceholder: "Ex. : ton complice et direct, tutoiement, phrases courtes, pas d'anglicismes…",

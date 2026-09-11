@@ -45,6 +45,16 @@ function BanniereAssignation({
   incomplets?: boolean;
 }) {
   const crees = (data.resultats ?? []).reduce((n, r) => n + r.crees, 0);
+  // 0 passage n'est pas forcément un pool vide : le plus souvent le quota du
+  // jour est déjà rempli. On montre ce que l'assignation a réellement répondu
+  // plutôt qu'une cause devinée.
+  const raisons = [
+    ...new Set(
+      (data.resultats ?? [])
+        .map((r) => r.raison ?? r.erreur ?? null)
+        .filter((r): r is string => Boolean(r)),
+    ),
+  ].slice(0, 4);
   const detailQuotas =
     data.avertissement ??
     (data.quotasBaisses?.length
@@ -65,6 +75,13 @@ function BanniereAssignation({
             ? t("minuit.reassignerIncompletsOk", { crees })
             : t("minuit.lance", { crees })}
       </div>
+      {crees === 0 && raisons.length > 0 && (
+        <ul className="space-y-1 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+          {raisons.map((r) => (
+            <li key={r}>{r}</li>
+          ))}
+        </ul>
+      )}
       {detailQuotas && (
         <div className="rounded-md bg-warning/10 p-3 text-sm text-warning">
           {t("minuit.quotasBaisses", { detail: detailQuotas })}
