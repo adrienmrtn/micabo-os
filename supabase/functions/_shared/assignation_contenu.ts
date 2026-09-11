@@ -163,6 +163,8 @@ export interface AssignationOpts {
   ignorerElo?: boolean;
   /** Ignore `warmup_ends_at` (compte hors process OK). */
   ignorerWarmup?: boolean;
+  /** Slideshows à ne pas re-piocher (ex. recharge créateur de ce post). */
+  exclureContenuIds?: string[];
   /** Logs progression (stream NDJSON / UI test). */
   onLog?: (detail: string) => void;
 }
@@ -364,7 +366,7 @@ export async function assignerCompteJour(
 
   const crees: string[] = [];
   /** Contenu IDs déjà pris / exclus cette session (choisirContenu filtre dessus). */
-  const contenusSession: string[] = [];
+  const contenusSession: string[] = [...(o.exclureContenuIds ?? [])];
   const maxTentatives = manquants + 8;
   /** Decks / matérialisations impossibles : cause distincte d'un pool trop mince. */
   let echecsDeck = 0;

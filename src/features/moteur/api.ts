@@ -5317,9 +5317,9 @@ export async function diagnostiquerQuotaCompte(
 export const avancerUnPost = (postId: string) =>
   invoke<{ ok: boolean; etape?: string }>("composition", { postId });
 
-/** Révoque un post inutilisable (rejette son sujet) et en refait un autre pour le
- *  même créateur + date. Renvoie l'id du nouveau post (à faire avancer ensuite).
- *  Côté créateur : max 2 recharges, fabrication avancée jusqu'à done. */
+/** Révoque un post inutilisable et en refait un autre pour le
+ *  même créateur + date. Admin : rejette le slideshow. Créateur : le
+ *  slideshow reste dans le pool. Renvoie l'id du nouveau post. */
 export const revoquerPost = (postId: string) =>
   invoke<{
     ok: boolean;

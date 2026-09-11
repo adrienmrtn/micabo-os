@@ -1,4 +1,8 @@
 import { assignerTousComptes } from "../_shared/assignation_contenu.ts";
+import {
+  RAISON_REVOQ_ADMIN,
+  doitRejeterSlideshow,
+} from "../_shared/revoquer_slideshow.ts";
 import { assertRole, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 const MAX_RECHARGES_CREATEUR = 2;
@@ -11,11 +15,12 @@ const MAX_RECHARGES_CREATEUR = 2;
  *   Poster : { postId } → { ok, newPostId, recharges_createur, restantes }
  *            — max 2 recharges, uniquement si non publié.
  *
- * v-next (`type=contenu`) : rejette le contenu, supprime le passage lié + le
- * post, puis relance l'assignation forcée (labels ∩ score). Le pont post est
- * déjà `pipeline_statut=done` (pas de boucle composition).
+ * v-next (`type=contenu`) : admin → rejette le contenu ; créateur → le
+ * slideshow reste dans le pool (juste pas re-pioché pour CE compte ce jour).
+ * Supprime le passage lié + le post, puis relance l'assignation forcée
+ * (labels ∩ score). Le pont post est déjà `pipeline_statut=done`.
  *
- * Legacy (sujet) : rejette le sujet puis même flux.
+ * Legacy (sujet) : même distinction admin / créateur.
  *
  * Gère aussi les coquilles « slideshow vide » : post sans slides / passage
  * orphelin (matérialisation ratée) qui bloquaient le quota.
@@ -77,7 +82,7 @@ Deno.serve(async (request) => {
       .eq("post_id", post.id)
       .maybeSingle();
 
-    let contenuRejete: string | null = passage?.contenu_id ?? null;
+    let contenuId: string | null = passage?.contenu_id ?? null;
 
     // Post vide sans lien : retrouver un passage orphelin du même créateur/jour
     // (créé juste avant l'échec de matérialisation).
@@ -92,33 +97,32 @@ Deno.serve(async (request) => {
         .limit(1)
         .maybeSingle();
       if (orphelin) {
-        contenuRejete = orphelin.contenu_id as string;
+        contenuId = orphelin.contenu_id as string;
         await supabase.from("passages").delete().eq("id", orphelin.id);
       }
     }
 
-    const raisonRejet =
-      acces.role === "poster"
-        ? "Rechargé par le créateur : slideshow buggé (texte décalé / incohérent)"
-        : "Révoqué à la main : incohérent / non intégrable pour Sophia";
+    const rejeter = doitRejeterSlideshow(acces.role);
 
-    if (contenuRejete) {
-      await supabase
-        .from("contenus")
-        .update({
-          statut: "rejete",
-          pertinence_raison: raisonRejet,
-        })
-        .eq("id", contenuRejete);
+    if (contenuId) {
+      if (rejeter) {
+        await supabase
+          .from("contenus")
+          .update({
+            statut: "rejete",
+            pertinence_raison: RAISON_REVOQ_ADMIN,
+          })
+          .eq("id", contenuId);
+      }
       if (passage) {
         await supabase.from("passages").delete().eq("id", passage.id);
       }
-    } else if (post.sujet_id) {
+    } else if (post.sujet_id && rejeter) {
       await supabase
         .from("sujets")
         .update({
           statut: "rejete",
-          pertinence_raison: raisonRejet,
+          pertinence_raison: RAISON_REVOQ_ADMIN,
         })
         .eq("id", post.sujet_id);
     }
@@ -142,6 +146,7 @@ Deno.serve(async (request) => {
     const resultats = await assignerTousComptes(supabase, jour, compteId, {
       forcer: true,
       ignorerWarmup: true,
+      exclureContenuIds: contenuId ? [contenuId] : undefined,
     });
     const assign = resultats[0];
     if (assign?.erreur) {
