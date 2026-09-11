@@ -33,6 +33,13 @@ L’enjeu n’est pas la taille brute mais `gemini.ts` (52 Ko de prompts) : reco
 courant : `H`. Attention, esbuild place l’`import{createClient …}` **au milieu**
 du bundle, pas forcément en tête — le chercher, ne pas supposer la 1ʳᵉ ligne.
 
+Passés au chargeur le 11/09/2026 avec la tierlist : `rattrapage-elo` (`ee`),
+`revoquer-post` (`ie`), `creation-manuelle` (`C`) et `assignation-contenu`
+(`ne`). Les quatre embarquent `assignation_contenu.ts` ou `rattrapage_elo.ts`,
+donc tout le moteur — le tree d'`assignation` faisait déjà 337 Ko. Chaque
+chargeur vérifie une sentinelle **ASCII** du bundle : esbuild échappe les
+accents (`é` → `\u00e9`), une sentinelle accentuée ne matcherait jamais.
+
 Ne pas redéployer `papier-cm` depuis ce dépôt : la prod est en avance.
 Le `papier_master.ts` embarqué par `minuit-vnext` est celui du dépôt, pas
 celui de `papier-cm` v11.
