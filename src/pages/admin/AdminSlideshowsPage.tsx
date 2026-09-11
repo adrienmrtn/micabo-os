@@ -1862,9 +1862,11 @@ export function AdminSlideshowsPage() {
   const { applicationId } = useApplication();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  // « actifs » = tout sauf les rejetés. Défaut : la bibliothèque utile, pas la
+  // pile des TikToks écartés à l'import.
   const [filtre, setFiltre] = React.useState<
-    "tous" | "valide" | "rejete" | "brouillon"
-  >("tous");
+    "actifs" | "tous" | "valide" | "rejete" | "brouillon"
+  >("actifs");
   const [filtreLabel, setFiltreLabel] = React.useState<FiltreLabel>(null);
   const [filtreCompte, setFiltreCompte] = React.useState<FiltreCompte>(null);
   const [filtreUgc, setFiltreUgc] = React.useState<FiltreUgc>("tous");
@@ -1888,7 +1890,8 @@ export function AdminSlideshowsPage() {
     queryKey: ["slideshows", applicationId, filtre, filtreLabel, filtreCompte],
     queryFn: () =>
       listerContenus({
-        statut: filtre === "tous" ? undefined : filtre,
+        statut: filtre === "tous" || filtre === "actifs" ? undefined : filtre,
+        exclureRejetes: filtre === "actifs",
         limit: filtreCompte ? 500 : 200,
         labelId:
           filtreLabel && filtreLabel !== "__none__" ? filtreLabel : undefined,
@@ -2263,7 +2266,7 @@ export function AdminSlideshowsPage() {
               </p>
             )}
             <div className="flex flex-wrap items-center gap-1.5">
-              {(["tous", "valide", "rejete", "brouillon"] as const).map((f) => (
+              {(["actifs", "tous", "valide", "rejete", "brouillon"] as const).map((f) => (
                 <Chip key={f} actif={filtre === f} onClick={() => setFiltre(f)}>
                   {t(`contenus.filtre.${f}`)}
                 </Chip>
@@ -2423,7 +2426,7 @@ export function AdminSlideshowsPage() {
                 filtreLabel ||
                   filtreCompte ||
                   filtreUgc !== "tous" ||
-                  filtre !== "tous"
+                  (filtre !== "tous" && filtre !== "actifs")
                   ? t("slideshows.emptyFiltre")
                   : t("slideshows.empty")
               }
