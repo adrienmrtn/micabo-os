@@ -7,7 +7,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "dd59237aca85b9f712bca5669e78d9e299181f51";
+const SHA = "f7289f286ae584d1f587e0fe269992082f259878";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/revoquer-post.bundle.js`;
 
