@@ -9,7 +9,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "REMPLACER_SHA";
+const SHA = "625cc9f71341a7a40de74d610d632ccac485368b";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/normaliser-format.bundle.js`;
 
