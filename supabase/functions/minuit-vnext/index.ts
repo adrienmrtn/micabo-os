@@ -17,6 +17,11 @@ import {
   kickUpscaleAssignes,
   listerMediasAssignesNonUpscales,
 } from "../_shared/upscale_media_core.ts";
+import {
+  burnConfigure,
+  kickBrulerAssignes,
+  listerSlidesABruler,
+} from "../_shared/burn_file.ts";
 import { avancerVariations } from "../_shared/variations.ts";
 import {
   assertAuthorised,
@@ -48,10 +53,11 @@ const POSTS_RELEVES = 30;
  *   - crée passages statut=assigne (musique + hashtags)
  *
  *   {}  → kick rattrapage-elo (async) + assignation + upscale + ugc
- *   { etapes?: ['stats'|'scores'|'assignation'|'upscale'|'variations'|'rattrapage'|'ugc_ai_video'|'papier_cm'|'papier_assign'], compteId?, date?, forcer? }
+ *   { etapes?: ['stats'|'scores'|'assignation'|'upscale'|'burn'|'variations'|'rattrapage'|'ugc_ai_video'|'papier_cm'|'papier_assign'], compteId?, date?, forcer? }
  *   etape `rattrapage` : stats 4j + reposts bonus + ELO compte, puis requalification tierlist + snapshot vues
  *                        — kick async si tous comptes (évite timeout cron)
  *   etape `upscale` : SeedVR Fal sur photos assignées du jour sans upscale_le
+ *   etape `burn` : incrustation du texte sur les slides des comptes « burned » (après upscale)
  *                     (strip C2PA en fin dans le drain — pas de double strip)
  *   etape `ugc_ai_video` : kick drain assignation-ugc-video (NB→Kling→concat)
  *   etape `papier_cm` : plus de master du jour — original seulement si la bibliothèque est vide
@@ -104,7 +110,15 @@ Deno.serve(async (request) => {
     // ugc_ai_video : TOUJOURS en dernier (après slideshow + upscale).
     const etapes: string[] = Array.isArray(body?.etapes)
       ? body.etapes
-      : ["rattrapage", "assignation", "upscale", "ugc_ai_video", "papier_cm", "papier_assign"];
+      : [
+        "rattrapage",
+        "assignation",
+        "upscale",
+        "burn",
+        "ugc_ai_video",
+        "papier_cm",
+        "papier_assign",
+      ];
     const jour = body?.date ?? aujourdhuiParis();
     const compteId: string | null = body?.compteId ?? null;
 
@@ -221,6 +235,27 @@ Deno.serve(async (request) => {
             "drain assignation démarré (lots de 8 comptes, auto-chaîne jusqu'à quota rempli)",
         };
       }
+    }
+    // `assignation` l'entraîne aussi : c'est ce qui donne au burn le filet des
+    // 15 minutes sans ajouter un job pg_cron.
+    if (etapes.includes("burn") || etapes.includes("assignation")) {
+      // Hors du chemin critique : minuit n'attend pas le burn. Une slide pas
+      // encore brûlée part en classique (image propre + texte à poser).
+      const { slides, enAttente } = await listerSlidesABruler(supabase, jour);
+      if (slides.length > 0) kickBrulerAssignes(request, { date: jour });
+      out.burn = {
+        ok: true,
+        kick: slides.length > 0,
+        pending: slides.length,
+        enAttente,
+        detail: !burnConfigure()
+          ? "BURN_SECRET absent — burn désactivé, les posts partent en classique"
+          : slides.length > 0
+          ? `drain burn démarré (${slides.length} slide(s))`
+          : enAttente > 0
+          ? `${enAttente} slide(s) attendent l'upscale`
+          : "aucune slide à brûler",
+      };
     }
     if (etapes.includes("upscale")) {
       // Ne bloque pas minuit : kick le drain SeedVR (1 à la fois + auto-chaîne).

@@ -159,6 +159,41 @@ function GenerationPersona({ compte }: { compte: CompteAvecDetails }) {
   );
 }
 
+/**
+ * Checkmark « burned » : ce créateur reçoit des slides avec le texte déjà
+ * incrusté. Il ne voit plus ni image vierge ni texte à poser.
+ */
+function BurnedCompte({ compte }: { compte: CompteAvecDetails }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const maj = useMutation({
+    mutationFn: (burned: boolean) => majCompte(compte.id, { burned }),
+    onSuccess: () => rafraichirComptes(queryClient),
+  });
+  const burned = Boolean(compte.burned);
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
+      <div>
+        <p className="text-sm font-medium">{t("comptes.burned")}</p>
+        <p className="text-xs text-muted-foreground">{t("comptes.burnedAide")}</p>
+      </div>
+      <button
+        type="button"
+        disabled={maj.isPending}
+        onClick={() => maj.mutate(!burned)}
+        className={
+          burned
+            ? "rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground"
+            : "rounded-md border px-3 py-1 text-xs"
+        }
+      >
+        {burned ? "Burned ✓" : "Burned"}
+      </button>
+    </div>
+  );
+}
+
 /** Checkmark UGC AI (slideshow) ou UGC AI VIDEO + persona unique associé. */
 function UgcAiCompte({ compte }: { compte: CompteAvecDetails }) {
   const { t } = useTranslation();
@@ -523,6 +558,7 @@ export function CompteEditor({ compte }: { compte: CompteAvecDetails }) {
         <p className="mt-1.5 text-xs text-muted-foreground">{t("comptes.postsParJourHint")}</p>
       </div>
       <UgcAiCompte compte={compte} />
+      <BurnedCompte compte={compte} />
       <InfosCompte compte={compte} />
       <ChoixAvatar compte={compte} />
       <GenerationPersona compte={compte} />

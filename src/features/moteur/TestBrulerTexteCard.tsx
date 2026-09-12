@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Type } from "lucide-react";
+import { Save, Type } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,14 +23,6 @@ import {
   type ContenuListe,
 } from "@/features/moteur/api";
 import { useApplication } from "@/features/moteur/ApplicationContext";
-import {
-  affinerZonesDepuisBrut,
-  assurerPoliceTikTok,
-  brulerTexteSurImage,
-  calculerFractionsTaille,
-  type SlideBurnInput,
-  type ZoneBurn,
-} from "@/features/moteur/brulerTexteCanvas";
 import { cn } from "@/lib/utils";
 
 const selectClass =
@@ -40,8 +32,6 @@ type FiltreLabel = string | null | "__none__";
 
 type PreviewSlide = {
   position: number;
-  propreUrl: string;
-  brutUrl: string;
   texteTraduit: string;
   previewUrl?: string;
   detail?: string;
@@ -79,23 +69,6 @@ function Chip({
   );
 }
 
-function zonesDepuisEvent(
-  zones: NonNullable<BurnTexteEvent["zones"]>,
-): ZoneBurn[] {
-  return zones.map((z) => ({
-    x: Number(z.x),
-    y: Number(z.y),
-    w: Number(z.w),
-    h: Number(z.h),
-    couleur: String(z.couleur ?? "#FFFFFF"),
-    ombre: z.ombre === true,
-    nbLignes: z.nbLignes != null ? Number(z.nbLignes) : undefined,
-    role: z.role === "titre" || z.role === "corps" ? z.role : undefined,
-    texte: String(z.texte ?? ""),
-    texteSource: z.texteSource != null ? String(z.texteSource) : undefined,
-  }));
-}
-
 function vignette(c: ContenuListe): string | null {
   const slides = [...(c.structure_slides ?? [])].sort(
     (a, b) => a.position - b.position,
@@ -108,10 +81,25 @@ function vignette(c: ContenuListe): string | null {
   return null;
 }
 
+/** Ce que le moteur de rendu a mesuré sur l'image d'origine, par zone. */
+type Reglage = {
+  role?: string;
+  taille: number;
+  tracking: number;
+  contour: number;
+  interligne: number;
+  alignement: string;
+  mesure?: boolean;
+  lignes?: string[];
+};
+
 /**
- * Test admin : burn texte traduit sur images propres (Canvas).
- * Analyse boxes+couleur sur le brut. Aucune sauvegarde.
- * Taille de police unifiée sur tout le slideshow (titre vs corps).
+ * Test admin : un slideshow d'origine, une langue → deck cuit (traduction +
+ * placement micabo) puis burn par le moteur de rendu de production. L'aperçu
+ * est donc l'image exacte que recevra un créateur « burned ».
+ *
+ * « Enregistrer » range les images dans la bibliothèque et le cache du burn ;
+ * sans lui, rien n'est écrit.
  */
 export function TestBrulerTexteCard() {
   const { t } = useTranslation();
@@ -124,6 +112,7 @@ export function TestBrulerTexteCard() {
   const [logs, setLogs] = React.useState<string[]>([]);
   const [previews, setPreviews] = React.useState<PreviewSlide[]>([]);
   const [erreur, setErreur] = React.useState<string | null>(null);
+
 
   const labelsTous = useQuery({
     queryKey: ["labels", applicationId],
@@ -188,13 +177,9 @@ export function TestBrulerTexteCard() {
     if (!encore) setContenuId("");
   }, [slideshows.data, contenuId]);
 
-  React.useEffect(() => {
-    void assurerPoliceTikTok();
-  }, []);
-
   const selection = (slideshows.data ?? []).find((c) => c.id === contenuId);
 
-  async function lancer() {
+  async function lancer(sauvegarder: boolean) {
     if (!contenuId || enCours) return;
     setEnCours(true);
     setErreur(null);
@@ -228,139 +213,69 @@ export function TestBrulerTexteCard() {
       });
     };
 
-    const aBurner: SlideBurnInput[] = [];
-
     try {
       push(t("tests.brulerDebut", { langue: nomLangue(langue) }));
       await brulerTexteTestStream(
-        { contenuId, langue },
+        { contenuId, langue, sauvegarder },
         async (ev: BurnTexteEvent) => {
           if (ev.etape === "deck" || ev.etape === "slide") {
             if (ev.detail) {
-              push(
-                `#${ev.position ?? "—"} · ${ev.statut ?? ""} · ${ev.detail}`,
-              );
+              push(`#${ev.position ?? "—"} · ${ev.statut ?? ""} · ${ev.detail}`);
             }
           }
-          if (ev.etape === "gemini" && ev.zones) {
-            if (ev.detail) push(`#${ev.position} ${ev.detail}`);
-            logZones("GEMINI brut", ev.position, ev.zones, "ocr");
-            if (ev.texteTraduit) {
-              const tr = ev.texteTraduit.trim().replace(/\s+/g, " ");
-              push(
-                `  traduit: ${tr.slice(0, 180)}${tr.length > 180 ? "…" : ""}`,
-              );
-            }
-          }
-          if (ev.etape === "analyse" && ev.zones) {
-            if (ev.detail) push(`#${ev.position} ${ev.detail}`);
-            logZones("après fusion/split", ev.position, ev.zones, "traduit");
-          }
-          if (ev.etape === "payload" && ev.propreUrl && ev.zones) {
+          if (ev.etape === "slide" && ev.position != null) {
             const pos = Number(ev.position);
-            const zones = zonesDepuisEvent(ev.zones);
-            aBurner.push({
-              position: pos,
-              propreUrl: ev.propreUrl,
-              brutUrl: ev.brutUrl,
-              zones,
-            });
             setPreviews((prev) => {
               const next = prev.filter((p) => p.position !== pos);
+              const avant = prev.find((p) => p.position === pos);
               next.push({
                 position: pos,
-                propreUrl: ev.propreUrl!,
-                brutUrl: ev.brutUrl ?? "",
-                texteTraduit: ev.texteTraduit ?? "",
-                statut: "attente",
-                detail: "en file…",
+                texteTraduit: avant?.texteTraduit ?? "",
+                previewUrl: avant?.previewUrl,
+                statut: (ev.statut as PreviewSlide["statut"]) ?? "attente",
+                detail: ev.detail,
               });
               return next.sort((a, b) => a.position - b.position);
             });
+          }
+          if (ev.etape === "analyse" && ev.zones) {
+            if (ev.detail) push(`#${ev.position} ${ev.detail}`);
+            logZones("zones mesurées", ev.position, ev.zones, "traduit");
+            const pos = Number(ev.position);
+            setPreviews((prev) =>
+              prev.map((p) =>
+                p.position === pos
+                  ? { ...p, texteTraduit: ev.texteTraduit ?? p.texteTraduit }
+                  : p,
+              ),
+            );
+          }
+          if (ev.etape === "image" && ev.position != null) {
+            const pos = Number(ev.position);
+            const src = ev.image ?? ev.url;
+            // Le rapport dit ce que le moteur a MESURÉ sur l'original : c'est
+            // par là qu'on voit si un rendu de travers vient de la mesure.
+            for (const r of (ev.rapport as Reglage[] | undefined) ?? []) {
+              push(
+                `  ${r.role ?? "zone"} · ${r.taille}px · interlettrage ${r.tracking}` +
+                  ` · contour ${r.contour} · interligne ${r.interligne}` +
+                  ` · ${r.alignement}${r.mesure ? "" : " (non mesuré)"}`,
+              );
+              for (const l of r.lignes ?? []) push(`     « ${l} »`);
+            }
+            if (src) {
+              setPreviews((prev) =>
+                prev.map((p) =>
+                  p.position === pos ? { ...p, previewUrl: src } : p,
+                ),
+              );
+            }
           }
           if (ev.etape === "ready") {
             push(ev.detail ?? `ready · ${ev.statut}`);
           }
         },
       );
-
-      if (aBurner.length === 0) {
-        push("aucun slide à brûler");
-        return;
-      }
-
-      push(`échantillonnage couleur depuis brut (${aBurner.length} slide(s))…`);
-      setPreviews((prev) =>
-        prev.map((p) => ({ ...p, statut: "encours", detail: "couleur…" })),
-      );
-      const affinés: SlideBurnInput[] = [];
-      for (const slide of aBurner) {
-        let zones = slide.zones;
-        if (slide.brutUrl) {
-          try {
-            const avant = slide.zones.map(
-              (z) => `${z.couleur}${z.ombre ? "+s" : ""}`,
-            );
-            zones = await affinerZonesDepuisBrut(slide.brutUrl, slide.zones);
-            const apres = zones.map(
-              (z) => `${z.couleur}${z.ombre ? "+s" : ""}`,
-            );
-            push(
-              `#${slide.position} pixels brut: ${apres.join(", ")} (Gemini disait ${avant.join(", ")})`,
-            );
-          } catch (e) {
-            push(
-              `#${slide.position} sample couleur échec · ${e instanceof Error ? e.message : e}`,
-            );
-          }
-        }
-        affinés.push({ ...slide, zones });
-      }
-
-      const { corpsFrac, titreFrac } = calculerFractionsTaille(affinés);
-      push(
-        `taille unifiée corps=${(corpsFrac * 100).toFixed(1)}%H · titre=${(titreFrac * 100).toFixed(1)}%H`,
-      );
-
-      for (const slide of affinés) {
-        setPreviews((prev) =>
-          prev.map((p) =>
-            p.position === slide.position
-              ? { ...p, statut: "encours", detail: "burn Canvas…" }
-              : p,
-          ),
-        );
-        try {
-          const url = await brulerTexteSurImage(slide.propreUrl, slide.zones, {
-            corpsFrac,
-            titreFrac,
-          });
-          const couleurs = slide.zones.map((z) => z.couleur).join("/");
-          setPreviews((prev) =>
-            prev.map((p) =>
-              p.position === slide.position
-                ? {
-                    ...p,
-                    previewUrl: url,
-                    statut: "ok",
-                    detail: couleurs,
-                  }
-                : p,
-            ),
-          );
-          push(`#${slide.position} burn OK · ${couleurs}`);
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          setPreviews((prev) =>
-            prev.map((p) =>
-              p.position === slide.position
-                ? { ...p, statut: "echec", detail: msg }
-                : p,
-            ),
-          );
-          push(`#${slide.position} burn échec · ${msg}`);
-        }
-      }
     } catch (e) {
       setErreur(e instanceof Error ? e.message : String(e));
     } finally {
@@ -519,13 +434,24 @@ export function TestBrulerTexteCard() {
           )}
         </div>
 
-        <Button
-          disabled={enCours || !contenuId}
-          onClick={() => void lancer()}
-        >
-          <Type className="size-4" />
-          {enCours ? t("tests.enCours") : t("tests.brulerLancer")}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            disabled={enCours || !contenuId}
+            onClick={() => void lancer(false)}
+          >
+            <Type className="size-4" />
+            {enCours ? t("tests.enCours") : t("tests.brulerLancer")}
+          </Button>
+          {/* Même rendu, mais rangé : c'est ce qui sert ensuite aux posts. */}
+          <Button
+            variant="outline"
+            disabled={enCours || !contenuId}
+            onClick={() => void lancer(true)}
+          >
+            <Save className="size-4" />
+            {t("tests.brulerEnregistrer")}
+          </Button>
+        </div>
 
         <BarreChargement
           actif={enCours}

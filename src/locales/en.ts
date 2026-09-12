@@ -411,6 +411,7 @@ export const en = {
       brulerSelection: "Selected",
       brulerLogs: "Gemini / burn logs",
       brulerLancer: "Burn-in preview",
+      brulerEnregistrer: "Burn and save",
       brulerDebut: "Burn-in → {{langue}}…",
       brulerSlideN: "Slide {{n}}",
       recentsTitre: "Your recent tests",
@@ -956,6 +957,9 @@ export const en = {
       activerSurcharge: "Customize for this account",
       retirerSurcharge: "Revert to global settings",
       postsParJourHint: "How many posts this creator gets assigned each day (1 to 3).",
+      burned: "Burned",
+      burnedAide:
+        "This creator gets slides with the text already burned in — no blank image, no text to place.",
       ugcAi: "UGC AI",
       ugcAiAide:
         "Only gets slideshows with the UGC checkmark. Face slides are regenerated with the persona (Nano Banana).",
@@ -1828,6 +1832,7 @@ export const en = {
       voirPlacement: "See where to place the text",
       placementTitre: "Original photo",
       photoAPoster: "Photo to post",
+      photoBurned: "Photo to post (text already burned in)",
       placementAide:
         "Original visual: reproduce the same text position and size in TikTok.",
       agrandir: "Enlarge",

@@ -17,6 +17,7 @@ import {
   listerMediasAssignesNonUpscales,
   upscalerMediaLibrary,
 } from "../_shared/upscale_media_core.ts";
+import { kickBrulerAssignes } from "../_shared/burn_file.ts";
 import { reponseNdjson, veutStream } from "../_shared/nettoyage_etapes.ts";
 import {
   assertAuthorised,
@@ -110,6 +111,10 @@ Deno.serve(async (request) => {
     if (more) {
       // Enchaîne 1 seul (SeedVR sérialisé).
       kickUpscaleAssignes(request, { date: jour });
+    } else {
+      // Le burn se fait sur l'image finale : il n'a de sens qu'une fois la
+      // file d'upscale vide.
+      kickBrulerAssignes(request, { date: jour });
     }
 
     if (!r.ok) {

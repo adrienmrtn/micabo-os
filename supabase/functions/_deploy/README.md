@@ -46,6 +46,19 @@ réécriture d'un message a fait disparaître « warmup fini » des bundles, et 
 chargeurs auraient refusé de démarrer. `assignation`, `minuit-vnext` et
 `assignation-contenu` vérifient désormais `date_publication_prevue`.
 
+Passés au chargeur le 12/09/2026 avec le burn : `bruler-assignes` (`N`, 20 Ko)
+et `bruler-texte-test` (`G`, 32 Ko). Les deux embarquent `gemini.ts` — ce n'est
+pas la taille du bundle qui décide, c'est le tree source (144 et 273 Ko) et le
+fait qu'un caractère perdu dans un prompt ne se voit pas. Sentinelles :
+`burned_media_id` et `burn_analyses`.
+
+Le même jour, `_shared/burn.ts` a été coupé en deux : `burn_file.ts` (file,
+kick, invalidation — sans LLM) et `burn.ts` (analyse + rendu). Sans cette
+coupe, `upscale-assignes` et `normaliser-format` traînaient `gemini.ts` pour un
+seul appel de kick et passaient de 48 à 156 Ko, donc au chargeur. Quand un
+module partagé n'a besoin du LLM que dans une partie de ses fonctions, le
+couper coûte moins cher que deux chargeurs de plus.
+
 Ne pas redéployer `papier-cm` depuis ce dépôt : la prod est en avance.
 Le `papier_master.ts` embarqué par `minuit-vnext` est celui du dépôt, pas
 celui de `papier-cm` v11.

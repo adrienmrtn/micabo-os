@@ -411,6 +411,7 @@ export const fr = {
       brulerSelection: "Sélection",
       brulerLogs: "Logs Gemini / burn",
       brulerLancer: "Burn-in preview",
+      brulerEnregistrer: "Brûler et enregistrer",
       brulerDebut: "Burn-in → {{langue}}…",
       brulerSlideN: "Slide {{n}}",
       recentsTitre: "Tes tests récents",
@@ -957,6 +958,9 @@ export const fr = {
       activerSurcharge: "Personnaliser pour ce compte",
       retirerSurcharge: "Revenir aux réglages globaux",
       postsParJourHint: "Nombre de posts assignés chaque jour à ce créateur (1 à 3).",
+      burned: "Burned",
+      burnedAide:
+        "Le créateur reçoit ses slides texte déjà incrusté — plus d'image vierge ni de texte à poser.",
       ugcAi: "UGC AI",
       ugcAiAide:
         "Reçoit uniquement des slideshows avec checkmark UGC. Les slides à visage sont régénérées avec le persona (Nano Banana).",
@@ -1832,6 +1836,7 @@ export const fr = {
       voirPlacement: "Voir où poser le texte",
       placementTitre: "Photo d'origine",
       photoAPoster: "Photo à poster",
+      photoBurned: "Photo à poster (texte déjà incrusté)",
       placementAide:
         "Visuel d'origine : reproduis la même position et la même taille de texte dans TikTok.",
       agrandir: "Agrandir",
