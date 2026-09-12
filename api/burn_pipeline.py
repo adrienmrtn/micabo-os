@@ -6,7 +6,9 @@ clé Fal et les decks. Ce module reçoit donc leur résultat au lieu de les fair
 et enchaîne les étapes du kit dans le même ordre : recalage, mesure, autotest
 dans la langue source, ajustement au cadre, rendu.
 
-`font_candidates` et `candidates_for_style` sont repris tels quels.
+`font_candidates` et `candidates_for_style` sont repris tels quels. Les boîtes
+arrivent déjà en pixels de la capture : c'est la lecture côté Edge qui les
+normalise, le kit les prend telles quelles.
 """
 
 from __future__ import annotations
@@ -45,21 +47,6 @@ def candidates_for_style(folder: str, style: str) -> list[str]:
     return sel or all_f
 
 
-def _bbox_pixels(bbox, taille: tuple[int, int]) -> list[float]:
-    """La boîte du LLM, ramenée en pixels de la capture.
-
-    Le kit la veut en pixels. Notre lecture la rend parfois en fractions de
-    l'image ; la conversion se fait ici, à la frontière, pour que tout ce qui
-    suit soit le kit sans retouche.
-    """
-    w, h = taille
-    x0, y0, x1, y1 = [float(v) for v in bbox]
-    if max(x0, y0, x1, y1) <= 1.0:
-        x0, x1 = x0 * w, x1 * w
-        y0, y1 = y0 * h, y1 * h
-    return [x0, y0, x1, y1]
-
-
 def run_slide(
     shot: str,
     clean: str,
@@ -76,7 +63,7 @@ def run_slide(
     spec = {"blocks": []}
     for b in blocks:
         hint = {
-            "bbox": _bbox_pixels(b["bbox"], (shot_rgb.shape[1], shot_rgb.shape[0])),
+            "bbox": b["bbox"],
             "text": b["text"],
             "color": b.get("color"),
             "outline": b.get("outline", False),
