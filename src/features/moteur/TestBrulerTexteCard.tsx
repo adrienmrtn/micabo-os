@@ -37,6 +37,8 @@ type PreviewSlide = {
   brutUrl?: string;
   previewUrl?: string;
   detail?: string;
+  /** Le rendu a passé son contrôle : sinon la production le refuserait. */
+  fiable?: boolean;
   statut: "attente" | "encours" | "ok" | "saute" | "echec";
 };
 
@@ -45,21 +47,30 @@ function Volet({
   url,
   legende,
   attente,
+  alerte,
 }: {
   url?: string;
   legende: string;
   attente: string;
+  alerte?: boolean;
 }) {
   return (
     <div className="relative">
       {url ? (
         <img src={url} alt={legende} className="aspect-[9/16] w-full object-cover" />
       ) : (
-        <div className="flex aspect-[9/16] items-center justify-center bg-muted text-xs text-muted-foreground">
+        <div className="flex aspect-[9/16] items-center justify-center bg-muted px-2 text-center text-xs text-muted-foreground">
           {attente}
         </div>
       )}
-      <span className="absolute left-1 top-1 rounded bg-background/80 px-1 text-[10px] font-medium">
+      <span
+        className={cn(
+          "absolute left-1 top-1 rounded px-1 text-[10px] font-medium",
+          alerte
+            ? "bg-destructive text-destructive-foreground"
+            : "bg-background/80",
+        )}
+      >
         {legende}
       </span>
     </div>
@@ -271,9 +282,10 @@ export function TestBrulerTexteCard() {
               const next = prev.filter((p) => p.position !== pos);
               const avant = prev.find((p) => p.position === pos);
               next.push({
+                // L'état d'une slide arrive après son image et son original :
+                // reconstruire la vignette sans les reprendre les effaçait.
+                ...(avant ?? { position: pos, texteTraduit: "" }),
                 position: pos,
-                texteTraduit: avant?.texteTraduit ?? "",
-                previewUrl: avant?.previewUrl,
                 statut: (ev.statut as PreviewSlide["statut"]) ?? "attente",
                 detail: ev.detail,
               });
@@ -327,13 +339,13 @@ export function TestBrulerTexteCard() {
                   " partirait en classique (image propre + texte à poser)",
               );
             }
-            if (src) {
-              setPreviews((prev) =>
-                prev.map((p) =>
-                  p.position === pos ? { ...p, previewUrl: src } : p,
-                ),
-              );
-            }
+            setPreviews((prev) =>
+              prev.map((p) =>
+                p.position === pos
+                  ? { ...p, previewUrl: src ?? p.previewUrl, fiable: ev.fiable }
+                  : p,
+              ),
+            );
           }
           if (ev.etape === "ready") {
             push(ev.detail ?? `ready · ${ev.statut}`);
@@ -562,12 +574,17 @@ export function TestBrulerTexteCard() {
                   <Volet
                     url={p.brutUrl}
                     legende={t("tests.brulerOriginal")}
-                    attente={`#${p.position}`}
+                    attente={t("tests.brulerSansOriginal")}
                   />
                   <Volet
                     url={p.previewUrl}
-                    legende={t("tests.brulerRendu")}
+                    legende={
+                      p.fiable === false
+                        ? t("tests.brulerRefuse")
+                        : t("tests.brulerRendu")
+                    }
                     attente={p.statut}
+                    alerte={p.fiable === false}
                   />
                 </div>
                 <figcaption className="space-y-0.5 p-2 text-[11px]">
