@@ -76,12 +76,23 @@ _cache_cmap: dict[str, set[int]] = {}
 _cache_police: dict[tuple[str, int], ImageFont.FreeTypeFont] = {}
 
 
-def _cmap(nom: str) -> set[int]:
-    if nom not in _cache_cmap:
-        from fontTools.ttLib import TTFont
+def _cmap(nom: str) -> set[int] | None:
+    """Codes couverts par une police, ou None si on ne peut pas les lire.
 
-        with TTFont(os.path.join(DOSSIER_POLICES, nom), lazy=True) as f:
-            _cache_cmap[nom] = set(f.getBestCmap().keys())
+    fontTools donne la table exacte. S'il manque — un `requirements.txt`
+    incomplet a déjà coûté une panne du moteur — on rend None : le repli se
+    fera alors glyphe par glyphe en comparant le dessin à celui d'un caractère
+    connu pour être absent. Une dépendance qui manque doit dégrader le rendu,
+    jamais l'arrêter.
+    """
+    if nom not in _cache_cmap:
+        try:
+            from fontTools.ttLib import TTFont
+
+            with TTFont(os.path.join(DOSSIER_POLICES, nom), lazy=True) as f:
+                _cache_cmap[nom] = set(f.getBestCmap().keys())
+        except Exception:
+            _cache_cmap[nom] = None
     return _cache_cmap[nom]
 
 
@@ -92,6 +103,26 @@ def _charger(nom: str, taille: int) -> ImageFont.FreeTypeFont:
             os.path.join(DOSSIER_POLICES, nom), max(1, taille)
         )
     return _cache_police[cle]
+
+
+#: Zone à usage privé : aucune police ne la couvre, son dessin est donc
+#: exactement celui du glyphe « caractère inconnu » de la police.
+_INCONNU = "\ue000"
+_cache_absent: dict[tuple[int, str], bool] = {}
+
+
+def _absent_du_dessin(police: ImageFont.FreeTypeFont, c: str) -> bool:
+    """Repli sans fontTools : ce qui se dessine comme l'inconnu est absent."""
+    cle = (id(police), c)
+    if cle not in _cache_absent:
+        try:
+            dessin, inconnu = police.getmask(c), police.getmask(_INCONNU)
+            _cache_absent[cle] = (
+                dessin.size == inconnu.size and bytes(dessin) == bytes(inconnu)
+            )
+        except Exception:
+            _cache_absent[cle] = False
+    return _cache_absent[cle]
 
 
 class Police:
@@ -109,7 +140,9 @@ class Police:
         self.connus = _cmap(nom)
 
     def pour(self, c: str) -> ImageFont.FreeTypeFont:
-        return self.principale if ord(c) in self.connus else self.repli
+        if self.connus is not None:
+            return self.principale if ord(c) in self.connus else self.repli
+        return self.repli if _absent_du_dessin(self.principale, c) else self.principale
 
     def avance(self, c: str) -> float:
         return self.pour(c).getlength(c)
@@ -485,37 +518,77 @@ def geometrie_ligne(masque: np.ndarray, y0: int, y1: int) -> tuple[float, float]
     return float(base), float(haut_x)
 
 
-def mesurer_lignes(masque: np.ndarray, dx: int = 0, dy: int = 0) -> list[Ligne]:
-    """Toutes les lignes d'un masque, nettoyées et mesurées."""
-    lignes: list[Ligne] = []
-    for y0, y1 in bandes_horizontales(masque):
-        if y1 - y0 < 4:
+def separer_soudees(
+    masque: np.ndarray, bandes: list[tuple[int, int]]
+) -> list[tuple[int, int]]:
+    """Recoupe les bandes qui portent visiblement plusieurs lignes.
+
+    Un contour épais comble l'espace entre deux lignes serrées et les soude en
+    une seule bande. Le compte ne tombe alors plus juste — « 10 lignes lues
+    pour 9 mesurées » — et tout le bloc glisse d'un interligne.
+
+    La hauteur médiane des autres bandes dit combien de lignes une bande trop
+    haute contient ; la coupure se fait là où l'encre est la plus rare, au
+    voisinage de la position attendue.
+    """
+    hauteurs = sorted(y1 - y0 for y0, y1 in bandes)
+    if not hauteurs:
+        return bandes
+    mediane = hauteurs[len(hauteurs) // 2]
+    if mediane < 8:
+        return bandes
+    sorties: list[tuple[int, int]] = []
+    for y0, y1 in bandes:
+        hauteur = y1 - y0
+        parts = int(round(hauteur / mediane))
+        if parts < 2 or hauteur < mediane * 1.55:
+            sorties.append((y0, y1))
             continue
+        profil = masque[y0 : y1 + 1].sum(axis=1)
+        coupes = [0]
+        for k in range(1, parts):
+            vise = int(hauteur * k / parts)
+            fenetre = max(2, int(hauteur / parts * 0.25))
+            bas, haut = max(1, vise - fenetre), min(hauteur, vise + fenetre)
+            coupes.append(bas + int(np.argmin(profil[bas:haut])))
+        coupes.append(hauteur)
+        for a, b in zip(coupes, coupes[1:]):
+            if b - a >= mediane * 0.45:
+                sorties.append((y0 + a, y0 + b))
+    return sorties
+
+
+def mesurer_lignes(masque: np.ndarray, dx: int = 0, dy: int = 0) -> list[Ligne]:
+    """Toutes les lignes d'un masque : triées, recoupées, nettoyées, mesurées.
+
+    L'ordre compte. On écarte d'abord le bruit sur l'ENCRE — les restes de
+    détourage sont nombreux et minuscules, ils domineraient toute médiane de
+    hauteur — et seulement ensuite on recoupe les bandes trop hautes, une fois
+    que la hauteur de référence est celle des vraies lignes.
+    """
+    bandes = [(y0, y1) for y0, y1 in bandes_horizontales(masque) if y1 - y0 >= 4]
+    if not bandes:
+        return []
+    encres = [int(masque[y0 : y1 + 1].sum()) for y0, y1 in bandes]
+    plancher = max(encres) * 0.15
+    solides = [b for b, e in zip(bandes, encres) if e >= plancher]
+    if not solides:
+        return []
+
+    lignes: list[Ligne] = []
+    for y0, y1 in separer_soudees(masque, solides):
         etendue = nettoyer_orphelins(masque, y0, y1)
         if etendue is None:
             continue
         x0, x1 = etendue
-        propre = masque[:, x0 : x1 + 1]
-        base, haut_x = geometrie_ligne(propre, y0, y1)
+        base, haut_x = geometrie_ligne(masque[:, x0 : x1 + 1], y0, y1)
         lignes.append(
             Ligne(
-                y0=y0 + dy,
-                y1=y1 + dy,
-                x0=x0 + dx,
-                x1=x1 + 1 + dx,
-                base=base + dy,
-                haut_x=haut_x + dy,
+                y0=y0 + dy, y1=y1 + dy, x0=x0 + dx, x1=x1 + 1 + dx,
+                base=base + dy, haut_x=haut_x + dy,
             )
         )
-    if not lignes:
-        return []
-    # Le tri se fait sur l'ENCRE, pas sur la hauteur. Les restes de détourage
-    # sont nombreux et minuscules : ils dominent en nombre, jamais en matière.
-    # Se fier à la hauteur médiane revenait à prendre le bruit pour la norme et
-    # à jeter les vraies lignes, qui sont plus hautes que lui.
-    encres = [int(masque[l.y0 - dy : l.y1 - dy + 1, l.x0 - dx : l.x1 - dx].sum()) for l in lignes]
-    plancher = max(encres) * 0.15
-    return [l for l, e in zip(lignes, encres) if e >= plancher and l.largeur > 8]
+    return [l for l in lignes if l.largeur > 8]
 
 
 @dataclass
