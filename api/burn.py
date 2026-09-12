@@ -56,6 +56,10 @@ def traiter(charge: dict) -> dict:
         "typeMime": "image/jpeg",
         "largeur": image.width,
         "hauteur": image.height,
+        # Le moteur a redessiné le texte d'origine et l'a re-mesuré : s'il ne
+        # sait pas le reproduire, l'appelant doit livrer la slide en classique
+        # plutôt que cette image.
+        "fiable": bc.burn_livrable(rapport),
         "rapport": rapport,
     }
 

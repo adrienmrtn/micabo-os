@@ -112,13 +112,27 @@ function vignette(c: ContenuListe): string | null {
 /** Ce que le moteur de rendu a mesuré sur l'image d'origine, par zone. */
 type Reglage = {
   role?: string;
+  police?: string;
   taille: number;
   tracking: number;
   contour: number;
   interligne: number;
   alignement: string;
+  hauteurX?: number;
   mesure?: boolean;
+  fiable?: boolean;
   lignes?: string[];
+  notes?: string[];
+  /** Écarts entre le texte d'origine redessiné et le texte mesuré. */
+  controle?: {
+    ok?: boolean;
+    baseline?: number;
+    bord?: number;
+    largeur?: number;
+    pireLargeur?: number;
+    pirePosition?: number;
+    detail?: string;
+  };
 };
 
 /**
@@ -289,11 +303,29 @@ export function TestBrulerTexteCard() {
             // par là qu'on voit si un rendu de travers vient de la mesure.
             for (const r of (ev.rapport as Reglage[] | undefined) ?? []) {
               push(
-                `  ${r.role ?? "zone"} · ${r.taille}px · interlettrage ${r.tracking}` +
-                  ` · contour ${r.contour} · interligne ${r.interligne}` +
-                  ` · ${r.alignement}${r.mesure ? "" : " (non mesuré)"}`,
+                `  ${r.role ?? "zone"} · ${r.police ?? "?"} ${r.taille}px` +
+                  ` · interlettrage ${r.tracking} · contour ${r.contour}` +
+                  ` · interligne ${r.interligne} · ${r.alignement}` +
+                  (r.mesure ? "" : " (non mesuré)"),
               );
+              const c = r.controle;
+              if (c?.detail) {
+                push(`     contrôle : ${c.detail}`);
+              } else if (c) {
+                push(
+                  `     contrôle ${c.ok ? "OK" : "HORS TOLÉRANCE"} · base ${c.baseline}px` +
+                    ` · bord ${c.bord}px · largeur ${c.largeur}%` +
+                    ` (pire ${c.pireLargeur}% / ${c.pirePosition}px)`,
+                );
+              }
+              for (const n of r.notes ?? []) push(`     ${n}`);
               for (const l of r.lignes ?? []) push(`     « ${l} »`);
+            }
+            if (ev.fiable === false) {
+              push(
+                "  ⚠ ce rendu ne passe pas le contrôle : en production la slide" +
+                  " partirait en classique (image propre + texte à poser)",
+              );
             }
             if (src) {
               setPreviews((prev) =>

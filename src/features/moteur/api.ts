@@ -2808,6 +2808,8 @@ export type BurnTexteEvent = {
   url?: string;
   /** Réglages mesurés par le moteur de rendu, par zone. */
   rapport?: unknown;
+  /** Le rendu a passé son propre contrôle : sinon la slide part en classique. */
+  fiable?: boolean;
   slides?: number;
   sautes?: number;
   echecs?: number;

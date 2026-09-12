@@ -6,7 +6,7 @@
  *         { etape:"deck",    statut, detail }
  *         { etape:"slide",   position, statut:"encours"|"saute"|"ok"|"echec", detail? }
  *         { etape:"analyse", position, zones:[…], texteTraduit, brutUrl, propreUrl, detail }
- *         { etape:"image",   position, image?|url?, rapport:[…] }
+ *         { etape:"image",   position, image?|url?, rapport:[…], fiable }
  *         { etape:"ready",   statut, detail, slides }
  *
  * Le texte est celui que la production utiliserait : `assurerDeckPourLangue`
@@ -180,7 +180,9 @@ Deno.serve(async (request) => {
           });
           emit({ etape: "image", position: pos, url: rendu.url, rapport: rendu.rapport });
         } else {
-          const { bytes, rapport } = await rendreImageBurn({
+          // L'aperçu montre TOUT, même ce que le contrôle refuse : c'est ici
+          // qu'on regarde pourquoi une slide ne passe pas.
+          const { bytes, rapport, fiable } = await rendreImageBurn({
             brutUrl: brutUrl!,
             propreUrl: propreUrl!,
             zones,
@@ -190,6 +192,7 @@ Deno.serve(async (request) => {
             position: pos,
             image: `data:image/jpeg;base64,${base64Depuis(bytes)}`,
             rapport,
+            fiable,
           });
         }
 

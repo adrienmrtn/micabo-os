@@ -50,31 +50,65 @@ derniers posts mesurés, −5 par jour actif sans publication, skip warmup.
 
 Un compte coché `comptes.burned` reçoit ses slides **texte déjà incrusté** : ni
 image vierge, ni texte à replacer. Le rendu est déterministe et vit sur Vercel,
-pas sur l'Edge — Deno n'a ni Pillow ni numpy :
+pas sur l'Edge — Deno n'a ni Pillow ni numpy.
 
-- `api/burn.py` (+ `api/_burn_core.py`, polices TikTok Sans dans `api/fonts/`)
-  mesure le texte d'origine sur l'image brute — hauteur d'encre, largeur de
-  chaque ligne, interligne, épaisseur du contour — puis redessine la traduction
-  avec les mêmes réglages sur l'image propre. Taille et interlettrage sortent
-  d'un système à deux inconnues calé sur les largeurs mesurées : sur la paire de
-  contrôle, les trois lignes retombent à 0,1 % près.
-- Le brut et le propre n'ont ni la même taille ni le même ratio (recadrage
-  `cover` centré puis upscale) : le recalage est analytique. Le masque du texte
-  croise la couleur et l'écart avec l'image propre — ce qui est présent dans les
-  deux images ne peut pas être une lettre.
-- Deux caches, indépendants du compte : `burn_analyses` (zones du LLM, une fois
-  par slide) et `burn_rendus` (image finale, une fois par slide + langue).
-  L'image est rangée sous `burned/<contenu>/<langue>/<position>.jpg`.
+**Le LLM lit et traduit, Python mesure et dessine.** Aucune valeur numérique ne
+sort de l'estimation d'un modèle : la boîte et la couleur qu'il annonce sont des
+indices, pas des mesures. `api/_burn_core.py` mesure sur l'image d'origine, dans
+cet ordre :
+
+1. le recalage brut → propre, analytique (recadrage « cover » centré puis
+   redimensionnement : la transformation est connue, inutile de la chercher) ;
+2. le masque du texte — couleur **et** écart avec l'image propre, qui a
+   justement été débarrassée de ce texte ;
+3. les lignes, débarrassées des pixels parasites de même couleur (un vêtement
+   clair faisait passer une ligne de 648 à 1019 px et cassait tout le calage) et
+   triées sur l'ENCRE, jamais sur la hauteur — le bruit est nombreux et
+   minuscule, il dominerait toute médiane de hauteur ;
+4. par ligne : hauteur d'x (là où les pixels explosent), ligne de base (là où
+   ils s'effondrent), largeur d'encre ;
+5. la taille, calée sur la **largeur** à interlettrage nul — le seuil du masque
+   gonfle la hauteur d'x de 8 à 10 %, et le tracking négatif qui rattraperait
+   collerait les mots ;
+6. la graisse (600/700) et la taille finale, par **recouvrement** du rendu avec
+   le masque mesuré : le score de proportions ne départage pas deux graisses
+   voisines, le recouvrement si ;
+7. l'interligne de base à base, la boîte de coupe (vérifiée en recoupant le
+   texte d'origine : elle doit redonner ses coupures exactes), l'alignement par
+   dispersion, l'épaisseur de contour par le rapport aire/périmètre du halo
+   sombre, calibrée en rendant deux essais.
+
+Styles gérés : contour noir, ombre portée, et **pastille** (texte sombre sur
+boîte claire) — détectée dans les deux sens, que le LLM ait donné la couleur de
+la boîte ou celle des lettres. Glyphes absents de TikTok Sans (flèches) : repli
+sur DejaVu Sans, jamais de tofu ni de substitution silencieuse.
+
+**Le moteur se contrôle et refuse de livrer ce qu'il ne sait pas reproduire.**
+Il redessine le texte d'origine avec les réglages trouvés, le re-mesure avec le
+même code, et compare : position à 8 px près, largeur à 2 % près. Hors
+tolérance, l'image n'est pas produite et la slide part en classique
+(`post_slides.burn_erreur` dit pourquoi). Sur les 27 zones du jeu de contrôle,
+8 passent aujourd'hui ; les autres échouent presque toutes sur un désaccord
+entre le nombre de lignes lues par le LLM et le nombre de lignes mesurables —
+c'est là qu'est le prochain gain, dans l'analyse, pas dans le rendu.
+
+Le reste du chemin :
+
+- deux caches, indépendants du compte : `burn_analyses` (zones du LLM, une fois
+  par slide) et `burn_rendus` (image finale, une fois par slide + langue),
+  rangée sous `burned/<contenu>/<langue>/<position>.jpg` ;
 - `bruler-assignes` draine le jour, hors du chemin de minuit. Il est entraîné
   par l'étape `burn` de `minuit-vnext` — laquelle part aussi avec `assignation`,
   donc le filet des 15 minutes le couvre sans job pg_cron de plus — et par la
-  fin du drain `upscale-assignes` (le burn vient **après** l'upscale).
-- Repli permanent : une slide non brûlée part en classique (image propre +
-  `texte_overlay`, qui reste rempli). `BURN_SECRET` absent = burn désactivé,
-  aucune slide marquée en échec.
-- Secret partagé `BURN_SECRET` (Edge **et** Vercel) + `BURN_URL` facultatif côté
-  Edge. C'est le seul secret des deux côtés : il ne donne accès qu'au moteur de
-  rendu, jamais à la base.
+  fin du drain `upscale-assignes` (le burn vient **après** l'upscale) ;
+- repli permanent : une slide non brûlée part avec l'image propre et
+  `texte_overlay`, qui reste rempli. `BURN_SECRET` absent = burn désactivé,
+  aucune slide marquée en échec ;
+- secret partagé `BURN_SECRET` (Edge **et** Vercel) + `BURN_URL` facultatif
+  côté Edge. `GET /api/burn` dit ce que le lambda embarque vraiment.
+
+Les contrôles du moteur tournent par `python3 api/_burn_core_test.py` (sans
+dépendance de test : le module s'appelle lui-même).
 
 ## Cloisonnement (non négociable)
 
