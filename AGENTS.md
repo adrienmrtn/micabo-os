@@ -203,6 +203,33 @@ slide et son rapport remonte jusqu'à la carte « Text burn-in (preview) » du
 Moteur, qui affiche l'original TikTok et le rendu brûlé côte à côte, avec les
 écarts mesurés et un badge rouge quand la livraison est refusée.
 
+## PostgREST : une seule clé étrangère vers ce qu'on embarque
+
+`comptes(… profiles(…))` se résout **par la clé étrangère**. Dès qu'une table
+en a deux vers la même cible, PostgREST refuse de choisir et renvoie
+« Could not embed because more than one relationship was found » — pas une
+ligne de moins, **l'écran entier**.
+
+Le 12/09/2026, trois colonnes d'audit (`qualification_manuelle_par`,
+`ne_pas_renouveler_par`, `hm_prevenu_par`) ont été ajoutées à `comptes` avec,
+par réflexe, une clé étrangère vers `profiles`. Sept requêtes sans rapport avec
+la qualification sont tombées d'un coup : surveillance, fiche créateur,
+calendrier, QA TikTok. Sur la page Posters l'erreur était pire qu'une erreur —
+`listerComptes` échouait, le `?? []` la transformait en liste vide, et les 25
+créateurs disparaissaient sans un mot.
+
+Donc : **une colonne « qui a fait ça » se stocke en uuid nu, sans clé
+étrangère** (0255). Et une lecture dont l'échec vide un écran doit **relever**
+son erreur, jamais la remplacer par `?? []`.
+
+Deuxième piège du même jour, même famille : **jamais de `or` entre deux
+colonnes dans une policy RLS corrélée** (0254). `(ps.media_id = … or
+ps.burned_media_id = …)` interdit l'accès par index et fait balayer la table
+une fois par ligne lue — 5 951 ms sur la bibliothèque, au-dessus du
+`statement_timeout`. Deux policies permissives sont OR-ées de toute façon :
+couper en deux garde le même droit et rend chaque moitié indexable. Et vérifier
+qu'un index existe sur la colonne jointe.
+
 ## Cloisonnement (non négociable)
 
 Tu travailles **uniquement** dans `adrienmrtn/micabo-os`.
