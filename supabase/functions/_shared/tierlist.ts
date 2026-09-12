@@ -146,3 +146,20 @@ export function jourRepostBonus(publieAt: string | null, aujourdhui: string): st
   const prevu = ajouterJoursParis(base, REPOST_BONUS_JOURS);
   return prevu > aujourdhui ? prevu : ajouterJoursParis(aujourdhui, 1);
 }
+
+/** Plancher du tirage prioritaire : B et au-dessus. */
+export const TIER_TIRAGE_PRIORITAIRE: Tier = "B";
+
+/**
+ * Un C ne sort que si le pool n'a plus rien en B ou mieux.
+ *
+ * Le tier ne pondère pas le tirage (il fixe le nombre de passages dus), mais
+ * on ne veut pas voir partir un C tant qu'il reste du B+ à servir : renvoie le
+ * sous-ensemble B+ s'il n'est pas vide, la liste entière sinon. À l'intérieur
+ * du groupe retenu, le tirage reste uniforme.
+ */
+export function prioriserTiersHauts<T extends { tier: string | null }>(candidats: T[]): T[] {
+  const plancher = indexTier(TIER_TIRAGE_PRIORITAIRE);
+  const hauts = candidats.filter((c) => estTier(c.tier) && indexTier(c.tier) >= plancher);
+  return hauts.length > 0 ? hauts : candidats;
+}

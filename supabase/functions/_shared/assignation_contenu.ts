@@ -3,7 +3,7 @@ import {
   type SlideStructureManuel,
 } from "./creation_manuelle.ts";
 import { assurerDeckPourLangue } from "./import_contenu.ts";
-import { estTier, type Tier } from "./tierlist.ts";
+import { estTier, prioriserTiersHauts, type Tier } from "./tierlist.ts";
 import { LOT_IDS, lireParLots } from "./lots.ts";
 import { mapPool } from "./parallel.ts";
 import { serviceClient } from "./supabase.ts";
@@ -894,7 +894,8 @@ async function restantsParContenu(
  * Pioche le slideshow du prochain post d'un créateur.
  *
  * 1. pool = labels du créateur ∩ slideshows prêts (famille UGC, application) ;
- * 2. candidats = ceux dont le cycle a encore des passages dus → tirage uniforme ;
+ * 2. candidats = ceux dont le cycle a encore des passages dus → tirage uniforme,
+ *    mais un C n'est tiré que s'il ne reste plus rien en B ou mieux ;
  * 3. si plus aucun passage dû dans le pool : repêchage d'un slideshow en D au
  *    hasard, avec un cycle d'1 passage ouvert au vol (« pas assez de posts à
  *    faire → on remet quelques posts en D pour remplir »).
@@ -997,7 +998,8 @@ async function choisirContenu(
   );
 
   const dus = pool.filter((c) => (restants.get(c.id) ?? 0) > 0);
-  const pick = tirerAuHasard(dus);
+  // Un C n'est tiré que si le pool n'a plus de B+ à servir.
+  const pick = tirerAuHasard(prioriserTiersHauts(dus));
   if (pick) return versCandidat(pick, restants.get(pick.id) ?? 0, false);
 
   // Remplissage : pas assez de passages dus → on repêche un slideshow en D
