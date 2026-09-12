@@ -7,7 +7,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "814bb953e0c7436fa795f5786f370c27ff640ee1";
+const SHA = "ae13aac02b82315e8deab357e31aaa48a4725276";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/minuit-vnext.bundle.js`;
 
