@@ -30,6 +30,17 @@ import { compteEnProcessus, statutWarmup } from "./warmup";
 import { messagePool } from "../../../supabase/functions/_shared/quota_pool.ts";
 import { type Tier } from "./tierlist";
 import {
+  donneesDepuisPassages,
+  enSurveillance,
+  estEnTrial,
+  estQualification,
+  finSkip,
+  finTrial,
+  indexQualification,
+  type PassageJuge,
+  type Qualification,
+} from "./qualification";
+import {
   motifEchecNettoyage,
   type MotifEchecNettoyage,
   type SlideANettoyer,
@@ -593,7 +604,7 @@ export async function listerPosters(): Promise<PosterProfil[]> {
   const { data: comptes } = await supabase
     .from("comptes")
     .select(
-      "id, poster_id, type_compte, langue, application_id, handle_tiktok, persona_nom, persona_bio, avatar_url, score, score_maj_at, warmup_started_at, warmup_ends_at, comptes_reference(handle_tiktok), applications(slug)",
+      "id, poster_id, type_compte, langue, application_id, handle_tiktok, persona_nom, persona_bio, avatar_url, qualification, qualification_maj_at, warmup_started_at, warmup_ends_at, comptes_reference(handle_tiktok), applications(slug)",
     )
     .eq("is_active", true)
     .order("created_at", { ascending: false });
@@ -611,8 +622,8 @@ export async function listerPosters(): Promise<PosterProfil[]> {
       persona_nom: c.persona_nom,
       persona_bio: c.persona_bio,
       avatar_url: c.avatar_url,
-      score: c.score ?? null,
-      score_maj_at: c.score_maj_at ?? null,
+      qualification: normaliserQualification(c.qualification),
+      qualification_maj_at: (c.qualification_maj_at as string | null) ?? null,
       warmup_started_at: (c.warmup_started_at as string | null) ?? null,
       warmup_ends_at: (c.warmup_ends_at as string | null) ?? null,
       reference_handle: ref?.handle_tiktok ?? null,
@@ -645,9 +656,9 @@ export async function listerPosters(): Promise<PosterProfil[]> {
       persona_nom: compte?.persona_nom ?? null,
       persona_bio: compte?.persona_bio ?? null,
       avatar_url: compte?.avatar_url ?? null,
-      /** ELO / forme du compte TikTok (moyenne pondérée des perfs). */
-      score: compte?.score ?? null,
-      score_maj_at: compte?.score_maj_at ?? null,
+      /** Case du compte TikTok : INACTIF → STAR. */
+      qualification: compte?.qualification ?? "PASSABLE",
+      qualification_maj_at: compte?.qualification_maj_at ?? null,
       warmup_started_at: compte?.warmup_started_at ?? null,
       warmup_ends_at: compte?.warmup_ends_at ?? null,
       manager_nom: p.manager_id ? (nomParId.get(p.manager_id) ?? null) : null,
@@ -1797,6 +1808,15 @@ export async function renseignerLienPublie(
   }
 }
 
+/**
+ * Une case de compte lue depuis la base. Une valeur inconnue (ligne ancienne,
+ * colonne absente) devient PASSABLE : mieux vaut un compte neutre qu'un crash
+ * de page ou un faux INACTIF.
+ */
+function normaliserQualification(v: unknown): Qualification {
+  return estQualification(v) ? v : "PASSABLE";
+}
+
 // --- Analyse ----------------------------------------------------------------
 
 export async function statsComptes(): Promise<StatsCompte[]> {
@@ -1818,7 +1838,8 @@ export type PilotageDashboard = {
   recruteurs: Array<{
     id: string;
     nom: string;
-    eloMoyen: number;
+    /** Créateurs rattachés qui sont INACTIF ou MAUVAISES_VUES. */
+    aSurveiller: number;
     nbCreateurs: number;
   }>;
   postsVeille: Array<{
@@ -1829,17 +1850,17 @@ export type PilotageDashboard = {
     publie_url: string | null;
     compte_id: string;
   }>;
-  eloTop: Array<{
+  comptesForts: Array<{
     compte_id: string;
     nom: string;
     handle: string | null;
-    score: number;
+    qualification: Qualification;
   }>;
-  eloBas: Array<{
+  comptesFaibles: Array<{
     compte_id: string;
     nom: string;
     handle: string | null;
-    score: number;
+    qualification: Qualification;
   }>;
   alertes: {
     niveau1: Array<{
@@ -1877,7 +1898,7 @@ export async function chargerPilotageDashboard(): Promise<PilotageDashboard> {
     supabase
       .from("comptes")
       .select(
-        "id, poster_id, persona_nom, handle_tiktok, score, is_active, warmup_started_at, warmup_ends_at",
+        "id, poster_id, persona_nom, handle_tiktok, qualification, is_active, warmup_started_at, warmup_ends_at",
       )
       .eq("is_active", true),
     supabase.from("user_roles").select("user_id, role"),
@@ -1911,7 +1932,7 @@ export async function chargerPilotageDashboard(): Promise<PilotageDashboard> {
   };
 
   // Hors warmup uniquement (pas encore démarré / en cours → exclus classements + alertes).
-  const eloListe = (comptes ?? [])
+  const classes = (comptes ?? [])
     .filter((c) =>
       compteEnProcessus({
         warmup_started_at: c.warmup_started_at as string | null,
@@ -1922,12 +1943,15 @@ export async function chargerPilotageDashboard(): Promise<PilotageDashboard> {
       compte_id: c.id as string,
       nom: nomCompte(c as never),
       handle: (c.handle_tiktok as string | null) ?? null,
-      score: Number(c.score ?? 50),
+      qualification: normaliserQualification(c.qualification),
       poster_id: c.poster_id as string,
     }))
-    .sort((a, b) => b.score - a.score);
+    // De la meilleure à la pire : les deux listes se découpent aux deux bouts.
+    .sort((a, b) => indexQualification(b.qualification) - indexQualification(a.qualification));
 
-  // Recruteurs = hiring_manager ; moyenne ELO des créateurs rattachés (manager_id).
+  const aSurveillerCase = (q: Qualification) => q === "INACTIF" || q === "MAUVAISES_VUES";
+
+  // Recruteurs = hiring_manager ; combien de leurs créateurs sont à surveiller.
   const recruteursIds = [...roleParUser.entries()]
     .filter(([, role]) => role === "hiring_manager" || role === "directing_manager")
     .map(([id]) => id);
@@ -1935,28 +1959,21 @@ export async function chargerPilotageDashboard(): Promise<PilotageDashboard> {
   const recruteurs = recruteursIds
     .map((rid) => {
       const p = profilParId.get(rid);
-      const createurs = eloListe.filter((c) => {
+      const createurs = classes.filter((c) => {
         const pr = profilParId.get(c.poster_id);
         return pr?.manager_id === rid;
       });
-      if (createurs.length === 0) {
-        return {
-          id: rid,
-          nom: [p?.prenom, p?.nom].filter(Boolean).join(" ") || "—",
-          eloMoyen: 0,
-          nbCreateurs: 0,
-        };
-      }
-      const eloMoyen = createurs.reduce((s, c) => s + c.score, 0) / createurs.length;
       return {
         id: rid,
         nom: [p?.prenom, p?.nom].filter(Boolean).join(" ") || "—",
-        eloMoyen,
+        aSurveiller: createurs.filter((c) => aSurveillerCase(c.qualification)).length,
         nbCreateurs: createurs.length,
       };
     })
     .filter((r) => r.nbCreateurs > 0)
-    .sort((a, b) => b.eloMoyen - a.eloMoyen);
+    // Le recruteur dont le plus de créateurs décrochent passe en tête : c'est
+    // lui qu'on va voir en premier.
+    .sort((a, b) => b.aSurveiller - a.aSurveiller || b.nbCreateurs - a.nbCreateurs);
 
   /**
    * Alertes = récence du DERNIER post réel (jour Paris de publie_at,
@@ -1966,7 +1983,7 @@ export async function chargerPilotageDashboard(): Promise<PilotageDashboard> {
    *   → concrètement : dernier post = hier est OK ; si posté aujourd'hui → aucune alerte
    *     (évite les faux positifs « posté il y a 5 h » dans L1).
    */
-  const compteIds = eloListe.map((c) => c.compte_id);
+  const compteIds = classes.map((c) => c.compte_id);
   /** Dernier jour de publication (YYYY-MM-DD Paris) par compte. */
   const dernierPostParCompte = new Map<string, string>();
   if (compteIds.length > 0) {
@@ -1997,7 +2014,7 @@ export async function chargerPilotageDashboard(): Promise<PilotageDashboard> {
   const niveau1: PilotageDashboard["alertes"]["niveau1"] = [];
   const niveau2: PilotageDashboard["alertes"]["niveau2"] = [];
 
-  for (const c of eloListe) {
+  for (const c of classes) {
     const dernier = dernierPostParCompte.get(c.compte_id) ?? null;
 
     let joursSans = 99;
@@ -2050,20 +2067,24 @@ export async function chargerPilotageDashboard(): Promise<PilotageDashboard> {
     })),
     recruteurs,
     postsVeille: postsVeilleMapped,
-    eloTop: eloListe.slice(0, 10).map(({ compte_id, nom, handle, score }) => ({
-      compte_id,
-      nom,
-      handle,
-      score,
-    })),
-    eloBas: [...eloListe]
-      .sort((a, b) => a.score - b.score)
+    comptesForts: classes
+      .filter((c) => c.qualification === "STAR" || c.qualification === "BIEN")
       .slice(0, 10)
-      .map(({ compte_id, nom, handle, score }) => ({
+      .map(({ compte_id, nom, handle, qualification }) => ({
         compte_id,
         nom,
         handle,
-        score,
+        qualification,
+      })),
+    comptesFaibles: [...classes]
+      .reverse()
+      .filter((c) => aSurveillerCase(c.qualification))
+      .slice(0, 10)
+      .map(({ compte_id, nom, handle, qualification }) => ({
+        compte_id,
+        nom,
+        handle,
+        qualification,
       })),
     alertes: { niveau1, niveau2 },
   };
@@ -2103,7 +2124,7 @@ export interface PostCalendrierAdmin {
   persona_nom: string | null;
   handle_tiktok: string | null;
   avatar_url: string | null;
-  score: number | null;
+  qualification: Qualification;
   poster_prenom: string | null;
   poster_nom: string | null;
   sujet_titre: string | null;
@@ -2168,7 +2189,7 @@ export async function postsCalendrierAdmin(): Promise<PostCalendrierAdmin[]> {
     .from("posts")
     .select(
       "id, compte_id, date_publication_prevue, type, statut, pipeline_statut, publie_at, publie_url, " +
-        "sujets(titre), comptes(persona_nom, handle_tiktok, avatar_url, score, langue, ugc_ai, ugc_ai_video, profiles(prenom, nom))",
+        "sujets(titre), comptes(persona_nom, handle_tiktok, avatar_url, qualification, langue, ugc_ai, ugc_ai_video, profiles(prenom, nom))",
     )
     .eq("est_test", false)
     .order("date_publication_prevue", { ascending: false, nullsFirst: false })
@@ -2213,7 +2234,7 @@ export async function postsCalendrierAdmin(): Promise<PostCalendrierAdmin[]> {
       persona_nom: (p.comptes?.persona_nom as string | null) ?? null,
       handle_tiktok: (p.comptes?.handle_tiktok as string | null) ?? null,
       avatar_url: (p.comptes?.avatar_url as string | null) ?? null,
-      score: (p.comptes?.score as number | null) ?? null,
+      qualification: normaliserQualification(p.comptes?.qualification),
       poster_prenom: (p.comptes?.profiles?.prenom as string | null) ?? null,
       poster_nom: (p.comptes?.profiles?.nom as string | null) ?? null,
       sujet_titre: (p.sujets?.titre as string | null) ?? null,
@@ -2234,8 +2255,8 @@ export interface CompteCreateurDetail {
   handle_tiktok: string | null;
   avatar_url: string | null;
   langue: string;
-  score: number;
-  score_maj_at: string | null;
+  qualification: Qualification;
+  qualification_maj_at: string | null;
   is_active: boolean;
   created_at: string | null;
   poster_prenom: string | null;
@@ -2244,12 +2265,12 @@ export interface CompteCreateurDetail {
   stats: StatsCompte | null;
 }
 
-/** Fiche créateur admin : identité + ELO + stats globales. */
+/** Fiche créateur admin : identité + case du compte + stats globales. */
 export async function lireCompteCreateur(compteId: string): Promise<CompteCreateurDetail | null> {
   const { data, error } = await supabase
     .from("comptes")
     .select(
-      "id, poster_id, persona_nom, handle_tiktok, avatar_url, langue, score, score_maj_at, is_active, created_at, profiles(prenom, nom, email)",
+      "id, poster_id, persona_nom, handle_tiktok, avatar_url, langue, qualification, qualification_maj_at, is_active, created_at, profiles(prenom, nom, email)",
     )
     .eq("id", compteId)
     .maybeSingle();
@@ -2276,8 +2297,8 @@ export async function lireCompteCreateur(compteId: string): Promise<CompteCreate
     handle_tiktok: (data.handle_tiktok as string | null) ?? null,
     avatar_url: (data.avatar_url as string | null) ?? null,
     langue: (data.langue as string) ?? "fr",
-    score: Number(data.score ?? 50),
-    score_maj_at: (data.score_maj_at as string | null) ?? null,
+    qualification: normaliserQualification(data.qualification),
+    qualification_maj_at: (data.qualification_maj_at as string | null) ?? null,
     is_active: Boolean(data.is_active),
     created_at: (data.created_at as string | null) ?? null,
     poster_prenom: profiles?.prenom ?? null,
@@ -6632,4 +6653,342 @@ export function coutMensuelCalcule(
   paiement: { tarif_base_mensuel: number; tarif_par_post_jour: number },
 ): number {
   return paiement.tarif_base_mensuel + postsParJour * paiement.tarif_par_post_jour;
+}
+
+// --- Surveillance des comptes ------------------------------------------------
+
+export interface CompteSurveille {
+  compte_id: string;
+  poster_id: string;
+  nom: string;
+  handle_tiktok: string | null;
+  avatar_url: string | null;
+  langue: string;
+  created_at: string;
+  qualification: Qualification;
+  qualification_manuelle: boolean;
+  qualification_maj_at: string | null;
+  surveillance_skip_jusqu_a: string | null;
+  ne_pas_renouveler: boolean;
+  ne_pas_renouveler_at: string | null;
+  hm_prevenu: boolean;
+  hm_prevenu_at: string | null;
+  /** Ce que la case dit, en clair : assiduité et vues sur la fenêtre. */
+  prevus: number;
+  publies: number;
+  moyenneVues: number | null;
+  /** Compte encore dans ses 80 premières heures. */
+  trial: boolean;
+  /** Heures restantes avant la fin de l'essai (null hors essai). */
+  trialHeures: number | null;
+  dernierNudge: { envoye_at: string; lu_at: string | null } | null;
+}
+
+/**
+ * La file de surveillance et la liste « ne pas renouveler ».
+ *
+ * Les deux sortent de la même lecture : un compte peut être dans la file ET
+ * sur la liste, et il faut alors voir les deux d'un coup.
+ */
+export async function fileSurveillance(): Promise<{
+  file: CompteSurveille[];
+  nePasRenouveler: CompteSurveille[];
+}> {
+  const { data: comptes, error } = await supabase
+    .from("comptes")
+    // Le select est écrit en toutes lettres : une constante concaténée fait
+    // perdre à PostgREST le typage des colonnes, et tout retombe en `any`.
+    .select(
+      "id, poster_id, persona_nom, handle_tiktok, avatar_url, langue, created_at, qualification, qualification_manuelle, qualification_maj_at, surveillance_skip_jusqu_a, ne_pas_renouveler, ne_pas_renouveler_at, hm_prevenu, hm_prevenu_at, profiles(prenom, nom, email)",
+    )
+    .eq("is_active", true)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const maintenant = new Date();
+  const retenus = (comptes ?? []).filter(
+    (c) =>
+      c.ne_pas_renouveler ||
+      enSurveillance(
+        {
+          qualification: normaliserQualification(c.qualification),
+          creeLe: c.created_at as string,
+          skipJusqua: (c.surveillance_skip_jusqu_a as string | null) ?? null,
+        },
+        maintenant,
+      ),
+  );
+  if (retenus.length === 0) return { file: [], nePasRenouveler: [] };
+
+  const ids = retenus.map((c) => c.id as string);
+  // Les chiffres qui expliquent la case. Une seule requête pour toute la file :
+  // elle est courte par construction.
+  const { data: passages } = await supabase
+    .from("passages")
+    .select("compte_id, statut, publie_at, publie_url, date_publication_prevue, vues, posts(est_test)")
+    .in("compte_id", ids)
+    .order("date_publication_prevue", { ascending: false, nullsFirst: false })
+    .limit(60 * ids.length);
+
+  const parCompte = new Map<string, PassageJuge[]>();
+  for (const p of passages ?? []) {
+    const cid = p.compte_id as string;
+    const postsLie = p.posts as { est_test?: boolean } | Array<{ est_test?: boolean }> | null;
+    const lie = Array.isArray(postsLie) ? postsLie[0] : postsLie;
+    const liste = parCompte.get(cid) ?? [];
+    liste.push({
+      statut: (p.statut as string | null) ?? null,
+      publie_at: (p.publie_at as string | null) ?? null,
+      publie_url: (p.publie_url as string | null) ?? null,
+      date_publication_prevue: (p.date_publication_prevue as string | null) ?? null,
+      vues: (p.vues as number | null) ?? null,
+      est_test: Boolean(lie?.est_test),
+    });
+    parCompte.set(cid, liste);
+  }
+
+  const { data: nudges } = await supabase
+    .from("comptes_nudges")
+    .select("compte_id, envoye_at, lu_at")
+    .in("compte_id", ids)
+    .order("envoye_at", { ascending: false });
+  const dernierNudge = new Map<string, { envoye_at: string; lu_at: string | null }>();
+  for (const n of nudges ?? []) {
+    const cid = n.compte_id as string;
+    if (dernierNudge.has(cid)) continue; // trié desc : le premier vu est le dernier envoyé
+    dernierNudge.set(cid, {
+      envoye_at: n.envoye_at as string,
+      lu_at: (n.lu_at as string | null) ?? null,
+    });
+  }
+
+  const auj = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(maintenant);
+  const lignes: CompteSurveille[] = retenus.map((c) => {
+    const raw = c.profiles as
+      | { prenom: string | null; nom: string | null; email: string | null }
+      | Array<{ prenom: string | null; nom: string | null; email: string | null }>
+      | null;
+    const prof = Array.isArray(raw) ? (raw[0] ?? null) : raw;
+    const nom =
+      [prof?.prenom, prof?.nom].filter(Boolean).join(" ") ||
+      (c.persona_nom as string | null) ||
+      (c.handle_tiktok ? `@${c.handle_tiktok}` : "—");
+    const creeLe = c.created_at as string;
+    const d = donneesDepuisPassages(parCompte.get(c.id as string) ?? [], auj);
+    const restant = finTrial(creeLe).getTime() - maintenant.getTime();
+    return {
+      compte_id: c.id as string,
+      poster_id: c.poster_id as string,
+      nom,
+      handle_tiktok: (c.handle_tiktok as string | null) ?? null,
+      avatar_url: (c.avatar_url as string | null) ?? null,
+      langue: (c.langue as string) ?? "fr",
+      created_at: creeLe,
+      qualification: normaliserQualification(c.qualification),
+      qualification_manuelle: Boolean(c.qualification_manuelle),
+      qualification_maj_at: (c.qualification_maj_at as string | null) ?? null,
+      surveillance_skip_jusqu_a: (c.surveillance_skip_jusqu_a as string | null) ?? null,
+      ne_pas_renouveler: Boolean(c.ne_pas_renouveler),
+      ne_pas_renouveler_at: (c.ne_pas_renouveler_at as string | null) ?? null,
+      hm_prevenu: Boolean(c.hm_prevenu),
+      hm_prevenu_at: (c.hm_prevenu_at as string | null) ?? null,
+      prevus: d.prevus,
+      publies: d.publies,
+      moyenneVues: d.moyenneVues,
+      trial: estEnTrial(creeLe, maintenant),
+      trialHeures: restant > 0 ? Math.ceil(restant / 3_600_000) : null,
+      dernierNudge: dernierNudge.get(c.id as string) ?? null,
+    };
+  });
+
+  return {
+    // La file : d'abord les essais qui expirent, puis la pire case.
+    file: lignes
+      .filter((l) =>
+        enSurveillance(
+          {
+            qualification: l.qualification,
+            creeLe: l.created_at,
+            skipJusqua: l.surveillance_skip_jusqu_a,
+          },
+          maintenant,
+        ),
+      )
+      .sort((a, b) => {
+        const urgenceA = a.trial ? (a.trialHeures ?? 0) : 9_999;
+        const urgenceB = b.trial ? (b.trialHeures ?? 0) : 9_999;
+        if (urgenceA !== urgenceB) return urgenceA - urgenceB;
+        return indexQualification(a.qualification) - indexQualification(b.qualification);
+      }),
+    nePasRenouveler: lignes
+      .filter((l) => l.ne_pas_renouveler)
+      .sort((a, b) => (a.ne_pas_renouveler_at ?? "") < (b.ne_pas_renouveler_at ?? "") ? 1 : -1),
+  };
+}
+
+/** Écarte le compte de la file pour 7 jours. */
+export async function skipperSurveillance(compteId: string): Promise<void> {
+  const { error } = await supabase
+    .from("comptes")
+    .update({ surveillance_skip_jusqu_a: finSkip().toISOString() })
+    .eq("id", compteId);
+  if (error) throw error;
+}
+
+/**
+ * Pose une case à la main. Elle est verrouillée : la requalification de nuit ne
+ * la réécrit plus tant qu'un admin ne rend pas la main au moteur.
+ */
+export async function poserQualification(
+  compteId: string,
+  qualification: Qualification,
+): Promise<void> {
+  const { data: auth } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from("comptes")
+    .update({
+      qualification,
+      qualification_manuelle: true,
+      qualification_manuelle_at: new Date().toISOString(),
+      qualification_manuelle_par: auth.user?.id ?? null,
+      qualification_maj_at: new Date().toISOString(),
+    })
+    .eq("id", compteId);
+  if (error) throw error;
+}
+
+/** Rend le compte à la requalification de nuit. */
+export async function rendreQualificationAuMoteur(compteId: string): Promise<void> {
+  const { error } = await supabase
+    .from("comptes")
+    .update({
+      qualification_manuelle: false,
+      qualification_manuelle_at: null,
+      qualification_manuelle_par: null,
+    })
+    .eq("id", compteId);
+  if (error) throw error;
+}
+
+export interface ModeleNudge {
+  cle: string;
+  titre: string;
+  corps: string;
+  titre_en: string | null;
+  corps_en: string | null;
+}
+
+export async function modelesNudge(): Promise<ModeleNudge[]> {
+  const { data, error } = await supabase
+    .from("nudges_modeles")
+    .select("cle, titre, corps, titre_en, corps_en")
+    .eq("actif", true)
+    .order("ordre", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as ModeleNudge[];
+}
+
+/**
+ * Envoie un message interne au créateur.
+ *
+ * Deux choix qui comptent :
+ * - le corps est **copié** depuis le modèle, pas référencé : réécrire un modèle
+ *   plus tard ne doit pas réécrire ce qui a déjà été envoyé ;
+ * - la langue suit celle du COMPTE, pas celle de l'admin. Un créateur turc ne
+ *   doit pas recevoir un message en français parce qu'un admin français a
+ *   cliqué. Français aux comptes `fr`, anglais à tous les autres quand le
+ *   modèle a sa version.
+ */
+export async function envoyerNudge(input: {
+  compteId: string;
+  posterId: string;
+  langueCompte: string;
+  modele: ModeleNudge;
+}): Promise<void> {
+  const enAnglais =
+    input.langueCompte.toLowerCase() !== "fr" &&
+    Boolean(input.modele.titre_en) &&
+    Boolean(input.modele.corps_en);
+  const { data: auth } = await supabase.auth.getUser();
+  const { error } = await supabase.from("comptes_nudges").insert({
+    compte_id: input.compteId,
+    poster_id: input.posterId,
+    modele_cle: input.modele.cle,
+    titre: enAnglais ? input.modele.titre_en : input.modele.titre,
+    corps: enAnglais ? input.modele.corps_en : input.modele.corps,
+    envoye_par: auth.user?.id ?? null,
+  });
+  if (error) throw error;
+}
+
+/** Liste « ne pas renouveler » — suivi seul, rien n'est coupé dans le process. */
+export async function marquerNePasRenouveler(
+  compteId: string,
+  valeur: boolean,
+): Promise<void> {
+  const { data: auth } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from("comptes")
+    .update(
+      valeur
+        ? {
+            ne_pas_renouveler: true,
+            ne_pas_renouveler_at: new Date().toISOString(),
+            ne_pas_renouveler_par: auth.user?.id ?? null,
+          }
+        : {
+            ne_pas_renouveler: false,
+            ne_pas_renouveler_at: null,
+            ne_pas_renouveler_par: null,
+            hm_prevenu: false,
+            hm_prevenu_at: null,
+            hm_prevenu_par: null,
+          },
+    )
+    .eq("id", compteId);
+  if (error) throw error;
+}
+
+/** La case de la checklist : « j'ai demandé au HM de ne pas renouveler ». */
+export async function marquerHmPrevenu(compteId: string, valeur: boolean): Promise<void> {
+  const { data: auth } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from("comptes")
+    .update({
+      hm_prevenu: valeur,
+      hm_prevenu_at: valeur ? new Date().toISOString() : null,
+      hm_prevenu_par: valeur ? (auth.user?.id ?? null) : null,
+    })
+    .eq("id", compteId);
+  if (error) throw error;
+}
+
+// --- Nudge, côté créateur ----------------------------------------------------
+
+export interface NudgeRecu {
+  id: string;
+  titre: string;
+  corps: string;
+  envoye_at: string;
+}
+
+/** Le plus ancien message non lu du créateur connecté, s'il y en a un. */
+export async function nudgeNonLu(): Promise<NudgeRecu | null> {
+  const { data, error } = await supabase
+    .from("comptes_nudges")
+    .select("id, titre, corps, envoye_at")
+    .is("lu_at", null)
+    .order("envoye_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as NudgeRecu | null) ?? null;
+}
+
+export async function marquerNudgeLu(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("comptes_nudges")
+    .update({ lu_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
 }

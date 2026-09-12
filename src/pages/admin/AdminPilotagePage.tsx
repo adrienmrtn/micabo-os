@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { QualificationBadge } from "@/components/moteur/QualificationBadge";
 import { ExternalLink } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -514,11 +515,11 @@ export function AdminPilotagePage() {
 
           <div className="grid gap-4 lg:grid-cols-2">
             <RangList
-              title={t("pilotage.eloBasTitre")}
-              desc={t("pilotage.eloBasDesc")}
-              empty={d.eloBas.length === 0}
+              title={t("pilotage.faiblesTitre")}
+              desc={t("pilotage.faiblesDesc")}
+              empty={d.comptesFaibles.length === 0}
             >
-              {d.eloBas.map((c, i) => (
+              {d.comptesFaibles.map((c, i) => (
                 <Link
                   key={c.compte_id}
                   to={`/admin/createurs/${c.compte_id}`}
@@ -531,17 +532,17 @@ export function AdminPilotagePage() {
                       <span className="ml-1.5 text-xs text-muted-foreground">@{c.handle}</span>
                     ) : null}
                   </span>
-                  <Badge variant="secondary">ELO {c.score.toFixed(1)}</Badge>
+                  <QualificationBadge qualification={c.qualification} size="sm" />
                 </Link>
               ))}
             </RangList>
 
             <RangList
-              title={t("pilotage.eloTopTitre")}
-              desc={t("pilotage.eloTopDesc")}
-              empty={d.eloTop.length === 0}
+              title={t("pilotage.fortsTitre")}
+              desc={t("pilotage.fortsDesc")}
+              empty={d.comptesForts.length === 0}
             >
-              {d.eloTop.map((c, i) => (
+              {d.comptesForts.map((c, i) => (
                 <Link
                   key={c.compte_id}
                   to={`/admin/createurs/${c.compte_id}`}
@@ -554,7 +555,7 @@ export function AdminPilotagePage() {
                       <span className="ml-1.5 text-xs text-muted-foreground">@{c.handle}</span>
                     ) : null}
                   </span>
-                  <Badge variant="secondary">ELO {c.score.toFixed(1)}</Badge>
+                  <QualificationBadge qualification={c.qualification} size="sm" />
                 </Link>
               ))}
             </RangList>
@@ -576,7 +577,13 @@ export function AdminPilotagePage() {
                       {t("pilotage.nbCreateurs", { n: r.nbCreateurs })}
                     </span>
                   </span>
-                  <Badge variant="secondary">ELO {r.eloMoyen.toFixed(1)}</Badge>
+                  {r.aSurveiller > 0 ? (
+                    <Badge variant="warning" title={t("pilotage.recruteursAide")}>
+                      {t("posters.aSurveiller", { n: r.aSurveiller })}
+                    </Badge>
+                  ) : (
+                    <Badge variant="success">{t("pilotage.recruteursOk")}</Badge>
+                  )}
                 </div>
               ))}
             </RangList>

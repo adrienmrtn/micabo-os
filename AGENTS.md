@@ -43,8 +43,65 @@ plus lu par le moteur.
   compte à J+7 (`reposts_bonus`). Hors cycle, mais dans le quota du jour ;
   abandonné si le créneau est passé.
 
-L'**ELO compte** (`comptes.score`) est inchangé : moyenne pondérée des ≤10
-derniers posts mesurés, −5 par jour actif sans publication, skip warmup.
+## Qualification des créateurs (0253, 12/09/2026)
+
+L'ELO compte est **retiré** — colonnes `comptes.score` / `score_maj_at`
+supprimées, avec la pénalité de −5 par jour sans post, la moyenne pondérée et
+les classements ELO du Pilotage. Un compte porte maintenant une **case** :
+
+    INACTIF < MAUVAISES_VUES < PASSABLE < BIEN < STAR
+
+Les règles vivent dans `_shared/qualification.ts` — module **pur**, réexporté
+par `src/features/moteur/qualification.ts` et testé côté front (23 cas), pour
+que l'écran et le moteur comptent pareil :
+
+- **INACTIF** : ≤ 6 posts réellement publiés sur les 10 derniers **prévus** ;
+- **MAUVAISES_VUES** : moyenne < 600 vues sur les 10 derniers **publiés** ;
+- **BIEN** : moyenne ≥ 1 000 **et** ≥ 8 publiés sur 10 prévus ;
+- **STAR** : moyenne > 10 000 **et** ≥ 9 publiés sur 10 prévus ;
+- **PASSABLE** : tout le reste.
+
+Deux points ont dû être tranchés, et ils sont dans le code :
+
+1. « la moins bonne quand plusieurs cases » ne peut pas jouer entre BIEN et
+   STAR, qui sont **emboîtées** — tout STAR remplit aussi BIEN, la règle prise
+   au pied de la lettre dégraderait chaque STAR. Elle joue entre ce qui monte
+   (vues, assiduité) et ce qui descend (inactivité, vues basses) : 50 000 vues
+   avec 5 posts sur 10 → INACTIF.
+2. « si moins de 10 prévus, prendre le nombre maximal de prévus » = la
+   **proportion** fait foi (6/10, 8/10, 9/10) appliquée aux créneaux réellement
+   eus. Sur 10 prévus on retombe sur l'énoncé.
+
+Le créneau du jour est exclu de l'assiduité (il est encore ouvert), les posts
+de test ne comptent nulle part, et un post publié mais non mesuré n'est pas un
+zéro dans la moyenne.
+
+**Quand** : à la FIN du drain `rattrapage-elo` (`rattrapageEloDrainLot`,
+`restants === 0`), jamais au cron de minuit — le relevé des vues est asynchrone
+et se termine bien après. Juger à minuit noterait chaque créateur sur la
+veille. Une case posée à la main (`qualification_manuelle`) est **verrouillée**
+tant qu'un admin ne rend pas la main au moteur.
+
+### Surveillance des comptes (`/admin/surveillance`)
+
+File des comptes INACTIF ou MAUVAISES_VUES, plus les comptes en **essai**
+(80 h après `comptes.created_at`) qui entrent d'office 30 h avant la fin — une
+échéance de contrat passe outre un skip. Quatre gestes :
+
+- **skip** 7 jours (`surveillance_skip_jusqu_a`) ;
+- **changer la case** à la main (verrouille) ou la rendre au moteur ;
+- **nudge** : un message interne, choisi parmi `nudges_modeles`, affiché au
+  créateur à sa prochaine connexion (`comptes_nudges` + `NudgePopup`). Il
+  n'existe aucun canal hors OS : ni e-mail, ni SMS. Le corps est **copié** du
+  modèle, pas référencé, et part dans la langue du COMPTE — pas celle de
+  l'admin qui clique ;
+- **ne pas renouveler** : liste de suivi (`ne_pas_renouveler`) avec la case
+  « j'ai demandé au HM » (`hm_prevenu`). **Rien n'est coupé dans le process** :
+  ni quota, ni assignation, ni désactivation. C'est une liste, pas un
+  interrupteur.
+
+L'essai de `/admin/essai` (5 jours) est un autre compteur, laissé tel quel :
+80 h est le seuil de la file de surveillance, pas une redéfinition de l'essai.
 
 ## Burned (0252, 12/09/2026)
 
@@ -238,6 +295,10 @@ Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
  `normaliser-format`. Les SHA épinglés sont ceux du commit
  qui porte les bundles, pas celui de `main` après squash — GitHub continue de
  servir les commits de branche.
+- Qualification (12/09/2026, 0253) : `rattrapage-elo` et `minuit-vnext` sont
+ épinglés sur `ae13aac`. Ce sont les deux seuls chargeurs qui embarquent
+ `rattrapage_elo.ts`. `minuit-vnext` était resté sur `814bb95` : le saut lui
+ apporte aussi l'étape `burn` (0252), déjà en prod partout ailleurs.
 - Passage au moteur du kit (12/09/2026, fin de journée) : `assignation`,
  `assignation-contenu`, `bruler-assignes`, `bruler-texte-test`,
  `creation-manuelle`, `import-contenu`, `renettoyer-contenu` et `revoquer-post`

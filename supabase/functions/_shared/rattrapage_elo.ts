@@ -4,9 +4,11 @@
  * 1) Relève stats TikTok des passages publiés (publie_url) — vues/likes…
  * 2) Reposts bonus : tout passage > 50 000 vues est replanifié à J+7 sur le
  *    même compte.
- * 3) ELO compte : moyenne pondérée récence des ≤10 derniers posts mesurés.
- * 4) En fin de file : requalification tierlist des slideshows dont le cycle est
- *    terminé (`_shared/requalification.ts`) + snapshot des vues globales.
+ * 3) En fin de file : requalification tierlist des slideshows dont le cycle est
+ *    terminé (`_shared/requalification.ts`), qualification des comptes
+ *    (INACTIF → STAR, `_shared/qualification.ts`) et snapshot des vues
+ *    globales. C'est le seul moment où toutes les vues du jour sont rentrées —
+ *    juger les créateurs au cron de minuit les noterait sur la veille.
  *
  * Les slideshows n'ont plus d'ELO par langue : leur tier ne bouge qu'à la
  * requalification, sur la moyenne des vues d'un cycle complet.
@@ -21,24 +23,17 @@ import {
   type RequalificationDetail,
   type RequalificationResultat,
 } from "./requalification.ts";
-import {
-  chargerScoring,
-  performancePassage,
-  type Supabase,
-} from "./scoring.ts";
+import { type Supabase } from "./scoring.ts";
 import { aujourdhuiParis } from "./supabase.ts";
+import { qualifierComptes, type QualificationResultat } from "./qualification_comptes.ts";
 
 export const RATTRAPAGE_JOURS_DEFAUT = 4;
 /** Profil TikTok scrapé — garder bas pour rester sous le timeout Edge 150s / compte. */
 const POSTS_RELEVES = 12;
-const COMPTE_MAX_POSTS = 10;
-const COMPTE_DECAY = 0.85;
 /** Fenêtre (±h) pour matcher le « dernier post » profil vs date attendue. */
 const COHERENCE_HEURES = 36;
 /** Max d’entrées détaillées dans le brief (UI). */
 const BRIEF_TOP = 12;
-/** Pénalité ELO compte par jour actif sans publication (jours passés de la fenêtre). */
-const ELO_PENALITE_NOPOST = 5;
 
 export type LogLevel = "info" | "ok" | "warn" | "error";
 
@@ -54,17 +49,6 @@ export interface RattrapageOpts {
   /** Nombre de jours Paris inclus (aujourd'hui inclus). Défaut 4. */
   jours?: number;
   dryRun?: boolean;
-}
-
-export interface EloCompteDetail {
-  compteId: string;
-  handle: string | null;
-  avant: number;
-  apres: number;
-  posts: number;
-  /** Jours passés (fenêtre) sans publication → −5 chacun. */
-  joursSansPost?: number;
-  penalite?: number;
 }
 
 export interface RattrapageBrief {
@@ -87,10 +71,6 @@ export interface RattrapageBrief {
     top: RequalificationDetail[];
   };
   repostsBonus: number;
-  eloCompte: {
-    maj: number;
-    top: EloCompteDetail[];
-  };
 }
 
 export interface RattrapageResultat {
@@ -105,7 +85,6 @@ export interface RattrapageResultat {
   };
   requalif: RequalificationResultat;
   repostsBonus: { planifies: number; details: Array<{ passageId: string; jour: string; vues: number }> };
-  eloCompte: { maj: number; details: EloCompteDetail[] };
   brief: RattrapageBrief;
   logs: RattrapageLog[];
   dryRun: boolean;
@@ -137,7 +116,7 @@ function joursFenetreParis(jours: number): { debut: string; fin: string; dates: 
   return { debut: dates[0]!, fin, dates };
 }
 
-/** Compte en process = warmup terminé (ends_at ≤ now). Hors process → pas d'ELO compte. */
+/** Compte en process = warmup terminé (ends_at ≤ now). Hors process → pas jugé. */
 function compteEnProcessus(c: {
   warmup_started_at?: string | null;
   warmup_ends_at?: string | null;
@@ -146,18 +125,6 @@ function compteEnProcessus(c: {
   return new Date(c.warmup_ends_at).getTime() <= Date.now();
 }
 
-/** Était déjà actif (warmup fini) au jour Paris `jour` (YYYY-MM-DD). */
-function etaitActifAuJour(
-  c: { warmup_ends_at?: string | null },
-  jour: string,
-): boolean {
-  if (!c.warmup_ends_at) return false;
-  // Compare en date Paris : fin warmup ≤ fin de ce jour.
-  const endsParis = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(
-    new Date(c.warmup_ends_at),
-  );
-  return endsParis <= jour;
-}
 
 function idDuLien(url: string): string {
   return url.match(/\/(?:photo|video)\/(\d+)/)?.[1] ?? url;
@@ -211,19 +178,6 @@ function texteAttenduSlides(slides: unknown): string {
     })
     .filter(Boolean)
     .join(" ");
-}
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, n));
-}
-
-function fmt(n: number, digits = 1): string {
-  return (Math.round(n * 10 ** digits) / 10 ** digits).toFixed(digits);
-}
-
-function signe(n: number): string {
-  if (n > 0) return `+${fmt(n)}`;
-  return fmt(n);
 }
 
 type PassageFenetre = {
@@ -445,211 +399,22 @@ async function releverStatsFenetre(
   return out;
 }
 
-/**
- * Jours passés de la fenêtre où le compte était actif mais n'a pas publié.
- * Aujourd'hui exclu (créneau encore ouvert).
- * Crédit publication = date_publication_prevue OU jour Paris de publie_at
- * (aligné Pilotage L1/L2).
- */
-async function joursSansPublication(
-  supabase: Supabase,
-  compteId: string,
-  joursPasses: string[],
-  compte: { warmup_ends_at?: string | null },
-): Promise<number> {
-  const joursEligibles = joursPasses.filter((j) => etaitActifAuJour(compte, j));
-  if (joursEligibles.length === 0) return 0;
-
-  // Fenêtre élargie : prevue OU publie_at (jour Paris) dans les jours éligibles.
-  const debut = joursEligibles[0]!;
-  const { data } = await supabase
-    .from("passages")
-    .select("date_publication_prevue, publie_at, publie_url, statut")
-    .eq("compte_id", compteId)
-    .gte("date_publication_prevue", ajouterJoursParis(debut, -2));
-
-  const postes = new Set<string>();
-  const fmtParis = (iso: string | null) => {
-    if (!iso) return null;
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return null;
-    return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(d);
-  };
-  const elig = new Set(joursEligibles);
-
-  for (const p of data ?? []) {
-    const publie =
-      p.statut === "publie" ||
-      Boolean(p.publie_url) ||
-      Boolean(p.publie_at);
-    if (!publie) continue;
-    const prevue = p.date_publication_prevue as string | null;
-    if (prevue && elig.has(prevue)) postes.add(prevue);
-    const jourPublie = fmtParis(p.publie_at as string | null);
-    if (jourPublie && elig.has(jourPublie)) postes.add(jourPublie);
-  }
-
-  return joursEligibles.filter((j) => !postes.has(j)).length;
-}
-
-/**
- * ELO compte = moyenne pondérée (décroissance récence) des ≤10 derniers
- * passages publiés mesurés (vues seules → performancePassage),
- * puis −5 par jour actif sans publication (idempotent sur la fenêtre).
- * Comptes en warmup : ignorés (score inchangé).
- */
-async function appliquerEloComptes(
-  supabase: Supabase,
-  compteIds: string[],
-  datesFenetre: string[],
-  dryRun: boolean,
-  handles: Map<string, string | null>,
-  journal: Journal,
-): Promise<RattrapageResultat["eloCompte"]> {
-  const scoring = await chargerScoring(supabase);
-  const details: EloCompteDetail[] = [];
-  // Pénalité = jours passés sans post. Aujourd'hui exclu (créneau ouvert),
-  // mais les posts du jour alimentent bien l'ELO compte via les vues mesurées.
-  const auj = aujourdhuiParis();
-  const joursPasses = datesFenetre.filter((d) => d < auj);
-
-  journal.push("info", `ELO compte — ${compteIds.length} compte(s)`);
-
-  for (const cid of compteIds) {
-    const { data: rowAvant } = await supabase
-      .from("comptes")
-      .select("score, handle_tiktok, warmup_started_at, warmup_ends_at")
-      .eq("id", cid)
-      .maybeSingle();
-    if (!rowAvant) continue;
-
-    const avant = (rowAvant.score as number | null) ?? scoring.score_prior;
-    if (rowAvant.handle_tiktok) {
-      handles.set(cid, rowAvant.handle_tiktok as string);
-    }
-    const handle = handles.get(cid) ?? null;
-    const label = handle ? `@${handle}` : cid.slice(0, 8);
-
-    // Warmup / pas encore en process → ne pas toucher l'ELO compte.
-    if (
-      !compteEnProcessus({
-        warmup_started_at: rowAvant.warmup_started_at as string | null,
-        warmup_ends_at: rowAvant.warmup_ends_at as string | null,
-      })
-    ) {
-      journal.push("info", `ELO compte — skip warmup ${label}`);
-      continue;
-    }
-
-    // Les DERNIERS posts mesurés d'abord (order serveur — pas un limit aveugle).
-    const { data: posts } = await supabase
-      .from("passages")
-      .select("vues, publie_at, date_publication_prevue, created_at")
-      .eq("compte_id", cid)
-      .eq("statut", "publie")
-      .not("vues", "is", null)
-      .order("date_publication_prevue", { ascending: false, nullsFirst: false })
-      .order("publie_at", { ascending: false, nullsFirst: false })
-      .limit(COMPTE_MAX_POSTS);
-
-    const mesurés = (posts ?? []).filter((p) => p.vues != null);
-    mesurés.sort((a, b) => {
-      const ta = (a.publie_at as string | null) ??
-        (a.date_publication_prevue as string | null) ??
-        (a.created_at as string | null) ??
-        "";
-      const tb = (b.publie_at as string | null) ??
-        (b.date_publication_prevue as string | null) ??
-        (b.created_at as string | null) ??
-        "";
-      return ta < tb ? 1 : ta > tb ? -1 : 0;
-    });
-    const top = mesurés.slice(0, COMPTE_MAX_POSTS);
-
-    let base: number;
-    if (top.length === 0) {
-      // Pas de posts mesurés : ancre sur le prior (idempotent) puis pénalités.
-      base = scoring.score_prior;
-    } else {
-      let sumW = 0;
-      let sum = 0;
-      top.forEach((p, i) => {
-        const w = Math.pow(COMPTE_DECAY, i);
-        const perf = performancePassage(p.vues as number, scoring.elo_vues_plafond);
-        sumW += w;
-        sum += w * perf;
-      });
-      const next = clamp(sum / sumW, 0, 100);
-      // k ELO import (défaut 1) — PAS regularisation_k=5 qui collait le score à 50.
-      const k = Math.max(0.1, scoring.elo_regularisation_k);
-      base = (k * scoring.score_prior + top.length * next) / (k + top.length);
-    }
-
-    const joursSans = await joursSansPublication(
-      supabase,
-      cid,
-      joursPasses,
-      { warmup_ends_at: rowAvant.warmup_ends_at as string | null },
-    );
-    const penalite = joursSans * ELO_PENALITE_NOPOST;
-    const apres = clamp(base - penalite, 0, 100);
-
-    if (top.length === 0 && joursSans === 0) {
-      journal.push("warn", `ELO compte — aucun post mesuré, pas de pénalité`, label);
-      continue;
-    }
-
-    if (!dryRun) {
-      await supabase
-        .from("comptes")
-        .update({ score: apres, score_maj_at: new Date().toISOString() })
-        .eq("id", cid);
-    }
-
-    details.push({
-      compteId: cid,
-      handle,
-      avant,
-      apres,
-      posts: top.length,
-      joursSansPost: joursSans,
-      penalite,
-    });
-    journal.push(
-      apres >= avant ? "ok" : "warn",
-      `ELO compte ${label} ${signe(apres - avant)} → ${fmt(apres)}`,
-      `${fmt(avant)} → ${fmt(apres)} · ${top.length} post(s)` +
-        (joursSans > 0
-          ? ` · −${penalite} (${joursSans}j sans post × ${ELO_PENALITE_NOPOST})`
-          : ""),
-    );
-  }
-
-  journal.push("info", `ELO compte — ${details.length} mis à jour`);
-  return { maj: details.length, details };
-}
-
 function construireBrief(
   fenetre: { debut: string; fin: string; jours: number },
   passages: number,
   stats: RattrapageResultat["stats"],
   requalif: RequalificationResultat,
   repostsBonus: number,
-  eloCompte: RattrapageResultat["eloCompte"],
   dryRun: boolean,
 ): RattrapageBrief {
   const topRequalif = [...requalif.details]
     .sort((a, b) => (b.m ?? -1) - (a.m ?? -1))
     .slice(0, BRIEF_TOP);
-  const topCompte = [...eloCompte.details]
-    .sort((a, b) => Math.abs(b.apres - b.avant) - Math.abs(a.apres - a.avant))
-    .slice(0, BRIEF_TOP);
 
   const resume =
     `${dryRun ? "[dry-run] " : ""}` +
     `${fenetre.debut}→${fenetre.fin} · ${stats.releves} stats · ` +
-    `${requalif.requalifies} requalif (${requalif.montees}↑ ${requalif.descentes}↓) · ` +
-    `${eloCompte.maj} ELO compte` +
+    `${requalif.requalifies} requalif (${requalif.montees}↑ ${requalif.descentes}↓)` +
     (repostsBonus ? ` · ${repostsBonus} repost(s) J+7` : "") +
     (stats.sansMatch ? ` · ${stats.sansMatch} sans match` : "") +
     (stats.erreurs.length ? ` · ${stats.erreurs.length} erreur(s)` : "");
@@ -674,10 +439,6 @@ function construireBrief(
       top: topRequalif,
     },
     repostsBonus,
-    eloCompte: {
-      maj: eloCompte.maj,
-      top: topCompte,
-    },
   };
 }
 
@@ -937,7 +698,6 @@ export async function rattrapageElo(
       },
       requalif: requalifVide(),
       repostsBonus: { planifies: 0, details: [] },
-      eloCompte: { maj: 0, details: [] },
       brief: construireBrief(
         { debut, fin, jours: dates.length },
         0,
@@ -975,7 +735,7 @@ export async function rattrapageElo(
   const passages = await chargerPassagesFenetre(supabase, dates, opts.compteId ?? null);
   journal.push("info", `${passages.length} passage(s) publiés avec lien dans la fenêtre`);
 
-  // Compte isolé sans passage dans la fenêtre : scraper quand même pour metrics + ELO compte.
+  // Compte isolé sans passage dans la fenêtre : scraper quand même pour les metrics.
   if (opts.compteId && passages.length === 0) {
     const { data: c } = await supabase
       .from("comptes")
@@ -1006,7 +766,7 @@ export async function rattrapageElo(
     }
   }
 
-  // Warmup : ne pas toucher ELO compte (ni langue pour ce compte isolé).
+  // Warmup : rien à relever pour ce compte isolé.
   if (opts.compteId) {
     const { data: cWarm } = await supabase
       .from("comptes")
@@ -1030,14 +790,12 @@ export async function rattrapageElo(
         sansMatch: 0,
         erreurs: [] as RattrapageResultat["stats"]["erreurs"],
       };
-      const compteVide = { maj: 0, details: [] as EloCompteDetail[] };
       const brief = construireBrief(
         { debut, fin, jours },
         0,
         vide,
         requalifVide(),
         0,
-        compteVide,
         dryRun,
       );
       journal.push("ok", "Terminé (warmup)", brief.resume);
@@ -1046,7 +804,6 @@ export async function rattrapageElo(
         stats: vide,
         requalif: requalifVide(),
         repostsBonus: { planifies: 0, details: [] },
-        eloCompte: compteVide,
         brief,
         logs: journal.lines,
         dryRun,
@@ -1073,33 +830,6 @@ export async function rattrapageElo(
     journal.push("ok", `Repost bonus planifié le ${r.jour}`, `${r.vues} vues`);
   }
 
-  // ELO compte : tous les actifs en process (pénalité no-post même sans passage publié).
-  let compteIds: string[];
-  if (opts.compteId) {
-    compteIds = [opts.compteId];
-  } else {
-    const { data: actifs } = await supabase
-      .from("comptes")
-      .select("id, warmup_started_at, warmup_ends_at")
-      .eq("is_active", true);
-    compteIds = (actifs ?? [])
-      .filter((c) =>
-        compteEnProcessus({
-          warmup_started_at: c.warmup_started_at as string | null,
-          warmup_ends_at: c.warmup_ends_at as string | null,
-        }),
-      )
-      .map((c) => c.id as string);
-  }
-  const eloCompte = await appliquerEloComptes(
-    supabase,
-    compteIds,
-    dates,
-    dryRun,
-    handles,
-    journal,
-  );
-
   // Requalification tierlist + snapshot : uniquement sur un run « tous comptes »
   // (un run compte isolé ne voit qu'une partie des passages d'un cycle).
   let requalif = requalifVide();
@@ -1122,18 +852,16 @@ export async function rattrapageElo(
     stats,
     requalif,
     repostsBonus.planifies,
-    eloCompte,
     dryRun,
   );
   journal.push("ok", "Terminé", brief.resume);
+
 
   return {
     fenetre: { debut, fin, jours },
     stats,
     requalif,
     repostsBonus,
-    eloCompte,
-    brief,
     logs: journal.lines,
     dryRun,
     snapshot,
@@ -1256,6 +984,7 @@ export async function rattrapageEloDrainLot(
   erreurs: Array<{ compteId: string; handle: string; erreur: string }>;
   snapshot?: Awaited<ReturnType<typeof snapshotVuesGlobales>>;
   requalif?: RequalificationResultat;
+  qualif?: QualificationResultat;
 }> {
   const offset = Math.max(0, Math.floor(opts.offset ?? 0));
   const tous = await listerComptesRattrapageElo(supabase);
@@ -1295,6 +1024,7 @@ export async function rattrapageEloDrainLot(
   // Fin de file : tous les comptes ont livré leurs vues du jour, on peut
   // requalifier les cycles terminés (et solder les reposts bonus en retard).
   let requalif: RequalificationResultat | undefined;
+  let qualif: QualificationResultat | undefined;
   if (restants === 0 && !opts.dryRun) {
     try {
       requalif = await requalifierContenus(supabase);
@@ -1305,6 +1035,19 @@ export async function rattrapageEloDrainLot(
       await abandonnerRepostsEnRetard(supabase);
     } catch (e) {
       console.error("[rattrapage-elo] requalifierContenus", e);
+    }
+
+    // Les comptes se requalifient ICI, et pas au cron de minuit : c'est le seul
+    // moment où toutes les vues du jour sont rentrées. À minuit, on noterait
+    // chaque créateur sur les vues de la veille.
+    try {
+      qualif = await qualifierComptes(supabase);
+      console.log(
+        `[rattrapage-elo] qualification ${qualif.changes}/${qualif.examines}` +
+          (qualif.verrouilles ? ` (${qualif.verrouilles} manuelle(s))` : ""),
+      );
+    } catch (e) {
+      console.error("[rattrapage-elo] qualifierComptes", e);
     }
   }
 
@@ -1317,6 +1060,7 @@ export async function rattrapageEloDrainLot(
     erreurs,
     snapshot,
     requalif,
+    qualif,
   };
 }
 

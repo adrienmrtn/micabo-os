@@ -20,6 +20,7 @@ import {
   PenLine,
   Scissors,
   Settings,
+  ShieldAlert,
   UserRound,
   Users,
   Video,
@@ -130,6 +131,12 @@ export function AdminLayout() {
               description: t("navDesc.analytics"),
             },
             { to: "/admin/posters", label: t("nav.posters"), icon: Users, description: t("navDesc.posters") },
+            {
+              to: "/admin/surveillance",
+              label: t("nav.surveillance"),
+              icon: ShieldAlert,
+              description: t("navDesc.surveillance"),
+            },
             {
               to: "/admin/reviews",
               label: t("nav.reviews"),

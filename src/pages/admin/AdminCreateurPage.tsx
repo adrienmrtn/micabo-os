@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { QualificationBadge } from "@/components/moteur/QualificationBadge";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -159,17 +160,15 @@ export function AdminCreateurPage() {
               {!c.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
               <EssaiBadge createdAt={c.created_at} />
               <Badge variant="outline">{nomLangue(c.langue)}</Badge>
-              <Badge variant="secondary" title={t("adminCreateur.eloAide")}>
-                {t("adminCreateur.elo", { score: c.score.toFixed(1) })}
-              </Badge>
+              <QualificationBadge qualification={c.qualification} />
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               {c.handle_tiktok && <span>@{c.handle_tiktok.replace(/^@/, "")}</span>}
               {c.poster_email && <span>{c.poster_email}</span>}
-              {c.score_maj_at && (
+              {c.qualification_maj_at && (
                 <span className="text-xs">
-                  {t("adminCreateur.eloMaj", {
-                    date: new Date(c.score_maj_at).toLocaleString(i18n.language),
+                  {t("adminCreateur.qualificationMaj", {
+                    date: new Date(c.qualification_maj_at).toLocaleString(i18n.language),
                   })}
                 </span>
               )}

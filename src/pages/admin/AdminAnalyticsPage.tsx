@@ -2,6 +2,8 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { QualificationBadge } from "@/components/moteur/QualificationBadge";
+import { indexQualification } from "@/features/moteur/qualification";
 import { ChevronRight, Flame, LinkIcon, RefreshCw, TrendingUp } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -91,7 +93,9 @@ export function AdminAnalyticsPage() {
   const comptesTries = React.useMemo(() => {
     const liste = [...(comptes.data ?? [])];
     liste.sort((a, b) => {
-      if (tri === "elo") return Number(b.elo ?? 0) - Number(a.elo ?? 0);
+      if (tri === "elo") {
+        return indexQualification(b.qualification) - indexQualification(a.qualification);
+      }
       if (tri === "likes") return Number(b.likes_totaux) - Number(a.likes_totaux);
       return Number(b.vues_totales) - Number(a.vues_totales);
     });
@@ -262,11 +266,8 @@ export function AdminAnalyticsPage() {
                 >
                   👁 {abrege(Number(c.vues_totales))}
                 </span>
-                <span
-                  title={t("analytics.elo")}
-                  className={tri === "elo" ? "font-semibold" : undefined}
-                >
-                  ELO {c.elo != null ? Number(c.elo).toFixed(1) : "—"}
+                <span className={tri === "elo" ? "font-semibold" : undefined}>
+                  <QualificationBadge qualification={c.qualification} size="sm" />
                 </span>
                 <span
                   title={t("analytics.likes")}

@@ -1,5 +1,6 @@
 import type { PapierFalUsage, ReglagesPapier } from "./papierReglages";
 import type { Tier } from "./tierlist";
+import type { Qualification } from "./qualification";
 
 export type PipelineStatut = "pending" | "running" | "done" | "failed";
 export type SujetStatut = "propose" | "retenu" | "rejete" | "utilise";
@@ -55,8 +56,8 @@ export interface CompteResumePoster {
   persona_nom: string | null;
   persona_bio: string | null;
   avatar_url: string | null;
-  score: number | null;
-  score_maj_at: string | null;
+  qualification: Qualification;
+  qualification_maj_at: string | null;
   warmup_started_at: string | null;
   warmup_ends_at: string | null;
   reference_handle: string | null;
@@ -83,9 +84,18 @@ export interface Compte {
   repartition: { recycle: number; remanie: number; nouveau: number } | null;
   /** Quota d'assignation minuit : 1 à 3 (défaut 1). */
   posts_par_jour: number;
-  /** Forme du compte (EWMA), défaut 50. */
-  score: number;
-  score_maj_at: string | null;
+  /** Case du compte : INACTIF < MAUVAISES_VUES < PASSABLE < BIEN < STAR. */
+  qualification: Qualification;
+  qualification_maj_at: string | null;
+  /** Case posée à la main par un admin : la requalification de nuit la respecte. */
+  qualification_manuelle: boolean;
+  /** Écarté de la file de surveillance jusqu'à cette date (« skip »). */
+  surveillance_skip_jusqu_a: string | null;
+  /** Sur la liste « ne pas renouveler » — suivi seul, rien n'est coupé. */
+  ne_pas_renouveler: boolean;
+  ne_pas_renouveler_at: string | null;
+  /** Checklist admin : le HM a été prévenu. */
+  hm_prevenu: boolean;
   /** Clic « Start warmup » — null = créé, warmup pas lancé. */
   warmup_started_at: string | null;
   /** Fin warmup (started + N h). En process si now >= ends. */
@@ -223,9 +233,9 @@ export interface PosterProfil {
   persona_nom: string | null;
   persona_bio: string | null;
   avatar_url: string | null;
-  /** ELO / forme du compte TikTok (`comptes.score`), null si pas de compte. */
-  score: number | null;
-  score_maj_at: string | null;
+  /** Case du compte TikTok (`comptes.qualification`). */
+  qualification: Qualification;
+  qualification_maj_at: string | null;
   warmup_started_at: string | null;
   warmup_ends_at: string | null;
   manager_id: string | null;
@@ -336,8 +346,8 @@ export interface StatsCompte {
   handle_tiktok: string | null;
   langue: string;
   is_active: boolean;
-  /** ELO / forme du compte (`comptes.score`). */
-  elo: number | null;
+  /** Case du compte (`comptes.qualification`), exposée par la vue. */
+  qualification: Qualification;
   poster_prenom: string | null;
   poster_nom: string | null;
   posts_total: number;

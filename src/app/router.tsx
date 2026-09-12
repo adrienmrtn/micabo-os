@@ -18,6 +18,7 @@ import { DocumentView } from "@/features/documents/DocumentView";
 import { AdminPilotagePage } from "@/pages/admin/AdminPilotagePage";
 import { AdminSourcesPage } from "@/pages/admin/AdminSourcesPage";
 import { AdminPostersPage } from "@/pages/admin/AdminPostersPage";
+import { AdminSurveillancePage } from "@/pages/admin/AdminSurveillancePage";
 import { AdminBibliothequePage } from "@/pages/admin/AdminBibliothequePage";
 import { AdminReglagesPage } from "@/pages/admin/AdminReglagesPage";
 import { AdminPromptsPage } from "@/pages/admin/AdminPromptsPage";
@@ -78,6 +79,7 @@ export function AppRouter() {
             <Route path="/admin/assignation-sources" element={<Navigate to="/admin/sources" replace />} />
             <Route path="/admin/reproduisibles" element={<Navigate to="/admin/slideshows" replace />} />
             <Route path="/admin/posters" element={<AdminPostersPage />} />
+            <Route path="/admin/surveillance" element={<AdminSurveillancePage />} />
             <Route path="/admin/reviews" element={<AdminReviewsPage />} />
             <Route path="/admin/reviews-jour" element={<AdminReviewsJourPage />} />
             <Route path="/admin/valider-jour" element={<AdminValiderJourPage />} />

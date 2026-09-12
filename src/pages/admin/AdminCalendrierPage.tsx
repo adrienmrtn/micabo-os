@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { QualificationBadge } from "@/components/moteur/QualificationBadge";
 import { ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -90,7 +91,7 @@ export function AdminCalendrierPage() {
         handle: postsCompte[0]?.handle_tiktok ?? null,
         avatar: postsCompte[0]?.avatar_url ?? null,
         langue: postsCompte[0]?.langue ?? null,
-        score: postsCompte[0]?.score ?? null,
+        qualification: postsCompte[0]?.qualification ?? "PASSABLE",
         ugc: Boolean(postsCompte[0]?.ugc_ai) && !postsCompte[0]?.ugc_ai_video,
         postes: postsCompte.filter(estPoste).length,
         vides: postsCompte.filter((p) => p.slideshow_vide && !estPoste(p)).length,
@@ -426,11 +427,7 @@ export function AdminCalendrierPage() {
                     {groupe.vides > 1 ? ` ×${groupe.vides}` : ""}
                   </Badge>
                 )}
-                {groupe.score != null && (
-                  <Badge variant="secondary">
-                    {t("adminCal.eloCourt", { score: Number(groupe.score).toFixed(0) })}
-                  </Badge>
-                )}
+                <QualificationBadge qualification={groupe.qualification} size="sm" />
                 {groupe.langue && (
                   <Badge variant="outline">{groupe.langue.toUpperCase()}</Badge>
                 )}

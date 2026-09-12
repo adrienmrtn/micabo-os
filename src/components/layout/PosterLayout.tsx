@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { BookOpen, CalendarDays, Gift, HelpCircle } from "lucide-react";
 
+import { NudgePopup } from "@/features/nudge/NudgePopup";
 import { ReviewPopup } from "@/features/reviews/ReviewPopup";
 import { OnboardingPopup } from "@/features/onboarding/OnboardingPopup";
 import { AppShell } from "./AppShell";
@@ -28,6 +29,7 @@ export function PosterLayout() {
       ]}
     >
       <OnboardingPopup />
+      <NudgePopup />
       <ReviewPopup />
       <Outlet />
     </AppShell>
