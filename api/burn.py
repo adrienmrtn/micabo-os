@@ -61,6 +61,22 @@ def traiter(charge: dict) -> dict:
 
 
 class handler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:  # noqa: N802 (signature imposée par Vercel)
+        """Contrôle de présence — rien de secret, rien de la base.
+
+        Les polices voyagent par `includeFiles` : si elles manquaient, le
+        premier burn échouerait en production sans qu'on sache pourquoi.
+        """
+        polices = sorted(
+            f for f in os.listdir(bc.DOSSIER_POLICES)
+            if f.endswith(".ttf")
+        ) if os.path.isdir(bc.DOSSIER_POLICES) else []
+        self._repondre(200 if polices else 500, {
+            "ok": bool(polices),
+            "polices": polices,
+            "secret": bool(os.environ.get("BURN_SECRET")),
+        })
+
     def do_POST(self) -> None:  # noqa: N802 (signature imposée par Vercel)
         attendu = os.environ.get("BURN_SECRET") or ""
         fourni = self.headers.get("x-burn-secret") or ""
