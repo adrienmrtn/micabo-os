@@ -162,8 +162,16 @@ export async function rendreImageBurn(args: {
     | { image?: string; rapport?: unknown; erreur?: string }
     | null;
   if (!reponse.ok || !corps?.image) {
+    // 401 = le moteur a bien répondu, mais il n'a pas reconnu le secret : soit
+    // les deux côtés ne portent pas la même valeur, soit Vercel n'a pas été
+    // redéployé depuis qu'elle y a été posée (l'environnement est figé au
+    // build). Le dire évite de chercher du côté du rendu.
+    const aide = reponse.status === 401
+      ? " — BURN_SECRET différent entre l'Edge et Vercel, ou Vercel pas redéployé depuis ;" +
+        " GET /api/burn répond « secret » = false tant que le lambda ne l'a pas"
+      : "";
     throw new Error(
-      `rendu burn ${reponse.status}: ${corps?.erreur ?? "réponse illisible"}`,
+      `rendu burn ${reponse.status}: ${corps?.erreur ?? "réponse illisible"}${aide}`,
     );
   }
   return { bytes: base64Vers(corps.image), rapport: corps.rapport };

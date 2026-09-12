@@ -412,6 +412,8 @@ export const en = {
       brulerLogs: "Gemini / burn logs",
       brulerLancer: "Burn-in preview",
       brulerEnregistrer: "Burn and save",
+      brulerOriginal: "Original",
+      brulerRendu: "Burned",
       brulerDebut: "Burn-in → {{langue}}…",
       brulerSlideN: "Slide {{n}}",
       recentsTitre: "Your recent tests",

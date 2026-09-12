@@ -5,7 +5,7 @@
  *     → NDJSON :
  *         { etape:"deck",    statut, detail }
  *         { etape:"slide",   position, statut:"encours"|"saute"|"ok"|"echec", detail? }
- *         { etape:"analyse", position, zones:[…], texteTraduit, detail }
+ *         { etape:"analyse", position, zones:[…], texteTraduit, brutUrl, propreUrl, detail }
  *         { etape:"image",   position, image?|url?, rapport:[…] }
  *         { etape:"ready",   statut, detail, slides }
  *
@@ -161,6 +161,10 @@ Deno.serve(async (request) => {
             (brutes.length === 0 ? " · aucune zone détectée, bandeau central" : ""),
           texteTraduit,
           zones,
+          // L'original sert de référence à l'œil : c'est en le mettant à côté
+          // du rendu qu'on voit si la mesure a pris.
+          brutUrl,
+          propreUrl,
         });
 
         if (sauvegarder) {

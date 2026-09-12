@@ -33,10 +33,38 @@ type FiltreLabel = string | null | "__none__";
 type PreviewSlide = {
   position: number;
   texteTraduit: string;
+  /** Slide TikTok d'origine, texte encore dessus : la référence de l'œil. */
+  brutUrl?: string;
   previewUrl?: string;
   detail?: string;
   statut: "attente" | "encours" | "ok" | "saute" | "echec";
 };
+
+/** Un des deux volets de la comparaison : l'image, ou ce qu'on attend. */
+function Volet({
+  url,
+  legende,
+  attente,
+}: {
+  url?: string;
+  legende: string;
+  attente: string;
+}) {
+  return (
+    <div className="relative">
+      {url ? (
+        <img src={url} alt={legende} className="aspect-[9/16] w-full object-cover" />
+      ) : (
+        <div className="flex aspect-[9/16] items-center justify-center bg-muted text-xs text-muted-foreground">
+          {attente}
+        </div>
+      )}
+      <span className="absolute left-1 top-1 rounded bg-background/80 px-1 text-[10px] font-medium">
+        {legende}
+      </span>
+    </div>
+  );
+}
 
 function Chip({
   actif,
@@ -245,7 +273,11 @@ export function TestBrulerTexteCard() {
             setPreviews((prev) =>
               prev.map((p) =>
                 p.position === pos
-                  ? { ...p, texteTraduit: ev.texteTraduit ?? p.texteTraduit }
+                  ? {
+                      ...p,
+                      texteTraduit: ev.texteTraduit ?? p.texteTraduit,
+                      brutUrl: ev.brutUrl ?? p.brutUrl,
+                    }
                   : p,
               ),
             );
@@ -492,17 +524,20 @@ export function TestBrulerTexteCard() {
                 key={p.position}
                 className="overflow-hidden rounded-lg border"
               >
-                {p.previewUrl ? (
-                  <img
-                    src={p.previewUrl}
-                    alt={`slide ${p.position}`}
-                    className="aspect-[9/16] w-full object-cover"
+                {/* L'original à gauche, le rendu à droite : un placement de
+                    travers ne se voit qu'en comparant les deux. */}
+                <div className="grid grid-cols-2 divide-x">
+                  <Volet
+                    url={p.brutUrl}
+                    legende={t("tests.brulerOriginal")}
+                    attente={`#${p.position}`}
                   />
-                ) : (
-                  <div className="flex aspect-[9/16] items-center justify-center bg-muted text-xs text-muted-foreground">
-                    #{p.position} · {p.statut}
-                  </div>
-                )}
+                  <Volet
+                    url={p.previewUrl}
+                    legende={t("tests.brulerRendu")}
+                    attente={p.statut}
+                  />
+                </div>
                 <figcaption className="space-y-0.5 p-2 text-[11px]">
                   <p className="font-medium">
                     {t("tests.brulerSlideN", { n: p.position })} · {p.statut}
