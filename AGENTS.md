@@ -115,7 +115,18 @@ Le reste du chemin :
   slide n'a pas été brûlée ;
 - secret partagé `BURN_SECRET` (Edge **et** Vercel) + `BURN_URL` facultatif
   côté Edge. `GET /api/burn` dit ce que le lambda embarque vraiment : polices
-  chargées, table de glyphes lisible, secret posé.
+  chargées, table de glyphes lisible, secret posé ;
+- **le lambda ne tient pas dans un build Vercel standard.** OpenCV pèse 136 Mo
+  installés (4.9) à 153 Mo (5.0), numpy 73, fontTools 30, Pillow 22 : ~300 Mo
+  là où le build standard plafonne à 225 Mo une fois les dépendances
+  optimisées. Le déblocage est une variable de projet Vercel,
+  `VERCEL_SUPPORT_LARGE_FUNCTIONS=1` (Large Functions, bêta publique, Python
+  jusqu'à 5 Go sur Fluid compute) — pas une coupe dans le moteur. Sans elle, le
+  build échoue en `LAMBDA_SIZE_EXCEEDED` et la prod reste sur le déploiement
+  précédent : l'Edge parle alors le contrat du kit à un moteur qui ne le
+  comprend pas, et **toutes** les slides repartent en classique.
+  `excludeFiles` sort du lambda ce qui ne sert pas à `api/burn.py` (front,
+  sources Edge, docs) : ~9 Mo, de l'hygiène, pas la solution.
 
 Le contrôle du moteur est `qa_selftest`, dans le moteur : il tourne sur chaque
 slide et son rapport remonte jusqu'à la carte « Text burn-in (preview) » du
@@ -143,6 +154,9 @@ Tu travailles **uniquement** dans `adrienmrtn/micabo-os`.
   `BURN_SECRET`, posé des deux côtés (Edge + Vercel) parce qu'il ferme le
   moteur de rendu `api/burn.py` — il ne donne accès à rien d'autre. Le texte (Gemini)
   passe par Fal OpenRouter — pas de `GEMINI_API_KEY`.
+- Côté Vercel, `VERCEL_SUPPORT_LARGE_FUNCTIONS=1` n'est pas un secret mais une
+  condition de build : sans elle, `api/burn.py` dépasse la taille maximale d'un
+  lambda Python standard et le déploiement échoue (voir Burned).
 - Slug unique : `micabo`. Pas de switcher, pas de `localStorage`
   `os-application-slug`, pas de fallback `application_id_sophia()`.
 - Mails internes : domaine `micabo.app`.
