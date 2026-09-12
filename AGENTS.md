@@ -20,9 +20,12 @@ d'ELO par langue — `contenu_langues.score` est **gelé** (historique) et n'est
 plus lu par le moteur.
 
 - Import : note /100 = 30 % pertinence + 70 % vues source, régularisée
-  (`kk = k/2`). <55 → non importé · 55–60 C · 60–70 B · ≥70 A.
-  Une seule ligne `contenu_langues` est créée (langue source) ; les autres
-  langues arrivent à la demande, à l'assignation (`assurerDeckPourLangue`).
+  (`kk = k/2`). <55 → non importé · 55–60 C · 60–70 B · ≥70 A. **Plafond :
+  sans 10 000 vues sur le TikTok d'origine (`VUES_SOURCE_MIN_B_PLUS`), l'entrée
+  se fait en C quelle que soit la note** — un slideshow très pertinent mais peu
+  vu ne mérite pas 2 à 4 passages d'emblée, il remontera s'il performe chez
+  nous. Une seule ligne `contenu_langues` est créée (langue source) ; les
+  autres langues arrivent à la demande, à l'assignation (`assurerDeckPourLangue`).
 - Cycle : les passages du cycle sont ceux créés depuis `tier_maj_at`, hors
   reposts bonus et hors posts test. Quand ils sont tous publiés **et** mesurés
   (3 jours après publication), minuit requalifie sur `m` = moyenne des vues :

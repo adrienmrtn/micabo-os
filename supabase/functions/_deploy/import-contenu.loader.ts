@@ -21,4 +21,4 @@ if (!src.includes("clockworks~tiktok-scraper") || !src.includes("Deno.serve")) {
 }
 // esbuild renomme l'alias d'un rebuild à l'autre : relire le
 // `import{createClient as …}` du bundle avant de l'effacer, et reporter le nom ici.
-new Function("qe", src)(createClient);
+new Function("Le", src)(createClient);

@@ -1721,7 +1721,7 @@ export const fr = {
       eloVuesPlafond: "Plafond vues (= score 100)",
       eloRegularisation: "Régularisation ELO k (import)",
       eloVuesAide:
-        "Note /100 = 30 % pertinence + 70 % vues de la source (log^1.3, plafond 80k), régularisée vers 50. Elle sert UNIQUEMENT au premier placement : <55 jeté · 55–60 C · 60–70 B · ≥70 A. Ensuite le slideshow vit dans la tierlist.",
+        "Note /100 = 30 % pertinence + 70 % vues de la source (log^1.3, plafond 80k), régularisée vers 50. Elle sert UNIQUEMENT au premier placement : <55 jeté · 55–60 C · 60–70 B · ≥70 A. Et sans 10 000 vues sur le TikTok d’origine, l’entrée se fait en C quelle que soit la note. Ensuite le slideshow vit dans la tierlist.",
       legacyTitle: "Legacy (ratios / semaine 1)",
       legacySubtitle: "Conservé jusqu'au cutover. Ignoré quand le v-next est actif.",
     },
