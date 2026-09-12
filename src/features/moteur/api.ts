@@ -6721,31 +6721,43 @@ export async function fileSurveillance(): Promise<{
   if (retenus.length === 0) return { file: [], nePasRenouveler: [] };
 
   const ids = retenus.map((c) => c.id as string);
-  // Les chiffres qui expliquent la case. Une seule requête pour toute la file :
-  // elle est courte par construction.
-  const { data: passages } = await supabase
-    .from("passages")
-    .select("compte_id, statut, publie_at, publie_url, date_publication_prevue, vues, posts(est_test)")
-    .in("compte_id", ids)
-    .order("date_publication_prevue", { ascending: false, nullsFirst: false })
-    .limit(60 * ids.length);
 
+  // Les chiffres qui expliquent la case, un compte à la fois.
+  //
+  // Une seule requête `in(...)` avec un `limit` global serait plus courte mais
+  // fausse : PostgREST coupe sur le total, donc un compte bavard mangerait le
+  // quota d'un compte discret, qui afficherait « 0 sur 0 » à côté d'un INACTIF.
+  // La file est courte par construction — ce sont les comptes en difficulté.
   const parCompte = new Map<string, PassageJuge[]>();
-  for (const p of passages ?? []) {
-    const cid = p.compte_id as string;
-    const postsLie = p.posts as { est_test?: boolean } | Array<{ est_test?: boolean }> | null;
-    const lie = Array.isArray(postsLie) ? postsLie[0] : postsLie;
-    const liste = parCompte.get(cid) ?? [];
-    liste.push({
-      statut: (p.statut as string | null) ?? null,
-      publie_at: (p.publie_at as string | null) ?? null,
-      publie_url: (p.publie_url as string | null) ?? null,
-      date_publication_prevue: (p.date_publication_prevue as string | null) ?? null,
-      vues: (p.vues as number | null) ?? null,
-      est_test: Boolean(lie?.est_test),
-    });
-    parCompte.set(cid, liste);
-  }
+  await Promise.all(
+    ids.map(async (cid) => {
+      const { data } = await supabase
+        .from("passages")
+        .select("statut, publie_at, publie_url, date_publication_prevue, vues, posts(est_test)")
+        .eq("compte_id", cid)
+        .order("date_publication_prevue", { ascending: false, nullsFirst: false })
+        .limit(60);
+      parCompte.set(
+        cid,
+        (data ?? []).map((p) => {
+          // Supabase type parfois un join en tableau : on normalise.
+          const lieBrut = p.posts as
+            | { est_test?: boolean }
+            | Array<{ est_test?: boolean }>
+            | null;
+          const lie = Array.isArray(lieBrut) ? lieBrut[0] : lieBrut;
+          return {
+            statut: (p.statut as string | null) ?? null,
+            publie_at: (p.publie_at as string | null) ?? null,
+            publie_url: (p.publie_url as string | null) ?? null,
+            date_publication_prevue: (p.date_publication_prevue as string | null) ?? null,
+            vues: (p.vues as number | null) ?? null,
+            est_test: Boolean(lie?.est_test),
+          };
+        }),
+      );
+    }),
+  );
 
   const { data: nudges } = await supabase
     .from("comptes_nudges")
