@@ -129,7 +129,7 @@ export async function rendreImageBurn(args: {
   brutUrl: string;
   propreUrl: string;
   zones: ZoneBurn[];
-}): Promise<{ bytes: Uint8Array; rapport: unknown }> {
+}): Promise<{ bytes: Uint8Array; rapport: unknown; fiable: boolean }> {
   const secret = Deno.env.get("BURN_SECRET");
   if (!secret) throw new Error("BURN_SECRET manquant");
   const url = Deno.env.get("BURN_URL") || BURN_URL_DEFAUT;
@@ -159,7 +159,7 @@ export async function rendreImageBurn(args: {
   });
 
   const corps = await reponse.json().catch(() => null) as
-    | { image?: string; rapport?: unknown; erreur?: string }
+    | { image?: string; rapport?: unknown; erreur?: string; fiable?: boolean }
     | null;
   if (!reponse.ok || !corps?.image) {
     // 401 = le moteur a bien répondu, mais il n'a pas reconnu le secret : soit
@@ -174,7 +174,11 @@ export async function rendreImageBurn(args: {
       `rendu burn ${reponse.status}: ${corps?.erreur ?? "réponse illisible"}${aide}`,
     );
   }
-  return { bytes: base64Vers(corps.image), rapport: corps.rapport };
+  return {
+    bytes: base64Vers(corps.image),
+    rapport: corps.rapport,
+    fiable: corps.fiable !== false,
+  };
 }
 
 function base64Vers(b64: string): Uint8Array {
@@ -228,11 +232,19 @@ export async function brulerSlide(
     brutUrl: args.brutUrl,
   });
   const zones = preparerZonesBurn(brutes, args.texte);
-  const { bytes, rapport } = await rendreImageBurn({
+  const { bytes, rapport, fiable } = await rendreImageBurn({
     brutUrl: args.brutUrl,
     propreUrl: args.propreUrl,
     zones,
   });
+  // Le moteur se contrôle en redessinant le texte d'origine : quand il n'y
+  // arrive pas, la slide part en classique. Une image approximative sur le
+  // compte d'un créateur coûte plus cher qu'une slide non brûlée.
+  if (!fiable) {
+    throw new Error(
+      "rendu non conforme au contrôle (position ou largeur hors tolérance) — slide laissée en classique",
+    );
+  }
 
   const chemin = `burned/${args.contenuId}/${langue}/${args.position}.jpg`;
   const { error: errUp } = await supabase.storage.from(BUCKET).upload(chemin, bytes, {

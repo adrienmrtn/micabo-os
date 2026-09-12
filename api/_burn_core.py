@@ -1,16 +1,29 @@
 """
 Burn déterministe du texte sur une slide propre.
 
-L'analyse (où est le texte, sa couleur, le nombre de lignes) vient d'un LLM
-vision côté Edge. Ce module ne devine rien : il MESURE le texte d'origine sur
-l'image brute — hauteur d'encre, largeur de chaque ligne, interligne, épaisseur
-du contour — puis redessine le texte traduit avec les mêmes réglages sur
-l'image propre. Mêmes entrées, même PNG, à chaque exécution.
+Le LLM lit et traduit. Python mesure et dessine. Aucune valeur numérique ne
+sort de l'estimation d'un modèle : taille, position, couleur, espacement se
+mesurent sur les pixels de la slide d'origine. Mêmes entrées, même PNG.
 
-Le brut et l'image propre n'ont ni la même taille ni le même ratio : le
-pipeline recadre en « cover » centré puis redimensionne (jamais
-d'agrandissement). Le recalage est donc analytique, pas une mise en
-correspondance de points.
+Ce que le moteur mesure, dans l'ordre :
+
+  1. le recalage brut → propre (analytique : le pipeline recadre en « cover »
+     centré puis redimensionne, la transformation est connue) ;
+  2. le masque du texte : couleur ET écart avec l'image propre, qui a
+     justement été débarrassée de ce texte ;
+  3. les lignes, débarrassées des pixels parasites de la même couleur — un
+     vêtement clair ou un reflet ferait passer une ligne de 648 à 1019 px et
+     casserait tout le calage ;
+  4. par ligne : hauteur d'x, ligne de base, largeur d'encre ;
+  5. la taille, calée sur la LARGEUR d'encre à interlettrage nul — le seuil du
+     masque gonfle la hauteur d'x de 2 à 3 px, une taille calée dessus est
+     trop grande de 8 à 10 % et le tracking négatif qui rattrape mange les
+     espaces entre les mots ;
+  6. la graisse, choisie entre deux candidates par cohérence largeur/hauteur ;
+  7. l'interligne de base à base, la boîte de coupe, l'alignement, le contour.
+
+Puis il se contrôle : il redessine le texte D'ORIGINE avec ces réglages et
+re-mesure avec le même code. Les écarts partent dans le rapport.
 """
 
 from __future__ import annotations
@@ -22,35 +35,171 @@ import urllib.request
 from dataclasses import dataclass, field
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 DOSSIER_POLICES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 POLICE_700 = "TikTokSans-700.ttf"
 POLICE_600 = "TikTokSans-600.ttf"
+#: Repli glyphe par glyphe : TikTok Sans n'a que 225 caractères, pas de flèches.
+POLICE_REPLI = "DejaVuSans.ttf"
 
 # Emojis Apple, même CDN que la preview du navigateur.
 CDN_EMOJI = "https://cdn.jsdelivr.net/npm/emoji-datasource-apple@15.1.2/img/apple/64"
 RE_EMOJI = re.compile("((?:[\U0001F000-\U0001FAFF☀-➿⬀-⯿][️‍]*)+)")
 
 #: Le texte est dessiné à cette échelle puis réduit — bords nets.
-SUPERSAMPLE = 4
-#: Contour par défaut quand la mesure ne le donne pas, en fraction de l'encre.
-CONTOUR_FRAC = 0.055
-#: Interligne de repli quand la zone n'a qu'une ligne.
-INTERLIGNE_FRAC = 1.30
-#: Un emoji occupe un carré de ce côté, proportionnel à l'encre de la ligne.
-EMOJI_FRAC = 1.22
-#: Écart minimal brut/propre pour qu'un pixel compte comme du texte effacé.
+SUPERSAMPLE = 3
+#: Distance de Chebyshev max à la couleur du texte.
+TOL_COULEUR = 45
+#: Écart minimal brut/propre (somme des canaux) pour qu'un pixel compte comme
+#: du texte effacé. Mesuré sur la paire de contrôle : les lettres dépassent
+#: largement ce seuil même posées sur un tableau blanc, parce que l'image
+#: propre a été repeinte à leur place, pas simplement éclaircie.
 ECART_TEXTE_MIN = 120
-#: TikTok coupe un peu après la plus longue ligne observée.
-MARGE_WRAP = 1.06
-#: Interlettrage plausible, en fraction de la taille de police.
-TRACKING_MAX_FRAC = 0.09
+#: Un emoji occupe un carré de ce côté, proportionnel à la hauteur d'x.
+EMOJI_FRAC = 1.6
+#: Interligne de repli quand la zone n'a qu'une ligne (× hauteur d'x).
+INTERLIGNE_FRAC = 2.6
+#: Interlettrage plausible, en em. Au-delà, c'est la mesure qui est fausse.
+TRACKING_MIN_EM, TRACKING_MAX_EM = -0.05, 0.15
+#: En deçà, on ne corrige pas l'interlettrage : l'écart est dans le bruit.
+ERREUR_LARGEUR_MIN = 0.03
+#: Contour de repli quand le LLM annonce un liseré que la mesure ne trouve pas.
+CONTOUR_FRAC = 0.06
 
 
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Police : repli glyphe par glyphe
+# ---------------------------------------------------------------------------
+
+_cache_cmap: dict[str, set[int]] = {}
+_cache_police: dict[tuple[str, int], ImageFont.FreeTypeFont] = {}
+
+
+def _cmap(nom: str) -> set[int]:
+    if nom not in _cache_cmap:
+        from fontTools.ttLib import TTFont
+
+        with TTFont(os.path.join(DOSSIER_POLICES, nom), lazy=True) as f:
+            _cache_cmap[nom] = set(f.getBestCmap().keys())
+    return _cache_cmap[nom]
+
+
+def _charger(nom: str, taille: int) -> ImageFont.FreeTypeFont:
+    cle = (nom, taille)
+    if cle not in _cache_police:
+        _cache_police[cle] = ImageFont.truetype(
+            os.path.join(DOSSIER_POLICES, nom), max(1, taille)
+        )
+    return _cache_police[cle]
+
+
+class Police:
+    """Une police, plus un repli pour les glyphes qu'elle n'a pas.
+
+    Une flèche absente doit sortir dans la police de repli, jamais en tofu et
+    jamais remplacée en silence par un autre caractère.
+    """
+
+    def __init__(self, nom: str, taille: float):
+        self.nom = nom
+        self.taille = max(1, int(round(taille)))
+        self.principale = _charger(nom, self.taille)
+        self.repli = _charger(POLICE_REPLI, self.taille)
+        self.connus = _cmap(nom)
+
+    def pour(self, c: str) -> ImageFont.FreeTypeFont:
+        return self.principale if ord(c) in self.connus else self.repli
+
+    def avance(self, c: str) -> float:
+        return self.pour(c).getlength(c)
+
+    def hauteur_x(self) -> float:
+        return -self.principale.getbbox("x", anchor="ls")[1]
+
+
+def segmenter(texte: str) -> list[tuple[str, str]]:
+    """Découpe en morceaux ('texte' | 'emoji')."""
+    return [
+        ("emoji" if RE_EMOJI.fullmatch(p) else "texte", p)
+        for p in RE_EMOJI.split(texte)
+        if p
+    ]
+
+
+def disposer(
+    police: Police, texte: str, tracking: float, emoji: float
+) -> tuple[list[tuple[str, str, float]], float, float]:
+    """Position de chaque glyphe, largeur d'ENCRE et bord gauche de l'encre.
+
+    C'est l'encre qui se mesure sur une image, pas la somme des avances : le
+    dernier glyphe traîne son approche droite. Confondre les deux fausse la
+    taille de quelques pour cent, systématiquement dans le même sens.
+    """
+    items: list[tuple[str, str, float]] = []
+    x = 0.0
+    for genre, morceau in segmenter(texte):
+        if genre == "emoji":
+            items.append(("emoji", morceau, x))
+            x += emoji + tracking
+            continue
+        for c in morceau:
+            items.append(("texte", c, x))
+            x += police.avance(c) + tracking
+
+    gauche = droite = None
+    for genre, contenu, gx in items:
+        if genre == "emoji":
+            g, d = gx, gx + emoji
+        elif contenu == " ":
+            continue
+        else:
+            boite = police.pour(contenu).getbbox(contenu, anchor="ls")
+            g, d = gx + boite[0], gx + boite[2]
+        gauche = g if gauche is None else min(gauche, g)
+        droite = d if droite is None else max(droite, d)
+    if gauche is None:
+        return items, 0.0, 0.0
+    return items, droite - gauche, gauche
+
+
+def largeur_encre(police: Police, texte: str, tracking: float, emoji: float) -> float:
+    return disposer(police, texte, tracking, emoji)[1]
+
+
+def couper_lignes(
+    police: Police, texte: str, largeur_max: float, tracking: float, emoji: float
+) -> list[str]:
+    """Retour à la ligne gourmand, comme une zone de texte d'application.
+
+    Les paragraphes vides sont conservés : dans l'image d'origine, un saut de
+    paragraphe occupe une ligne pour de bon. Le supprimer tassait le bloc et
+    faisait glisser tout ce qui suit vers le haut.
+    """
+    lignes: list[str] = []
+    for paragraphe in texte.split("\n"):
+        if not paragraphe.strip():
+            lignes.append("")
+            continue
+        courante = ""
+        for mot in paragraphe.split():
+            essai = f"{courante} {mot}".strip()
+            if not courante or largeur_encre(police, essai, tracking, emoji) <= largeur_max:
+                courante = essai
+            else:
+                lignes.append(courante)
+                courante = mot
+        lignes.append(courante)
+    while lignes and not lignes[0]:
+        lignes.pop(0)
+    while lignes and not lignes[-1]:
+        lignes.pop()
+    return lignes or [texte.strip()]
+
+
+# ---------------------------------------------------------------------------
 # Recalage brut → propre
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -66,6 +215,14 @@ class Recalage:
 
 
 def recaler(taille_brut: tuple[int, int], taille_propre: tuple[int, int]) -> Recalage:
+    """Transformation brut → propre, analytique.
+
+    Inutile de la chercher par points d'intérêt : le pipeline la connaît. Il
+    recadre en « cover » centré sur le ratio dominant du post, puis
+    redimensionne sans jamais agrandir. À ratios égaux, la formule dégénère
+    d'elle-même en échelle pure, translation nulle — ce que ferait un ORB bien
+    réglé, sans son bruit ni sa dépendance.
+    """
     bw, bh = taille_brut
     pw, ph = taille_propre
     if bw <= 0 or bh <= 0 or pw <= 0 or ph <= 0:
@@ -78,51 +235,58 @@ def recaler(taille_brut: tuple[int, int], taille_propre: tuple[int, int]) -> Rec
     return Recalage((bw - cw) / 2, (bh - ch) / 2, pw / cw)
 
 
-# --------------------------------------------------------------------------
-# Mesure du texte d'origine
-# --------------------------------------------------------------------------
-
-
 @dataclass
-class Bande:
-    """Une ligne de texte repérée sur le brut, en pixels du brut."""
+class Paire:
+    """Le brut ramené dans le cadre de l'image propre, et leur écart."""
 
-    y0: int
-    y1: int
-    x0: int
-    x1: int
+    propre: Image.Image
+    recale: np.ndarray
+    ecart: np.ndarray
+    recalage: Recalage
+    taille_brut: tuple[int, int]
 
-    @property
-    def hauteur(self) -> int:
-        return self.y1 - self.y0
-
-    @property
-    def largeur(self) -> int:
-        return self.x1 - self.x0
-
-    @property
-    def centre_x(self) -> float:
-        return (self.x0 + self.x1) / 2
-
-
-@dataclass
-class Reglages:
-    """Ce que la mesure a conclu pour une zone, en pixels de l'image propre."""
-
-    taille: int
-    tracking: float
-    contour: float
-    interligne: float
-    largeur_wrap: float
-    alignement: str
-    ancre_x: float
-    ancre_y: float
-    encre: float
-    mesure: bool = True
-    bandes: list[Bande] = field(default_factory=list)
+    def rect(self, zone: dict) -> tuple[int, int, int, int]:
+        bw, bh = self.taille_brut
+        xf, yf = float(zone.get("x", 0.0)), float(zone.get("y", 0.0))
+        wf, hf = float(zone.get("w", 1.0)), float(zone.get("h", 1.0))
+        x0, y0 = self.recalage.vers_propre(xf * bw, yf * bh)
+        x1, y1 = self.recalage.vers_propre((xf + wf) * bw, (yf + hf) * bh)
+        W, H = self.propre.size
+        # La boîte du LLM est approximative : on l'élargit d'un cheveu pour ne
+        # pas couper une ascendante au ras, pas plus — chaque pixel de marge
+        # est une chance d'attraper du texte qui n'est pas celui de la zone.
+        marge = max(6.0, (y1 - y0) * 0.02)
+        return (
+            max(0, min(W - 1, int(x0 - marge))),
+            max(0, min(H - 1, int(y0 - marge))),
+            max(1, min(W, int(x1 + marge))),
+            max(1, min(H, int(y1 + marge))),
+        )
 
 
-def _hex_vers_rgb(couleur: str | None) -> tuple[int, int, int]:
+def preparer(brut: Image.Image, propre: Image.Image) -> Paire:
+    """Recale le brut sur l'image propre et calcule leur écart pixel à pixel."""
+    brut = brut.convert("RGB")
+    propre = propre.convert("RGB")
+    r = recaler(brut.size, propre.size)
+    bw, bh = brut.size
+    recale = brut.resize(
+        propre.size, Image.LANCZOS, box=(r.ox, r.oy, bw - r.ox, bh - r.oy)
+    )
+    # Cumul des trois canaux, pas leur maximum : un texte clair sur fond clair
+    # ne se sépare que de quelques niveaux par canal, mais trois fois.
+    ecart = np.abs(
+        np.asarray(recale).astype(np.int16) - np.asarray(propre).astype(np.int16)
+    ).sum(axis=2)
+    return Paire(propre, np.asarray(recale), ecart, r, brut.size)
+
+
+# ---------------------------------------------------------------------------
+# Masque du texte
+# ---------------------------------------------------------------------------
+
+
+def hex_vers_rgb(couleur: str | None) -> tuple[int, int, int]:
     m = re.fullmatch(r"#?([0-9a-fA-F]{6})", (couleur or "").strip())
     if not m:
         return (255, 255, 255)
@@ -130,239 +294,810 @@ def _hex_vers_rgb(couleur: str | None) -> tuple[int, int, int]:
     return ((n >> 16) & 255, (n >> 8) & 255, n & 255)
 
 
-def masque_texte(crop: np.ndarray, couleur: str | None) -> np.ndarray:
-    """Pixels qui appartiennent au remplissage des lettres."""
-    cible = np.array(_hex_vers_rgb(couleur), dtype=np.int16)
-    masque = np.abs(crop.astype(np.int16) - cible).sum(axis=2) < 120
-    if int(cible.sum()) > 700:
-        # Blanc : sans contrainte de saturation, tout fond clair passerait.
-        mx = crop.max(axis=2).astype(np.int16)
-        mn = crop.min(axis=2).astype(np.int16)
-        masque &= (mx - mn) < 42
-        masque &= mx > 195
-    return masque
+def masque_couleur(img: np.ndarray, cible: tuple[int, int, int], tol: int = TOL_COULEUR):
+    """Pixels proches d'une couleur, en distance de Chebyshev."""
+    return np.abs(img.astype(np.int16) - np.array(cible, dtype=np.int16)).max(axis=2) <= tol
 
 
-def _bande(masque: np.ndarray, y0: int, y1: int) -> Bande:
-    colonnes = np.nonzero(masque[y0:y1].sum(axis=0))[0]
-    x0 = int(colonnes[0]) if colonnes.size else 0
-    x1 = int(colonnes[-1]) + 1 if colonnes.size else 0
-    return Bande(y0=y0, y1=y1, x0=x0, x1=x1)
-
-
-def mesurer_bandes(masque: np.ndarray) -> list[Bande]:
-    """Lignes visuelles : suites de rangées qui portent assez de pixels texte."""
-    if masque.size == 0:
-        return []
-    h, w = masque.shape
-    par_rangee = masque.sum(axis=1)
-    seuil = max(2, int(w * 0.012))
-    bandes: list[Bande] = []
-    debut: int | None = None
-    for y in range(h):
-        if par_rangee[y] >= seuil:
-            if debut is None:
-                debut = y
-        elif debut is not None:
-            bandes.append(_bande(masque, debut, y))
-            debut = None
-    if debut is not None:
-        bandes.append(_bande(masque, debut, h))
-    bandes = [b for b in bandes if b.hauteur >= 6 and b.largeur >= 10]
-    if not bandes:
-        return []
-    # Une bande bien plus fine que les autres, c'est un reste de détourage.
-    plancher = max(b.hauteur for b in bandes) * 0.45
-    return [b for b in bandes if b.hauteur >= plancher]
-
-
-def _dilater(masque: np.ndarray, rayon: int) -> np.ndarray:
+def _voisinage(masque: np.ndarray, rayon: int, erosion: bool) -> np.ndarray:
     out = masque
     for _ in range(rayon):
-        out = (
-            out
-            | np.roll(out, 1, axis=0)
-            | np.roll(out, -1, axis=0)
-            | np.roll(out, 1, axis=1)
-            | np.roll(out, -1, axis=1)
-        )
+        décalés = [
+            np.roll(out, 1, axis=0), np.roll(out, -1, axis=0),
+            np.roll(out, 1, axis=1), np.roll(out, -1, axis=1),
+        ]
+        out = np.logical_and.reduce([out, *décalés]) if erosion else np.logical_or.reduce([out, *décalés])
     return out
 
 
-def mesurer_contour(crop: np.ndarray, masque: np.ndarray) -> float:
-    """Épaisseur du liseré sombre autour des lettres, en pixels du brut."""
-    if not masque.any():
-        return 0.0
-    sombre = crop.astype(np.int16).sum(axis=2) < 210
-    epaisseur = 0.0
-    precedent = masque
-    for rayon in range(1, 7):
-        courant = _dilater(masque, rayon)
-        anneau = courant & ~precedent
-        precedent = courant
-        if not anneau.any():
-            break
-        if float((sombre & anneau).sum()) / float(anneau.sum()) < 0.5:
-            break
-        epaisseur = float(rayon)
-    return epaisseur
+def eroder(masque: np.ndarray, rayon: int = 2) -> np.ndarray:
+    return _voisinage(masque, rayon, True)
 
 
-# --------------------------------------------------------------------------
-# Police, largeurs, découpe
-# --------------------------------------------------------------------------
+def dilater(masque: np.ndarray, rayon: int = 1) -> np.ndarray:
+    return _voisinage(masque, rayon, False)
 
 
-def charger_police(gras: bool, taille: int) -> ImageFont.FreeTypeFont:
-    nom = POLICE_700 if gras else POLICE_600
-    return ImageFont.truetype(os.path.join(DOSSIER_POLICES, nom), max(1, int(taille)))
+def couleur_exacte(crop: np.ndarray, masque: np.ndarray) -> tuple[int, int, int] | None:
+    """Médiane des pixels du texte, après érosion.
+
+    L'érosion enlève l'anticrénelage des bords, qui tire la médiane vers la
+    couleur du fond — un blanc devient gris, un jaune devient terne.
+    """
+    coeur = eroder(masque, 2)
+    if coeur.sum() < 24:
+        coeur = masque
+    if coeur.sum() == 0:
+        return None
+    pixels = crop[coeur]
+    return tuple(int(v) for v in np.median(pixels, axis=0))
 
 
-def segmenter(texte: str) -> list[tuple[str, str]]:
-    """Découpe en morceaux ('texte' | 'emoji')."""
-    return [
-        ("emoji" if RE_EMOJI.fullmatch(p) else "texte", p)
-        for p in RE_EMOJI.split(texte)
-        if p
+def couleur_du_texte(
+    crop: np.ndarray, efface: np.ndarray, indice: tuple[int, int, int]
+) -> tuple[int, int, int]:
+    """Couleur réelle du texte, prise dans les pixels que le nettoyage a effacés.
+
+    Le LLM donne une intention — « blanc », « orange » — pas une valeur : un
+    orange annoncé #FF8C00 vaut #E8791A à l'écran, et une tolérance serrée
+    autour de l'indice ne trouve alors plus rien. Parmi les pixels qui ont
+    disparu au nettoyage, le remplissage est l'extrême : le plus clair si le
+    texte est clair, le plus sombre s'il est sombre.
+    """
+    if not efface.any():
+        return indice
+    lum = crop.astype(np.int16).sum(axis=2)
+    valeurs = lum[efface]
+    clair = sum(indice) > 380
+    seuil = np.percentile(valeurs, 92 if clair else 8)
+    coeur = efface & ((lum >= seuil) if clair else (lum <= seuil))
+    if coeur.sum() < 40:
+        return indice
+    return tuple(int(v) for v in np.median(crop[coeur], axis=0))
+
+
+def masque_zone(paire: Paire, rect: tuple[int, int, int, int], couleur: str | None):
+    """Pixels du texte : de la bonne couleur ET absents de l'image nettoyée.
+
+    L'image propre a été débarrassée de ce texte et d'elle seule : ce qui est
+    présent dans les deux ne peut pas être une lettre. C'est le filtre le plus
+    sûr — sauf sur un texte clair posé sur un fond clair, où l'écart devient
+    trop faible pour discriminer ; on retombe alors sur la couleur seule, et
+    c'est le rejet des orphelins qui fait le tri.
+    """
+    x0, y0, x1, y1 = rect
+    crop = paire.recale[y0:y1, x0:x1]
+    efface = paire.ecart[y0:y1, x0:x1] > ECART_TEXTE_MIN
+    exacte = couleur_du_texte(crop, efface, hex_vers_rgb(couleur))
+    couleurs = masque_couleur(crop, exacte)
+    filtre = couleurs & efface
+    if filtre.sum() < couleurs.sum() * 0.15:
+        return couleurs, crop, exacte
+    return filtre, crop, exacte
+
+
+# ---------------------------------------------------------------------------
+# Lignes : bandes, rejet des parasites, géométrie verticale
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Ligne:
+    """Une ligne de texte mesurée, en pixels de l'image propre."""
+
+    y0: int
+    y1: int
+    x0: int
+    x1: int
+    base: float
+    haut_x: float
+
+    @property
+    def largeur(self) -> float:
+        return float(self.x1 - self.x0)
+
+    @property
+    def hauteur_x(self) -> float:
+        return float(self.base - self.haut_x)
+
+    @property
+    def centre(self) -> float:
+        return (self.x0 + self.x1) / 2
+
+
+def bandes_horizontales(masque: np.ndarray, ecart: int = 6) -> list[tuple[int, int]]:
+    """Bandes de rangées allumées. Une bande = une ligne de texte."""
+    rangees = np.where(masque.any(axis=1))[0]
+    if len(rangees) == 0:
+        return []
+    groupes, debut, precedent = [], rangees[0], rangees[0]
+    for r in rangees[1:]:
+        if r - precedent > ecart:
+            groupes.append((int(debut), int(precedent)))
+            debut = r
+        precedent = r
+    groupes.append((int(debut), int(precedent)))
+    return groupes
+
+
+def segments(masque: np.ndarray, y0: int, y1: int, ecart: int) -> list[tuple[int, int]]:
+    """Segments horizontaux d'une bande, séparés par au moins `ecart` colonnes."""
+    colonnes = np.where(masque[y0 : y1 + 1].any(axis=0))[0]
+    if len(colonnes) == 0:
+        return []
+    runs, debut, precedent = [], colonnes[0], colonnes[0]
+    for c in colonnes[1:]:
+        if c - precedent > ecart:
+            runs.append((int(debut), int(precedent)))
+            debut = c
+        precedent = c
+    runs.append((int(debut), int(precedent)))
+    return runs
+
+
+def nettoyer_orphelins(
+    masque: np.ndarray, y0: int, y1: int
+) -> tuple[int, int] | None:
+    """Étendue horizontale du texte, sans les pixels parasites de même couleur.
+
+    Un vêtement clair, un reflet, un logo ont la couleur du texte. Ils
+    apparaissent comme des segments isolés, séparés du texte par un grand vide.
+    C'est l'erreur la plus coûteuse du burn : sur une slide de référence elle
+    faisait passer une ligne de 648 à 1019 px, et la police calée dessus était
+    fausse pour toute la slide.
+
+    Les mots d'une même ligne sont séparés d'une espace, jamais d'un vide de
+    l'ordre de la hauteur de la ligne : c'est ce qui sépare un mot d'un intrus.
+    """
+    hauteur = max(1, y1 - y0)
+    runs = segments(masque, y0, y1, ecart=max(6, int(hauteur * 0.9)))
+    if not runs:
+        return None
+    # Chaque groupe pèse son encre : le texte en a bien plus qu'un reflet.
+    poids = [
+        (int(masque[y0 : y1 + 1, a : b + 1].sum()), a, b) for a, b in runs
     ]
+    _, a, b = max(poids)
+    # On raccroche les groupes voisins qui pèsent leur part : un mot court en
+    # fin de ligne reste du texte.
+    total = max(p for p, _, _ in poids)
+    for p, ga, gb in poids:
+        if p >= total * 0.08 and min(abs(ga - b), abs(a - gb)) <= hauteur * 2.2:
+            a, b = min(a, ga), max(b, gb)
+    return a, b
 
 
-def largeur_ligne(
-    font: ImageFont.FreeTypeFont, texte: str, tracking: float, emoji: float
+def geometrie_ligne(masque: np.ndarray, y0: int, y1: int) -> tuple[float, float]:
+    """Ligne de base et haut d'x d'une ligne.
+
+    Le haut d'x est la rangée où le nombre de pixels explose : toutes les
+    minuscules commencent à la même hauteur. La ligne de base est la dernière
+    rangée où il est encore élevé, avant l'effondrement dû aux seules
+    descendantes.
+    """
+    profil = masque[y0 : y1 + 1].sum(axis=1).astype(float)
+    if profil.max() <= 0:
+        return float(y1), float(y0)
+    pic = profil.max()
+    haut_x = y0 + int(np.argmax(profil > pic * 0.45))
+    sous = np.where(profil > pic * 0.30)[0]
+    base = y0 + int(sous.max())
+    return float(base), float(haut_x)
+
+
+def mesurer_lignes(masque: np.ndarray, dx: int = 0, dy: int = 0) -> list[Ligne]:
+    """Toutes les lignes d'un masque, nettoyées et mesurées."""
+    lignes: list[Ligne] = []
+    for y0, y1 in bandes_horizontales(masque):
+        if y1 - y0 < 4:
+            continue
+        etendue = nettoyer_orphelins(masque, y0, y1)
+        if etendue is None:
+            continue
+        x0, x1 = etendue
+        propre = masque[:, x0 : x1 + 1]
+        base, haut_x = geometrie_ligne(propre, y0, y1)
+        lignes.append(
+            Ligne(
+                y0=y0 + dy,
+                y1=y1 + dy,
+                x0=x0 + dx,
+                x1=x1 + 1 + dx,
+                base=base + dy,
+                haut_x=haut_x + dy,
+            )
+        )
+    if not lignes:
+        return []
+    # Le tri se fait sur l'ENCRE, pas sur la hauteur. Les restes de détourage
+    # sont nombreux et minuscules : ils dominent en nombre, jamais en matière.
+    # Se fier à la hauteur médiane revenait à prendre le bruit pour la norme et
+    # à jeter les vraies lignes, qui sont plus hautes que lui.
+    encres = [int(masque[l.y0 - dy : l.y1 - dy + 1, l.x0 - dx : l.x1 - dx].sum()) for l in lignes]
+    plancher = max(encres) * 0.15
+    return [l for l, e in zip(lignes, encres) if e >= plancher and l.largeur > 8]
+
+
+@dataclass
+class Pastille:
+    """Boîte pleine posée derrière une ligne de texte (style TikTok « fond »)."""
+
+    couleur: tuple[int, int, int]
+    marge_x: float
+    marge_y: float
+    rayon: float
+
+
+def region_pleine(masque: np.ndarray, y0: int, y1: int) -> np.ndarray:
+    """Surface de la pastille : chaque rangée comblée d'un bord à l'autre.
+
+    Le masque de la pastille est troué — ce sont les lettres. Reboucher rangée
+    par rangée redonne la boîte, coins arrondis compris, sans aller chercher
+    une bibliothèque de morphologie.
+    """
+    region = np.zeros_like(masque)
+    for y in range(y0, min(y1 + 1, masque.shape[0])):
+        colonnes = np.where(masque[y])[0]
+        if colonnes.size:
+            region[y, colonnes[0] : colonnes[-1] + 1] = True
+    return region
+
+
+def _geometrie_pastille(
+    region: np.ndarray, lettres: np.ndarray, y0: int, y1: int
+) -> tuple[float, float, float] | None:
+    """Marges et rayon d'une pastille, depuis sa surface et ses lettres."""
+    ys, xs = np.nonzero(lettres[y0 : y1 + 1])
+    if ys.size < 30:
+        return None
+    largeurs = region[y0 : y1 + 1].sum(axis=1)
+    pleine = largeurs.max()
+    if pleine <= 0:
+        return None
+    colonnes = np.where(region[y0 : y1 + 1].any(axis=0))[0]
+    bx0, bx1 = int(colonnes[0]), int(colonnes[-1])
+    marge_x = min(xs.min() - 0, bx1 - bx0 - xs.max())
+    marge_y = min(ys.min(), (y1 - y0) - ys.max())
+    # Un coin arrondi de rayon r rétrécit la première rangée de 2r.
+    haut = largeurs[1] if len(largeurs) > 1 else largeurs[0]
+    rayon = max(0.0, float(pleine - haut) / 2)
+    return float(max(0, marge_x)), float(max(0, marge_y)), min(rayon, (y1 - y0) / 2)
+
+
+def demonter_pastille(
+    crop: np.ndarray, masque: np.ndarray, bandes: list[tuple[int, int]]
+) -> tuple[np.ndarray, tuple[int, int, int], Pastille] | None:
+    """Le LLM a donné la couleur de la BOÎTE : sort les lettres de dedans.
+
+    C'est elle qui saute aux yeux, pas les lettres — le LLM annonce donc
+    souvent « blanc » pour un texte noir sur pastille blanche. Une ligne de
+    texte noircit un tiers de sa boîte, une pastille la remplit : la différence
+    est franche, et le négatif à l'intérieur donne les lettres.
+    """
+    lettres = np.zeros_like(masque)
+    marges_x, marges_y, rayons, dedans = [], [], [], []
+    for y0, y1 in bandes:
+        if y1 - y0 < 10:
+            continue
+        region = region_pleine(masque, y0, y1)
+        surface = region[y0 : y1 + 1]
+        # Une ligne de texte noircit un tiers de sa surface ligne à ligne, une
+        # pastille les trois quarts : le seuil tombe dans un vrai creux, il
+        # n'est pas un réglage à ajuster au cas par cas.
+        if surface.sum() < 400 or masque[y0 : y1 + 1].sum() / surface.sum() < 0.62:
+            continue
+        creux = surface & ~masque[y0 : y1 + 1]
+        creux = creux & eroder(region, 3)[y0 : y1 + 1]
+        if creux.sum() < 40:
+            continue
+        lettres[y0 : y1 + 1] = creux
+        dedans.append(crop[y0 : y1 + 1][creux])
+        mesure = _geometrie_pastille(region, lettres, y0, y1)
+        if mesure:
+            marges_x.append(mesure[0])
+            marges_y.append(mesure[1])
+            rayons.append(mesure[2])
+    if not dedans or not marges_x:
+        return None
+    return (
+        lettres,
+        tuple(int(v) for v in np.median(np.concatenate(dedans), axis=0)),
+        Pastille(
+            couleur=tuple(int(v) for v in np.median(crop[masque], axis=0)),
+            marge_x=float(np.median(marges_x)),
+            marge_y=float(np.median(marges_y)),
+            rayon=float(np.median(rayons)),
+        ),
+    )
+
+
+def pastille_derriere(
+    crop: np.ndarray, lettres: np.ndarray, lignes: list["Ligne"], dx: int, dy: int
+) -> Pastille | None:
+    """Le LLM a donné la couleur des LETTRES : cherche la boîte derrière elles.
+
+    Le pourtour immédiat d'un texte posé sur photo est bariolé ; posé sur une
+    pastille, il est d'un seul ton. C'est ce que regarde cette fonction, et
+    c'est ce qui distingue les deux cas sans rien demander de plus au LLM.
+    """
+    if not lignes:
+        return None
+    hauteur = float(np.median([l.hauteur_x for l in lignes]))
+    autour = dilater(lettres, max(2, int(hauteur * 0.35))) & ~lettres
+    if autour.sum() < 200:
+        return None
+    pixels = crop[autour]
+    if float(pixels.std(axis=0).mean()) > 20:
+        return None  # fond bariolé : c'est une photo, pas une pastille
+    fond = tuple(int(v) for v in np.median(pixels, axis=0))
+
+    region = masque_couleur(crop, fond, tol=38) | lettres
+    marges_x, marges_y, rayons = [], [], []
+    for ligne in lignes:
+        y0, y1 = ligne.y0 - dy, ligne.y1 - dy
+        pleine = region_pleine(region, max(0, y0 - int(hauteur)), min(region.shape[0] - 1, y1 + int(hauteur)))
+        mesure = _geometrie_pastille(pleine, lettres, max(0, y0 - int(hauteur)), min(region.shape[0] - 1, y1 + int(hauteur)))
+        if mesure:
+            marges_x.append(mesure[0])
+            marges_y.append(mesure[1])
+            rayons.append(mesure[2])
+    if not marges_x:
+        return None
+    # Une « pastille » aussi large que l'image est un mur, pas une boîte.
+    if float(np.median(marges_x)) > crop.shape[1] * 0.25:
+        return None
+    return Pastille(
+        couleur=fond,
+        marge_x=float(np.median(marges_x)),
+        marge_y=float(np.median(marges_y)),
+        rayon=float(np.median(rayons)),
+    )
+
+
+def lignes_de_la_zone(
+    lignes: list[Ligne],
+    rect: tuple[int, int, int, int],
+    origine: list[str],
+    nom_police: str = POLICE_700,
+) -> list[Ligne]:
+    """Parmi les lignes trouvées, celles qui sont vraiment celles de la zone.
+
+    La boîte du LLM est approximative et les zones se touchent : la mesure
+    ramasse volontiers la ligne du bloc voisin, et un décalage d'une seule
+    ligne fait glisser tout le bloc d'un interligne.
+
+    Le bon critère n'est ni la position ni la régularité, c'est l'ÉCHELLE : le
+    bon alignement est celui où toutes les lignes s'accordent sur un seul
+    facteur entre leur largeur mesurée et la largeur naturelle de leur texte.
+    Un décalage d'une ligne fait diverger ces rapports aussitôt.
+    """
+    attendu = len(origine)
+    if attendu <= 0 or len(lignes) <= attendu:
+        return lignes
+    police = Police(nom_police, SONDE)
+    naturelles = [largeur_encre(police, t, 0.0, 0.0) for t in origine]
+    centre_zone = (rect[1] + rect[3]) / 2
+    hauteur_zone = max(1.0, float(rect[3] - rect[1]))
+    meilleur = None
+    for debut in range(len(lignes) - attendu + 1):
+        fenetre = lignes[debut : debut + attendu]
+        rapports = [
+            ligne.largeur / naturelle
+            for ligne, naturelle, texte in zip(fenetre, naturelles, origine)
+            if naturelle > 0 and len(texte) > 3
+        ]
+        if len(rapports) >= 2:
+            dispersion = float(np.std(rapports)) / max(1e-6, float(np.mean(rapports)))
+        else:
+            dispersion = 1.0
+        distance = abs((fenetre[0].base + fenetre[-1].base) / 2 - centre_zone) / hauteur_zone
+        note = dispersion + distance * 0.5
+        if meilleur is None or note < meilleur[0]:
+            meilleur = (note, fenetre)
+    return meilleur[1] if meilleur else lignes
+
+
+def alignement(lignes: list[Ligne]) -> str:
+    """Gauche, centre ou droite : la dispersion la plus faible gagne.
+
+    Ne jamais s'en remettre à l'œil : un bloc centré dont les lignes ont des
+    longueurs proches ressemble à un bloc ferré à gauche.
+    """
+    if len(lignes) < 2:
+        return "center"
+    etendue = lambda v: max(v) - min(v)
+    scores = {
+        "left": etendue([l.x0 for l in lignes]),
+        "center": etendue([l.centre for l in lignes]),
+        "right": etendue([l.x1 for l in lignes]),
+    }
+    return min(scores, key=scores.get)
+
+
+def interligne(lignes: list[Ligne]) -> float:
+    """Écart de ligne de base à ligne de base.
+
+    Mesuré de la première à la dernière puis divisé : l'erreur se divise
+    d'autant. Entre deux lignes voisines, elle resterait entière.
+    """
+    if len(lignes) < 2:
+        return lignes[0].hauteur_x * INTERLIGNE_FRAC if lignes else 0.0
+    return (lignes[-1].base - lignes[0].base) / (len(lignes) - 1)
+
+
+#: Largeur de la bande fouillée autour des lettres, en pixels.
+HALO = 14
+
+
+def mesurer_contour(crop: np.ndarray, masque: np.ndarray, *_ignore) -> float:
+    """Épaisseur du liseré sombre, par le rapport aire / périmètre.
+
+    Un contour d'épaisseur w autour d'une forme de périmètre P couvre à peu
+    près P × w pixels : le rapport donne w directement. Cet estimateur ne
+    dépend pas du chemin suivi depuis une lettre — donc ni des lettres qui se
+    touchent, ni de la rampe d'anticrénelage, qu'il compte simplement pour
+    moitié.
+
+    Il reste biaisé (le seuil du masque ronge le bord des lettres), mais le
+    même estimateur sert sur l'original et sur le rendu de contrôle : c'est là
+    que le biais s'annule, pas ici.
+    """
+    if masque.sum() < 40:
+        return 0.0
+    perimetre = masque & ~eroder(masque, 1)
+    p = int(perimetre.sum())
+    if p < 20:
+        return 0.0
+    halo = dilater(masque, HALO) & ~masque
+    if not halo.any():
+        return 0.0
+    sombre = crop.astype(np.int16).sum(axis=2) < 230
+    # Un fond déjà sombre rendrait la mesure absurde. On le juge LOIN des
+    # lettres : tout près, c'est le contour lui-même qui noircit, et s'en
+    # servir comme garde-fou reviendrait à écarter les contours épais, ceux
+    # qu'on cherche justement à mesurer.
+    loin = dilater(masque, HALO * 2) & ~dilater(masque, HALO)
+    if loin.any() and float((sombre & loin).sum()) / float(loin.sum()) > 0.6:
+        return 0.0
+    return float((sombre & halo).sum()) / p
+
+
+# ---------------------------------------------------------------------------
+# Calibration : taille, graisse, interlettrage
+# ---------------------------------------------------------------------------
+
+SONDE = 100.0
+
+
+def taille_par_largeur(
+    nom: str, echantillons: list[tuple[str, float]]
+) -> tuple[float, list[float]] | None:
+    """Taille qui reproduit les largeurs mesurées, à interlettrage NUL.
+
+    Surtout pas par la hauteur d'x : le seuil du masque la gonfle de deux ou
+    trois pixels de chaque côté sur du texte adouci par la compression. Une
+    taille calée dessus est trop grande de 8 à 10 %, et le tracking négatif
+    qu'il faut alors pour retomber sur la bonne largeur colle les mots entre
+    eux. La largeur, elle, porte des dizaines de glyphes : le seuil s'y dilue.
+    """
+    police = Police(nom, SONDE)
+    emoji = police.hauteur_x() * EMOJI_FRAC
+    ratios = []
+    for texte, cible in echantillons:
+        largeur = largeur_encre(police, texte, 0.0, emoji)
+        if largeur > 0 and cible > 0:
+            ratios.append(cible / largeur)
+    if not ratios:
+        return None
+    # Une ligne mal mesurée donne un ratio isolé : la médiane l'ignore, et on
+    # écarte franchement ce qui s'en éloigne de plus de 8 %.
+    mediane = float(np.median(ratios))
+    gardes = [r for r in ratios if abs(r - mediane) / mediane <= 0.08] or [mediane]
+    return SONDE * float(np.mean(gardes)), [round(r, 3) for r in ratios]
+
+
+def choisir_graisse(
+    echantillons: list[tuple[str, float]], hauteur_x: float
+) -> tuple[str, float, dict[str, float]]:
+    """Entre deux graisses, celle dont les proportions collent au modèle.
+
+    Pour chaque candidate : la taille déduite de la largeur, et celle déduite
+    de la hauteur d'x. Leur rapport dit si la police a les bonnes proportions.
+    Le score ne distingue pas deux polices de mêmes proportions — ici il ne
+    tranche qu'entre deux graisses de la même famille, ce qu'il sait faire.
+    """
+    scores: dict[str, float] = {}
+    tailles: dict[str, float] = {}
+    for nom in (POLICE_700, POLICE_600):
+        par_largeur = taille_par_largeur(nom, echantillons)
+        if par_largeur is None:
+            continue
+        taille, _ = par_largeur
+        sonde = Police(nom, 1000)
+        par_hauteur = hauteur_x / (sonde.hauteur_x() / 1000.0) if hauteur_x > 0 else taille
+        tailles[nom] = taille
+        scores[nom] = abs(taille / par_hauteur - 1.0) if par_hauteur > 0 else 1.0
+    if not scores:
+        return POLICE_700, 0.0, {}
+    gagnante = min(scores, key=scores.get)
+    return gagnante, tailles[gagnante], {k: round(v, 3) for k, v in scores.items()}
+
+
+def ajuster_tracking(
+    police: Police, echantillons: list[tuple[str, float]], emoji: float
 ) -> float:
-    total, n = 0.0, 0
+    """Interlettrage, seulement si la taille seule n'explique pas les largeurs.
+
+    Un tracking introduit pour rattraper trois pour cent d'erreur est du bruit
+    déguisé en réglage ; au-delà, c'est une vraie caractéristique du texte.
+    """
+    erreurs, ecarts = [], []
+    for texte, cible in echantillons:
+        largeur = largeur_encre(police, texte, 0.0, emoji)
+        glyphes = sum(1 for _ in _glyphes(texte))
+        if largeur <= 0 or glyphes < 2:
+            continue
+        erreurs.append(abs(cible - largeur) / cible)
+        ecarts.append((cible - largeur) / (glyphes - 1))
+    if not ecarts or float(np.median(erreurs)) < ERREUR_LARGEUR_MIN:
+        return 0.0
+    tracking = float(np.median(ecarts))
+    return max(TRACKING_MIN_EM * police.taille, min(TRACKING_MAX_EM * police.taille, tracking))
+
+
+def _glyphes(texte: str):
     for genre, morceau in segmenter(texte):
         if genre == "emoji":
-            total += emoji
-            n += 1
+            yield morceau
         else:
-            for c in morceau:
-                total += font.getlength(c)
-                n += 1
-    return total + tracking * max(0, n - 1)
+            yield from morceau
 
 
-def hauteur_encre(font: ImageFont.FreeTypeFont, texte: str) -> float:
-    """Hauteur réellement noircie par ce texte — pas la boîte de la police."""
-    nettoye = "".join(m for g, m in segmenter(texte) if g == "texte")
-    if not nettoye.strip():
-        nettoye = "Hx"
-    bbox = font.getbbox(nettoye)
-    return float(bbox[3] - bbox[1])
-
-
-def taille_pour_encre(gras: bool, texte: str, cible: float) -> int:
-    """Plus petite taille dont l'encre de ce texte atteint la mesure."""
-    bas, haut = 6, 600
-    while bas < haut:
-        milieu = (bas + haut) // 2
-        if hauteur_encre(charger_police(gras, milieu), texte) < cible:
-            bas = milieu + 1
-        else:
-            haut = milieu
-    return max(6, bas)
-
-
-def tracking_pour_largeur(
-    font: ImageFont.FreeTypeFont, texte: str, cible: float, emoji: float
+def boite_de_coupe(
+    police: Police, lignes_origine: list[str], tracking: float, emoji: float
 ) -> float:
-    n = sum(1 for g, m in segmenter(texte) for _ in (m if g == "texte" else "e"))
-    if n < 2:
-        return 0.0
-    ecart = (cible - largeur_ligne(font, texte, 0.0, emoji)) / (n - 1)
-    # Au-delà, c'est la mesure ou la police qui est fausse — on ne force pas.
-    return max(-6.0, min(6.0, ecart))
+    """Largeur de la zone de texte de l'application d'origine.
 
-
-def nb_glyphes(texte: str) -> int:
-    return sum(1 if g == "emoji" else len(m) for g, m in segmenter(texte))
-
-
-def calibrer(
-    gras: bool, echantillons: list[tuple[str, float]]
-) -> tuple[int, float] | None:
-    """Taille et interlettrage qui reproduisent les largeurs mesurées.
-
-    Deux inconnues, une équation par ligne : `largeur = taille × u + tracking ×
-    (glyphes − 1)`. Avec deux lignes de longueurs différentes, le système est
-    déterminé ; au-delà, on prend les moindres carrés.
+    Elle est inconnue, mais encadrée : au moins la ligne la plus large, au plus
+    cette ligne augmentée du premier mot de la suivante — ce mot n'y tenait
+    pas. On prend la valeur de l'intervalle qui redonne EXACTEMENT les coupures
+    d'origine ; si aucune ne le fait, le milieu.
     """
-    REF = 200
-    police = charger_police(gras, REF)
-    obs = [
-        (largeur_ligne(police, t, 0.0, 0.0) / REF, float(nb_glyphes(t) - 1), w)
-        for t, w in echantillons
-        if t and len(t) > 3 and not RE_EMOJI.search(t)
-    ]
-    obs = [o for o in obs if o[0] > 0 and o[1] > 0]
-    if not obs:
-        return None
-    if len(obs) >= 2:
-        saa = sum(u * u for u, _, _ in obs)
-        sab = sum(u * n for u, n, _ in obs)
-        sbb = sum(n * n for _, n, _ in obs)
-        saw = sum(u * w for u, _, w in obs)
-        sbw = sum(n * w for _, n, w in obs)
-        det = saa * sbb - sab * sab
-        if abs(det) > 1e-9:
-            taille = (saw * sbb - sbw * sab) / det
-            tracking = (sbw * saa - saw * sab) / det
-        else:
-            taille, tracking = sum(w / u for u, _, w in obs) / len(obs), 0.0
-    else:
-        taille, tracking = obs[0][2] / obs[0][0], 0.0
-    # Un interlettrage délirant veut dire que la mesure ou la police est fausse.
-    limite = TRACKING_MAX_FRAC * max(1.0, taille)
-    if not (-limite <= tracking <= limite) or taille <= 0:
-        tracking = max(-limite, min(limite, tracking))
-        taille = sum((w - tracking * n) / u for u, n, w in obs) / len(obs)
-    taille = max(6, int(round(taille)))
-    # Dernier ajustement avec la police à sa taille réelle (le hinting arrondit).
-    police = charger_police(gras, taille)
-    restes = [
-        (w - largeur_ligne(police, t, 0.0, 0.0)) / max(1, nb_glyphes(t) - 1)
-        for (t, w), (_, _, _) in zip(
-            [e for e in echantillons if e[0] and len(e[0]) > 3 and not RE_EMOJI.search(e[0])],
-            obs,
+    largeurs = [largeur_encre(police, l, tracking, emoji) for l in lignes_origine]
+    if not largeurs:
+        return 0.0
+    basse = max(largeurs)
+    i = int(np.argmax(largeurs))
+    haute = basse * 1.12
+    if i + 1 < len(lignes_origine):
+        suite = lignes_origine[i + 1].split()
+        if suite:
+            haute = largeur_encre(
+                police, f"{lignes_origine[i]} {suite[0]}", tracking, emoji
+            )
+    if haute <= basse:
+        haute = basse * 1.12
+
+    texte = " ".join(lignes_origine)
+    for part in (0.5, 0.35, 0.65, 0.2, 0.8):
+        essai = basse + (haute - basse) * part
+        if couper_lignes(police, texte, essai, tracking, emoji) == lignes_origine:
+            return essai
+    return (basse + haute) / 2
+
+
+# ---------------------------------------------------------------------------
+# Le style d'une zone : ce que la mesure a conclu
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Style:
+    """Contrat entre la mesure et le rendu. Tout est en pixels du propre."""
+
+    police: str
+    taille: float
+    tracking: float
+    couleur: tuple[int, int, int]
+    alignement: str
+    ancre_x: float
+    base: float
+    interligne: float
+    largeur_boite: float
+    contour: float = 0.0
+    couleur_contour: tuple[int, int, int] = (0, 0, 0)
+    pastille: "Pastille | None" = None
+    ombre: dict = field(default_factory=dict)
+    hauteur_x: float = 0.0
+    mesure: bool = True
+    lignes_origine: list[str] = field(default_factory=list)
+    lignes_mesurees: list[Ligne] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    #: Masque mesuré sur l'original, et de quoi le recomparer après rendu.
+    reference: np.ndarray | None = None
+    rect: tuple[int, int, int, int] = (0, 0, 0, 0)
+    echantillons: list[tuple[str, float]] = field(default_factory=list)
+
+    @property
+    def emoji(self) -> float:
+        return self.hauteur_x * EMOJI_FRAC
+
+
+def analyser_zone(paire: Paire, zone: dict, gras: bool = True) -> Style:
+    """Mesure une zone de la slide d'origine et en tire un style."""
+    rect = paire.rect(zone)
+    x0, y0, x1, y1 = rect
+    notes: list[str] = []
+    origine = (zone.get("texte") or "").strip()
+    # Les paragraphes vides sont gardés : dans l'image, un saut de paragraphe
+    # occupe une ligne. Les retirer tassait le bloc rendu contre le mesuré et
+    # faisait échouer l'appariement sur toutes les slides bavardes.
+    lignes_origine = [l.strip() for l in origine.split("\n")]
+    while lignes_origine and not lignes_origine[0]:
+        lignes_origine.pop(0)
+    while lignes_origine and not lignes_origine[-1]:
+        lignes_origine.pop()
+    pleines = [l for l in lignes_origine if l]
+
+    if x1 - x0 < 8 or y1 - y0 < 8:
+        return _style_de_repli(paire, rect, zone, gras, ["zone trop petite"])
+
+    masque, crop, couleur = masque_zone(paire, rect, zone.get("couleur"))
+    pastille = demonter_pastille(crop, masque, bandes_horizontales(masque))
+    if pastille is not None:
+        masque, couleur, boite = pastille
+        notes.append(
+            f"texte sur pastille {'#%02X%02X%02X' % boite.couleur} "
+            f"(marges {boite.marge_x:.0f}×{boite.marge_y:.0f}, rayon {boite.rayon:.0f})"
         )
+    toutes = mesurer_lignes(masque, dx=x0, dy=y0)
+    if not toutes:
+        return _style_de_repli(paire, rect, zone, gras, ["aucun pixel de texte mesurable"])
+    lignes = lignes_de_la_zone(toutes, rect, pleines, POLICE_700 if gras else POLICE_600)
+    if len(lignes) < len(toutes):
+        notes.append(f"{len(toutes) - len(lignes)} ligne(s) hors zone écartée(s)")
+
+    # L'autre sens : le LLM a donné la couleur des lettres, et il y a peut-être
+    # une pastille derrière elles.
+    pastille_mesuree = (
+        pastille[2] if pastille is not None
+        else pastille_derriere(crop, masque, lignes, x0, y0)
+    )
+    if pastille is None and pastille_mesuree is not None:
+        notes.append(
+            f"pastille détectée derrière le texte "
+            f"{'#%02X%02X%02X' % pastille_mesuree.couleur} "
+            f"(marges {pastille_mesuree.marge_x:.0f}×{pastille_mesuree.marge_y:.0f}, "
+            f"rayon {pastille_mesuree.rayon:.0f})"
+        )
+
+    hauteur_x = float(np.median([l.hauteur_x for l in lignes]))
+
+    # Deux tailles dans un même bloc : la hauteur d'x le dit. On cale sur le
+    # groupe dominant plutôt que sur une moyenne qui ne conviendrait à aucun.
+    groupe = [l for l in lignes if abs(l.hauteur_x - hauteur_x) <= hauteur_x * 0.18]
+    if len(groupe) < len(lignes):
+        notes.append(
+            f"tailles multiples dans la zone ({len(lignes) - len(groupe)} ligne(s) à l'écart)"
+        )
+
+    # La calibration apparie ligne d'origine et ligne mesurée : sans
+    # correspondance une pour une, elle mesurerait n'importe quoi.
+    appariables = len(pleines) == len(lignes)
+    if not appariables:
+        notes.append(
+            f"{len(pleines)} ligne(s) lues par le LLM pour {len(lignes)} mesurée(s)"
+        )
+    echantillons = [
+        (pleines[i], lignes[i].largeur)
+        for i in range(len(lignes))
+        if appariables
+        and len(pleines[i]) > 3
+        and not RE_EMOJI.search(pleines[i])
+        and lignes[i] in groupe
     ]
-    tracking = round(sum(restes) / len(restes), 2) if restes else 0.0
-    limite = TRACKING_MAX_FRAC * taille
-    return taille, max(-limite, min(limite, tracking))
+
+    if echantillons:
+        nom, taille, scores = choisir_graisse(echantillons, hauteur_x)
+        del scores  # le recouvrement des masques tranchera mieux, après rendu
+    else:
+        nom = POLICE_700 if gras else POLICE_600
+        sonde = Police(nom, 1000)
+        taille = hauteur_x / (sonde.hauteur_x() / 1000.0)
+        notes.append("taille calée sur la hauteur d'x, faute de lignes appariables")
+
+    police = Police(nom, taille)
+    emoji = hauteur_x * EMOJI_FRAC
+    tracking = ajuster_tracking(police, echantillons, emoji) if echantillons else 0.0
+
+    align = alignement(lignes)
+    ancre_x = (
+        min(l.x0 for l in lignes)
+        if align == "left"
+        else max(l.x1 for l in lignes)
+        if align == "right"
+        else float(np.mean([l.centre for l in lignes]))
+    )
+
+    contour = 0.0 if pastille_mesuree is not None else mesurer_contour(crop, masque)
+    if contour <= 0 and pastille_mesuree is None and zone.get("ombre"):
+        contour = hauteur_x * CONTOUR_FRAC
+        notes.append("contour non mesuré, repli sur le signalement du LLM")
+
+    largeur_boite = (
+        boite_de_coupe(police, pleines, tracking, emoji)
+        if appariables and len(pleines) > 1
+        else max(l.largeur for l in lignes) * 1.06
+    )
+
+    style = Style(
+        police=nom,
+        taille=taille,
+        tracking=tracking,
+        couleur=couleur,
+        alignement=align,
+        ancre_x=ancre_x,
+        base=lignes[0].base,
+        interligne=interligne(lignes),
+        largeur_boite=largeur_boite,
+        contour=contour,
+        pastille=pastille_mesuree,
+        # Sans contour ni pastille, un texte clair sur photo tient par une
+        # ombre discrète — avec pastille, le fond fait déjà ce travail.
+        ombre={} if contour > 0 or pastille_mesuree is not None else {"alpha": 0.38, "blur": max(2, hauteur_x * 0.06), "dx": 0, "dy": max(1, hauteur_x * 0.03)},
+        hauteur_x=hauteur_x,
+        mesure=True,
+        lignes_origine=lignes_origine,
+        lignes_mesurees=lignes,
+        notes=notes,
+    )
+    haut = int(max(0, min(l.y0 for l in lignes) - y0 - hauteur_x))
+    bas = int(min(masque.shape[0], max(l.y1 for l in lignes) - y0 + hauteur_x))
+    borne = np.zeros_like(masque)
+    borne[haut:bas] = masque[haut:bas]
+    style.reference = borne
+    style.rect = rect
+    style.echantillons = echantillons
+    return style
 
 
-def couper_lignes(
-    font: ImageFont.FreeTypeFont, texte: str, largeur_max: float, tracking: float, emoji: float
-) -> list[str]:
-    """Coupe au mot, sur la largeur mesurée sur le brut — comme TikTok."""
-    lignes: list[str] = []
-    for paragraphe in texte.split("\n"):
-        mots = paragraphe.split()
-        if not mots:
-            lignes.append("")
-            continue
-        courante = mots[0]
-        for mot in mots[1:]:
-            essai = f"{courante} {mot}"
-            if largeur_ligne(font, essai, tracking, emoji) <= largeur_max:
-                courante = essai
-            else:
-                lignes.append(courante)
-                courante = mot
-        lignes.append(courante)
-    return lignes
+def _style_de_repli(
+    paire: Paire, rect: tuple[int, int, int, int], zone: dict, gras: bool, notes: list[str]
+) -> Style:
+    """Rien de mesurable : on se cale sur la boîte donnée par le LLM."""
+    x0, y0, x1, y1 = rect
+    nb = max(1, int(zone.get("nbLignes") or 1))
+    inter = (y1 - y0) / nb
+    hauteur_x = inter / INTERLIGNE_FRAC
+    nom = POLICE_700 if gras else POLICE_600
+    sonde = Police(nom, 1000)
+    return Style(
+        police=nom,
+        taille=hauteur_x / (sonde.hauteur_x() / 1000.0),
+        tracking=0.0,
+        couleur=hex_vers_rgb(zone.get("couleur")),
+        alignement="center",
+        ancre_x=(x0 + x1) / 2,
+        base=y0 + inter * 0.78,
+        interligne=inter,
+        largeur_boite=float(x1 - x0),
+        contour=hauteur_x * CONTOUR_FRAC if zone.get("ombre") else 0.0,
+        ombre={} if zone.get("ombre") else {"alpha": 0.38, "blur": 3, "dx": 0, "dy": 2},
+        hauteur_x=hauteur_x,
+        mesure=False,
+        notes=notes,
+    )
 
 
-# --------------------------------------------------------------------------
-# Emojis
-# --------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Rendu
+# ---------------------------------------------------------------------------
 
 _cache_emoji: dict[str, Image.Image | None] = {}
 
 
 def image_emoji(sequence: str) -> Image.Image | None:
-    points = [c for c in sequence if c not in ("️",)]
-    cle = "-".join(f"{ord(c):x}" for c in points)
+    cle = "-".join(f"{ord(c):x}" for c in sequence if c not in ("️",))
     if not cle:
         return None
     if cle in _cache_emoji:
@@ -379,326 +1114,393 @@ def image_emoji(sequence: str) -> Image.Image | None:
     return img
 
 
-# --------------------------------------------------------------------------
-# Analyse d'une zone
-# --------------------------------------------------------------------------
+def _bases(style: Style, nb: int) -> list[float]:
+    """Ligne de base de chaque ligne, ancrée sur celle de l'original.
 
-
-@dataclass
-class Paire:
-    """Le brut ramené dans le cadre de l'image propre, et leur écart."""
-
-    propre: Image.Image
-    recale: np.ndarray
-    ecart: np.ndarray
-    recalage: Recalage
-    taille_brut: tuple[int, int]
-
-    def vers_propre_rect(self, zone: dict) -> tuple[int, int, int, int]:
-        bw, bh = self.taille_brut
-        xf, yf = float(zone.get("x", 0.0)), float(zone.get("y", 0.0))
-        wf, hf = float(zone.get("w", 1.0)), float(zone.get("h", 1.0))
-        x0, y0 = self.recalage.vers_propre(xf * bw, yf * bh)
-        x1, y1 = self.recalage.vers_propre((xf + wf) * bw, (yf + hf) * bh)
-        W, H = self.propre.size
-        return (
-            max(0, min(W - 1, int(x0))),
-            max(0, min(H - 1, int(y0))),
-            max(1, min(W, int(x1))),
-            max(1, min(H, int(y1))),
-        )
-
-
-def preparer(brut: Image.Image, propre: Image.Image) -> Paire:
-    """Recale le brut sur l'image propre et calcule leur écart pixel à pixel."""
-    brut = brut.convert("RGB")
-    propre = propre.convert("RGB")
-    r = recaler(brut.size, propre.size)
-    bw, bh = brut.size
-    recale = brut.resize(
-        propre.size, Image.LANCZOS, box=(r.ox, r.oy, bw - r.ox, bh - r.oy)
-    )
-    ecart = np.abs(
-        np.asarray(recale).astype(np.int16) - np.asarray(propre).astype(np.int16)
-    ).sum(axis=2)
-    return Paire(propre, np.asarray(recale), ecart, r, brut.size)
-
-
-def masque_zone(paire: Paire, rect: tuple[int, int, int, int], couleur: str | None):
-    """Pixels du texte : de la bonne couleur ET absents de l'image nettoyée.
-
-    L'image propre a justement été débarrassée de ce texte : l'écart entre les
-    deux est le repère le plus sûr — un tableau blanc derrière les lettres ne
-    trompe plus la mesure.
+    Ancrer par le haut du texte serait faux : les accents français montent plus
+    haut que les capitales anglaises et décaleraient toute la ligne. Quand la
+    traduction prend une ligne de plus, le bloc remonte d'un demi-interligne
+    pour rester centré au même endroit.
     """
-    x0, y0, x1, y1 = rect
-    crop = paire.recale[y0:y1, x0:x1]
-    masque = masque_texte(crop, couleur)
-    efface = paire.ecart[y0:y1, x0:x1] > ECART_TEXTE_MIN
-    filtre = masque & efface
-    # Texte clair sur fond clair : l'écart avec le propre est trop faible pour
-    # servir de filtre. On retombe alors sur la couleur seule, moins sûre mais
-    # meilleure que pas de mesure du tout.
-    if filtre.sum() < masque.sum() * 0.15:
-        return masque, crop
-    return filtre, crop
+    origine = len(style.lignes_origine) or nb
+    decalage = -(nb - origine) * style.interligne / 2
+    return [style.base + decalage + i * style.interligne for i in range(nb)]
 
 
-def _coherent(gras: bool, taille: int, lignes: list[str], encre: float) -> bool:
-    """La taille trouvée par les largeurs doit rester plausible en hauteur."""
-    if not lignes or encre <= 0:
-        return False
-    police = charger_police(gras, taille)
-    rendue = max(hauteur_encre(police, l) for l in lignes)
-    return 0.7 <= rendue / encre <= 1.45
+def calques(
+    taille: tuple[int, int], lignes: list[str], style: Style, rapide: bool = False
+) -> tuple[Image.Image, Image.Image, Image.Image]:
+    """Masques du remplissage et du contour, plus le calque des emojis.
 
-
-def analyser_zone(paire: Paire, zone: dict, gras: bool = True) -> Reglages:
-    """Mesure la zone et rend des réglages en pixels de l'image propre."""
-    rect = paire.vers_propre_rect(zone)
-    x0, y0, x1, y1 = rect
-    couleur = zone.get("couleur") or "#FFFFFF"
-    origine = (zone.get("texte") or "").strip()
-
-    bandes: list[Bande] = []
-    contour = 0.0
-    if x1 - x0 > 8 and y1 - y0 > 8:
-        masque, crop = masque_zone(paire, rect, couleur)
-        bandes = mesurer_bandes(masque)
-        contour = mesurer_contour(crop, masque)
-        for b in bandes:  # repère de l'image propre entière
-            b.y0 += y0
-            b.y1 += y0
-            b.x0 += x0
-            b.x1 += x0
-
-    lignes_origine = [l for l in origine.split("\n") if l.strip()]
-    if not bandes:
-        return _reglages_de_repli(paire, rect, zone, gras)
-
-    # Taille et interlettrage : déduits des largeurs de ligne mesurées, qui
-    # portent bien plus d'information que la hauteur (des dizaines de glyphes
-    # contre une seule dimension, et sans le flou des bords du détourage).
-    ref = max(range(len(bandes)), key=lambda i: bandes[i].largeur)
-    encre = float(bandes[ref].hauteur)
-    reglage = calibrer(
-        gras,
-        [
-            (lignes_origine[i], float(bandes[i].largeur))
-            for i in range(min(len(bandes), len(lignes_origine)))
-        ],
-    )
-    if reglage is None or not _coherent(gras, reglage[0], lignes_origine, encre):
-        ref_texte = (
-            lignes_origine[ref]
-            if ref < len(lignes_origine)
-            else (lignes_origine[0] if lignes_origine else "Hx")
-        )
-        taille = taille_pour_encre(gras, ref_texte, encre)
-        tracking = tracking_pour_largeur(
-            charger_police(gras, taille),
-            ref_texte,
-            float(bandes[ref].largeur),
-            encre * EMOJI_FRAC,
-        )
-    else:
-        taille, tracking = reglage
-
-    # Interligne : écart médian entre hauts de bandes consécutives.
-    if len(bandes) > 1:
-        deltas = sorted(bandes[i + 1].y0 - bandes[i].y0 for i in range(len(bandes) - 1))
-        interligne = float(deltas[len(deltas) // 2])
-    else:
-        interligne = encre * INTERLIGNE_FRAC
-
-    if contour <= 0 and zone.get("ombre"):
-        contour = encre * CONTOUR_FRAC
-
-    # Alignement : des bords gauches alignés trahissent un fer à gauche.
-    if len(bandes) > 1:
-        ecart_gauche = max(b.x0 for b in bandes) - min(b.x0 for b in bandes)
-        ecart_centre = max(b.centre_x for b in bandes) - min(b.centre_x for b in bandes)
-        alignement = "left" if ecart_gauche + 4 < ecart_centre else "center"
-    else:
-        alignement = "center"
-
-    return Reglages(
-        taille=taille,
-        tracking=tracking,
-        contour=round(contour, 2),
-        interligne=round(interligne, 2),
-        # TikTok coupe un peu après la plus longue ligne observée.
-        largeur_wrap=round(max(b.largeur for b in bandes) * MARGE_WRAP, 1),
-        alignement=alignement,
-        ancre_x=round(
-            min(b.x0 for b in bandes)
-            if alignement == "left"
-            else sum(b.centre_x for b in bandes) / len(bandes),
-            1,
-        ),
-        ancre_y=round((bandes[0].y0 + bandes[-1].y1) / 2, 1),
-        encre=round(encre, 2),
-        mesure=True,
-        bandes=bandes,
-    )
-
-
-def _reglages_de_repli(
-    paire: Paire, rect: tuple[int, int, int, int], zone: dict, gras: bool
-) -> Reglages:
-    """Rien de mesurable : on se cale sur la boîte donnée par le LLM."""
-    x0, y0, x1, y1 = rect
-    lignes = max(1, int(zone.get("nbLignes") or 1))
-    interligne = (y1 - y0) / lignes
-    encre = interligne / INTERLIGNE_FRAC
-    return Reglages(
-        taille=taille_pour_encre(gras, (zone.get("texte") or "Hx"), encre),
-        tracking=0.0,
-        contour=encre * CONTOUR_FRAC if zone.get("ombre") else 0.0,
-        interligne=round(interligne, 2),
-        largeur_wrap=float(x1 - x0),
-        alignement="center",
-        ancre_x=round((x0 + x1) / 2, 1),
-        ancre_y=round((y0 + y1) / 2, 1),
-        encre=round(encre, 2),
-        mesure=False,
-    )
-
-
-# --------------------------------------------------------------------------
-# Rendu
-# --------------------------------------------------------------------------
-
-
-def disposer(
-    font: ImageFont.FreeTypeFont, lignes: list[str], reglages: Reglages, emoji: float
-) -> tuple[list[tuple[float, float]], tuple[float, float, float, float]]:
-    """Point de base de chaque ligne, et la boîte d'encre du bloc entier.
-
-    Le bloc est centré sur l'ancre mesurée sur l'original : la traduction peut
-    prendre une ligne de plus sans décoller du sujet de la photo.
+    On ne dessine jamais en couleur directement : des masques en niveaux de
+    gris, dessinés trois fois plus grand puis réduits, donnent des bords nets
+    et un contour qui ne mange pas le remplissage.
     """
-    ascent, _ = font.getmetrics()
-    hauts, bas, largeurs = [], [], []
-    for i, ligne in enumerate(lignes):
-        base = i * reglages.interligne
-        nettoye = "".join(m for g, m in segmenter(ligne) if g == "texte") or "Hx"
-        bbox = font.getbbox(nettoye)
-        haut = base - ascent + bbox[1]
-        bas_ = base - ascent + bbox[3]
-        if RE_EMOJI.search(ligne):  # un emoji déborde de la boîte des lettres
-            haut = min(haut, base - emoji * 0.86)
-            bas_ = max(bas_, base + emoji * 0.14)
-        hauts.append(haut)
-        bas.append(bas_)
-        largeurs.append(largeur_ligne(font, ligne, reglages.tracking, emoji))
-    if not hauts:
-        return [], (0.0, 0.0, 0.0, 0.0)
-    dy = reglages.ancre_y - (min(hauts) + max(bas)) / 2
-    points = []
-    for i, largeur in enumerate(largeurs):
-        x = (
-            reglages.ancre_x - largeur / 2
-            if reglages.alignement == "center"
-            else reglages.ancre_x
-        )
-        points.append((x, i * reglages.interligne + dy))
-    x0 = min(p[0] for p in points)
-    x1 = max(p[0] + w for p, w in zip(points, largeurs))
-    return points, (x0, min(hauts) + dy, x1, max(bas) + dy)
+    W, H = taille
+    # Le supersampling ne sert qu'à la netteté des bords ; pendant la recherche
+    # de taille, seule la forme compte et chaque rendu est payé douze fois.
+    s = 1 if rapide else SUPERSAMPLE
+    remplissage = Image.new("L", (W * s, H * s), 0)
+    contour = Image.new("L", (W * s, H * s), 0)
+    fond = Image.new("L", (W * s, H * s), 0)
+    emojis = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    dr = ImageDraw.Draw(remplissage)
+    dc = ImageDraw.Draw(contour)
+    df = ImageDraw.Draw(fond)
 
+    police = Police(style.police, style.taille * s)
+    emoji_px = style.emoji
+    trait = int(round(style.contour * s))
 
-def _mise_a_echelle(reglages: Reglages, s: int) -> Reglages:
-    return Reglages(
-        taille=reglages.taille * s,
-        tracking=reglages.tracking * s,
-        contour=reglages.contour * s,
-        interligne=reglages.interligne * s,
-        largeur_wrap=reglages.largeur_wrap * s,
-        alignement=reglages.alignement,
-        ancre_x=reglages.ancre_x * s,
-        ancre_y=reglages.ancre_y * s,
-        encre=reglages.encre * s,
-    )
-
-
-def dessiner_zone(
-    sortie: Image.Image,
-    texte: str,
-    reglages: Reglages,
-    couleur: str | None = "#FFFFFF",
-    gras: bool = True,
-) -> list[str]:
-    """Incruste le texte sur `sortie` (RGBA) et rend les lignes obtenues.
-
-    Le dessin se fait quatre fois plus grand puis est réduit — les bords sont
-    nets — mais seulement sur la boîte du texte : un calque plein format à
-    cette échelle coûterait des centaines de mégaoctets.
-    """
-    s = SUPERSAMPLE
-    police = charger_police(gras, reglages.taille)
-    emoji = reglages.encre * EMOJI_FRAC
-    lignes = couper_lignes(police, texte, reglages.largeur_wrap, reglages.tracking, emoji)
-    if not any(l.strip() for l in lignes):
-        return []
-    _, boite = disposer(police, lignes, reglages, emoji)
-
-    marge = reglages.contour + reglages.taille * 0.25 + 4
-    bx0 = int(max(0, boite[0] - marge))
-    by0 = int(max(0, boite[1] - marge))
-    bx1 = int(min(sortie.width, boite[2] + marge))
-    by1 = int(min(sortie.height, boite[3] + marge))
-    if bx1 - bx0 < 2 or by1 - by0 < 2:
-        return lignes
-
-    grand = _mise_a_echelle(reglages, s)
-    grand.ancre_x -= bx0 * s
-    grand.ancre_y -= by0 * s
-    police_s = charger_police(gras, reglages.taille * s)
-    points, _ = disposer(police_s, lignes, grand, emoji * s)
-
-    calque = Image.new("RGBA", ((bx1 - bx0) * s, (by1 - by0) * s), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(calque)
-    remplissage = _hex_vers_rgb(couleur) + (255,)
-    contour = max(0, int(round(grand.contour)))
-
-    # Deux passes : tout le contour noir d'abord, le texte par-dessus. Sinon le
-    # contour d'une lettre viendrait mordre la lettre précédente.
-    for passe in ("contour", "texte"):
-        if passe == "contour" and contour <= 0:
+    for ligne, base in zip(lignes, _bases(style, len(lignes))):
+        if not ligne:
             continue
-        for ligne, (x0, base) in zip(lignes, points):
-            x = x0
-            for genre, morceau in segmenter(ligne):
-                if genre == "emoji":
-                    if passe == "texte":
-                        vignette = image_emoji(morceau)
-                        if vignette is not None:
-                            cote = max(1, int(round(emoji * s)))
-                            calque.alpha_composite(
-                                vignette.resize((cote, cote), Image.LANCZOS),
-                                (int(round(x)), int(round(base - emoji * s * 0.86))),
-                            )
-                    x += emoji * s + grand.tracking
-                    continue
-                for c in morceau:
-                    if passe == "contour":
-                        draw.text(
-                            (x, base),
-                            c,
-                            font=police_s,
-                            fill=(0, 0, 0, 255),
-                            anchor="ls",
-                            stroke_width=contour,
-                            stroke_fill=(0, 0, 0, 255),
-                        )
-                    else:
-                        draw.text(
-                            (x, base), c, font=police_s, fill=remplissage, anchor="ls"
-                        )
-                    x += police_s.getlength(c) + grand.tracking
-    sortie.alpha_composite(calque.resize((bx1 - bx0, by1 - by0), Image.LANCZOS), (bx0, by0))
-    return lignes
+        items, largeur, gauche = disposer(
+            police, ligne, style.tracking * s, emoji_px * s
+        )
+        if style.alignement == "left":
+            depart = style.ancre_x * s - gauche
+        elif style.alignement == "right":
+            depart = style.ancre_x * s - largeur - gauche
+        else:
+            depart = style.ancre_x * s - largeur / 2 - gauche
+        y = base * s
+        if style.pastille is not None:
+            # La boîte se cale sur l'encre de SA ligne, comme dans l'original :
+            # une pastille par ligne, jamais un bandeau unique.
+            p = style.pastille
+            haut = y - (style.hauteur_x + p.marge_y) * s
+            bas = y + (style.hauteur_x * 0.32 + p.marge_y) * s
+            df.rounded_rectangle(
+                [depart + gauche - p.marge_x * s, haut,
+                 depart + gauche + largeur + p.marge_x * s, bas],
+                radius=max(0.0, p.rayon * s),
+                fill=255,
+            )
+        for genre, contenu, x in items:
+            if genre == "emoji":
+                vignette = image_emoji(contenu)
+                if vignette is not None:
+                    cote = max(1, int(round(emoji_px)))
+                    emojis.alpha_composite(
+                        vignette.resize((cote, cote), Image.LANCZOS),
+                        (
+                            int(round((depart + x) / s)),
+                            int(round(base - emoji_px * 0.82)),
+                        ),
+                    )
+                continue
+            if contenu == " ":
+                continue
+            f = police.pour(contenu)
+            if trait:
+                dc.text(
+                    (depart + x, y), contenu, font=f, anchor="ls", fill=255,
+                    stroke_width=trait, stroke_fill=255,
+                )
+            dr.text((depart + x, y), contenu, font=f, anchor="ls", fill=255)
+
+    return (
+        remplissage.resize((W, H), Image.LANCZOS),
+        contour.resize((W, H), Image.LANCZOS),
+        emojis,
+        fond.resize((W, H), Image.LANCZOS),
+    )
+
+
+def dessiner(
+    fond: Image.Image, lignes: list[str], style: Style, rapide: bool = False
+) -> Image.Image:
+    """Incruste les lignes sur l'image, ombre puis contour puis remplissage."""
+    W, H = fond.size
+    remplissage, contour, emojis, pastilles = calques((W, H), lignes, style, rapide)
+    img = fond.convert("RGBA")
+
+    if style.pastille is not None:
+        img = Image.composite(
+            Image.new("RGBA", (W, H), style.pastille.couleur + (255,)), img, pastilles
+        )
+
+    if style.ombre:
+        o = style.ombre
+        ombre = remplissage.filter(ImageFilter.GaussianBlur(float(o.get("blur", 3))))
+        ombre = ombre.point(lambda v: int(v * float(o.get("alpha", 0.38))))
+        ombre = ombre.transform(
+            ombre.size, Image.AFFINE,
+            (1, 0, -float(o.get("dx", 0)), 0, 1, -float(o.get("dy", 2))),
+        )
+        img = Image.composite(Image.new("RGBA", (W, H), (0, 0, 0, 255)), img, ombre)
+
+    if style.contour > 0:
+        img = Image.composite(
+            Image.new("RGBA", (W, H), style.couleur_contour + (255,)), img, contour
+        )
+    img = Image.composite(Image.new("RGBA", (W, H), style.couleur + (255,)), img, remplissage)
+    img.alpha_composite(emojis)
+    return img
+
+
+# ---------------------------------------------------------------------------
+# Contrôle : redessiner l'original et re-mesurer avec le même code
+# ---------------------------------------------------------------------------
+
+
+def _decale(style: Style, dx: float, dy: float) -> Style:
+    """Le même style, exprimé dans le repère d'un recadrage."""
+    copie = Style(**{**style.__dict__})
+    copie.ancre_x -= dx
+    copie.base -= dy
+    return copie
+
+
+def _mesurer_rendu(
+    paire: Paire, style: Style, lignes: list[str], rect: tuple[int, int, int, int]
+) -> tuple[list[Ligne], float]:
+    """Dessine ces lignes sur l'image propre et les re-mesure comme l'original.
+
+    Sur le vrai fond, avec le même estimateur : c'est la seule comparaison qui
+    ait un sens. Les biais du seuillage — qui gonflent la hauteur d'x et
+    mangent le bord des lettres — sont les mêmes des deux côtés et s'annulent.
+    """
+    x0, y0, x1, y1 = rect
+    fond = paire.propre.crop(rect)
+    rendu = dessiner(fond, lignes, _decale(style, x0, y0))
+    arr = np.asarray(rendu.convert("RGB"))
+    # Même filtre que sur l'original : couleur ET écart avec l'image propre.
+    # Sans lui, un tableau blanc derrière le texte entrerait dans la mesure de
+    # contrôle alors qu'il est écarté de la mesure de référence, et les deux ne
+    # seraient plus comparables.
+    ecart = np.abs(arr.astype(np.int16) - np.asarray(fond.convert("RGB")).astype(np.int16)).sum(axis=2)
+    masque = masque_couleur(arr, style.couleur) & (ecart > ECART_TEXTE_MIN)
+    mesurees = mesurer_lignes(masque)
+    return mesurees, mesurer_contour(arr, masque)
+
+
+def calibrer_contour(
+    paire: Paire, style: Style, rect: tuple[int, int, int, int], cible: float
+) -> float:
+    """Épaisseur de contour qui, une fois rendue, se mesure comme l'original.
+
+    Mesurée directement, l'épaisseur est surestimée : la marche depuis le bord
+    de la lettre traverse d'abord la rampe d'anticrénelage. Plutôt que de
+    corriger ce biais à la main, on rend deux essais et on interpole — le biais
+    est dans les deux mesures et disparaît.
+    """
+    if cible <= 0 or not style.lignes_origine:
+        return 0.0
+    essais: list[tuple[float, float]] = []
+    for facteur in (0.75, 0.35):
+        essai = max(0.5, cible * facteur)
+        style.contour = essai
+        _, mesure = _mesurer_rendu(paire, style, style.lignes_origine, rect)
+        essais.append((essai, mesure))
+    (s1, m1), (s2, m2) = essais
+    if abs(m1 - m2) < 1e-6:
+        return max(0.0, cible * 0.5)
+    pente = (s1 - s2) / (m1 - m2)
+    trouve = s2 + (cible - m2) * pente
+    return float(max(0.0, min(cible * 1.5, trouve)))
+
+
+def _masque_rendu(
+    paire: Paire,
+    style: Style,
+    lignes: list[str],
+    rect: tuple[int, int, int, int],
+    rapide: bool = False,
+) -> np.ndarray:
+    """Masque du texte tel qu'il sortirait du rendu, sur le vrai fond."""
+    x0, y0, x1, y1 = rect
+    fond = paire.propre.crop(rect)
+    rendu = dessiner(fond, lignes, _decale(style, x0, y0), rapide)
+    arr = np.asarray(rendu.convert("RGB"))
+    ecart = np.abs(
+        arr.astype(np.int16) - np.asarray(fond.convert("RGB")).astype(np.int16)
+    ).sum(axis=2)
+    return masque_couleur(arr, style.couleur) & (ecart > ECART_TEXTE_MIN)
+
+
+def ressemblance(reference: np.ndarray, rendu: np.ndarray) -> float:
+    """Recouvrement des deux masques de texte (intersection sur union).
+
+    Le score de proportions ne distingue pas deux polices de mêmes largeurs ;
+    le recouvrement, lui, compare les formes là où elles sont — c'est le
+    verdict visuel, rendu chiffrable et reproductible.
+    """
+    inter = int((reference & rendu).sum())
+    union = int((reference | rendu).sum())
+    return inter / union if union else 0.0
+
+
+def caler_par_ressemblance(
+    paire: Paire, style: Style, rect: tuple[int, int, int, int]
+) -> dict[str, float]:
+    """Taille et graisse qui recouvrent le mieux le texte d'origine.
+
+    L'appariement ligne à ligne suppose que le LLM a lu exactement autant de
+    lignes qu'il y en a : sur les slides denses, c'est faux une fois sur deux,
+    et la calibration par les largeurs n'a alors rien à quoi se raccrocher.
+
+    Le recouvrement, lui, ne demande aucun appariement : on redessine le texte
+    d'origine avec ses propres coupures et on regarde ce qui tombe juste. La
+    hauteur d'x donne le point de départ — biaisée de 8 à 10 % par le seuil du
+    masque, mais jamais très loin — et la recherche corrige ce biais en
+    regardant, ce qui est précisément ce qu'on lui demande.
+    """
+    if style.reference is None or not style.lignes_origine:
+        return {}
+    depart = style.taille
+    scores: dict[str, float] = {}
+    meilleur: tuple[float, str, float] | None = None
+
+    for nom in (POLICE_700, POLICE_600):
+        essai = Style(**{**style.__dict__})
+        essai.police = nom
+
+        def score(taille: float) -> float:
+            essai.taille = taille
+            return ressemblance(
+                style.reference,
+                _masque_rendu(paire, essai, essai.lignes_origine, rect, rapide=True),
+            )
+
+        # Section dorée : le recouvrement n'a qu'un maximum en fonction de la
+        # taille, la dichotomie suffit et coûte six rendus au lieu de vingt.
+        bas, haut = depart * 0.72, depart * 1.28
+        phi = 0.6180339887
+        c, d = haut - phi * (haut - bas), bas + phi * (haut - bas)
+        sc, sd = score(c), score(d)
+        for _ in range(7):
+            if sc < sd:
+                bas, c, sc = c, d, sd
+                d = bas + phi * (haut - bas)
+                sd = score(d)
+            else:
+                haut, d, sd = d, c, sc
+                c = haut - phi * (haut - bas)
+                sc = score(c)
+        taille = (bas + haut) / 2
+        valeur = score(taille)
+        scores[nom[10:13]] = round(valeur, 3)
+        if meilleur is None or valeur > meilleur[0]:
+            meilleur = (valeur, nom, taille)
+
+    # Un recouvrement au ras des pâquerettes veut dire que le masque de
+    # référence n'est pas du texte : mieux vaut l'estimation par la hauteur
+    # d'x, connue pour être un peu grande, qu'une taille tirée d'un nuage.
+    if meilleur is None or meilleur[0] < 0.18:
+        style.notes.append(
+            f"recouvrement trop faible ({meilleur[0]:.2f} au mieux) — taille laissée à la hauteur d'x"
+            if meilleur else "recouvrement non calculable"
+        )
+        return scores
+    _, style.police, style.taille = meilleur
+    return scores
+
+
+def controler(
+    paire: Paire, style: Style, rect: tuple[int, int, int, int]
+) -> dict:
+    """Redessine le texte D'ORIGINE avec le style calculé et compare.
+
+    C'est le seul juge honnête : un style incapable de reproduire le texte
+    qu'il vient de mesurer ne reproduira pas la traduction non plus. Les écarts
+    partent dans le rapport plutôt que d'attendre l'œil d'un créateur.
+    """
+    if not style.lignes_origine or not style.lignes_mesurees:
+        return {"fait": False, "ok": False}
+    rendues, _ = _mesurer_rendu(paire, style, style.lignes_origine, rect)
+    if len(rendues) != len(style.lignes_mesurees):
+        return {
+            "fait": True,
+            "ok": False,
+            "detail": f"{len(rendues)} ligne(s) rendues pour {len(style.lignes_mesurees)} mesurées",
+        }
+
+    x0, y0 = rect[0], rect[1]
+    d_base, d_bord, d_largeur = [], [], []
+    for rendue, ref in zip(rendues, style.lignes_mesurees):
+        d_base.append((rendue.base + y0) - ref.base)
+        d_bord.append(
+            (rendue.x0 + x0) - ref.x0 if style.alignement == "left"
+            else (rendue.x1 + x0) - ref.x1 if style.alignement == "right"
+            else (rendue.centre + x0) - ref.centre
+        )
+        d_largeur.append((rendue.largeur - ref.largeur) / max(1.0, ref.largeur))
+
+    pire_pos = max(max(abs(v) for v in d_base), max(abs(v) for v in d_bord))
+    pire_largeur = max(abs(v) for v in d_largeur)
+    return {
+        "fait": True,
+        "ok": pire_pos <= max(8.0, paire.propre.width * 0.005) and pire_largeur <= 0.02,
+        "baseline": round(float(np.mean(d_base)), 1),
+        "bord": round(float(np.mean(d_bord)), 1),
+        "largeur": round(float(np.mean(d_largeur)) * 100, 2),
+        "pireLargeur": round(pire_largeur * 100, 2),
+        "pirePosition": round(pire_pos, 1),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Entrée publique
+# ---------------------------------------------------------------------------
+
+
+def _tient_dans_le_cadre(lignes: list[str], style: Style, taille: tuple[int, int]) -> bool:
+    W, H = taille
+    police = Police(style.police, style.taille)
+    bases = _bases(style, len(lignes))
+    if bases[0] - style.hauteur_x * 1.4 < 0 or bases[-1] + style.hauteur_x * 0.6 > H:
+        return False
+    for ligne, _ in zip(lignes, bases):
+        largeur = largeur_encre(police, ligne, style.tracking, style.emoji)
+        gauche = (
+            style.ancre_x if style.alignement == "left"
+            else style.ancre_x - largeur if style.alignement == "right"
+            else style.ancre_x - largeur / 2
+        )
+        if gauche < 0 or gauche + largeur > W:
+            return False
+    return True
+
+
+def _mettre_en_lignes(texte: str, style: Style, taille: tuple[int, int]) -> tuple[list[str], list[str]]:
+    """Coupe la traduction sur la boîte mesurée, sans jamais déborder du cadre.
+
+    Une ligne de plus est préférable à un texte rétréci ; un texte rétréci est
+    préférable à une ligne qui sort de l'image. Dans tous les cas on le dit.
+    """
+    notes: list[str] = []
+    police = Police(style.police, style.taille)
+    lignes = couper_lignes(police, texte, style.largeur_boite, style.tracking, style.emoji)
+    if _tient_dans_le_cadre(lignes, style, taille):
+        return lignes, notes
+
+    # Resserrer la boîte fait passer à la ligne plus tôt : le bloc rentre en
+    # largeur au prix d'une ligne de plus, ce que l'ancrage sur la base absorbe.
+    for facteur in (0.9, 0.8, 0.7):
+        essai = couper_lignes(
+            police, texte, style.largeur_boite * facteur, style.tracking, style.emoji
+        )
+        if _tient_dans_le_cadre(essai, style, taille):
+            notes.append(f"boîte resserrée à {int(facteur * 100)} % pour tenir dans le cadre")
+            return essai, notes
+
+    for reduction in (0.92, 0.85):
+        petit = Police(style.police, style.taille * reduction)
+        essai = couper_lignes(
+            petit, texte, style.largeur_boite, style.tracking * reduction, style.emoji * reduction
+        )
+        sauve = (style.taille, style.tracking, style.hauteur_x)
+        style.taille, style.tracking = style.taille * reduction, style.tracking * reduction
+        style.hauteur_x *= reduction
+        if _tient_dans_le_cadre(essai, style, taille):
+            notes.append(f"taille réduite de {int((1 - reduction) * 100)} % pour tenir dans le cadre")
+            return essai, notes
+        style.taille, style.tracking, style.hauteur_x = sauve
+
+    notes.append("le texte déborde malgré tout — à relire")
+    return lignes, notes
 
 
 def bruler(
@@ -712,23 +1514,52 @@ def bruler(
     paire = preparer(brut, propre)
     sortie = paire.propre.convert("RGBA")
     rapport: list[dict] = []
+
     for zone, texte in zip(zones, textes):
         if not (texte or "").strip():
             continue
-        reglages = analyser_zone(paire, zone, gras=gras)
-        lignes = dessiner_zone(sortie, texte, reglages, zone.get("couleur"), gras)
+        rect = paire.rect(zone)
+        style = analyser_zone(paire, zone, gras=gras)
+        style.contour = calibrer_contour(paire, style, rect, style.contour)
+        scores = caler_par_ressemblance(paire, style, rect)
+        if scores:
+            style.notes.append(
+                "graisse " + ("700" if style.police == POLICE_700 else "600")
+                + " (recouvrement " + " / ".join(f"{k}:{v}" for k, v in scores.items()) + ")"
+            )
+        controle = controler(paire, style, rect)
+        lignes, notes = _mettre_en_lignes(texte, style, paire.propre.size)
+        # Un style qui ne sait pas reproduire le texte qu'il vient de mesurer
+        # ne reproduira pas la traduction non plus. Plutôt qu'une slide de
+        # travers, on ne dessine rien : le créateur la recevra en classique.
+        fiable = bool(controle.get("ok"))
+        if fiable:
+            sortie = dessiner(sortie, lignes, style)
         rapport.append(
             {
                 "role": zone.get("role"),
-                "mesure": reglages.mesure,
-                "taille": reglages.taille,
-                "tracking": reglages.tracking,
-                "contour": reglages.contour,
-                "interligne": reglages.interligne,
-                "alignement": reglages.alignement,
-                "largeurWrap": reglages.largeur_wrap,
-                "lignesOrigine": len(reglages.bandes),
+                "mesure": style.mesure,
+                "police": style.police.replace(".ttf", ""),
+                "taille": round(style.taille, 1),
+                "tracking": round(style.tracking, 2),
+                "hauteurX": round(style.hauteur_x, 1),
+                "contour": round(style.contour, 2),
+                "interligne": round(style.interligne, 1),
+                "alignement": style.alignement,
+                "largeurBoite": round(style.largeur_boite, 1),
+                "couleur": "#%02X%02X%02X" % style.couleur,
+                "ombre": bool(style.ombre),
+                "lignesOrigine": len(style.lignes_mesurees),
                 "lignes": lignes,
+                "controle": controle,
+                "fiable": fiable,
+                "notes": style.notes + notes,
             }
         )
+
     return sortie.convert("RGB"), rapport
+
+
+def burn_livrable(rapport: list[dict]) -> bool:
+    """Toutes les zones ont passé leur contrôle : l'image est bonne à livrer."""
+    return bool(rapport) and all(z.get("fiable") for z in rapport)
