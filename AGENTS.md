@@ -84,6 +84,19 @@ par `font_score` et verdict visuel ; traduction (un appel par carrousel, avec un
 (SS = 3, caractère par caractère, masques en niveaux de gris, contour puis
 remplissage) ; `qa_selftest`.
 
+**La lecture est faite par Claude, et seulement par Claude**
+(`MODELES_LECTURE_BURN` dans `gemini.ts` : `anthropic/claude-opus-5` puis
+`anthropic/claude-sonnet-5`, par le routeur OpenRouter de Fal — un identifiant
+déjà préfixé passe tel quel, aucune plomberie à changer). C'est le seul endroit
+du burn où un modèle parle ; tout le reste est mesuré. `gemini-2.5-flash` n'y
+tient pas : une bbox à 20 px près ou une coupure de ligne inventée fait échouer
+un autotest dont la tolérance est 0,5 % de la largeur d'image. **Pas de repli
+vers un modèle plus faible** : la lecture est mise en cache dans
+`burn_analyses`, donc une mauvaise lecture ne rate pas une slide, elle la rate
+définitivement. `burn_analyses.modele` porte désormais le modèle qui a répondu,
+préfixé `burn-kit/read_style:` ; une ligne sans ce préfixe est une lecture
+Gemini ou d'avant le kit, et elle est relue au lieu d'être resservie.
+
 `api/fonts/` contient **exactement** ce que télécharge `api/fonts/fetch_fonts.sh`
 (24 fichiers, 1,7 Mo) : TikTok Sans 500/600/700, Figtree, Mulish, Playfair
 Display, Bodoni Moda, plus DejaVu Sans en repli de glyphes. Ni en ajouter, ni en

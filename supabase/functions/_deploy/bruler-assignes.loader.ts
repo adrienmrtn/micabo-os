@@ -8,7 +8,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "f4da0b923b14d12690b842978a56bf0dfbc5f995";
+const SHA = "d6b88a0b1d40fe0954ca2082713e406de95a1bfa";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/bruler-assignes.bundle.js`;
 
@@ -25,4 +25,4 @@ if (!src.includes("Deno.serve") || !src.includes("burned_media_id")) {
 }
 // esbuild renomme l'alias d'un rebuild à l'autre : relire le
 // `import{createClient as …}` du bundle avant de l'effacer, et reporter le nom ici.
-new Function("I", src)(createClient);
+new Function("P", src)(createClient);
