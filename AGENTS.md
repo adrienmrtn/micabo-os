@@ -50,55 +50,60 @@ derniers posts mesurés, −5 par jour actif sans publication, skip warmup.
 
 Un compte coché `comptes.burned` reçoit ses slides **texte déjà incrusté** : ni
 image vierge, ni texte à replacer. Le rendu est déterministe et vit sur Vercel,
-pas sur l'Edge — Deno n'a ni Pillow ni numpy.
+pas sur l'Edge — Deno n'a ni Pillow, ni numpy, ni OpenCV.
 
-**Le LLM lit et traduit, Python mesure et dessine.** Aucune valeur numérique ne
-sort de l'estimation d'un modèle : la boîte et la couleur qu'il annonce sont des
-indices, pas des mesures. `api/_burn_core.py` mesure sur l'image d'origine, dans
-cet ordre :
+**Le moteur est le burn-kit, tel quel.** `api/burn_engine.py` est le
+`burn/engine.py` du kit à une adaptation près, commentée dans le fichier : le
+kit résout `fonts/` depuis le dossier courant, qu'un lambda n'a pas, donc les
+chemins passent par le dossier du module. `api/burn_pipeline.py` est son
+`pipeline.py` ramené à un appel HTTP — les deux appels LLM (lecture du style,
+traduction) vivent côté Edge, qui a la clé et les decks, et leur résultat arrive
+en entrée. `api/burn.py` n'est qu'une enveloppe HTTP. Le protocole est dans
+`docs/burn-RECETTE.md` et `docs/burn-kit-README.md` : **s'y tenir à la lettre**,
+ne pas garder « au cas où » un bout d'un moteur maison.
 
-1. le recalage brut → propre, analytique (recadrage « cover » centré puis
-   redimensionnement : la transformation est connue, inutile de la chercher) ;
-2. le masque du texte — couleur **et** écart avec l'image propre, qui a
-   justement été débarrassée de ce texte ;
-3. les lignes, débarrassées des pixels parasites de même couleur (un vêtement
-   clair faisait passer une ligne de 648 à 1019 px et cassait tout le calage) et
-   triées sur l'ENCRE, jamais sur la hauteur — le bruit est nombreux et
-   minuscule, il dominerait toute médiane de hauteur ;
-4. par ligne : hauteur d'x (là où les pixels explosent), ligne de base (là où
-   ils s'effondrent), largeur d'encre ;
-5. la taille, calée sur la **largeur** à interlettrage nul — le seuil du masque
-   gonfle la hauteur d'x de 8 à 10 %, et le tracking négatif qui rattraperait
-   collerait les mots ;
-6. la graisse et la taille finale, par **recouvrement** du rendu avec le masque
-   mesuré. Les **sept** graisses de TikTok Sans (300 à 900) sont embarquées :
-   n'en avoir que deux obligeait le moteur à prendre la moins mauvaise et à
-   compenser avec une taille fausse — sur la paire de contrôle, la bonne
-   graisse est la 500. Le score de proportions ne départage pas deux graisses
-   voisines, le recouvrement si ;
-7. l'interligne de base à base, la boîte de coupe (vérifiée en recoupant le
-   texte d'origine : elle doit redonner ses coupures exactes), l'alignement par
-   dispersion, l'épaisseur de contour par le rapport aire/périmètre du halo
-   sombre, calibrée en rendant deux essais.
+Trois règles non négociables du kit :
 
-Styles gérés : contour noir, ombre portée, et **pastille** (texte sombre sur
-boîte claire) — détectée dans les deux sens, que le LLM ait donné la couleur de
-la boîte ou celle des lettres. Glyphes absents de TikTok Sans (flèches) : repli
-sur DejaVu Sans, jamais de tofu ni de substitution silencieuse.
+1. **Le LLM lit et traduit, Python mesure et dessine.** Aucune valeur numérique
+   ne sort de l'estimation d'un modèle : la boîte et la couleur annoncées sont
+   des indices, jamais des mesures.
+2. **Reproduire avant de traduire.** Le moteur redessine le texte *source* avec
+   le spec calculé, le re-mesure avec le même code et compare à la capture :
+   position à 0,5 % de la largeur d'image près, largeur d'encre à 2 % près,
+   coupures de lignes identiques. Tant que ça ne passe pas, la traduction n'est
+   pas rendue.
+3. **La taille se cale sur la LARGEUR, jamais sur la hauteur d'x.** Le seuil du
+   masque gonfle la hauteur d'x de 2 à 3 px → taille 10 % trop grande → tracking
+   négatif pour rattraper → mots collés.
 
-**Le moteur se contrôle et refuse de livrer ce qu'il ne sait pas reproduire.**
-Il redessine le texte d'origine avec les réglages trouvés, le re-mesure avec le
-même code, et compare : position à 8 px près, largeur à 2 % près. Hors
-tolérance, l'image n'est pas produite et la slide part en classique
-(`post_slides.burn_erreur` dit pourquoi). Sur les 27 zones du jeu de contrôle,
-8 passent aujourd'hui ; les autres échouent presque toutes sur un désaccord
-entre le nombre de lignes lues par le LLM et le nombre de lignes mesurables —
-c'est là qu'est le prochain gain, dans l'analyse, pas dans le rendu.
+L'ordre des étapes, dans `run_slide` : recalage ORB + RANSAC brut → propre
+(repli sur le rapport de largeurs sous 50 inliers) ; lecture LLM (`READ_PROMPT`,
+JSON strict, bbox **en pixels**) ; mesure au pixel ; identification de la police
+par `font_score` et verdict visuel ; traduction (un appel par carrousel, avec un
+`text_short` de repli) ; re-découpe par `wrap_paragraphs` ; rendu Pillow
+(SS = 3, caractère par caractère, masques en niveaux de gris, contour puis
+remplissage) ; `qa_selftest`.
+
+`api/fonts/` contient **exactement** ce que télécharge `api/fonts/fetch_fonts.sh`
+(24 fichiers, 1,7 Mo) : TikTok Sans 500/600/700, Figtree, Mulish, Playfair
+Display, Bodoni Moda, plus DejaVu Sans en repli de glyphes. Ni en ajouter, ni en
+retirer : `candidates_for_style` restreint les candidats au bon genre avant de
+les noter, et une graisse de plus déplace le score.
+
+**Résultat honnête sur notre stock : 2 zones sur 27 passent l'autotest**, donc
+presque toutes les slides repartent en classique. La cause est isolée et n'est
+pas dans le rendu : `color_mask` isole le texte **par la couleur seule**, et nos
+slides sont posées sur des tableaux blancs ou des pastilles claires — le fond
+entre dans le masque et l'autotest compte 6 lignes là où il y en a 2, alors que
+la mesure, elle, est juste (TikTok Sans 500, 111,4 px sur la paire de contrôle).
+Croiser le masque avec la plaque propre — une ligne — remonte à 8-9/27 ; **c'est
+délibérément non fait** : le kit est le modèle, verbatim. Toute reprise de ce
+sujet se discute avec Adrien avant d'être codée.
 
 Le reste du chemin :
 
-- deux caches, indépendants du compte : `burn_analyses` (zones du LLM, une fois
-  par slide) et `burn_rendus` (image finale, une fois par slide + langue),
+- deux caches, indépendants du compte : `burn_analyses` (lecture du LLM, une
+  fois par slide) et `burn_rendus` (image finale, une fois par slide + langue),
   rangée sous `burned/<contenu>/<langue>/<position>.jpg` ;
 - `bruler-assignes` draine le jour, hors du chemin de minuit. Il est entraîné
   par l'étape `burn` de `minuit-vnext` — laquelle part aussi avec `assignation`,
@@ -106,12 +111,16 @@ Le reste du chemin :
   fin du drain `upscale-assignes` (le burn vient **après** l'upscale) ;
 - repli permanent : une slide non brûlée part avec l'image propre et
   `texte_overlay`, qui reste rempli. `BURN_SECRET` absent = burn désactivé,
-  aucune slide marquée en échec ;
+  aucune slide marquée en échec ; `post_slides.burn_erreur` dit pourquoi une
+  slide n'a pas été brûlée ;
 - secret partagé `BURN_SECRET` (Edge **et** Vercel) + `BURN_URL` facultatif
-  côté Edge. `GET /api/burn` dit ce que le lambda embarque vraiment.
+  côté Edge. `GET /api/burn` dit ce que le lambda embarque vraiment : polices
+  chargées, table de glyphes lisible, secret posé.
 
-Les contrôles du moteur tournent par `python3 api/_burn_core_test.py` (sans
-dépendance de test : le module s'appelle lui-même).
+Le contrôle du moteur est `qa_selftest`, dans le moteur : il tourne sur chaque
+slide et son rapport remonte jusqu'à la carte « Text burn-in (preview) » du
+Moteur, qui affiche l'original TikTok et le rendu brûlé côte à côte, avec les
+écarts mesurés et un badge rouge quand la livraison est refusée.
 
 ## Cloisonnement (non négociable)
 
@@ -202,6 +211,16 @@ Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
  `normaliser-format`. Les SHA épinglés sont ceux du commit
  qui porte les bundles, pas celui de `main` après squash — GitHub continue de
  servir les commits de branche.
+- Passage au moteur du kit (12/09/2026, fin de journée) : `assignation`,
+ `assignation-contenu`, `bruler-assignes`, `bruler-texte-test`,
+ `creation-manuelle`, `import-contenu`, `renettoyer-contenu` et `revoquer-post`
+ sont épinglés sur `f4da0b9` — huit bundles bougent parce que `gemini.ts` a
+ changé, et `gemini.ts` est tiré par tout le moteur de deck. L'alias que
+ `new Function(...)` passe au bundle est **renommé par esbuild à chaque
+ rebuild** : relire le `import{createClient as …}` du bundle avant de l'effacer
+ et reporter le nom dans le chargeur, sinon la fonction boote sur un
+ `ReferenceError`. Test de vie après déploiement : un POST anonyme doit rendre
+ `401 {"error":"unauthorized"}` — un chargeur cassé rend un 500.
 
 Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
 être en avance sur `main`.
