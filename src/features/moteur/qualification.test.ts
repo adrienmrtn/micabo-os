@@ -125,6 +125,26 @@ describe("essai et file de surveillance", () => {
     ).toBe(true);
   });
 
+  it("« ne pas renouveler » sort le compte de la file, décision prise", () => {
+    const now = h(200);
+    expect(
+      enSurveillance(
+        { creeLe: cree.toISOString(), qualification: "INACTIF", nePasRenouveler: true },
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it("« ne pas renouveler » l'emporte même sur une fin d'essai", () => {
+    const now = h(60);
+    expect(
+      enSurveillance(
+        { creeLe: cree.toISOString(), qualification: "STAR", nePasRenouveler: true },
+        now,
+      ),
+    ).toBe(false);
+  });
+
   it("une fin d'essai passe outre le skip : c'est une échéance, pas une relance", () => {
     const now = h(60);
     const skip = finSkip(now).toISOString();

@@ -215,15 +215,25 @@ export interface EtatSurveillance {
   creeLe: string;
   /** `comptes.surveillance_skip_jusqu_a`, si le compte a été écarté. */
   skipJusqua?: string | null;
+  /** `comptes.ne_pas_renouveler` — la décision est prise, le compte sort. */
+  nePasRenouveler?: boolean | null;
 }
 
 /**
  * Le compte doit-il apparaître dans la file de surveillance ?
  *
- * Un compte en fin d'essai y entre même s'il a été skippé : le skip repousse
- * une relance, il ne fait pas disparaître une échéance de contrat.
+ * Trois règles, dans cet ordre :
+ *
+ * 1. « ne pas renouveler » sort le compte, et rien ne l'y ramène. La file sert
+ *    à décider ; une fois la décision prise, le compte appartient à la liste de
+ *    suivi, pas à la file. Le relancer chaque jour sur une décision déjà prise
+ *    ferait du bruit et finirait par masquer les comptes encore en jeu.
+ * 2. une fin d'essai fait entrer le compte même s'il a été skippé : le skip
+ *    repousse une relance, il ne fait pas disparaître une échéance de contrat.
+ * 3. sinon, INACTIF ou MAUVAISES_VUES, hors période de skip.
  */
 export function enSurveillance(e: EtatSurveillance, maintenant: Date = new Date()): boolean {
+  if (e.nePasRenouveler) return false;
   if (trialAAlerter(e.creeLe, maintenant)) return true;
   const skippe = e.skipJusqua != null && new Date(e.skipJusqua).getTime() > maintenant.getTime();
   if (skippe) return false;
