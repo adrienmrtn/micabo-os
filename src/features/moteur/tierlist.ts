@@ -1,4 +1,6 @@
 export {
+  prioriserTiersHauts,
+  TIER_TIRAGE_PRIORITAIRE,
   ajouterJoursParis,
   jourRepostBonus,
   passageMesure,

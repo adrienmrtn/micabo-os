@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   passagesPourTier,
+  prioriserTiersHauts,
   requalifier,
   tierDepuisEloLegacy,
   tierImport,
@@ -107,5 +108,32 @@ describe("tierDepuisEloLegacy", () => {
     expect(tierDepuisEloLegacy(70)).toBe("S");
     expect(tierDepuisEloLegacy(80)).toBe("S+");
     expect(tierDepuisEloLegacy(96)).toBe("S+");
+  });
+});
+
+describe("prioriserTiersHauts", () => {
+  const pool = (...tiers: Array<string | null>) => tiers.map((tier, i) => ({ id: `c${i}`, tier }));
+
+  it("écarte les C tant qu'il reste du B ou mieux", () => {
+    const retenus = prioriserTiersHauts(pool("C", "B", "C", "S"));
+    expect(retenus.map((c) => c.tier)).toEqual(["B", "S"]);
+  });
+
+  it("laisse sortir les C quand le pool n'a plus que ça", () => {
+    const retenus = prioriserTiersHauts(pool("C", "C"));
+    expect(retenus).toHaveLength(2);
+  });
+
+  it("traite un slideshow sans tier comme un C", () => {
+    expect(prioriserTiersHauts(pool(null, "A")).map((c) => c.tier)).toEqual(["A"]);
+    expect(prioriserTiersHauts(pool(null, "C")).map((c) => c.tier)).toEqual([null, "C"]);
+  });
+
+  it("ne touche pas un pool déjà tout en B+", () => {
+    expect(prioriserTiersHauts(pool("B", "A", "S", "S+"))).toHaveLength(4);
+  });
+
+  it("rend une liste vide telle quelle", () => {
+    expect(prioriserTiersHauts([])).toEqual([]);
   });
 });

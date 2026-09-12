@@ -30,10 +30,11 @@ plus lu par le moteur.
   sinon S+), jamais plus d'un cran de descente, et il faut 1 000 vues pour
   sortir de D. Cycle qui traîne → requalification forcée à 14 jours.
 - Assignation : tirage **au hasard** parmi les slideshows du pool (labels ∩,
-  toutes langues) qui ont encore des passages dus. Plus de softmax, plus de
-  pénalité de saturation, plus de « jamais deux fois le même post » (mais
-  jamais deux fois le même jour sur le même compte). S'il n'y a pas assez de
-  passages dus, un slideshow en D est repêché avec un cycle d'un passage.
+  toutes langues) qui ont encore des passages dus — mais **un C n'est tiré que
+  si le pool n'a plus rien en B ou mieux**. Plus de softmax, plus de pénalité
+  de saturation, plus de « jamais deux fois le même post » (mais jamais deux
+  fois le même jour sur le même compte). S'il n'y a pas assez de passages dus,
+  un slideshow en D est repêché avec un cycle d'un passage.
 - Le quota d'un créateur (`posts_par_jour`) **ne baisse plus jamais**.
 - Repost bonus : un passage > 50 000 vues rejoue le même post sur le même
   compte à J+7 (`reposts_bonus`). Hors cycle, mais dans le quota du jour ;
