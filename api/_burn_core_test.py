@@ -42,6 +42,34 @@ def test_repli_glyphe_par_glyphe() -> None:
     assert p.avance("→") > 0
 
 
+def test_repli_tient_sans_fonttools() -> None:
+    """Une dépendance absente doit dégrader le rendu, jamais l'arrêter.
+
+    `fontTools` a manqué une fois en production : sans ce chemin de repli, le
+    moteur renvoyait une erreur 500 au lieu d'une image.
+    """
+    import builtins
+
+    vrai = builtins.__import__
+
+    def sans_fonttools(nom, *a, **k):
+        if nom.startswith("fontTools"):
+            raise ImportError("absent")
+        return vrai(nom, *a, **k)
+
+    bc._cache_cmap.clear()
+    builtins.__import__ = sans_fonttools
+    try:
+        p = bc.Police(bc.POLICE_700, 100)
+        assert p.connus is None
+        assert p.pour("a") is p.principale
+        assert p.pour("é") is p.principale
+        assert p.pour("→") is p.repli
+    finally:
+        builtins.__import__ = vrai
+        bc._cache_cmap.clear()
+
+
 def test_largeur_est_celle_de_l_encre() -> None:
     """L'encre, pas la somme des avances.
 
