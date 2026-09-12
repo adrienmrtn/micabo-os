@@ -75,9 +75,17 @@ class handler(BaseHTTPRequestHandler):
             f for f in os.listdir(bc.DOSSIER_POLICES)
             if f.endswith(".ttf")
         ) if os.path.isdir(bc.DOSSIER_POLICES) else []
+        # `table` dit si fontTools répond : sans lui, le repli des glyphes
+        # absents marche encore mais à l'aveugle, et c'est exactement ce qui
+        # est passé en production sans être vu.
+        try:
+            table = bc._cmap(bc.POLICE_700) is not None
+        except Exception:
+            table = False
         self._repondre(200 if polices else 500, {
             "ok": bool(polices),
             "polices": polices,
+            "table": table,
             "secret": bool(os.environ.get("BURN_SECRET")),
         })
 
