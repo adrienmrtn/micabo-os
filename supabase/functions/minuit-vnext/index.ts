@@ -54,7 +54,7 @@ const POSTS_RELEVES = 30;
  *
  *   {}  → kick rattrapage-elo (async) + assignation + upscale + ugc
  *   { etapes?: ['stats'|'scores'|'assignation'|'upscale'|'burn'|'variations'|'rattrapage'|'ugc_ai_video'|'papier_cm'|'papier_assign'], compteId?, date?, forcer? }
- *   etape `rattrapage` : stats 4j + reposts bonus + ELO compte, puis requalification tierlist + snapshot vues
+ *   etape `rattrapage` : stats 4j + reposts bonus, puis requalification tierlist, qualification des comptes + snapshot vues
  *                        — kick async si tous comptes (évite timeout cron)
  *   etape `upscale` : SeedVR Fal sur photos assignées du jour sans upscale_le
  *   etape `burn` : incrustation du texte sur les slides des comptes « burned » (après upscale)
@@ -104,7 +104,7 @@ Deno.serve(async (request) => {
       }
     }
 
-    // Défaut : rattrapage (vues + reposts bonus + ELO compte, puis
+    // Défaut : rattrapage (vues + reposts bonus, puis
     // requalification tierlist en fin de file) en kick async — plus de scrape
     // synchrone « stats » qui faisait timeout Edge avant snapshot/assign.
     // ugc_ai_video : TOUJOURS en dernier (après slideshow + upscale).
@@ -125,7 +125,7 @@ Deno.serve(async (request) => {
     const out: Record<string, unknown> = { ok: true, jour };
 
     if (etapes.includes("rattrapage")) {
-      // Vues + reposts bonus + ELO compte ; requalification tierlist et
+      // Vues + reposts bonus ; requalification tierlist, qualification des comptes et
       // snapshot Pilotage en fin de file (drain « tous comptes »).
       if (compteId) {
         // Compte isolé (manuel) : synchrone, résultat dans la réponse.

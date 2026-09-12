@@ -16,8 +16,8 @@ import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared
  * Rattrapage (admin / cron minuit / cron minute) — fenêtre Paris (défaut 4 jours) :
  *   1) stats TikTok des passages publiés (publie_url)
  *   2) reposts bonus J+7 pour les passages > 50 000 vues
- *   3) ELO compte = moyenne pondérée ≤10 posts mesurés
- *   4) fin de file : requalification tierlist des slideshows + snapshot vues
+ *   3) fin de file : requalification tierlist des slideshows, qualification des
+ *      comptes (INACTIF → STAR) et snapshot vues
  *
  *   {} | { drain: true }     → 1 compte / invoke ; reprend elo_dernier_run si !done
  *                              (cron `rattrapage-elo-drain` * * * * * = filet)

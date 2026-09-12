@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { QualificationBadge } from "@/components/moteur/QualificationBadge";
 import { Check, HelpCircle, Plus, UserPlus, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -965,13 +966,13 @@ export function AdminPostersPage() {
     parManager.set(k, [...(parManager.get(k) ?? []), c]);
   }
 
-  const eloMoyenRecruteur = (recId: string): number | null => {
-    const scores = tousCreateurs
-      .filter((c) => c.manager_id === recId && c.score != null)
-      .map((c) => Number(c.score));
-    if (scores.length === 0) return null;
-    return scores.reduce((s, n) => s + n, 0) / scores.length;
-  };
+  /** Combien des créateurs de ce recruteur sont en INACTIF ou MAUVAISES_VUES. */
+  const aSurveillerRecruteur = (recId: string): number =>
+    tousCreateurs.filter(
+      (c) =>
+        c.manager_id === recId &&
+        (c.qualification === "INACTIF" || c.qualification === "MAUVAISES_VUES"),
+    ).length;
 
   const carteRecruteur = (poster: PosterProfil) => {
     const langues =
@@ -1063,9 +1064,7 @@ export function AdminPostersPage() {
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                       {c.ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
                       {c.ugc_ai && !c.ugc_ai_video && <BadgeUgc label="UGC" />}
-                      {c.score != null && (
-                        <span>{t("posters.eloCompte", { score: Number(c.score).toFixed(1) })}</span>
-                      )}
+                      <QualificationBadge qualification={c.qualification} size="sm" />
                       <EssaiBadge createdAt={c.created_at} />
                       {!estCompteCm(c) && (
                         <WarmupBadge
@@ -1213,8 +1212,8 @@ export function AdminPostersPage() {
     fiche?.role === "hiring_manager" && fiche.manager_id
       ? tous.find((p) => p.id === fiche.manager_id && p.role === "directing_manager")
       : undefined;
-  const ficheEloMoyen =
-    fiche && estRoleManager(fiche.role) ? eloMoyenRecruteur(fiche.id) : null;
+  const ficheASurveiller =
+    fiche && estRoleManager(fiche.role) ? aSurveillerRecruteur(fiche.id) : null;
   const soiMeme = fiche?.id === user?.id;
 
   return (
@@ -1276,9 +1275,9 @@ export function AdminPostersPage() {
                 )}
                 {fiche.hm_ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
                 {!fiche.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
-                {ficheEloMoyen != null && (
-                  <Badge variant="secondary" title={t("posters.eloMoyenAide")}>
-                    {t("posters.eloMoyen", { score: ficheEloMoyen.toFixed(1) })}
+                {ficheASurveiller != null && ficheASurveiller > 0 && (
+                  <Badge variant="warning" title={t("posters.aSurveillerAide")}>
+                    {t("posters.aSurveiller", { n: ficheASurveiller })}
                   </Badge>
                 )}
               </div>
@@ -1364,11 +1363,7 @@ export function AdminPostersPage() {
                             >
                               {nomAffiche(c)}
                             </button>
-                            {c.score != null && (
-                              <span className="text-xs text-muted-foreground">
-                                {t("posters.eloCompte", { score: Number(c.score).toFixed(1) })}
-                              </span>
-                            )}
+                            <QualificationBadge qualification={c.qualification} size="sm" />
                           </li>
                         ))}
                       </ul>
@@ -1395,11 +1390,7 @@ export function AdminPostersPage() {
                           >
                             {nomAffiche(c)}
                           </button>
-                          {c.score != null && (
-                            <span className="text-xs text-muted-foreground">
-                              {t("posters.eloCompte", { score: Number(c.score).toFixed(1) })}
-                            </span>
-                          )}
+                          <QualificationBadge qualification={c.qualification} size="sm" />
                         </li>
                       ))}
                     </ul>
@@ -1530,13 +1521,7 @@ export function AdminPostersPage() {
                                 <div className="mt-1.5 flex flex-wrap items-center gap-2">
                                   {c.ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
                                   {c.ugc_ai && !c.ugc_ai_video && <BadgeUgc label="UGC" />}
-                                  {c.score != null && (
-                                    <Badge variant="secondary">
-                                      {t("posters.eloCompte", {
-                                        score: Number(c.score).toFixed(1),
-                                      })}
-                                    </Badge>
-                                  )}
+                                  <QualificationBadge qualification={c.qualification} size="sm" />
                                   <EssaiBadge createdAt={c.created_at} />
                                   {!estCompteCm(c) && (
                                     <span onClick={(e) => e.stopPropagation()}>
