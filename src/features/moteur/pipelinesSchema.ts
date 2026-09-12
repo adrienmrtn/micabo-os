@@ -316,8 +316,19 @@ export const SCHEMA_ASSIGNATION: PipelineAction = {
       onFail: "Média sauté ; le drain reprend les suivants",
     },
     {
-      id: "ugc_ai_video",
+      id: "burn",
       rang: "⑨",
+      label: "Burn-in du texte (comptes « burned »)",
+      kind: "api",
+      api: "bruler-assignes drain → api/burn.py (Vercel)",
+      env: "FAL_KEY (analyse) · BURN_SECRET (rendu)",
+      detail:
+        "Comptes burned : zones LLM sur le brut (cache burn_analyses) → rendu déterministe Pillow sur l'image propre upscalée (cache burn_rendus) → post_slides.burned_media_id",
+      onFail: "Slide livrée en classique (image propre + texte_overlay)",
+    },
+    {
+      id: "ugc_ai_video",
+      rang: "⑩",
       label: "UGC AI VIDEO — assignation (EN DERNIER)",
       kind: "api",
       api: "assignation-ugc-video (kick drain streamé)",
@@ -335,6 +346,11 @@ export const SCHEMA_ASSIGNATION: PipelineAction = {
       cle: "upscale drain",
       valeur: "SeedVR ×1 + cron * * * * *",
       detail: "kick post-assignation + file de secours",
+    },
+    {
+      cle: "burn",
+      valeur: "après upscale",
+      detail: "hors chemin minuit · repris par le filet des 15 min",
     },
     {
       cle: "ugc_ai_video",

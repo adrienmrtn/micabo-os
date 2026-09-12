@@ -29,6 +29,7 @@ import {
   urlVisuelRecadre,
   type DimensionsVisuel,
 } from "./format_visuel.ts";
+import { invaliderBurn } from "./burn_file.ts";
 import { dimensionsImage } from "./inpaint.ts";
 import { messageErreur, serviceClient } from "./supabase.ts";
 
@@ -218,6 +219,16 @@ export async function uniformiserFormatsContenu(
         motif: messageErreur(error),
       });
     }
+  }
+
+  // Les images propres viennent de changer : les burns faits dessus montrent
+  // un texte calé sur l'ancien cadrage. On les jette, ils seront refaits.
+  if (recadrees > 0) {
+    await invaliderBurn(
+      supabase,
+      contenuId,
+      lignes.filter((l) => l.statut === "recadre").map((l) => l.position),
+    );
   }
 
   return { contenuId, ratio, recadrees, lignes };

@@ -46,6 +46,36 @@ plus lu par le moteur.
 L'**ELO compte** (`comptes.score`) est inchangé : moyenne pondérée des ≤10
 derniers posts mesurés, −5 par jour actif sans publication, skip warmup.
 
+## Burned (0252, 12/09/2026)
+
+Un compte coché `comptes.burned` reçoit ses slides **texte déjà incrusté** : ni
+image vierge, ni texte à replacer. Le rendu est déterministe et vit sur Vercel,
+pas sur l'Edge — Deno n'a ni Pillow ni numpy :
+
+- `api/burn.py` (+ `api/_burn_core.py`, polices TikTok Sans dans `api/fonts/`)
+  mesure le texte d'origine sur l'image brute — hauteur d'encre, largeur de
+  chaque ligne, interligne, épaisseur du contour — puis redessine la traduction
+  avec les mêmes réglages sur l'image propre. Taille et interlettrage sortent
+  d'un système à deux inconnues calé sur les largeurs mesurées : sur la paire de
+  contrôle, les trois lignes retombent à 0,1 % près.
+- Le brut et le propre n'ont ni la même taille ni le même ratio (recadrage
+  `cover` centré puis upscale) : le recalage est analytique. Le masque du texte
+  croise la couleur et l'écart avec l'image propre — ce qui est présent dans les
+  deux images ne peut pas être une lettre.
+- Deux caches, indépendants du compte : `burn_analyses` (zones du LLM, une fois
+  par slide) et `burn_rendus` (image finale, une fois par slide + langue).
+  L'image est rangée sous `burned/<contenu>/<langue>/<position>.jpg`.
+- `bruler-assignes` draine le jour, hors du chemin de minuit. Il est entraîné
+  par l'étape `burn` de `minuit-vnext` — laquelle part aussi avec `assignation`,
+  donc le filet des 15 minutes le couvre sans job pg_cron de plus — et par la
+  fin du drain `upscale-assignes` (le burn vient **après** l'upscale).
+- Repli permanent : une slide non brûlée part en classique (image propre +
+  `texte_overlay`, qui reste rempli). `BURN_SECRET` absent = burn désactivé,
+  aucune slide marquée en échec.
+- Secret partagé `BURN_SECRET` (Edge **et** Vercel) + `BURN_URL` facultatif côté
+  Edge. C'est le seul secret des deux côtés : il ne donne accès qu'au moteur de
+  rendu, jamais à la base.
+
 ## Cloisonnement (non négociable)
 
 Tu travailles **uniquement** dans `adrienmrtn/micabo-os`.
@@ -63,7 +93,9 @@ Tu travailles **uniquement** dans `adrienmrtn/micabo-os`.
 - Front Vite : `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` (type Config
   sur Vercel, jamais Secret, jamais `service_role`).
 - Secrets moteur (`FAL_KEY`, `APIFY_TOKEN`, `CRON_SECRET`) : Edge Function
-  Secrets du projet `qkmiwnmiwsvwkttldqgb` seulement. Le texte (Gemini)
+  Secrets du projet `qkmiwnmiwsvwkttldqgb` seulement. Seule exception :
+  `BURN_SECRET`, posé des deux côtés (Edge + Vercel) parce qu'il ferme le
+  moteur de rendu `api/burn.py` — il ne donne accès à rien d'autre. Le texte (Gemini)
   passe par Fal OpenRouter — pas de `GEMINI_API_KEY`.
 - Slug unique : `micabo`. Pas de switcher, pas de `localStorage`
   `os-application-slug`, pas de fallback `application_id_sophia()`.
@@ -127,6 +159,12 @@ Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
  `import-contenu` en chargeur sur `b821612` / `066e7d6`. L'avertissement papier
  ne s'applique pas : le `papier_master.ts` de `minuit-vnext` est celui du dépôt
  (seul `papier-cm` v11 est en avance).
+
+- Depuis le 12/09/2026 (burn), les chargeurs sont **onze** : s'ajoutent
+ `bruler-assignes`, `bruler-texte-test`, `upscale-assignes` et
+ `normaliser-format`. Les SHA épinglés sont ceux du commit
+ qui porte les bundles, pas celui de `main` après squash — GitHub continue de
+ servir les commits de branche.
 
 Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
 être en avance sur `main`.

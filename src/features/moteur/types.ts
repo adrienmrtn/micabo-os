@@ -96,6 +96,8 @@ export interface Compte {
   ugc_ai_video: boolean;
   /** Persona UGC (4 angles) associé à ce créateur. */
   ugc_persona_id: string | null;
+  /** Le créateur reçoit ses slides texte déjà incrusté, pas à poser. */
+  burned: boolean;
   /** Création du compte OS — fenêtre d'essai admin = created_at + 5 × 24 h. */
   created_at?: string | null;
 }
@@ -194,11 +196,16 @@ export interface PostSlide {
   position_sophia: boolean;
   /** Visuel d'origine, texte encore incrusté : modèle de placement. */
   reference_url: string | null;
+  /** Image finale, texte déjà incrusté (comptes « burned »). */
+  burned_media_id?: string | null;
+  burned_at?: string | null;
+  burn_erreur?: string | null;
   media_library: {
     url: string;
     storage_path: string;
     upscale_le: string | null;
   } | null;
+  burned?: { url: string; storage_path: string } | null;
 }
 
 export interface PosterProfil {

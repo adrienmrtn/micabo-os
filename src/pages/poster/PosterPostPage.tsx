@@ -60,11 +60,26 @@ function nomFichier(postId: string, position: number) {
 }
 
 /**
+ * Slide « burned » : le texte est déjà incrusté sur l'image. Le créateur n'a
+ * rien à replacer, il poste le fichier tel quel.
+ */
+function estBurned(slide: PostSlide): boolean {
+  return Boolean(slide.burned?.url);
+}
+
+/** L'image à publier : la version brûlée si elle existe, sinon la propre. */
+function visuelSlide(slide: PostSlide): string | null {
+  return slide.burned?.url ?? slide.media_library?.url ?? null;
+}
+
+/**
  * Une slide n'est publiable que si sa photo a été nettoyée : `storage_path`
  * commençant par `propre/`. Un `brut/` porte encore le texte d'origine, un
  * media absent n'a rien du tout — les deux sont à signaler, pas à enregistrer.
+ * Une image brûlée part de la propre : elle est publiable par construction.
  */
 function estPropre(slide: PostSlide): boolean {
+  if (estBurned(slide)) return true;
   return Boolean(slide.media_library?.storage_path?.startsWith("propre/"));
 }
 
@@ -373,7 +388,7 @@ export function PosterPostPage() {
   // slides sont ramenées au même format — un post peut mélanger plusieurs
   // TikToks sources quand l'assignation a pioché un visuel de secours.
   const fichiers = useQuery({
-    queryKey: ["fichiers", id, liste.map((s) => s.media_library?.url).join("|")],
+    queryKey: ["fichiers", id, liste.map(visuelSlide).join("|")],
     enabled: liste.length > 0,
     staleTime: Infinity,
     queryFn: () =>
@@ -381,7 +396,7 @@ export function PosterPostPage() {
         // On ne précharge que les photos nettoyées : enregistrer un visuel au
         // texte encore incrusté reviendrait à le faire publier tel quel.
         liste.filter(estPropre).map((slide) => ({
-          url: slide.media_library!.url,
+          url: visuelSlide(slide)!,
           nom: nomFichier(id!, slide.position),
         })),
       ),
@@ -494,7 +509,7 @@ export function PosterPostPage() {
     const dejaPret = (fichiers.data ?? []).find((f) => f.name === nom);
 
     try {
-      const fichier = dejaPret ?? (await recupererFichier(slide.media_library!.url, nom));
+      const fichier = dejaPret ?? (await recupererFichier(visuelSlide(slide)!, nom));
       if (peutPartager([fichier])) {
         await partagerFichiers([fichier], nom);
         return;
@@ -702,9 +717,11 @@ export function PosterPostPage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 {estPropre(slide) ? (
                   <Visuel
-                    url={slide.media_library!.url}
-                    legende={t("posts.photoAPoster")}
-                    onZoom={() => setLoupe(slide.media_library!.url)}
+                    url={visuelSlide(slide)!}
+                    legende={estBurned(slide)
+                      ? t("posts.photoBurned")
+                      : t("posts.photoAPoster")}
+                    onZoom={() => setLoupe(visuelSlide(slide)!)}
                   />
                 ) : slide.media_library?.url ? (
                   // Photo présente mais jamais nettoyée : elle porte encore son
@@ -740,7 +757,9 @@ export function PosterPostPage() {
                     </span>
                   </div>
                 )}
-                {slide.reference_url && (
+                {/* Le modèle de placement n'a plus d'objet quand le texte est
+                    déjà sur l'image : il ne ferait qu'inviter à en reposer un. */}
+                {slide.reference_url && !estBurned(slide) && (
                   <Visuel
                     url={slide.reference_url}
                     legende={t("posts.placementTitre")}
@@ -760,7 +779,7 @@ export function PosterPostPage() {
                 </Button>
               )}
 
-              {slide.texte_overlay && (
+              {slide.texte_overlay && !estBurned(slide) && (
                 <TexteCopiable texte={slide.texte_overlay} label={t("posts.texteSlide")} />
               )}
 
@@ -823,8 +842,10 @@ export function PosterPostPage() {
 }
 
 function texteComplet(post: Post, slides: PostSlide[]): string {
+  // Une slide brûlée porte déjà son texte : le remettre dans le pense-bête
+  // ferait croire qu'il reste à poser.
   const lignes = slides
-    .filter((s) => s.texte_overlay)
+    .filter((s) => s.texte_overlay && !estBurned(s))
     .map((s) => `Slide ${s.position}\n${s.texte_overlay}`);
   if (post.hashtags) lignes.push(`Description :\n${post.hashtags}`);
   if (post.musique_url) lignes.push(`Musique : ${post.musique_url}`);

@@ -1600,7 +1600,10 @@ export async function listerSlides(postId: string): Promise<PostSlide[]> {
     // storage_path distingue une photo nettoyée (`propre/…`) d'un original
     // gardé faute de nettoyage (`brut/…`), qui porte encore son texte.
     // upscale_le : badge / forcer re-upscale depuis le détail post.
-    .select("*, media_library(url, storage_path, upscale_le)")
+    // `burned` : image finale texte déjà incrusté, pour les comptes « burned ».
+    .select(
+      "*, media_library(url, storage_path, upscale_le), burned:media_library!post_slides_burned_media_id_fkey(url, storage_path)",
+    )
     .eq("post_id", postId)
     .order("position");
   if (error) throw error;
@@ -2798,16 +2801,24 @@ export type BurnTexteEvent = {
   propreUrl?: string;
   brutUrl?: string;
   texteTraduit?: string;
-  /** Zones Gemini brutes (`etape: gemini`) ou normalisées (`analyse` / `payload`). */
+  /** Zones du LLM, fusionnées et garnies du texte traduit (`etape: analyse`). */
   zones?: BurnTexteZone[];
+  /** `etape: image` — aperçu en data URL (test) ou URL stockée (enregistrement). */
+  image?: string;
+  url?: string;
+  /** Réglages mesurés par le moteur de rendu, par zone. */
+  rapport?: unknown;
   slides?: number;
   sautes?: number;
   echecs?: number;
 };
 
-/** Test admin : analyse brut + payload burn (Canvas front). Aucune sauvegarde. */
+/**
+ * Test admin : deck cuit (traduction + micabo) puis burn par le moteur de
+ * rendu de production. `sauvegarder` range les images ; sinon simple aperçu.
+ */
 export async function brulerTexteTestStream(
-  input: { contenuId: string; langue: string },
+  input: { contenuId: string; langue: string; sauvegarder?: boolean },
   onEtape: (e: BurnTexteEvent) => void | Promise<void>,
 ): Promise<BurnTexteEvent> {
   const url = import.meta.env.VITE_SUPABASE_URL;
