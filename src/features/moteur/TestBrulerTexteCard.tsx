@@ -120,30 +120,29 @@ function vignette(c: ContenuListe): string | null {
   return null;
 }
 
-/** Ce que le moteur de rendu a mesuré sur l'image d'origine, par zone. */
-type Reglage = {
-  role?: string;
-  police?: string;
-  taille: number;
-  tracking: number;
-  contour: number;
-  interligne: number;
-  alignement: string;
-  hauteurX?: number;
-  mesure?: boolean;
-  fiable?: boolean;
-  lignes?: string[];
-  notes?: string[];
-  /** Écarts entre le texte d'origine redessiné et le texte mesuré. */
-  controle?: {
-    ok?: boolean;
-    baseline?: number;
-    bord?: number;
-    largeur?: number;
-    pireLargeur?: number;
-    pirePosition?: number;
-    detail?: string;
+/** Ce que le moteur du kit renvoie : le spec mesuré et son autotest. */
+type RapportKit = {
+  spec?: Array<{
+    id: string;
+    font?: string;
+    size: number;
+    align: string;
+    stroke?: number;
+    pitch?: number;
+    box_width?: number;
+    lines?: string[];
+  }>;
+  selftest?: {
+    pass?: boolean;
+    blocks?: Array<{
+      pass: boolean;
+      lines_source: number;
+      lines_render: number;
+      max_d_baseline: number | null;
+      max_d_width: number | null;
+    }>;
   };
+  reductions?: Record<string, number>;
 };
 
 /**
@@ -241,31 +240,6 @@ export function TestBrulerTexteCard() {
     const push = (l: string) =>
       setLogs((prev) => [...prev.slice(-200), l]);
 
-    const logZones = (
-      prefix: string,
-      pos: number | undefined,
-      zones: NonNullable<BurnTexteEvent["zones"]>,
-      mode: "ocr" | "traduit",
-    ) => {
-      push(`── #${pos ?? "—"} ${prefix} (${zones.length} zone(s)) ──`);
-      zones.forEach((z, i) => {
-        const role = z.role ?? "?";
-        const box = `x=${Number(z.x).toFixed(2)} y=${Number(z.y).toFixed(2)} w=${Number(z.w).toFixed(2)} h=${Number(z.h).toFixed(2)}`;
-        const style = `${z.couleur ?? "?"} ${z.ombre ? "stroke" : "flat"} · ${z.nbLignes ?? "?"}L · ${role}`;
-        push(`  [${i}] ${box} · ${style}`);
-        const ocr = (z.texteSource ?? (mode === "ocr" ? z.texte : "") ?? "")
-          .trim()
-          .replace(/\s+/g, " ");
-        const trad = mode === "traduit" ? (z.texte ?? "").trim().replace(/\s+/g, " ") : "";
-        if (ocr) {
-          push(`       OCR: ${ocr.slice(0, 160)}${ocr.length > 160 ? "…" : ""}`);
-        }
-        if (trad) {
-          push(`       → ${trad.slice(0, 160)}${trad.length > 160 ? "…" : ""}`);
-        }
-      });
-    };
-
     try {
       push(t("tests.brulerDebut", { langue: nomLangue(langue) }));
       await brulerTexteTestStream(
@@ -292,9 +266,18 @@ export function TestBrulerTexteCard() {
               return next.sort((a, b) => a.position - b.position);
             });
           }
-          if (ev.etape === "analyse" && ev.zones) {
+          if (ev.etape === "analyse" && ev.blocs) {
             if (ev.detail) push(`#${ev.position} ${ev.detail}`);
-            logZones("zones mesurées", ev.position, ev.zones, "traduit");
+            // Ce que le LLM a LU : texte, genre de police, boîte. Aucune
+            // mesure ici — elles arrivent avec l'image, depuis le moteur.
+            for (const b of ev.blocs) {
+              const boite = (b.bbox ?? []).map((v) => Math.round(v)).join(", ");
+              push(`  ${b.id} · ${b.style ?? "?"} · ${b.outline ? "contour" : "sans contour"}`
+                + (boite ? ` · [${boite}]` : ""));
+              for (const l of (b.text ?? "").split("\n")) push(`     « ${l} »`);
+              const cible = ev.traductions?.[b.id]?.text;
+              if (cible) push(`     → ${cible}`);
+            }
             const pos = Number(ev.position);
             setPreviews((prev) =>
               prev.map((p) =>
@@ -313,25 +296,24 @@ export function TestBrulerTexteCard() {
             const src = ev.image ?? ev.url;
             // Le rapport dit ce que le moteur a MESURÉ sur l'original : c'est
             // par là qu'on voit si un rendu de travers vient de la mesure.
-            for (const r of (ev.rapport as Reglage[] | undefined) ?? []) {
+            const rapport = ev.rapport as RapportKit | undefined;
+            for (const b of rapport?.spec ?? []) {
               push(
-                `  ${r.role ?? "zone"} · ${r.police ?? "?"} ${r.taille}px` +
-                  ` · interlettrage ${r.tracking} · contour ${r.contour}` +
-                  ` · interligne ${r.interligne} · ${r.alignement}` +
-                  (r.mesure ? "" : " (non mesuré)"),
+                `  ${b.id} · ${(b.font ?? "").split("/").pop()} · ${Math.round(b.size)}px`
+                  + ` · ${b.align} · contour ${b.stroke?.toFixed(1)}`
+                  + ` · interligne ${Math.round(b.pitch ?? 0)} · boîte ${Math.round(b.box_width ?? 0)}`,
               );
-              const c = r.controle;
-              if (c?.detail) {
-                push(`     contrôle : ${c.detail}`);
-              } else if (c) {
-                push(
-                  `     contrôle ${c.ok ? "OK" : "HORS TOLÉRANCE"} · base ${c.baseline}px` +
-                    ` · bord ${c.bord}px · largeur ${c.largeur}%` +
-                    ` (pire ${c.pireLargeur}% / ${c.pirePosition}px)`,
-                );
-              }
-              for (const n of r.notes ?? []) push(`     ${n}`);
-              for (const l of r.lignes ?? []) push(`     « ${l} »`);
+              for (const l of b.lines ?? []) push(`     « ${l} »`);
+            }
+            for (const q of rapport?.selftest?.blocks ?? []) {
+              push(
+                `  autotest ${q.pass ? "OK" : "HORS TOLÉRANCE"}`
+                  + ` · lignes ${q.lines_source}→${q.lines_render}`
+                  + ` · base ${q.max_d_baseline}px · largeur ${q.max_d_width}px`,
+              );
+            }
+            for (const [id, ratio] of Object.entries(rapport?.reductions ?? {})) {
+              push(`  ${id} réduit à ${Math.round(ratio * 100)} % pour tenir dans le cadre`);
             }
             if (ev.fiable === false) {
               push(

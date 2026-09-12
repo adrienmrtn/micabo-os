@@ -1046,6 +1046,169 @@ export interface ZoneTexteIncruste {
  * Analyse le brut : boxes + couleur + texte de chaque bloc incrusté.
  * Sert au burn-in test (repose le texte traduit au plus près du style source).
  */
+/** Un bloc lu par le LLM, au contrat du burn-kit : le modèle LIT, il ne mesure pas. */
+export interface BlocLu {
+  id: string;
+  /** Texte exact, une ligne par ligne visible, séparées par \n. */
+  text: string;
+  role: string;
+  /** sans | sans_gras | serif | serif_gras | serif_italique | manuscrit */
+  style: string;
+  case: string;
+  /** Estimation du remplissage ; la mesure la raffinera. */
+  color: [number, number, number];
+  outline: boolean;
+  outline_color: [number, number, number];
+  highlight: boolean;
+  /** Rectangle du bloc, en pixels de la capture. */
+  bbox: [number, number, number, number];
+}
+
+/**
+ * Lecture du style d'une slide, prompt du burn-kit.
+ *
+ * C'est la moitié « le LLM lit » du contrat : aucune taille, aucune position,
+ * aucun interligne ne sort d'ici. Le reste se mesure sur les pixels, côté
+ * moteur. Les boîtes sont SERRÉES — ne pas les réutiliser pour un masque de
+ * détourage, qui en veut de larges (`analyserTexteIncrusteBrut`).
+ */
+export async function lireStyleBurn(imageUrl: string): Promise<BlocLu[]> {
+  const image = await fetchImageAsInline(imageUrl);
+  const dimensions = await dimensionsImageDistante(imageUrl);
+  const prompt = `Tu analyses la capture d'une slide de carrousel TikTok.
+
+Tu décris UNIQUEMENT le texte ajouté par le créateur par-dessus la photo.
+Tu ignores complètement :
+- l'interface de l'application : pseudo, date, légende, hashtags, points de
+  carrousel, flèches de navigation, boutons, barre du bas, icône de son ;
+- le texte qui fait partie de la photo elle-même : panneaux, écrans, livres,
+  marques sur les objets.
+
+Un "bloc" est un groupe de lignes qui partagent police, taille et couleur.
+Un titre et son sous-titre sont deux blocs différents. Deux tailles différentes
+font deux blocs différents, même s'ils se touchent.
+
+Réponds en JSON strict, sans commentaire, sans texte autour :
+{
+  "blocks": [
+    {
+      "id": "titre",
+      "text": "le texte exact, une ligne par ligne visible, séparées par \\n",
+      "role": "titre | sous-titre | puces | legende",
+      "style": "sans | sans_gras | serif | serif_gras | serif_italique | manuscrit",
+      "case": "minuscules | capitales | normal",
+      "color": [r, g, b],
+      "outline": true,
+      "outline_color": [r, g, b],
+      "highlight": false,
+      "bbox": [x0, y0, x1, y1]
+    }
+  ]
+}
+
+Règles :
+- "text" : recopie au caractère près, fautes comprises, et respecte les retours
+  à la ligne visibles. C'est ce découpage qui sert à mesurer.
+- "color" : ta meilleure estimation du remplissage, en RGB. Elle sera raffinée
+  par la mesure, mais elle doit être dans le bon voisinage.
+- "outline" : true seulement si les lettres ont un contour d'une autre couleur.
+- "highlight" : true si le texte est posé sur un rectangle de couleur.
+- "bbox" : le rectangle qui contient tout le bloc, en pixels de CETTE image,
+  généreux de 10 px mais sans mordre sur un autre bloc.
+
+Cette image fait exactement ${dimensions.largeur} × ${dimensions.hauteur} pixels.`;
+
+  for (let essai = 0; essai < 2; essai += 1) {
+    const parts = await callWithFallback(TEXT_MODELS, [image, { text: prompt }]);
+    const blocs = parserBlocsLus(textOf(parts), dimensions);
+    if (blocs.length > 0) return blocs;
+  }
+  return [];
+}
+
+/** Dimensions réelles d'une image distante, pour parler pixels au modèle. */
+async function dimensionsImageDistante(
+  url: string,
+): Promise<{ largeur: number; hauteur: number }> {
+  const reponse = await fetch(url, { headers: { range: "bytes=0-65535" } });
+  const octets = new Uint8Array(await reponse.arrayBuffer());
+  const vue = new DataView(octets.buffer);
+  // JPEG : on avance de marqueur en marqueur jusqu'au SOF, qui porte la taille.
+  if (octets[0] === 0xff && octets[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < octets.length) {
+      if (octets[i] !== 0xff) { i += 1; continue; }
+      const marqueur = octets[i + 1];
+      if (marqueur >= 0xc0 && marqueur <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marqueur)) {
+        return { hauteur: vue.getUint16(i + 5), largeur: vue.getUint16(i + 7) };
+      }
+      i += 2 + vue.getUint16(i + 2);
+    }
+  }
+  // PNG : largeur et hauteur sont en clair juste après la signature.
+  if (octets[0] === 0x89 && octets[1] === 0x50) {
+    return { largeur: vue.getUint32(16), hauteur: vue.getUint32(20) };
+  }
+  return { largeur: 0, hauteur: 0 };
+}
+
+function parserBlocsLus(
+  texte: string,
+  dimensions: { largeur: number; hauteur: number },
+): BlocLu[] {
+  const trouve = texte.match(/\{[\s\S]*\}/);
+  if (!trouve) return [];
+  let data: unknown;
+  try {
+    data = JSON.parse(trouve[0]);
+  } catch {
+    return [];
+  }
+  const brut = (data as { blocks?: unknown[] })?.blocks;
+  if (!Array.isArray(brut)) return [];
+
+  const couleur = (v: unknown, defaut: [number, number, number]): [number, number, number] => {
+    if (Array.isArray(v) && v.length >= 3 && v.every((n) => typeof n === "number")) {
+      return [Math.round(v[0]), Math.round(v[1]), Math.round(v[2])];
+    }
+    return defaut;
+  };
+
+  const out: BlocLu[] = [];
+  for (const [i, item] of brut.entries()) {
+    if (!item || typeof item !== "object") continue;
+    const raw = item as Record<string, unknown>;
+    const text = String(raw.text ?? "").trim();
+    const bbox = raw.bbox;
+    if (!text || !Array.isArray(bbox) || bbox.length !== 4) continue;
+    let [x0, y0, x1, y1] = bbox.map(Number);
+    if ([x0, y0, x1, y1].some((n) => !Number.isFinite(n))) continue;
+    // Le modèle rend parfois des centièmes ou des millièmes malgré la consigne.
+    const maxi = Math.max(x0, y0, x1, y1);
+    if (maxi <= 1.5 && dimensions.largeur > 0) {
+      x0 *= dimensions.largeur; x1 *= dimensions.largeur;
+      y0 *= dimensions.hauteur; y1 *= dimensions.hauteur;
+    } else if (maxi <= 1000 && dimensions.largeur > 1200) {
+      const k = dimensions.largeur / 1000;
+      x0 *= k; x1 *= k; y0 *= dimensions.hauteur / 1000; y1 *= dimensions.hauteur / 1000;
+    }
+    if (x1 <= x0 || y1 <= y0) continue;
+    out.push({
+      id: String(raw.id ?? `bloc${i}`),
+      text,
+      role: String(raw.role ?? "corps"),
+      style: String(raw.style ?? "sans"),
+      case: String(raw.case ?? "normal"),
+      color: couleur(raw.color, [255, 255, 255]),
+      outline: raw.outline === true,
+      outline_color: couleur(raw.outline_color, [0, 0, 0]),
+      highlight: raw.highlight === true,
+      bbox: [x0, y0, x1, y1],
+    });
+  }
+  return out;
+}
+
 export async function analyserTexteIncrusteBrut(
   imageUrl: string,
 ): Promise<ZoneTexteIncruste[]> {

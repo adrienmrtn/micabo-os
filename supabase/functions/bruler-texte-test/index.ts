@@ -5,7 +5,7 @@
  *     → NDJSON :
  *         { etape:"deck",    statut, detail }
  *         { etape:"slide",   position, statut:"encours"|"saute"|"ok"|"echec", detail? }
- *         { etape:"analyse", position, zones:[…], texteTraduit, brutUrl, propreUrl, detail }
+ *         { etape:"analyse", position, blocs:[…], traductions, texteTraduit, brutUrl, propreUrl }
  *         { etape:"image",   position, image?|url?, rapport:[…], fiable }
  *         { etape:"ready",   statut, detail, slides }
  *
@@ -20,10 +20,10 @@
  */
 
 import {
+  blocsPourSlide,
   brulerSlide,
-  preparerZonesBurn,
   rendreImageBurn,
-  zonesPourSlide,
+  repartirDeckSurBlocs,
 } from "../_shared/burn.ts";
 import { assurerDeckPourLangue } from "../_shared/import_contenu.ts";
 import { reponseNdjson, veutStream } from "../_shared/nettoyage_etapes.ts";
@@ -147,20 +147,22 @@ Deno.serve(async (request) => {
       });
 
       try {
-        const { zones: brutes, cache } = await zonesPourSlide(supabase, {
+        const { blocs, cache } = await blocsPourSlide(supabase, {
           contenuId,
           position: pos,
           brutUrl: brutUrl!,
         });
-        const zones = preparerZonesBurn(brutes, texteTraduit);
+        if (blocs.length === 0) {
+          throw new Error("aucun bloc de texte lu sur la slide");
+        }
+        const traductions = repartirDeckSurBlocs(texteTraduit, blocs);
         emit({
           etape: "analyse",
           position: pos,
-          detail: `${zones.length} zone(s)` +
-            (cache ? " · analyse en cache" : "") +
-            (brutes.length === 0 ? " · aucune zone détectée, bandeau central" : ""),
+          detail: `${blocs.length} bloc(s) lu(s)` + (cache ? " · lecture en cache" : ""),
           texteTraduit,
-          zones,
+          blocs,
+          traductions,
           // L'original sert de référence à l'œil : c'est en le mettant à côté
           // du rendu qu'on voit si la mesure a pris.
           brutUrl,
@@ -185,7 +187,8 @@ Deno.serve(async (request) => {
           const { bytes, rapport, fiable } = await rendreImageBurn({
             brutUrl: brutUrl!,
             propreUrl: propreUrl!,
-            zones,
+            blocs,
+            traductions,
           });
           emit({
             etape: "image",
