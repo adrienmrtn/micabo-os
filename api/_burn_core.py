@@ -1602,12 +1602,12 @@ def bruler(
             )
         controle = controler(paire, style, rect)
         lignes, notes = _mettre_en_lignes(texte, style, paire.propre.size)
-        # Un style qui ne sait pas reproduire le texte qu'il vient de mesurer
-        # ne reproduira pas la traduction non plus. Plutôt qu'une slide de
-        # travers, on ne dessine rien : le créateur la recevra en classique.
+        # Le moteur dessine toujours et dit ce qu'il vaut ; c'est l'appelant qui
+        # décide de livrer ou non. Ne rien dessiner rendait l'aperçu de test
+        # inutilisable : une image propre étiquetée « brûlée », sans rien à
+        # regarder pour comprendre ce qui cloche.
         fiable = bool(controle.get("ok"))
-        if fiable:
-            sortie = dessiner(sortie, lignes, style)
+        sortie = dessiner(sortie, lignes, style)
         rapport.append(
             {
                 "role": zone.get("role"),
@@ -1634,5 +1634,10 @@ def bruler(
 
 
 def burn_livrable(rapport: list[dict]) -> bool:
-    """Toutes les zones ont passé leur contrôle : l'image est bonne à livrer."""
+    """Toutes les zones ont passé leur contrôle : l'image est bonne à livrer.
+
+    L'image existe dans tous les cas — c'est ce qui permet de la regarder pour
+    comprendre. Seule la production s'interdit de la servir quand ce drapeau
+    est faux, et la slide part alors en classique.
+    """
     return bool(rapport) and all(z.get("fiable") for z in rapport)

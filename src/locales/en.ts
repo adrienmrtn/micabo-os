@@ -414,6 +414,8 @@ export const en = {
       brulerEnregistrer: "Burn and save",
       brulerOriginal: "Original",
       brulerRendu: "Burned",
+      brulerRefuse: "Burned · rejected",
+      brulerSansOriginal: "original unavailable",
       brulerDebut: "Burn-in → {{langue}}…",
       brulerSlideN: "Slide {{n}}",
       recentsTitre: "Your recent tests",
