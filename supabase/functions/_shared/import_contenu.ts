@@ -33,6 +33,7 @@ import {
   NOTE_IMPORT_MIN,
   passagesPourTier,
   tierImport,
+  VUES_SOURCE_MIN_B_PLUS,
   type Tier,
 } from "./tierlist.ts";
 import {
@@ -181,6 +182,9 @@ export interface RapportImport {
 /**
  * Note d'import /100 — un seul score, plus de note par langue.
  *
+ * Attention : la note seule ne décide pas du tier. `tierImport` plafonne à C
+ * tant que le TikTok d'origine n'a pas atteint `VUES_SOURCE_MIN_B_PLUS` vues.
+ *
  *   base = (1−poidsVues)×pertinence + poidsVues×scoreVues   (défaut 30/70)
  *   note = (kk × prior + base) / (kk + 1)   avec kk = k/2
  *
@@ -228,7 +232,7 @@ export function rapportImport(opts: {
     poidsVues: opts.poidsVues,
     vuesPlafond: opts.vuesPlafond,
   });
-  const tier = tierImport(note);
+  const tier = tierImport(note, vues);
   const pctVues = Math.round(opts.poidsVues * 100);
   const pctPert = 100 - pctVues;
   const texte = [
@@ -237,6 +241,9 @@ export function rapportImport(opts: {
     `base = ${pctPert}%×pert + ${pctVues}%×vues = ${base.toFixed(2)}`,
     `note = (kk×prior + base) / (kk+1) · kk = k/2 = ${kk} · prior=${opts.prior}`,
     `NOTE = ${note.toFixed(2)} · seuil import ${opts.seuil} · source ${opts.langueSource}`,
+    vues < VUES_SOURCE_MIN_B_PLUS
+      ? `plafond C : la source n'a pas ${VUES_SOURCE_MIN_B_PLUS} vues`
+      : `pas de plafond : source ≥ ${VUES_SOURCE_MIN_B_PLUS} vues`,
     tier
       ? `→ TIER ${tier} (${NOTE_IMPORT_MIN}–${NOTE_IMPORT_B} C · ${NOTE_IMPORT_B}–${NOTE_IMPORT_A} B · ≥${NOTE_IMPORT_A} A)` +
         ` · ${passagesPourTier(tier)} passage(s) à effectuer`

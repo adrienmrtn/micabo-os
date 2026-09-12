@@ -1,4 +1,5 @@
 export {
+  VUES_SOURCE_MIN_B_PLUS,
   prioriserTiersHauts,
   TIER_TIRAGE_PRIORITAIRE,
   ajouterJoursParis,

@@ -1717,7 +1717,7 @@ export const en = {
       eloVuesPlafond: "Views ceiling (= score 100)",
       eloRegularisation: "ELO regularization k (import)",
       eloVuesAide:
-        "Score /100 = 30 % relevance + 70 % source views (log^1.3, cap 80k), regularised toward 50. It only decides the first placement: <55 dropped · 55–60 C · 60–70 B · ≥70 A. After that the slideshow lives in the tier list.",
+        "Score /100 = 30 % relevance + 70 % source views (log^1.3, cap 80k), regularised toward 50. It only decides the first placement: <55 dropped · 55–60 C · 60–70 B · ≥70 A. And without 10,000 views on the original TikTok, entry is capped at C whatever the score. After that the slideshow lives in the tier list.",
       legacyTitle: "Legacy (ratios / week 1)",
       legacySubtitle: "Kept until cutover. Ignored when v-next is active.",
     },

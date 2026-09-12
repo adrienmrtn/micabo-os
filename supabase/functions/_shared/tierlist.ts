@@ -47,6 +47,16 @@ export const NOTE_IMPORT_MIN = 55;
 export const NOTE_IMPORT_B = 60;
 export const NOTE_IMPORT_A = 70;
 
+/**
+ * Vues minimales du TikTok d'origine pour entrer au-dessus de C.
+ *
+ * La note mélange pertinence et vues : un TikTok très pertinent mais peu vu
+ * pouvait entrer en B, voire en A. On n'accorde plus 2 à 4 passages à un
+ * slideshow dont la source n'a jamais convaincu personne — il entre en C et
+ * remonte s'il le mérite chez nous.
+ */
+export const VUES_SOURCE_MIN_B_PLUS = 10_000;
+
 /** Vues d'un passage à partir desquelles on replanifie le même post à J+7. */
 export const VUES_REPOST_BONUS = 50_000;
 /** Décalage du repost bonus, en jours. */
@@ -92,9 +102,15 @@ export function requalifier(actuel: Tier, m: number): Tier {
   return TIERS[idx]!;
 }
 
-/** Premier placement à l'import. `null` = sous le seuil, TikTok non importé. */
-export function tierImport(note: number): Tier | null {
+/**
+ * Premier placement à l'import. `null` = sous le seuil, TikTok non importé.
+ *
+ * `vuesSource` est plafonnant : sous `VUES_SOURCE_MIN_B_PLUS`, l'entrée se fait
+ * en C quelle que soit la note.
+ */
+export function tierImport(note: number, vuesSource: number | null | undefined): Tier | null {
   if (!Number.isFinite(note) || note < NOTE_IMPORT_MIN) return null;
+  if ((vuesSource ?? 0) < VUES_SOURCE_MIN_B_PLUS) return "C";
   if (note < NOTE_IMPORT_B) return "C";
   if (note < NOTE_IMPORT_A) return "B";
   return "A";

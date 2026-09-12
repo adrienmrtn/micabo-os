@@ -21,17 +21,37 @@ describe("passagesPourTier", () => {
 });
 
 describe("tierImport", () => {
+  /** Source assez vue pour que le plafond C ne s'applique pas. */
+  const VUE = 50_000;
+
   it("rejette sous 55", () => {
-    expect(tierImport(54.9)).toBeNull();
+    expect(tierImport(54.9, VUE)).toBeNull();
   });
 
   it("place C / B / A sur les bornes basses incluses", () => {
-    expect(tierImport(55)).toBe("C");
-    expect(tierImport(59.9)).toBe("C");
-    expect(tierImport(60)).toBe("B");
-    expect(tierImport(69.9)).toBe("B");
-    expect(tierImport(70)).toBe("A");
-    expect(tierImport(98)).toBe("A");
+    expect(tierImport(55, VUE)).toBe("C");
+    expect(tierImport(59.9, VUE)).toBe("C");
+    expect(tierImport(60, VUE)).toBe("B");
+    expect(tierImport(69.9, VUE)).toBe("B");
+    expect(tierImport(70, VUE)).toBe("A");
+    expect(tierImport(98, VUE)).toBe("A");
+  });
+
+  it("plafonne à C sous 10 000 vues sur la source, quelle que soit la note", () => {
+    expect(tierImport(98, 9_999)).toBe("C");
+    expect(tierImport(70, 0)).toBe("C");
+    expect(tierImport(60, 5_000)).toBe("C");
+    expect(tierImport(98, 10_000)).toBe("A");
+  });
+
+  it("traite une source inconnue comme non vue", () => {
+    expect(tierImport(98, null)).toBe("C");
+    expect(tierImport(98, undefined)).toBe("C");
+  });
+
+  it("laisse le seuil d'import primer sur le plafond", () => {
+    expect(tierImport(40, 1_000_000)).toBeNull();
+    expect(tierImport(40, 100)).toBeNull();
   });
 });
 
