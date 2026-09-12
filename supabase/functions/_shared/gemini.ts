@@ -20,6 +20,28 @@ export const TEXT_MODELS = [
 ];
 
 /**
+ * Lecture du style d'une slide à brûler — Claude, et seulement Claude.
+ *
+ * C'est le seul endroit du burn où un modèle parle : tout le reste est mesuré
+ * par le moteur. Une bbox à 20 px près ou une coupure de ligne inventée suffit
+ * à faire échouer un autotest dont la tolérance est 0,5 % de la largeur
+ * d'image, et la slide repart en classique. Le kit a été mis au point avec
+ * Claude à cette place ; `gemini-2.5-flash` n'y tient pas.
+ *
+ * Pas de repli vers un modèle plus faible : la lecture est mise en cache dans
+ * `burn_analyses`, donc une mauvaise lecture ne rate pas une slide, elle la
+ * rate DÉFINITIVEMENT. Mieux vaut ne rien lire — le repli classique existe
+ * pour ça.
+ *
+ * Le routeur de Fal est OpenRouter : un identifiant déjà préfixé passe tel
+ * quel (voir `versModeleOpenRouter`), aucune plomberie à changer.
+ */
+export const MODELES_LECTURE_BURN = [
+  "anthropic/claude-opus-5",
+  "anthropic/claude-sonnet-5",
+];
+
+/**
  * Le refus de retouche est inconstant : le même modèle accepte une image et en
  * refuse une autre. On enchaîne donc plusieurs modèles avant d'abandonner.
  */
@@ -88,6 +110,16 @@ function estTransitoireGemini(message: string): boolean {
 }
 
 async function callWithFallback(models: string[], parts: Part[]): Promise<Part[]> {
+  return (await callWithFallbackModele(models, parts)).parts;
+}
+
+/** Comme `callWithFallback`, mais dit AUSSI quel modèle a répondu. La lecture
+ * du burn en a besoin : le cache doit savoir qui a lu, sinon une lecture faite
+ * par un modèle remplacé depuis est resservie éternellement. */
+async function callWithFallbackModele(
+  models: string[],
+  parts: Part[],
+): Promise<{ parts: Part[]; model: string }> {
   // On essaie chaque modèle ; si TOUS échouent pour une raison PASSAGÈRE
   // (surcharge Gemini), on réessaie après une attente croissante + jitter, au
   // lieu de remonter une erreur 500 tout de suite. C'est ce qui manquait aux
@@ -104,7 +136,7 @@ async function callWithFallback(models: string[], parts: Part[]): Promise<Part[]
     failures = [];
     for (const model of models) {
       try {
-        return await call(model, parts);
+        return { parts: await call(model, parts), model };
       } catch (error) {
         failures.push(`${model}: ${messageErreur(error)}`);
       }
@@ -1072,7 +1104,9 @@ export interface BlocLu {
  * moteur. Les boîtes sont SERRÉES — ne pas les réutiliser pour un masque de
  * détourage, qui en veut de larges (`analyserTexteIncrusteBrut`).
  */
-export async function lireStyleBurn(imageUrl: string): Promise<BlocLu[]> {
+export async function lireStyleBurn(
+  imageUrl: string,
+): Promise<{ blocs: BlocLu[]; modele: string }> {
   const image = await fetchImageAsInline(imageUrl);
   const dimensions = await dimensionsImageDistante(imageUrl);
   const prompt = `Tu analyses la capture d'une slide de carrousel TikTok.
@@ -1119,11 +1153,14 @@ Règles :
 Cette image fait exactement ${dimensions.largeur} × ${dimensions.hauteur} pixels.`;
 
   for (let essai = 0; essai < 2; essai += 1) {
-    const parts = await callWithFallback(TEXT_MODELS, [image, { text: prompt }]);
+    const { parts, model } = await callWithFallbackModele(
+      MODELES_LECTURE_BURN,
+      [image, { text: prompt }],
+    );
     const blocs = parserBlocsLus(textOf(parts), dimensions);
-    if (blocs.length > 0) return blocs;
+    if (blocs.length > 0) return { blocs, modele: model };
   }
-  return [];
+  return { blocs: [], modele: "" };
 }
 
 /** Dimensions réelles d'une image distante, pour parler pixels au modèle. */

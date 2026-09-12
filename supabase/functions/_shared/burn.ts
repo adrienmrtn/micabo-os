@@ -27,6 +27,14 @@ type Supabase = ReturnType<typeof serviceClient>;
 const BUCKET = "medias";
 const BURN_URL_DEFAUT = "https://micabo-os.vercel.app/api/burn";
 
+/**
+ * Marque du lecteur dans `burn_analyses.modele`. Le suffixe porte le modèle qui
+ * a réellement répondu : une lecture faite par un autre modèle est une AUTRE
+ * lecture, pas la même en moins frais. Les lignes sans suffixe sont celles de
+ * `gemini-2.5-flash` — on ne les resserre pas, on relit.
+ */
+const MARQUE_LECTURE = "burn-kit/read_style:";
+
 export type RenduBurn = {
   mediaId: string;
   url: string;
@@ -59,25 +67,29 @@ export async function blocsPourSlide(
   if (args.contenuId && !args.force) {
     const { data } = await supabase
       .from("burn_analyses")
-      .select("zones")
+      .select("zones, modele")
       .eq("contenu_id", args.contenuId)
       .eq("position", args.position)
       .maybeSingle();
     const blocs = data?.zones as BlocLu[] | undefined;
-    // Les analyses d'avant le kit sont au format zones (fractions, hex) : on
-    // les ignore plutôt que de les traduire, la lecture coûte un appel.
-    if (Array.isArray(blocs) && blocs.length > 0 && Array.isArray(blocs[0]?.bbox)) {
-      return { blocs, cache: true };
+    const modele = (data?.modele as string | null) ?? "";
+    // Deux générations de lignes sont à jeter plutôt qu'à traduire : celles
+    // d'avant le kit (format zones, fractions et hex) et celles lues par
+    // Gemini, dont les bbox ne tiennent pas la tolérance de l'autotest.
+    const auFormatDuKit =
+      Array.isArray(blocs) && blocs.length > 0 && Array.isArray(blocs[0]?.bbox);
+    if (auFormatDuKit && modele.startsWith(MARQUE_LECTURE)) {
+      return { blocs: blocs!, cache: true };
     }
   }
 
-  const blocs = await lireStyleBurn(args.brutUrl);
+  const { blocs, modele } = await lireStyleBurn(args.brutUrl);
   if (args.contenuId && blocs.length > 0) {
     await supabase.from("burn_analyses").upsert({
       contenu_id: args.contenuId,
       position: args.position,
       zones: blocs,
-      modele: "burn-kit/read_style",
+      modele: `${MARQUE_LECTURE}${modele}`,
     });
   }
   return { blocs, cache: false };
