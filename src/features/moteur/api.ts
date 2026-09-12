@@ -2780,19 +2780,6 @@ export async function nettoyerTest(
 }
 
 /** Événements NDJSON du test burn-in texte (bruler-texte-test). */
-export type BurnTexteZone = {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  couleur?: string;
-  ombre?: boolean;
-  nbLignes?: number;
-  role?: "titre" | "corps";
-  texte?: string;
-  texteSource?: string;
-};
-
 export type BurnTexteEvent = {
   etape: string;
   statut?: "encours" | "ok" | "echec" | "saute";
@@ -2801,8 +2788,19 @@ export type BurnTexteEvent = {
   propreUrl?: string;
   brutUrl?: string;
   texteTraduit?: string;
-  /** Zones du LLM, fusionnées et garnies du texte traduit (`etape: analyse`). */
-  zones?: BurnTexteZone[];
+  /** Blocs lus par le LLM au contrat du burn-kit (`etape: analyse`). */
+  blocs?: Array<{
+    id: string;
+    text: string;
+    role?: string;
+    style?: string;
+    color?: [number, number, number];
+    outline?: boolean;
+    highlight?: boolean;
+    bbox?: [number, number, number, number];
+  }>;
+  /** Texte du deck réparti sur ces blocs. */
+  traductions?: Record<string, { text: string; text_short?: string }>;
   /** `etape: image` — aperçu en data URL (test) ou URL stockée (enregistrement). */
   image?: string;
   url?: string;

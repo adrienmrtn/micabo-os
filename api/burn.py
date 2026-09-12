@@ -1,9 +1,12 @@
 """Rendu du texte incrusté, appelé par l'Edge Function `bruler-texte`.
 
-Vercel sait faire tourner du Python : c'est ici que vivent Pillow et numpy,
-que Deno n'a pas. La fonction ne connaît ni Supabase ni la base — on lui donne
-deux URLs d'images, les zones repérées par le LLM et le texte traduit, elle
-rend le JPEG. Tout l'état reste côté Edge.
+Vercel sait faire tourner du Python : c'est ici que vivent Pillow, numpy et
+OpenCV, que Deno n'a pas. La fonction ne connaît ni Supabase ni la base — on lui
+donne les deux images, ce que le LLM a lu et ce qu'il a traduit, elle rend le
+JPEG. Tout l'état reste côté Edge.
+
+Le moteur est celui du kit (`burn_engine.py`), et l'enchaînement des étapes
+celui de son pipeline (`burn_pipeline.py`). Rien n'est mesuré ici.
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 import urllib.request
 from http.server import BaseHTTPRequestHandler
 
@@ -21,13 +25,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from PIL import Image  # noqa: E402
 
-import _burn_core as bc  # noqa: E402
+import burn_engine as engine  # noqa: E402
+import burn_pipeline as pipeline  # noqa: E402
 
 TAILLE_MAX = 24 * 1024 * 1024
 QUALITE_DEFAUT = 92
 
 
-def telecharger(url: str) -> Image.Image:
+def telecharger(url: str, vers: str) -> str:
     if not isinstance(url, str) or not url.startswith("https://"):
         raise ValueError("url d'image invalide")
     requete = urllib.request.Request(url, headers={"User-Agent": "micabo-burn/1"})
@@ -35,19 +40,28 @@ def telecharger(url: str) -> Image.Image:
         donnees = reponse.read(TAILLE_MAX + 1)
     if len(donnees) > TAILLE_MAX:
         raise ValueError("image trop lourde")
-    return Image.open(io.BytesIO(donnees))
+    # Les fonctions du kit prennent des chemins : on écrit le fichier tel quel,
+    # sans réencoder — un réencodage changerait les pixels que la mesure lit.
+    with open(vers, "wb") as f:
+        f.write(donnees)
+    return vers
 
 
 def traiter(charge: dict) -> dict:
-    zones = charge.get("zones") or []
-    textes = charge.get("textes") or []
-    if not zones or not textes:
-        raise ValueError("zones et textes sont obligatoires")
-    brut = telecharger(charge.get("brut"))
-    propre = telecharger(charge.get("propre"))
-    image, rapport = bc.bruler(
-        brut, propre, zones, textes, gras=bool(charge.get("gras", True))
-    )
+    blocks = charge.get("blocks") or []
+    traductions = charge.get("translations") or {}
+    if not blocks:
+        raise ValueError("blocks est obligatoire")
+
+    with tempfile.TemporaryDirectory() as dossier:
+        shot = telecharger(charge.get("shot"), os.path.join(dossier, "shot.img"))
+        clean = telecharger(charge.get("clean"), os.path.join(dossier, "clean.img"))
+        resultat = pipeline.run_slide(shot, clean, blocks, traductions)
+
+        sortie = os.path.join(dossier, "out.png")
+        engine.render_spec(clean, resultat["spec"], sortie)
+        image = Image.open(sortie).convert("RGB")
+
     tampon = io.BytesIO()
     qualite = int(charge.get("qualite") or QUALITE_DEFAUT)
     image.save(tampon, "JPEG", quality=max(60, min(97, qualite)), subsampling=0)
@@ -56,11 +70,18 @@ def traiter(charge: dict) -> dict:
         "typeMime": "image/jpeg",
         "largeur": image.width,
         "hauteur": image.height,
-        # Le moteur a redessiné le texte d'origine et l'a re-mesuré : s'il ne
-        # sait pas le reproduire, l'appelant doit livrer la slide en classique
-        # plutôt que cette image.
-        "fiable": bc.burn_livrable(rapport),
-        "rapport": rapport,
+        # Règle non négociable du kit : on rend le texte source avec le style
+        # mesuré et on le compare à la capture. Tant que ça ne passe pas, on ne
+        # publie pas la traduction.
+        "fiable": bool(resultat["selftest"]["pass"]),
+        "selftest": resultat["selftest"],
+        "align": resultat["align"],
+        "reductions": resultat["reductions"],
+        "spec": [
+            {k: v for k, v in b.items() if k not in ("debug",)}
+            for b in resultat["spec"]["blocks"]
+        ],
+        "debug": [b.get("debug") for b in resultat["spec"]["blocks"]],
     }
 
 
@@ -68,18 +89,17 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 (signature imposée par Vercel)
         """Contrôle de présence — rien de secret, rien de la base.
 
-        Les polices voyagent par `includeFiles` : si elles manquaient, le
-        premier burn échouerait en production sans qu'on sache pourquoi.
+        Les polices voyagent par `includeFiles` et fontTools par
+        `requirements.txt` : si l'un manquait, le premier burn échouerait en
+        production sans qu'on sache pourquoi.
         """
-        polices = sorted(
-            f for f in os.listdir(bc.DOSSIER_POLICES)
-            if f.endswith(".ttf")
-        ) if os.path.isdir(bc.DOSSIER_POLICES) else []
-        # `table` dit si fontTools répond : sans lui, le repli des glyphes
-        # absents marche encore mais à l'aveugle, et c'est exactement ce qui
-        # est passé en production sans être vu.
+        polices = (
+            sorted(os.path.basename(f) for f in pipeline.font_candidates(engine.FONTS))
+            if os.path.isdir(engine.FONTS)
+            else []
+        )
         try:
-            table = bc._cmap(bc.POLICE_700) is not None
+            table = bool(engine.FontSet(polices and os.path.join(engine.FONTS, polices[0]), 40).cmap)
         except Exception:
             table = False
         self._repondre(200 if polices else 500, {
