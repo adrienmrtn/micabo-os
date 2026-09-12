@@ -34,6 +34,25 @@ def test_recalage_degenere_en_echelle_pure() -> None:
 # --- police et mise en ligne ----------------------------------------------
 
 
+def test_famille_complete_embarquee() -> None:
+    """Les sept graisses de TikTok Sans doivent être là.
+
+    N'en embarquer que deux obligeait le moteur à choisir la moins mauvaise et
+    à compenser avec une taille fausse : sur la paire de contrôle, la bonne
+    graisse est la 500, absente des fichiers.
+    """
+    for nom in bc.POLICES:
+        chemin = os.path.join(bc.DOSSIER_POLICES, nom)
+        assert os.path.exists(chemin), chemin
+    assert bc.graisse("TikTokSans-500.ttf") == "500"
+    # Plus la graisse monte, plus le même texte est large.
+    largeurs = [
+        bc.largeur_encre(bc.Police(nom, 100), "Méthodes", 0.0, 0.0)
+        for nom in bc.POLICES
+    ]
+    assert largeurs == sorted(largeurs), largeurs
+
+
 def test_repli_glyphe_par_glyphe() -> None:
     """Une flèche absente de TikTok Sans doit sortir dans la police de repli."""
     p = bc.Police(bc.POLICE_700, 100)
