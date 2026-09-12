@@ -59,6 +59,12 @@ seul appel de kick et passaient de 48 à 156 Ko, donc au chargeur. Quand un
 module partagé n'a besoin du LLM que dans une partie de ses fonctions, le
 couper coûte moins cher que deux chargeurs de plus.
 
+`upscale-assignes` (`z`, 15 Ko) et `normaliser-format` (`T`, 7 Ko) sont passés
+au chargeur le 12/09/2026, non pour la taille du bundle mais pour celle du
+tree : neuf et sept fichiers recopiés à la main dans un appel MCP, ce sont
+autant d'occasions de tronquer en silence. Par git, le bundle voyage octet pour
+octet. Sentinelles : `upscale_le` et `structure_slides`.
+
 Ne pas redéployer `papier-cm` depuis ce dépôt : la prod est en avance.
 Le `papier_master.ts` embarqué par `minuit-vnext` est celui du dépôt, pas
 celui de `papier-cm` v11.

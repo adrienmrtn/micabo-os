@@ -160,8 +160,9 @@ Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
  ne s'applique pas : le `papier_master.ts` de `minuit-vnext` est celui du dépôt
  (seul `papier-cm` v11 est en avance).
 
-- Depuis le 12/09/2026 (burn), les chargeurs sont **neuf** : s'ajoutent
- `bruler-assignes` et `bruler-texte-test`. Les SHA épinglés sont ceux du commit
+- Depuis le 12/09/2026 (burn), les chargeurs sont **onze** : s'ajoutent
+ `bruler-assignes`, `bruler-texte-test`, `upscale-assignes` et
+ `normaliser-format`. Les SHA épinglés sont ceux du commit
  qui porte les bundles, pas celui de `main` après squash — GitHub continue de
  servir les commits de branche.
 
