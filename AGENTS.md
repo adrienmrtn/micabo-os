@@ -70,8 +70,11 @@ cet ordre :
 5. la taille, calée sur la **largeur** à interlettrage nul — le seuil du masque
    gonfle la hauteur d'x de 8 à 10 %, et le tracking négatif qui rattraperait
    collerait les mots ;
-6. la graisse (600/700) et la taille finale, par **recouvrement** du rendu avec
-   le masque mesuré : le score de proportions ne départage pas deux graisses
+6. la graisse et la taille finale, par **recouvrement** du rendu avec le masque
+   mesuré. Les **sept** graisses de TikTok Sans (300 à 900) sont embarquées :
+   n'en avoir que deux obligeait le moteur à prendre la moins mauvaise et à
+   compenser avec une taille fausse — sur la paire de contrôle, la bonne
+   graisse est la 500. Le score de proportions ne départage pas deux graisses
    voisines, le recouvrement si ;
 7. l'interligne de base à base, la boîte de coupe (vérifiée en recoupant le
    texte d'origine : elle doit redonner ses coupures exactes), l'alignement par

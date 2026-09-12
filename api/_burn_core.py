@@ -38,6 +38,17 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 DOSSIER_POLICES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+#: TikTok Sans, toute la famille livrée par fontsource. N'en embarquer que deux
+#: obligeait le moteur à choisir la moins mauvaise et à compenser avec une
+#: taille fausse : sur la paire de contrôle, la bonne graisse est la 500, que
+#: je n'avais pas.
+GRAISSES = (300, 400, 500, 600, 700, 800, 900)
+POLICES = tuple(f"TikTokSans-{g}.ttf" for g in GRAISSES)
+
+
+def graisse(nom: str) -> str:
+    """« TikTokSans-500.ttf » → « 500 »."""
+    return nom.rsplit("-", 1)[-1].removesuffix(".ttf")
 POLICE_700 = "TikTokSans-700.ttf"
 POLICE_600 = "TikTokSans-600.ttf"
 #: Repli glyphe par glyphe : TikTok Sans n'a que 225 caractères, pas de flèches.
@@ -1327,8 +1338,12 @@ def _decale(style: Style, dx: float, dy: float) -> Style:
 
 
 def _mesurer_rendu(
-    paire: Paire, style: Style, lignes: list[str], rect: tuple[int, int, int, int]
-) -> tuple[list[Ligne], float]:
+    paire: Paire,
+    style: Style,
+    lignes: list[str],
+    rect: tuple[int, int, int, int],
+    rapide: bool = False,
+) -> tuple[list[Ligne], float, np.ndarray]:
     """Dessine ces lignes sur l'image propre et les re-mesure comme l'original.
 
     Sur le vrai fond, avec le même estimateur : c'est la seule comparaison qui
@@ -1337,7 +1352,7 @@ def _mesurer_rendu(
     """
     x0, y0, x1, y1 = rect
     fond = paire.propre.crop(rect)
-    rendu = dessiner(fond, lignes, _decale(style, x0, y0))
+    rendu = dessiner(fond, lignes, _decale(style, x0, y0), rapide)
     arr = np.asarray(rendu.convert("RGB"))
     # Même filtre que sur l'original : couleur ET écart avec l'image propre.
     # Sans lui, un tableau blanc derrière le texte entrerait dans la mesure de
@@ -1346,7 +1361,7 @@ def _mesurer_rendu(
     ecart = np.abs(arr.astype(np.int16) - np.asarray(fond.convert("RGB")).astype(np.int16)).sum(axis=2)
     masque = masque_couleur(arr, style.couleur) & (ecart > ECART_TEXTE_MIN)
     mesurees = mesurer_lignes(masque)
-    return mesurees, mesurer_contour(arr, masque)
+    return mesurees, mesurer_contour(arr, masque), masque
 
 
 def calibrer_contour(
@@ -1365,7 +1380,7 @@ def calibrer_contour(
     for facteur in (0.75, 0.35):
         essai = max(0.5, cible * facteur)
         style.contour = essai
-        _, mesure = _mesurer_rendu(paire, style, style.lignes_origine, rect)
+        _, mesure, _ = _mesurer_rendu(paire, style, style.lignes_origine, rect)
         essais.append((essai, mesure))
     (s1, m1), (s2, m2) = essais
     if abs(m1 - m2) < 1e-6:
@@ -1373,24 +1388,6 @@ def calibrer_contour(
     pente = (s1 - s2) / (m1 - m2)
     trouve = s2 + (cible - m2) * pente
     return float(max(0.0, min(cible * 1.5, trouve)))
-
-
-def _masque_rendu(
-    paire: Paire,
-    style: Style,
-    lignes: list[str],
-    rect: tuple[int, int, int, int],
-    rapide: bool = False,
-) -> np.ndarray:
-    """Masque du texte tel qu'il sortirait du rendu, sur le vrai fond."""
-    x0, y0, x1, y1 = rect
-    fond = paire.propre.crop(rect)
-    rendu = dessiner(fond, lignes, _decale(style, x0, y0), rapide)
-    arr = np.asarray(rendu.convert("RGB"))
-    ecart = np.abs(
-        arr.astype(np.int16) - np.asarray(fond.convert("RGB")).astype(np.int16)
-    ).sum(axis=2)
-    return masque_couleur(arr, style.couleur) & (ecart > ECART_TEXTE_MIN)
 
 
 def ressemblance(reference: np.ndarray, rendu: np.ndarray) -> float:
@@ -1405,70 +1402,94 @@ def ressemblance(reference: np.ndarray, rendu: np.ndarray) -> float:
     return inter / union if union else 0.0
 
 
+def _juger(
+    paire: Paire, style: Style, rect: tuple[int, int, int, int], rapide: bool = True
+) -> tuple[float, float]:
+    """Rend le texte d'origine et note le résultat : largeur d'abord, forme ensuite.
+
+    Les deux critères ne mesurent pas la même chose. La largeur des lignes est
+    ce qui décide de la livraison ; le recouvrement dit si les FORMES sont les
+    bonnes, ce que la largeur ne voit pas. On garde donc la largeur comme juge
+    et le recouvrement comme départage — l'inverse faisait retenir une graisse
+    plus jolie au recouvrement mais fausse de trois pour cent en largeur.
+    """
+    rendues, _, masque = _mesurer_rendu(
+        paire, style, style.lignes_origine, rect, rapide=rapide
+    )
+    recouvrement = ressemblance(style.reference, masque)
+    if len(rendues) != len(style.lignes_mesurees) or not rendues:
+        return 1.0, recouvrement
+    pire = max(
+        abs(r.largeur - ref.largeur) / max(1.0, ref.largeur)
+        for r, ref in zip(rendues, style.lignes_mesurees)
+    )
+    return pire, recouvrement
+
+
+def _taille_de_depart(nom: str, style: Style) -> float:
+    """Taille d'entrée d'une graisse : par les largeurs si on peut, sinon par
+    la hauteur d'x — qu'on sait un peu grande, et que la recherche corrigera."""
+    par_largeur = taille_par_largeur(nom, style.echantillons)
+    if par_largeur is not None:
+        return par_largeur[0]
+    sonde = Police(nom, 1000)
+    hauteur = sonde.hauteur_x() / 1000.0
+    return style.hauteur_x / hauteur if hauteur > 0 else style.taille
+
+
 def caler_par_ressemblance(
     paire: Paire, style: Style, rect: tuple[int, int, int, int]
-) -> dict[str, float]:
-    """Taille et graisse qui recouvrent le mieux le texte d'origine.
+) -> dict[str, str]:
+    """Graisse et taille qui reproduisent le mieux le texte d'origine.
 
     L'appariement ligne à ligne suppose que le LLM a lu exactement autant de
-    lignes qu'il y en a : sur les slides denses, c'est faux une fois sur deux,
-    et la calibration par les largeurs n'a alors rien à quoi se raccrocher.
+    lignes qu'il y en a : sur les slides denses c'est faux une fois sur deux.
+    On redessine donc le texte d'origine avec ses propres coupures et on
+    regarde ce qui tombe juste — aucun appariement nécessaire.
 
-    Le recouvrement, lui, ne demande aucun appariement : on redessine le texte
-    d'origine avec ses propres coupures et on regarde ce qui tombe juste. La
-    hauteur d'x donne le point de départ — biaisée de 8 à 10 % par le seuil du
-    masque, mais jamais très loin — et la recherche corrige ce biais en
-    regardant, ce qui est précisément ce qu'on lui demande.
+    En deux temps, pour le coût : un essai par graisse à sa taille calculée,
+    puis la recherche fine sur la seule qui gagne. Sept recherches complètes
+    coûteraient soixante rendus par zone.
     """
     if style.reference is None or not style.lignes_origine:
         return {}
-    depart = style.taille
-    scores: dict[str, float] = {}
-    meilleur: tuple[float, str, float] | None = None
 
-    for nom in (POLICE_700, POLICE_600):
+    notes: dict[str, str] = {}
+    classement: list[tuple[float, float, str, float]] = []
+    for nom in POLICES:
         essai = Style(**{**style.__dict__})
         essai.police = nom
+        essai.taille = _taille_de_depart(nom, style)
+        largeur, forme = _juger(paire, essai, rect)
+        notes[graisse(nom)] = f"{largeur * 100:.1f}%/{forme:.2f}"
+        # Largeur d'abord ; à largeur comparable, la meilleure forme.
+        classement.append((round(largeur, 3), -forme, nom, essai.taille))
+    classement.sort()
 
-        def score(taille: float) -> float:
-            essai.taille = taille
-            return ressemblance(
-                style.reference,
-                _masque_rendu(paire, essai, essai.lignes_origine, rect, rapide=True),
-            )
+    _, _, nom, depart = classement[0]
+    essai = Style(**{**style.__dict__})
+    essai.police = nom
 
-        # Section dorée : le recouvrement n'a qu'un maximum en fonction de la
-        # taille, la dichotomie suffit et coûte six rendus au lieu de vingt.
-        bas, haut = depart * 0.72, depart * 1.28
-        phi = 0.6180339887
-        c, d = haut - phi * (haut - bas), bas + phi * (haut - bas)
-        sc, sd = score(c), score(d)
-        for _ in range(7):
-            if sc < sd:
-                bas, c, sc = c, d, sd
-                d = bas + phi * (haut - bas)
-                sd = score(d)
-            else:
-                haut, d, sd = d, c, sc
-                c = haut - phi * (haut - bas)
-                sc = score(c)
-        taille = (bas + haut) / 2
-        valeur = score(taille)
-        scores[nom[10:13]] = round(valeur, 3)
-        if meilleur is None or valeur > meilleur[0]:
-            meilleur = (valeur, nom, taille)
+    meilleur = None
+    for facteur in (0.94, 0.97, 1.0, 1.03, 1.06):
+        essai.taille = depart * facteur
+        largeur, forme = _juger(paire, essai, rect)
+        note = (round(largeur, 4), -forme)
+        if meilleur is None or note < meilleur[0]:
+            meilleur = (note, essai.taille, largeur, forme)
 
-    # Un recouvrement au ras des pâquerettes veut dire que le masque de
-    # référence n'est pas du texte : mieux vaut l'estimation par la hauteur
-    # d'x, connue pour être un peu grande, qu'une taille tirée d'un nuage.
-    if meilleur is None or meilleur[0] < 0.18:
+    (_, taille, largeur, forme) = meilleur
+    notes[graisse(nom)] = f"{largeur * 100:.1f}%/{forme:.2f}"
+    # Une forme au ras des pâquerettes veut dire que le masque de référence
+    # n'est pas du texte : mieux vaut la taille calculée qu'une taille tirée
+    # d'un nuage.
+    if forme < 0.18:
         style.notes.append(
-            f"recouvrement trop faible ({meilleur[0]:.2f} au mieux) — taille laissée à la hauteur d'x"
-            if meilleur else "recouvrement non calculable"
+            f"recouvrement trop faible ({forme:.2f}) — taille laissée au calcul"
         )
-        return scores
-    _, style.police, style.taille = meilleur
-    return scores
+        return notes
+    style.police, style.taille = nom, taille
+    return notes
 
 
 def controler(
@@ -1482,7 +1503,7 @@ def controler(
     """
     if not style.lignes_origine or not style.lignes_mesurees:
         return {"fait": False, "ok": False}
-    rendues, _ = _mesurer_rendu(paire, style, style.lignes_origine, rect)
+    rendues, _, _ = _mesurer_rendu(paire, style, style.lignes_origine, rect)
     if len(rendues) != len(style.lignes_mesurees):
         return {
             "fait": True,
@@ -1597,8 +1618,9 @@ def bruler(
         scores = caler_par_ressemblance(paire, style, rect)
         if scores:
             style.notes.append(
-                "graisse " + ("700" if style.police == POLICE_700 else "600")
-                + " (recouvrement " + " / ".join(f"{k}:{v}" for k, v in scores.items()) + ")"
+                f"graisse {graisse(style.police)} retenue "
+                + "(écart de largeur / recouvrement : "
+                + " · ".join(f"{k} {v}" for k, v in scores.items()) + ")"
             )
         controle = controler(paire, style, rect)
         lignes, notes = _mettre_en_lignes(texte, style, paire.propre.size)
