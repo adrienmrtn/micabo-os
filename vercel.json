@@ -12,7 +12,8 @@
   "functions": {
     "api/burn.py": {
       "maxDuration": 60,
-      "includeFiles": "api/**"
+      "includeFiles": "api/**",
+      "excludeFiles": "{node_modules/**,dist/**,src/**,supabase/**,docs/**,public/**}"
     }
   }
 }
