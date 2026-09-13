@@ -97,7 +97,7 @@ export async function listerSlidesABruler(
   const { data: slides, error: errS } = await supabase
     .from("post_slides")
     .select(
-      "id, post_id, position, texte_overlay, reference_url, burned_media_id, media_library(url, upscale_le)",
+      "id, post_id, position, texte_overlay, reference_url, burned_media_id, media_library!post_slides_media_id_fkey(url, upscale_le)",
     )
     .in("post_id", postIds)
     .is("burned_media_id", null)
