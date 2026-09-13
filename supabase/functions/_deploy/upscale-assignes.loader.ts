@@ -9,7 +9,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "625cc9f71341a7a40de74d610d632ccac485368b";
+const SHA = "a82a89e45b765952fe61c57fb6acbc3c262da09d";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/upscale-assignes.bundle.js`;
 
