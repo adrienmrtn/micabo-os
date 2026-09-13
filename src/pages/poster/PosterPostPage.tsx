@@ -523,6 +523,16 @@ export function PosterPostPage() {
   if (post.isPending || slides.isPending) {
     return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   }
+  // Une lecture qui échoue doit se VOIR. Sans cette branche, un post dont les
+  // slides ne se chargent pas s'affichait complet mais vide, et le bouton
+  // restait sur « Préparation des photos… » pour toujours — le créateur n'avait
+  // aucun moyen de savoir que quelque chose n'allait pas.
+  if (post.isError || slides.isError) {
+    const erreur = (post.error ?? slides.error) as Error | null;
+    return (
+      <p className="text-sm text-destructive">{erreur?.message ?? t("common.error")}</p>
+    );
+  }
   if (!post.data) {
     return <p className="text-sm text-destructive">{t("common.notFoundTitle")}</p>;
   }
@@ -604,11 +614,14 @@ export function PosterPostPage() {
           <Button
             size="lg"
             className="w-full"
-            disabled={enCours || fichiers.isPending || nbPhotos === 0}
+            disabled={enCours || fichiers.isFetching || nbPhotos === 0}
             onClick={() => toutEnregistrer(donnees)}
           >
             {peutPartager(fichiers.data ?? []) ? <Share /> : <Download />}
-            {fichiers.isPending
+            {/* `isFetching`, pas `isPending` : une requête désactivée (aucune
+                slide à précharger) reste « pending » indéfiniment dans React
+                Query, et le bouton annonçait une préparation qui n'existait pas. */}
+            {fichiers.isFetching
               ? t("posts.preparation")
               : t("posts.enregistrerPhotos", { count: nbPhotos })}
           </Button>

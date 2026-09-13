@@ -184,7 +184,7 @@ export async function listerMediasAssignesNonUpscales(
     const ids = postIds.slice(i, i + chunk);
     const { data: slides, error: e2 } = await supabase
       .from("post_slides")
-      .select("media_id, media_library(upscale_le, ugc_face_regen)")
+      .select("media_id, media_library!post_slides_media_id_fkey(upscale_le, ugc_face_regen)")
       .in("post_id", ids)
       .not("media_id", "is", null);
     if (e2) throw e2;

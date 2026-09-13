@@ -1622,7 +1622,7 @@ export async function listerSlides(postId: string): Promise<PostSlide[]> {
     // upscale_le : badge / forcer re-upscale depuis le détail post.
     // `burned` : image finale texte déjà incrusté, pour les comptes « burned ».
     .select(
-      "*, media_library(url, storage_path, upscale_le), burned:media_library!post_slides_burned_media_id_fkey(url, storage_path)",
+      "*, media_library!post_slides_media_id_fkey(url, storage_path, upscale_le), burned:media_library!post_slides_burned_media_id_fkey(url, storage_path)",
     )
     .eq("post_id", postId)
     .order("position");
@@ -2170,7 +2170,7 @@ export async function mediasPostsPrevusJour(date: string): Promise<
     const ids = postIds.slice(i, i + chunk);
     const { data: slides, error: e2 } = await supabase
       .from("post_slides")
-      .select("media_id, post_id, media_library(upscale_le)")
+      .select("media_id, post_id, media_library!post_slides_media_id_fkey(upscale_le)")
       .in("post_id", ids)
       .not("media_id", "is", null);
     if (e2) throw e2;
