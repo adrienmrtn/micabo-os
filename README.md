@@ -32,9 +32,8 @@ Les secrets moteur (`FAL_KEY`, `APIFY_TOKEN`, `CRON_SECRET`) restent
 Le moteur (schema + Edge Functions + UI) extrait de la matière, la nettoie,
 traduit, y place un CTA micabo (flashcards / cours IA), et assigne les posts.
 
-UGC AI VIDEO : **dormant** sur micabo. Ne pas l’allumer.
-File Settings / fallback least-used : jamais de label `ugc_ai_video` sur un
-créateur slideshow.
+UGC AI VIDEO, CM paper et la création semi-manuelle ont été retirés le
+14/09/2026 (migration `0256`) : le schéma reste dormant, le code est parti.
 
 Les crons pg_cron ne sont **pas** activés tant qu’un test manuel n’a pas
 été validé. Aucun job ne doit pointer hors de

@@ -19,4 +19,4 @@ const src = await res.text();
 if (!src.includes("Deno.serve") || !src.includes('"hook"')) {
   throw new Error("manage-users bundle illisible ou tronqué");
 }
-new Function("me", src)(createClient);
+new Function("ne", src)(createClient);

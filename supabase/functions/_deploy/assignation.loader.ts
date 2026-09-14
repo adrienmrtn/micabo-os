@@ -19,4 +19,4 @@ const src = await res.text();
 if (!src.includes("Deno.serve") || !src.includes("date_publication_prevue")) {
   throw new Error("assignation bundle illisible ou tronqué");
 }
-new Function("le", src)(createClient);
+new Function("pe", src)(createClient);

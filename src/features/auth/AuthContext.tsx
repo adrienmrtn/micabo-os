@@ -17,7 +17,6 @@ export interface Profil {
   is_active: boolean;
   must_change_password: boolean;
   /** Recruteur UGC AI VIDEO (créateurs marque vidéo, sans labels). */
-  hm_ugc_ai_video: boolean;
 }
 
 interface AuthState {
@@ -47,16 +46,13 @@ async function chargerProfil(userId: string): Promise<Profil | null> {
   const { data } = await supabase
     .from("profiles")
     .select(
-      "id, prenom, nom, email, langues, nationalite, is_active, must_change_password, hm_ugc_ai_video",
+      "id, prenom, nom, email, langues, nationalite, is_active, must_change_password",
     )
     .eq("id", userId)
     .single();
   if (!data) return null;
   return {
-    ...(data as Omit<Profil, "hm_ugc_ai_video">),
-    hm_ugc_ai_video: Boolean(
-      (data as { hm_ugc_ai_video?: boolean }).hm_ugc_ai_video,
-    ),
+    ...(data as Profil),
   };
 }
 

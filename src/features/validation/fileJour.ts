@@ -17,11 +17,9 @@ export interface ItemValidationJour {
 export function horsFileValidation(opts: {
   postId: string;
   statut: string;
-  ugcAiVideo: boolean;
   deja: ReadonlySet<string>;
 }): boolean {
   if (opts.deja.has(opts.postId)) return true;
-  if (opts.ugcAiVideo) return true;
   if (opts.statut === "publie") return true;
   return false;
 }

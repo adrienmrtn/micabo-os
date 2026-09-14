@@ -4,12 +4,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { nomApplication, type ApplicationOs } from "@/features/moteur/applications";
 import { nomLangue } from "@/features/moteur/langues";
-import type { TypeCompte } from "@/features/moteur/types";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
-export type PremierCompte = TypeCompte | "aucun";
+/** Un login naît avec un compte TikTok (`perso`) ou seul (`aucun`). */
+export type PremierCompte = "perso" | "aucun";
 
 export function ChampsPremierCompte({
   allowAucun,
@@ -22,12 +22,6 @@ export function ChampsPremierCompte({
   onPostsParJour,
   handle,
   onHandle,
-  email,
-  onEmail,
-  password,
-  onPassword,
-  deuxFa,
-  onDeuxFa,
   applications,
   applicationSlug,
   onApplication,
@@ -42,18 +36,12 @@ export function ChampsPremierCompte({
   onPostsParJour?: (n: 1 | 2 | 3) => void;
   handle: string;
   onHandle: (v: string) => void;
-  email: string;
-  onEmail: (v: string) => void;
-  password: string;
-  onPassword: (v: string) => void;
-  deuxFa: string;
-  onDeuxFa: (v: string) => void;
   applications?: ApplicationOs[];
   applicationSlug?: string;
   onApplication?: (slug: string) => void;
 }) {
   const { t } = useTranslation();
-  const types: PremierCompte[] = allowAucun ? ["perso", "cm", "aucun"] : ["perso", "cm"];
+  const types: PremierCompte[] = allowAucun ? ["perso", "aucun"] : ["perso"];
 
   return (
     <div className="space-y-3 sm:col-span-2">
@@ -71,20 +59,14 @@ export function ChampsPremierCompte({
                   : "rounded px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
               }
             >
-              {type === "cm"
-                ? t("cm.badge")
-                : type === "aucun"
-                  ? t("posters.premierCompteAucun")
-                  : t("cm.perso")}
+              {type === "aucun" ? t("posters.premierCompteAucun") : t("cm.perso")}
             </button>
           ))}
         </div>
         <p className="text-xs text-muted-foreground">
-          {typeCompte === "cm"
-            ? t("cm.ajouterAide")
-            : typeCompte === "aucun"
-              ? t("posters.premierCompteAucunAide")
-              : t("cm.ajouterPersoAide")}
+          {typeCompte === "aucun"
+            ? t("posters.premierCompteAucunAide")
+            : t("cm.ajouterPersoAide")}
         </p>
       </div>
 
@@ -155,40 +137,6 @@ export function ChampsPremierCompte({
                 ))}
               </div>
             </div>
-          )}
-          {typeCompte === "cm" && (
-            <>
-              <div className="space-y-1">
-                <Label htmlFor="premier-email">{t("cm.email")}</Label>
-                <Input
-                  id="premier-email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => onEmail(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="premier-pass">{t("cm.password")}</Label>
-                <Input
-                  id="premier-pass"
-                  type="text"
-                  required
-                  autoComplete="off"
-                  value={password}
-                  onChange={(e) => onPassword(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1 sm:col-span-2">
-                <Label htmlFor="premier-2fa">{t("cm.deuxFa")}</Label>
-                <Input
-                  id="premier-2fa"
-                  value={deuxFa}
-                  placeholder={t("cm.deuxFaPh")}
-                  onChange={(e) => onDeuxFa(e.target.value)}
-                />
-              </div>
-            </>
           )}
         </div>
       )}

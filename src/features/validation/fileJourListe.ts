@@ -22,7 +22,7 @@ export async function listerFileValidationJour(jour: string): Promise<ItemValida
     supabase
       .from("posts")
       .select(
-        "id, compte_id, type, statut, sujets(titre, source_url), comptes(poster_id, handle_tiktok, persona_nom, ugc_ai_video, langue, profiles(prenom, nom))",
+        "id, compte_id, type, statut, sujets(titre, source_url), comptes(poster_id, handle_tiktok, persona_nom, langue, profiles(prenom, nom))",
       )
       .eq("date_publication_prevue", jour)
       .eq("est_test", false)
@@ -94,7 +94,6 @@ export async function listerFileValidationJour(jour: string): Promise<ItemValida
             poster_id: string | null;
             handle_tiktok: string | null;
             persona_nom: string | null;
-            ugc_ai_video: boolean | null;
             langue: string | null;
             profiles: ProfilJoin | ProfilJoin[] | null;
           }
@@ -102,7 +101,6 @@ export async function listerFileValidationJour(jour: string): Promise<ItemValida
             poster_id: string | null;
             handle_tiktok: string | null;
             persona_nom: string | null;
-            ugc_ai_video: boolean | null;
             langue: string | null;
             profiles: ProfilJoin | ProfilJoin[] | null;
           }>
@@ -115,7 +113,6 @@ export async function listerFileValidationJour(jour: string): Promise<ItemValida
       horsFileValidation({
         postId: r.id,
         statut: r.statut,
-        ugcAiVideo: Boolean(comptes?.ugc_ai_video),
         deja,
       })
     ) {

@@ -15,8 +15,6 @@ import {
   supprimerCompte,
 } from "@/features/moteur/api";
 import { listerUgcPersonas } from "@/features/ugc/api";
-import { estCompteCm } from "@/features/moteur/comptesCm";
-import { IdentifiantsCm } from "@/features/moteur/FormulaireCompteCm";
 import { nomLangue } from "@/features/moteur/langues";
 import type { CompteAvecDetails } from "@/features/moteur/types";
 
@@ -207,52 +205,17 @@ function UgcAiCompte({ compte }: { compte: CompteAvecDetails }) {
   const maj = useMutation({
     mutationFn: (patch: {
       ugc_ai?: boolean;
-      ugc_ai_video?: boolean;
       ugc_persona_id?: string | null;
     }) => majCompte(compte.id, patch),
     onSuccess: () => rafraichirComptes(queryClient),
   });
 
-  const ugcVideo = Boolean(compte.ugc_ai_video);
-  const ugc = Boolean(compte.ugc_ai) && !ugcVideo;
+  const ugc = Boolean(compte.ugc_ai);
   const personaId = compte.ugc_persona_id ?? "";
 
   return (
     <div className="space-y-2 rounded-lg border p-3">
-      {ugcVideo ? (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-medium">{t("comptes.ugcAiVideo")}</p>
-              <p className="text-xs text-muted-foreground">{t("comptes.ugcAiVideoAide")}</p>
-            </div>
-            <Badge>{t("comptes.ugcAiVideoBadge")}</Badge>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`persona-${compte.id}`}>{t("comptes.ugcPersona")}</Label>
-            <select
-              id={`persona-${compte.id}`}
-              className={selectClass}
-              value={personaId}
-              disabled={maj.isPending || personas.isPending}
-              onChange={(e) =>
-                maj.mutate({ ugc_persona_id: e.target.value || null })
-              }
-            >
-              <option value="">{t("comptes.ugcPersonaChoisir")}</option>
-              {(personas.data ?? []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nom}
-                </option>
-              ))}
-            </select>
-            {!personaId && (
-              <p className="text-xs text-destructive">{t("comptes.ugcPersonaRequis")}</p>
-            )}
-          </div>
-        </>
-      ) : (
-        <>
+      <>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-medium">{t("comptes.ugcAi")}</p>
@@ -264,7 +227,6 @@ function UgcAiCompte({ compte }: { compte: CompteAvecDetails }) {
               onClick={() =>
                 maj.mutate({
                   ugc_ai: !ugc,
-                  ugc_ai_video: false,
                   ugc_persona_id: !ugc ? compte.ugc_persona_id : null,
                 })
               }
@@ -301,8 +263,7 @@ function UgcAiCompte({ compte }: { compte: CompteAvecDetails }) {
               )}
             </div>
           )}
-        </>
-      )}
+      </>
     </div>
   );
 }
@@ -515,28 +476,6 @@ export function CompteEditor({ compte }: { compte: CompteAvecDetails }) {
     mutationFn: () => supprimerCompte(compte.id),
     onSuccess: () => rafraichirComptes(queryClient),
   });
-
-  if (estCompteCm(compte)) {
-    return (
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <Badge>{t("cm.badge")}</Badge>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-destructive hover:text-destructive"
-            onClick={() => {
-              if (window.confirm(t("comptes.confirmDelete"))) retirer.mutate();
-            }}
-          >
-            {t("comptes.supprimerCompte")}
-          </Button>
-        </div>
-        <IdentifiantsCm compteId={compte.id} editable />
-        <InfosCompte compte={compte} />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-3">

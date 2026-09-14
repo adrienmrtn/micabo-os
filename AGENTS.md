@@ -8,9 +8,30 @@ révision ~10 min/jour.
 - Ton : étude, examens, notes, révisions.
 - Jamais de culture générale.
 - Jamais le mot d’un autre produit dans un CTA (écrire `micabo` en minuscules).
-- UGC AI VIDEO : laisser dormant, ne pas l’allumer.
-- File Settings / least-used : jamais de label `ugc_ai_video` (ex. `test`)
-  sur un créateur slideshow.
+
+## Retrait des modules annexes (0256, 14/09/2026)
+
+Quatre modules sont **partis** : « Create a post » (`/admin/creation` +
+`creation-manuelle`), « CM paper » (`/admin/papier` + `papier-cm` + les étapes
+`papier_cm` / `papier_assign` de minuit + le type de compte `cm`), « AI
+slideshows » (`/admin/ugc/slideshows`, une page vide) et « AI Videos »
+(`/admin/ugc/videos` + `assignation-ugc-video`). La marque système
+`ugc-ai-video` est supprimée de `labels` ; `hook` reste.
+
+**Le schéma reste dormant** : rien n’est droppé. Les cinq tables `papier_*`
+(0 ligne), `ugc_video_posts`, `comptes.type_compte`, `comptes.ugc_ai_video`,
+`labels.ugc_ai_video`, `profiles.hm_ugc_ai_video` et `hm_ugc_video_labels`
+sont toujours là — plus personne ne les écrit. Un compte n’a donc plus qu’un
+type, et `comptesPoster.ts` a remplacé `comptesCm.ts`.
+
+Ce qui **reste allumé** et ne doit pas être confondu avec le retrait : les
+personas UGC (`/admin/ugc/personas`), le face swap slideshow (`comptes.ugc_ai`,
+`contenus.ugc_compatible`, `ugc_face_swap.ts`) et le burn.
+
+Deux morceaux ont été **sauvés** de fichiers supprimés parce que le moteur s’en
+sert encore : `resoudreVisuelsAssignation` (garnissage d’une slide depuis la
+biblio du label) vit dans `_shared/visuels_assignation.ts`, et les exemples
+feed d’un label dans `src/features/moteur/promptsFeed.ts`.
 
 ## Tierlist des slideshows (0250, en prod depuis le 11/09/2026)
 

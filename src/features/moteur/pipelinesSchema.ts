@@ -326,17 +326,6 @@ export const SCHEMA_ASSIGNATION: PipelineAction = {
         "Comptes burned : zones LLM sur le brut (cache burn_analyses) → rendu déterministe Pillow sur l'image propre upscalée (cache burn_rendus) → post_slides.burned_media_id",
       onFail: "Slide livrée en classique (image propre + texte_overlay)",
     },
-    {
-      id: "ugc_ai_video",
-      rang: "⑩",
-      label: "UGC AI VIDEO — assignation (EN DERNIER)",
-      kind: "api",
-      api: "assignation-ugc-video (kick drain streamé)",
-      env: "FAL_KEY",
-      detail:
-        "Comptes ugc_ai_video : reaction → frame10 clean → Nano Banana → Kling Pro (durée = reaction, orientation=video) → concat utilisation EN PLUS → caption",
-      onFail: "Post statut=echec ; les autres comptes continuent",
-    },
   ],
   constants: [
     { cle: "Cron minuit", valeur: "0 22 * * * UTC", detail: "≈ minuit Paris (été)" },
@@ -351,11 +340,6 @@ export const SCHEMA_ASSIGNATION: PipelineAction = {
       cle: "burn",
       valeur: "après upscale",
       detail: "hors chemin minuit · repris par le filet des 15 min",
-    },
-    {
-      cle: "ugc_ai_video",
-      valeur: "après upscale",
-      detail: "Kling + merge via Fal ; logs NDJSON",
     },
   ],
 };

@@ -34,8 +34,8 @@ courant : `H`. Attention, esbuild place l’`import{createClient …}` **au mili
 du bundle, pas forcément en tête — le chercher, ne pas supposer la 1ʳᵉ ligne.
 
 Passés au chargeur le 11/09/2026 avec la tierlist : `rattrapage-elo` (`ee`),
-`revoquer-post` (`ie`), `creation-manuelle` (`C`) et `assignation-contenu`
-(`ne`). Les quatre embarquent `assignation_contenu.ts` ou `rattrapage_elo.ts`,
+`revoquer-post` (`ie`), `creation-manuelle` (`C`, **retiré le 14/09/2026**) et
+`assignation-contenu` (`ne`). Les quatre embarquent `assignation_contenu.ts` ou `rattrapage_elo.ts`,
 donc tout le moteur — le tree d'`assignation` faisait déjà 337 Ko. Chaque
 chargeur vérifie une sentinelle **ASCII** du bundle : esbuild échappe les
 accents (`é` → `\u00e9`), une sentinelle accentuée ne matcherait jamais.
@@ -65,6 +65,13 @@ tree : neuf et sept fichiers recopiés à la main dans un appel MCP, ce sont
 autant d'occasions de tronquer en silence. Par git, le bundle voyage octet pour
 octet. Sentinelles : `upscale_le` et `structure_slides`.
 
-Ne pas redéployer `papier-cm` depuis ce dépôt : la prod est en avance.
-Le `papier_master.ts` embarqué par `minuit-vnext` est celui du dépôt, pas
-celui de `papier-cm` v11.
+`papier-cm`, `creation-manuelle` et `assignation-ugc-video` sont retirés du
+dépôt (0256, 14/09/2026). Les fonctions déployées correspondantes ne sont plus
+alimentées d'ici : les supprimer côté Supabase, ou les laisser mourir — mais
+ne jamais les redéployer depuis ce dépôt, leurs sources n'existent plus.
+
+Les alias `createClient` bougent à chaque rebuild : le 14/09/2026,
+`assignation-contenu` est passé de `ne` à `oe`, `assignation` de `le` à `pe`,
+`manage-users` de `me` à `ne` et `revoquer-post` de `ie` à `ae`. Les regénérer
+tous d'un coup et relire l'alias dans chaque bundle est plus sûr que de
+supposer qu'un bundle « n'a pas bougé ».

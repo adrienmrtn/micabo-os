@@ -6,7 +6,6 @@ import {
   BookOpen,
   CalendarDays,
   CheckCheck,
-  Clapperboard,
   FlaskConical,
   Gauge,
   Gift,
@@ -17,13 +16,10 @@ import {
   MessageCircle,
   MessageSquareQuote,
   MoonStar,
-  PenLine,
-  Scissors,
   Settings,
   ShieldAlert,
   UserRound,
   Users,
-  Video,
 } from "lucide-react";
 
 import { AppShell } from "./AppShell";
@@ -73,18 +69,6 @@ export function AdminLayout() {
               description: t("navDesc.slideshows"),
             },
             {
-              to: "/admin/creation",
-              label: t("nav.creation"),
-              icon: PenLine,
-              description: t("navDesc.creation"),
-            },
-            {
-              to: "/admin/papier",
-              label: t("nav.papier"),
-              icon: Scissors,
-              description: t("navDesc.papier"),
-            },
-            {
               to: "/admin/bibliotheque",
               label: t("nav.bibliotheque"),
               icon: Images,
@@ -100,18 +84,6 @@ export function AdminLayout() {
               label: t("nav.ugcPersonas"),
               icon: UserRound,
               description: t("navDesc.ugcPersonas"),
-            },
-            {
-              to: "/admin/ugc/slideshows",
-              label: t("nav.ugcSlideshows"),
-              icon: Clapperboard,
-              description: t("navDesc.ugcSlideshows"),
-            },
-            {
-              to: "/admin/ugc/videos",
-              label: t("nav.ugcVideos"),
-              icon: Video,
-              description: t("navDesc.ugcVideos"),
             },
           ],
         },

@@ -6,12 +6,11 @@ import {
 } from "../../../supabase/functions/_shared/labels_systeme.ts";
 
 describe("labels système — pas d'assignation créateur", () => {
-  it("retire hook et ugc-ai-video du pool", () => {
+  it("retire hook du pool", () => {
     expect(
       idsLabelsAssignables([
         { id: "hook", slug: "hook" },
         { id: "study", slug: "study-aes" },
-        { id: "ugc", slug: "ugc-ai-video" },
       ]),
     ).toEqual(["study"]);
   });

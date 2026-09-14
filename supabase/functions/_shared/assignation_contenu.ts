@@ -1,7 +1,7 @@
 import {
   resoudreVisuelsAssignation,
-  type SlideStructureManuel,
-} from "./creation_manuelle.ts";
+  type SlideStructureVisuels,
+} from "./visuels_assignation.ts";
 import { assurerDeckPourLangue } from "./import_contenu.ts";
 import { estTier, prioriserTiersHauts, type Tier } from "./tierlist.ts";
 import { LOT_IDS, lireParLots } from "./lots.ts";
@@ -224,30 +224,12 @@ export async function assignerCompteJour(
   // (L'ancien fallback « pool mince → 0 » est interdit.)
   const quota = quotaPostsParJour(brut);
   const langue: string = compte.langue ?? "fr";
-  const ugcAiVideo = Boolean(compte.ugc_ai_video);
-  const ugcAi = Boolean(compte.ugc_ai) && !ugcAiVideo;
+  const ugcAi = Boolean(compte.ugc_ai);
   const ugcPersonaId = (compte.ugc_persona_id as string | null) ?? null;
   const nomCompte =
     (compte.persona_nom as string | null) ??
     (compte.handle_tiktok as string | null) ??
     String(compte.id).slice(0, 8);
-
-  if (compte.type_compte === "cm") {
-    log(`Compte ${nomCompte} · CM — skip assignation slideshow`);
-    return {
-      ids: [],
-      raison: "Compte CM — hors assignation slideshow (vidéo papier).",
-    };
-  }
-
-  // UGC AI VIDEO : hors assignation slideshow minuit (pipeline vidéos à part).
-  if (ugcAiVideo) {
-    log(`Compte ${nomCompte} · UGC AI VIDEO — skip assignation slideshow`);
-    return {
-      ids: [],
-      raison: "Compte UGC AI VIDEO — hors assignation slideshow.",
-    };
-  }
 
   // Soigne les comptes restés à 0 après l'ancien fallback.
   if (!estTest && Number.isFinite(brut) && brut <= 0) {
@@ -658,7 +640,7 @@ async function materialiserPostDepuisPassage(
       critere: s.critere ?? null,
       raw_url: s.raw_url ?? null,
       reference_url: s.reference_url ?? null,
-    })) as SlideStructureManuel[],
+    })) as SlideStructureVisuels[],
   );
   if (visuelsLogs.some((l) => l.fallback)) {
     console.log(
@@ -1048,8 +1030,6 @@ export async function listerComptesSousQuota(
 
   const maintenant = Date.now();
   const comptes = (comptesBruts ?? []).filter((c) => {
-    if (c.type_compte === "cm") return false;
-    if (Boolean(c.ugc_ai_video)) return false;
     // Quota 0 (legacy) = toujours à traiter (plancher 1).
     if (opts.ignorerWarmup) return true;
     const ends = c.warmup_ends_at as string | null | undefined;
@@ -1198,12 +1178,8 @@ export async function assignerTousComptes(
 
   // Warmup : uniquement les comptes dont warmup_ends_at est passé (en process).
   // Mode test : on peut cibler un compte hors process (ignorerWarmup).
-  // UGC AI VIDEO : hors pipeline slideshow (même en test ciblé on laisse
-  // assignerCompteJour renvoyer la raison — sauf filtre batch minuit).
   const maintenant = Date.now();
   const comptes = (comptesBruts ?? []).filter((c) => {
-    if (c.type_compte === "cm" && !compteId) return false;
-    if (Boolean(c.ugc_ai_video) && !compteId) return false;
     if (o.ignorerWarmup) return true;
     const ends = c.warmup_ends_at as string | null | undefined;
     if (!ends) return false; // pas démarré → hors process

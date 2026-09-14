@@ -47,7 +47,6 @@ import {
 } from "./echecsNettoyage";
 import { cheminVideoRemarque } from "@/features/reviews/videoRemarque";
 import { ugcVisages } from "./ugcVisages";
-import { corpsAssignationUgcVideoTest } from "./corpsAssignationUgcVideoTest";
 import { decouperEnLots, handleTiktokDepuisSaisie } from "./oubliSource";
 import {
   aggregerStatsSlideshowsParCompte,
@@ -60,7 +59,7 @@ import {
   normaliserSlugApplication,
   type ApplicationOs,
 } from "./applications";
-import { comptePrincipal, normaliserTypeCompte, resoudrePremierCompte } from "./comptesCm";
+import { comptePrincipal, premierCompteDemande } from "./comptesPoster";
 import {
   estLabelSysteme,
   idsLabelsAssignables,
@@ -68,14 +67,7 @@ import {
   SLUG_HOOK,
 } from "./mediaCaption";
 import { fusionnerTexteSlide } from "./deckSlides";
-import {
-  ELO_MANUEL_DEFAUT,
-  hookTexteDepuisDeck,
-  SLIDES_MANUEL_MAX,
-  SLIDES_MANUEL_MIN,
-} from "./creationManuelle";
-import { normaliserReglagesPapier } from "./papierReglages";
-import type { CompteIdentifiants, CompteResumePoster, TypeCompte } from "./types";
+import type { CompteResumePoster } from "./types";
 import {
   CLE_REMARQUES,
   estHorsFile,
@@ -119,9 +111,9 @@ export async function creerApplication(input: {
   if (source?.id) {
     const { data: systeme } = await supabase
       .from("labels")
-      .select("nom, slug, couleur, genre, ugc_ai_video")
+      .select("nom, slug, couleur, genre")
       .eq("application_id", source.id)
-      .in("slug", ["hook", "ugc-ai-video"]);
+      .in("slug", ["hook"]);
     if ((systeme ?? []).length > 0) {
       await supabase.from("labels").insert(
         (systeme ?? []).map((l) => ({
@@ -129,7 +121,6 @@ export async function creerApplication(input: {
           slug: l.slug,
           couleur: l.couleur,
           genre: l.genre ?? null,
-          ugc_ai_video: Boolean(l.ugc_ai_video),
           application_id: app.id,
         })),
       );
@@ -493,7 +484,6 @@ export async function listerComptes(): Promise<CompteAvecDetails[]> {
     const app = (c as { applications?: { slug?: string } }).applications;
     return {
       ...c,
-      type_compte: normaliserTypeCompte(c.type_compte),
       application_slug: app?.slug ?? null,
     };
   });
@@ -612,7 +602,7 @@ export async function listerPosters(): Promise<PosterProfil[]> {
   const { data: comptes, error: errComptes } = await supabase
     .from("comptes")
     .select(
-      "id, poster_id, type_compte, langue, application_id, handle_tiktok, persona_nom, persona_bio, avatar_url, qualification, qualification_maj_at, warmup_started_at, warmup_ends_at, comptes_reference(handle_tiktok), applications(slug)",
+      "id, poster_id, langue, application_id, handle_tiktok, persona_nom, persona_bio, avatar_url, qualification, qualification_maj_at, warmup_started_at, warmup_ends_at, comptes_reference(handle_tiktok), applications(slug)",
     )
     .eq("is_active", true)
     .order("created_at", { ascending: false });
@@ -623,7 +613,6 @@ export async function listerPosters(): Promise<PosterProfil[]> {
     const appJoin = (c as { applications?: { slug?: string } }).applications;
     const resume: CompteResumePoster = {
       id: c.id,
-      type_compte: normaliserTypeCompte(c.type_compte),
       langue: c.langue,
       application_id: (c.application_id as string | null) ?? null,
       application_slug: appJoin?.slug ?? null,
@@ -803,7 +792,7 @@ export async function listerFileReviewsJour(jour: string): Promise<ItemFileRevie
   const { data, error } = await supabase
     .from("passages")
     .select(
-      "id, post_id, publie_at, publie_url, langue, contenus(titre, source_url), comptes(poster_id, handle_tiktok, persona_nom, ugc_ai_video, profiles(prenom, nom)), posts(est_test)",
+      "id, post_id, publie_at, publie_url, langue, contenus(titre, source_url), comptes(poster_id, handle_tiktok, persona_nom, profiles(prenom, nom)), posts(est_test)",
     )
     .eq("statut", "publie")
     .not("publie_url", "is", null)
@@ -828,7 +817,6 @@ export async function listerFileReviewsJour(jour: string): Promise<ItemFileRevie
             poster_id: string | null;
             handle_tiktok: string | null;
             persona_nom: string | null;
-            ugc_ai_video: boolean | null;
             profiles:
               | { prenom: string | null; nom: string | null }
               | Array<{ prenom: string | null; nom: string | null }>
@@ -838,7 +826,6 @@ export async function listerFileReviewsJour(jour: string): Promise<ItemFileRevie
             poster_id: string | null;
             handle_tiktok: string | null;
             persona_nom: string | null;
-            ugc_ai_video: boolean | null;
             profiles:
               | { prenom: string | null; nom: string | null }
               | Array<{ prenom: string | null; nom: string | null }>
@@ -852,7 +839,6 @@ export async function listerFileReviewsJour(jour: string): Promise<ItemFileRevie
     const posts = Array.isArray(r.posts) ? (r.posts[0] ?? null) : r.posts;
     if (!r.post_id || !r.publie_url || !r.publie_at) continue;
     if (posts?.est_test) continue;
-    if (comptes?.ugc_ai_video) continue;
     if (!comptes?.poster_id) continue;
     if (estHorsFile({ postId: r.post_id, publieAt: r.publie_at, jour, deja: new Set() })) continue;
     const rawProfil = comptes.profiles;
@@ -944,10 +930,6 @@ export function creerRecruteur(input: {
   /** @deprecated préfère `langues` */
   langue?: string;
   langues?: string[];
-  /** HM UGC AI VIDEO : créateurs = marque + labels HM + persona. */
-  ugc_ai_video?: boolean;
-  /** Labels thématiques UGC AI VIDEO assignés au HM. */
-  ugc_ai_video_label_ids?: string[];
 }) {
   const langues =
     input.langues?.filter(Boolean) ??
@@ -960,12 +942,6 @@ export function creerRecruteur(input: {
     password: "12345678",
     langue: langues[0],
     langues,
-    ...(input.ugc_ai_video
-      ? {
-          ugc_ai_video: true,
-          ugc_ai_video_label_ids: input.ugc_ai_video_label_ids ?? [],
-        }
-      : {}),
   });
 }
 
@@ -989,7 +965,6 @@ export async function majCoutMensuel(userId: string, montant: number | null): Pr
 
 export interface MonCompte {
   id: string;
-  type_compte: TypeCompte;
   persona_nom: string | null;
   persona_bio: string | null;
   handle_tiktok: string | null;
@@ -1004,20 +979,15 @@ export async function mesComptes(): Promise<MonCompte[]> {
   const { data, error } = await supabase
     .from("comptes")
     .select(
-      "id, type_compte, persona_nom, persona_bio, handle_tiktok, avatar_url, langue, warmup_started_at, warmup_ends_at",
+      "id, persona_nom, persona_bio, handle_tiktok, avatar_url, langue, warmup_started_at, warmup_ends_at",
     )
     .eq("is_active", true)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return ((data ?? []) as Array<Omit<MonCompte, "type_compte"> & { type_compte?: string }>).map(
-    (c) => ({
-      ...c,
-      type_compte: normaliserTypeCompte(c.type_compte),
-    }),
-  );
+  return (data ?? []) as MonCompte[];
 }
 
-/** Premier compte perso (rétrocompat calendrier / warmup). */
+/** Premier compte du poster (rétrocompat calendrier / warmup). */
 export async function monCompte(): Promise<MonCompte | null> {
   const liste = await mesComptes();
   return comptePrincipal(liste) ?? null;
@@ -1034,7 +1004,6 @@ export async function majMonHandle(handle: string, compteId?: string): Promise<v
 
 export function ajouterCompte(input: {
   posterId: string;
-  type_compte: TypeCompte;
   langue: string;
   application_slug?: string;
   posts_par_jour?: number;
@@ -1052,7 +1021,7 @@ export function ajouterCompte(input: {
   }>("manage-users", {
     action: "ajouter_compte",
     userId: input.posterId,
-    type_compte: input.type_compte,
+    type_compte: "perso",
     langue: input.langue,
     application_slug: input.application_slug ?? "",
     ...(input.posts_par_jour != null
@@ -1067,49 +1036,8 @@ export function ajouterCompte(input: {
   });
 }
 
-export function ajouterCompteCm(input: {
-  posterId: string;
-  langue: string;
-  tiktok_email: string;
-  tiktok_password: string;
-  tiktok_2fa_note?: string;
-  notes_hm?: string;
-  handle_tiktok?: string;
-  persona_nom?: string;
-}) {
-  return ajouterCompte({ ...input, type_compte: "cm" });
-}
 
-export function majIdentifiantsCm(input: {
-  compteId: string;
-  tiktok_email: string;
-  tiktok_password: string;
-  tiktok_2fa_note?: string;
-  notes_hm?: string;
-}) {
-  return invoke<{ ok: boolean }>("manage-users", {
-    action: "maj_identifiants_cm",
-    compteId: input.compteId,
-    tiktok_email: input.tiktok_email,
-    tiktok_password: input.tiktok_password,
-    tiktok_2fa_note: input.tiktok_2fa_note ?? "",
-    notes_hm: input.notes_hm ?? "",
-  });
-}
 
-export async function lireIdentifiantsCm(
-  compteId: string,
-): Promise<CompteIdentifiants | null> {
-  const { data, error } = await supabase
-    .from("compte_identifiants")
-    .select(
-      "compte_id, tiktok_email, tiktok_password, tiktok_2fa_note, notes_hm, renseigne_at, vu_par_poster_at",
-    )
-    .eq("compte_id", compteId)
-    .maybeSingle();
-  if (error) throw error;
-  return (data as CompteIdentifiants) ?? null;
-}
 
 /** Le poster met à jour SON lien de conversation Upwork depuis son espace. */
 export async function majMonUpwork(url: string): Promise<void> {
@@ -1156,8 +1084,8 @@ export function creerPoster(input: {
   nom: string;
   password: string;
   langue?: string;
-  /** perso (défaut si langue) | cm | aucun */
-  type_compte?: TypeCompte | "aucun";
+  /** false = login seul, sans compte TikTok. Défaut : un compte si langue. */
+  avecCompte?: boolean;
   /** Quota d'assignation journalier (1–3). Défaut 2 côté Edge. */
   posts_par_jour?: number;
   application_slug?: string;
@@ -1169,10 +1097,8 @@ export function creerPoster(input: {
   return invoke<{
     userId: string;
     email: string;
-    type_compte?: TypeCompte | null;
     compte: {
       id: string;
-      type_compte?: string;
       reference: string | null;
       persona: boolean;
       labelId: string | null;
@@ -1182,10 +1108,10 @@ export function creerPoster(input: {
     prenom: input.prenom,
     nom: input.nom,
     password: input.password,
-    langue: resoudrePremierCompte(input.type_compte, input.langue) === "aucun"
+    langue: premierCompteDemande(input.avecCompte, input.langue) === "aucun"
       ? ""
       : (input.langue ?? ""),
-    type_compte: resoudrePremierCompte(input.type_compte, input.langue),
+    type_compte: premierCompteDemande(input.avecCompte, input.langue),
     application_slug: input.application_slug ?? "",
     ...(input.posts_par_jour != null
       ? { posts_par_jour: normaliserPostsParJour(Number(input.posts_par_jour)) }
@@ -2138,10 +2064,8 @@ export interface PostCalendrierAdmin {
   poster_nom: string | null;
   sujet_titre: string | null;
   langue: string | null;
-  /** Compte UGC AI slideshow (hors UGC AI VIDEO). */
+  /** Compte UGC AI slideshow. */
   ugc_ai: boolean;
-  /** Compte UGC AI VIDEO (pipeline vidéos). */
-  ugc_ai_video: boolean;
   /** Nombre de slides (0 = slideshow vide / matérialisation ratée). */
   nb_slides: number;
   /** Slides avec un media_id non null. */
@@ -2198,7 +2122,7 @@ export async function postsCalendrierAdmin(): Promise<PostCalendrierAdmin[]> {
     .from("posts")
     .select(
       "id, compte_id, date_publication_prevue, type, statut, pipeline_statut, publie_at, publie_url, " +
-        "sujets(titre), comptes(persona_nom, handle_tiktok, avatar_url, qualification, langue, ugc_ai, ugc_ai_video, profiles(prenom, nom))",
+        "sujets(titre), comptes(persona_nom, handle_tiktok, avatar_url, qualification, langue, ugc_ai, profiles(prenom, nom))",
     )
     .eq("est_test", false)
     .order("date_publication_prevue", { ascending: false, nullsFirst: false })
@@ -2230,7 +2154,6 @@ export async function postsCalendrierAdmin(): Promise<PostCalendrierAdmin[]> {
   return rows.map((p) => {
     const counts = slidesParPost.get(p.id as string) ?? { nb: 0, media: 0 };
     const slideshow_vide = counts.nb === 0 || counts.media === 0;
-    const ugcVideo = Boolean(p.comptes?.ugc_ai_video);
     return {
       id: p.id as string,
       compte_id: p.compte_id as string,
@@ -2248,8 +2171,7 @@ export async function postsCalendrierAdmin(): Promise<PostCalendrierAdmin[]> {
       poster_nom: (p.comptes?.profiles?.nom as string | null) ?? null,
       sujet_titre: (p.sujets?.titre as string | null) ?? null,
       langue: (p.comptes?.langue as string | null) ?? null,
-      ugc_ai: Boolean(p.comptes?.ugc_ai) && !ugcVideo,
-      ugc_ai_video: ugcVideo,
+      ugc_ai: Boolean(p.comptes?.ugc_ai),
       nb_slides: counts.nb,
       nb_media: counts.media,
       slideshow_vide,
@@ -3384,12 +3306,6 @@ export async function lireReglages(): Promise<Reglages> {
       heures: 24,
       ...((map.get("warmup") as Partial<Reglages["warmup"]> | undefined) ?? {}),
     },
-    papier: normaliserReglagesPapier(map.get("papier")),
-    papier_fal_usage: {
-      date: null,
-      appels: 0,
-      ...((map.get("papier_fal_usage") as Partial<Reglages["papier_fal_usage"]> | undefined) ?? {}),
-    },
   };
 }
 
@@ -3866,254 +3782,6 @@ export const scraperSourceVersContenus = (compteReferenceId: string) =>
 /** Pipeline minuit v-next : stats → (scores PAUSE) → assignation contenus. */
 export const lancerMinuitVnext = (body: Record<string, unknown> = {}) =>
   invoke<{ ok: boolean; saute?: boolean; jour?: string }>("minuit-vnext", body);
-
-export type PapierStatut = "queued" | "scripting" | "images" | "clips" | "ready" | "failed";
-
-export type PapierJournal = { at: string; etape: string; detail: string };
-
-export type PapierScene = {
-  id: string;
-  master_id: string;
-  index: number;
-  narration: string;
-  overlay: string;
-  image_prompt: string;
-  video_prompt: string;
-  image_path: string | null;
-  image_url: string | null;
-  clip_path: string | null;
-  clip_url: string | null;
-  duree_cible: 4 | 6 | 8;
-};
-
-export type PapierLangueStatut =
-  | "queued"
-  | "translating"
-  | "voice"
-  | "mix"
-  | "render"
-  | "karaoke"
-  | "ready"
-  | "failed";
-
-export type PapierLangue = {
-  id: string;
-  master_id: string;
-  langue: string;
-  title: string | null;
-  hook: string | null;
-  cta: string | null;
-  hashtags: string | null;
-  statut: PapierLangueStatut;
-  etape: string | null;
-  progression: number;
-  erreur: string | null;
-  video_url: string | null;
-  video_mix_url: string | null;
-  voice?: string | null;
-};
-
-export type PapierMaster = {
-  id: string;
-  date_publication: string;
-  topic: string | null;
-  kind: string;
-  narration_style: string;
-  script: { title?: string; hook?: string; cta?: string } | null;
-  statut: PapierStatut;
-  etape: string | null;
-  progression: number;
-  erreur: string | null;
-  journal: PapierJournal[];
-  created_at: string;
-  updated_at: string;
-  video_url?: string | null;
-  video_path?: string | null;
-  voice?: string | null;
-  papier_scenes?: PapierScene[];
-  papier_langues?: PapierLangue[];
-  papier_posts?: Array<{ id: string; compte_id: string; langue: string; est_test?: boolean }>;
-};
-
-export type PapierPost = {
-  id: string;
-  compte_id: string;
-  date_publication_prevue: string;
-  master_id: string;
-  langue_id: string;
-  langue: string;
-  title: string | null;
-  caption: string | null;
-  hashtags: string | null;
-  video_url: string;
-  video_path: string | null;
-  statut: "assigne" | "publie";
-  est_test?: boolean;
-  publie_at: string | null;
-  created_at: string;
-};
-
-export type PapierPostCalendrier = PapierPost & {
-  persona_nom: string | null;
-  handle_tiktok: string | null;
-  poster_prenom: string | null;
-  poster_nom: string | null;
-};
-
-export type PapierAssignResultat = {
-  ok: boolean;
-  assigns?: number;
-  comptes?: number;
-  langues?: number;
-  dates?: string[];
-  detail?: string;
-  test?: boolean;
-  posts?: PapierPost[];
-  besoinOriginal?: boolean;
-  kicksLangue?: string[];
-  error?: string;
-};
-
-export type PapierTickResultat = {
-  ok: boolean;
-  done?: boolean;
-  kick?: boolean;
-  masterId?: string;
-  date?: string;
-  statut?: PapierStatut;
-  progression?: number;
-  detail?: string;
-  error?: string;
-};
-
-export async function listerPapierMasters(
-  limite = 60,
-  applicationId?: string | null,
-): Promise<PapierMaster[]> {
-  let q = supabase
-    .from("papier_masters")
-    .select("*, papier_scenes(*), papier_langues(*), papier_posts(id, compte_id, langue, est_test)")
-    .order("created_at", { ascending: false })
-    .limit(limite);
-  if (applicationId) q = q.eq("application_id", applicationId);
-  const { data, error } = await q;
-  if (error) throw error;
-  return (data ?? []).map((row) => {
-    const r = row as PapierMaster;
-    const scenes = [...(r.papier_scenes ?? [])].sort((a, b) => a.index - b.index);
-    const langues = [...(r.papier_langues ?? [])].sort((a, b) => a.langue.localeCompare(b.langue));
-    const posts = (r.papier_posts ?? []).filter((p) => !p.est_test);
-    return {
-      ...r,
-      journal: Array.isArray(r.journal) ? r.journal : [],
-      papier_scenes: scenes,
-      papier_langues: langues,
-      papier_posts: posts,
-    };
-  });
-}
-
-export const lancerPapierJour = (
-  body: { date?: string; topic?: string; voice?: string; application_id?: string | null } = {},
-) => invoke<PapierTickResultat>("papier-cm", { action: "assurer", manuel: true, ...body });
-
-export const changerVoixPapier = (id: string, voice: string) =>
-  invoke<PapierTickResultat & { voix?: string; rebuildFr?: boolean }>("papier-cm", {
-    action: "voix",
-    manuel: true,
-    id,
-    voice,
-  });
-
-export const relancerPapier = (id: string) =>
-  invoke<PapierTickResultat>("papier-cm", { action: "relancer", manuel: true, id });
-
-export const regenererPapier = (id: string, topic?: string) =>
-  invoke<PapierTickResultat>("papier-cm", { action: "regenerer", manuel: true, id, topic });
-
-export const lancerPapierLocales = (masterId: string) =>
-  invoke<PapierTickResultat>("papier-cm", { action: "tick_locales", manuel: true, masterId });
-
-export const relancerPapierLangue = (id: string) =>
-  invoke<PapierTickResultat>("papier-cm", { action: "relancer_langue", manuel: true, id });
-
-export const assignerPapierCm = (
-  body: {
-    date?: string;
-    masterId?: string;
-    langueId?: string;
-    fenetreJours?: number;
-    compteId?: string;
-    test?: boolean;
-  } = {},
-) => invoke<PapierAssignResultat>("papier-cm", { action: "assigner", manuel: true, ...body });
-
-export const testerAssignationPapier = (body: {
-  compteId: string;
-  date?: string;
-  masterId?: string;
-}) =>
-  invoke<PapierAssignResultat>("papier-cm", {
-    action: "assigner",
-    manuel: true,
-    test: true,
-    ...body,
-  });
-
-export const annulerAssignationPapierTest = (compteId: string, date?: string) =>
-  invoke<{ ok: boolean; supprimes?: number; error?: string }>("papier-cm", {
-    action: "annuler_test",
-    manuel: true,
-    compteId,
-    date,
-  });
-
-export async function mesPapierPosts(compteId: string): Promise<PapierPost[]> {
-  const { data, error } = await supabase
-    .from("papier_posts")
-    .select("*")
-    .eq("compte_id", compteId)
-    .eq("est_test", false)
-    .order("date_publication_prevue", { ascending: false })
-    .limit(200);
-  if (error) throw error;
-  return (data ?? []) as PapierPost[];
-}
-
-export async function papierPostsCalendrier(): Promise<PapierPostCalendrier[]> {
-  const { data, error } = await supabase
-    .from("papier_posts")
-    .select("*, comptes(persona_nom, handle_tiktok, profiles(prenom, nom))")
-    .eq("est_test", false)
-    .order("date_publication_prevue", { ascending: false, nullsFirst: false })
-    .limit(400);
-  if (error) throw error;
-  // deno-lint-ignore no-explicit-any
-  return ((data ?? []) as any[]).map((row) => ({
-    ...row,
-    persona_nom: row.comptes?.persona_nom ?? null,
-    handle_tiktok: row.comptes?.handle_tiktok ?? null,
-    poster_prenom: row.comptes?.profiles?.prenom ?? null,
-    poster_nom: row.comptes?.profiles?.nom ?? null,
-  })) as PapierPostCalendrier[];
-}
-
-export async function listerPapierPostsTest(
-  compteId: string,
-  date?: string,
-): Promise<PapierPost[]> {
-  let q = supabase
-    .from("papier_posts")
-    .select("*")
-    .eq("compte_id", compteId)
-    .eq("est_test", true)
-    .order("date_publication_prevue", { ascending: false })
-    .limit(20);
-  if (date) q = q.eq("date_publication_prevue", date);
-  const { data, error } = await q;
-  if (error) throw error;
-  return (data ?? []) as PapierPost[];
-}
 
 export const lancerScoringVnext = (compteId?: string) =>
   invoke<{ ok: boolean; contenus: number; comptes: number }>("scoring", {
@@ -4854,132 +4522,7 @@ export const annulerAssignationTestCompte = (date: string, compteId: string) =>
     compteId,
   });
 
-export interface UgcVideoPostTest {
-  id: string;
-  statut: string;
-  caption: string | null;
-  video_finale_url: string | null;
-  video_kling_url: string | null;
-  image_ref_url: string | null;
-  frame_clean_url: string | null;
-  pipeline_erreur: string | null;
-  reaction_id: string;
-  utilisation_id: string;
-}
 
-/** Assignation UGC AI VIDEO test (1 créateur) — stream NDJSON + logs exacts. */
-export async function lancerAssignationUgcVideoTest(
-  date: string,
-  compteId: string,
-  onLog?: (ligne: AssignationTestLog) => void,
-  opts: { jusquA?: "face_ref" | "complet"; reactionId?: string; libre?: boolean } = {},
-): Promise<{
-  ok: boolean;
-  jour: string;
-  crees: number;
-  resultats: Array<{
-    compteId: string;
-    crees: number;
-    postIds?: string[];
-    erreur?: string;
-    raison?: string;
-  }>;
-}> {
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !anon) throw new Error("Supabase non configuré");
-
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData.session?.access_token;
-  if (!token) throw new Error("Session expirée — reconnecte-toi.");
-
-  const res = await fetch(`${url}/functions/v1/assignation-ugc-video`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      apikey: anon,
-      "Content-Type": "application/json",
-      Accept: "application/x-ndjson",
-    },
-    body: JSON.stringify(
-      corpsAssignationUgcVideoTest({
-        date,
-        compteId,
-        jusquA: opts.jusquA,
-        reactionId: opts.reactionId,
-        libre: opts.libre,
-      }),
-    ),
-  });
-
-  if (!res.ok || !res.body) {
-    let message = `Edge assignation-ugc-video ${res.status}`;
-    try {
-      const j = (await res.json()) as { error?: string };
-      if (j?.error) message = j.error;
-    } catch {
-      // ignore
-    }
-    throw new Error(message);
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let dernier: Record<string, unknown> | null = null;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lignes = buffer.split("\n");
-    buffer = lignes.pop() ?? "";
-    for (const ligne of lignes) {
-      const trim = ligne.trim();
-      if (!trim) continue;
-      try {
-        const ev = JSON.parse(trim) as Record<string, unknown>;
-        dernier = ev;
-        const detail = typeof ev.detail === "string" ? ev.detail : "";
-        if (detail) {
-          onLog?.({
-            at: typeof ev.at === "string" ? ev.at : new Date().toISOString(),
-            detail,
-            statut: typeof ev.statut === "string" ? ev.statut : undefined,
-          });
-        }
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  if (!dernier) throw new Error("Assignation UGC VIDEO : aucune réponse stream");
-  if (dernier.ok === false) {
-    throw new Error(
-      typeof dernier.error === "string"
-        ? dernier.error
-        : typeof dernier.detail === "string"
-          ? dernier.detail
-          : "Assignation UGC VIDEO échouée",
-    );
-  }
-
-  return {
-    ok: true,
-    jour: String(dernier.jour ?? date),
-    crees: Number(dernier.crees ?? 0),
-    resultats: Array.isArray(dernier.resultats)
-      ? (dernier.resultats as Array<{
-          compteId: string;
-          crees: number;
-          postIds?: string[];
-          erreur?: string;
-          raison?: string;
-        }>)
-      : [],
-  };
-}
 
 export const annulerAssignationUgcVideoTest = (date: string, compteId: string) =>
   invoke<{ ok: boolean; jour: string; compteId: string; posts: number }>(
@@ -4987,22 +4530,6 @@ export const annulerAssignationUgcVideoTest = (date: string, compteId: string) =
     { action: "annuler_test", date, compteId },
   );
 
-export async function listerUgcVideoPostsTest(
-  compteId: string,
-  date: string,
-): Promise<UgcVideoPostTest[]> {
-  const { data, error } = await supabase
-    .from("ugc_video_posts")
-    .select(
-      "id, statut, caption, video_finale_url, video_kling_url, image_ref_url, frame_clean_url, pipeline_erreur, reaction_id, utilisation_id",
-    )
-    .eq("compte_id", compteId)
-    .eq("date_publication_prevue", date)
-    .eq("est_test", true)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as UgcVideoPostTest[];
-}
 
 const LARGEUR_ASSIGN_FRONT = 6;
 
@@ -5256,16 +4783,13 @@ export async function diagnostiquerQuotaCompte(
   const { data: compte, error: errC } = await supabase
     .from("comptes")
     .select(
-      "id, langue, ugc_ai, ugc_ai_video, ugc_persona_id, posts_par_jour, application_id, warmup_started_at, warmup_ends_at",
+      "id, langue, ugc_ai, ugc_persona_id, posts_par_jour, application_id, warmup_started_at, warmup_ends_at",
     )
     .eq("id", compteId)
     .maybeSingle();
   if (errC) throw errC;
   if (!compte) return "Compte introuvable.";
 
-  if (compte.ugc_ai_video) {
-    return "Compte UGC AI VIDEO — hors assignation slideshow (pipeline vidéos à part).";
-  }
   if (compte.ugc_ai && !compte.ugc_persona_id) {
     return "Compte UGC AI sans persona — assigne un persona UGC (4 angles) sur le créateur.";
   }
@@ -5290,7 +4814,7 @@ export async function diagnostiquerQuotaCompte(
   }
 
   const langue = (compte.langue as string) || "fr";
-  const ugcAi = Boolean(compte.ugc_ai) && !compte.ugc_ai_video;
+  const ugcAi = Boolean(compte.ugc_ai);
   const applicationId = (compte.application_id as string | null) ?? null;
 
   const { data: labelsCompte, error: errL } = await supabase
@@ -5553,10 +5077,6 @@ function slugify(nom: string): string {
   );
 }
 
-/** Marque système (checkmark compte/HM) — jamais un label thématique sélectionnable. */
-export function estMarqueUgcAiVideo(lab: { slug?: string | null }): boolean {
-  return lab.slug === "ugc-ai-video";
-}
 
 /** Labels thématiques (hors marques système `ugc-ai-video` / `hook`). */
 export async function listerLabels(applicationId?: string | null): Promise<Label[]> {
@@ -5567,13 +5087,13 @@ export async function listerLabels(applicationId?: string | null): Promise<Label
   return ((data ?? []) as Label[]).filter((l) => !estLabelSysteme(l));
 }
 
-/** Labels affichés en bibliothèque (inclut Hook, exclut la marque UGC). */
+/** Labels affichés en bibliothèque (Hook compris — c'est une étagère, pas une niche). */
 export async function listerLabelsBiblio(applicationId?: string | null): Promise<Label[]> {
   let q = supabase.from("labels").select("*").order("nom");
   if (applicationId) q = q.eq("application_id", applicationId);
   const { data, error } = await q;
   if (error) throw error;
-  return ((data ?? []) as Label[]).filter((l) => !estMarqueUgcAiVideo(l));
+  return (data ?? []) as Label[];
 }
 
 /** Labels qui ont au moins un slideshow `ugc_compatible` (file UGC admin). */
@@ -5592,10 +5112,10 @@ export async function listerLabelIdsAvecUgc(applicationId?: string | null): Prom
 export async function creerLabel(
   nom: string,
   couleur?: string | null,
-  opts?: { ugc_ai_video?: boolean; genre?: "homme" | "femme"; application_id?: string | null },
+  opts?: { genre?: "homme" | "femme"; application_id?: string | null },
 ): Promise<Label> {
   const base = slugify(nom);
-  if (base === "ugc-ai-video" || base === SLUG_HOOK) {
+  if (base === SLUG_HOOK) {
     throw new Error("LABEL_MARQUE_RESERVE");
   }
   let slug = base;
@@ -5607,7 +5127,6 @@ export async function creerLabel(
         nom: nom.trim(),
         slug,
         couleur: couleur ?? null,
-        ugc_ai_video: Boolean(opts?.ugc_ai_video),
         genre,
         ...(opts?.application_id ? { application_id: opts.application_id } : {}),
       })
@@ -5685,6 +5204,17 @@ export async function listerBiblioDuLabel(
 
 export const listerImagesHookDuLabel = (labelId: string) =>
   listerBiblioDuLabel(labelId, { hookSeulement: true });
+
+/** Texte de la 1ʳᵉ slide d'un deck — le « hook » du slideshow. */
+function texteHookDeck(
+  slides: Array<{ position?: number; texte_overlay?: string | null }> | null | undefined,
+): string {
+  const tries = (slides ?? [])
+    .slice()
+    .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
+  const premiere = tries.find((s) => Number(s.position) === 1) ?? tries[0] ?? null;
+  return (premiere?.texte_overlay ?? "").trim();
+}
 
 export interface HookDuLabel {
   contenuId: string;
@@ -5771,7 +5301,7 @@ export async function listerHooksDuLabel(labelId: string): Promise<HookDuLabel[]
   const vus = new Set<string>();
   for (const c of top) {
     const deck = deckPar.get(`${c.id}:${c.langue_source}`) ?? [];
-    let hook = hookTexteDepuisDeck(deck);
+    let hook = texteHookDeck(deck);
     if (!hook) hook = (c.titre ?? "").trim();
     if (!hook) {
       const slides = [...(c.structure_slides ?? [])].sort((a, b) => a.position - b.position);
@@ -5794,117 +5324,21 @@ export async function listerHooksDuLabel(labelId: string): Promise<HookDuLabel[]
   return out;
 }
 
-export type SlideBrouillonManuel = {
-  position: number;
-  texte: string;
-  critere: string;
-  pinned: boolean;
-  media_id: string | null;
-  preview_media_id?: string | null;
-  preview_url?: string | null;
-  fallback?: boolean;
-  motif?: string;
-};
-
-export async function genererSlideshowManuel(input: {
-  labelId: string;
-  hook: string;
-  nbSlides: number;
-  promptExtra?: string;
-  hookMediaId?: string | null;
-}): Promise<SlideBrouillonManuel[]> {
-  const r = await invoke<{ ok: boolean; slides?: SlideBrouillonManuel[] }>(
-    "creation-manuelle",
-    {
-      action: "generer",
-      labelId: input.labelId,
-      hook: input.hook,
-      nbSlides: input.nbSlides,
-      promptExtra: input.promptExtra ?? "",
-      hookMediaId: input.hookMediaId ?? null,
-    },
-  );
-  return r.slides ?? [];
-}
-
-export async function previewTiragesManuel(
-  labelId: string,
-  slides: SlideBrouillonManuel[],
-): Promise<SlideBrouillonManuel[]> {
-  const r = await invoke<{ ok: boolean; slides?: SlideBrouillonManuel[] }>(
-    "creation-manuelle",
-    { action: "preview", labelId, slides },
-  );
-  return r.slides ?? [];
-}
-
-export async function validerSlideshowManuel(input: {
-  labelId: string;
-  hook: string;
-  hookContenuId?: string | null;
-  elo?: number;
-  langueSource?: string | null;
-  slides: SlideBrouillonManuel[];
-}): Promise<string> {
-  const r = await invoke<{ ok: boolean; contenuId?: string }>("creation-manuelle", {
-    action: "valider",
-    ...input,
-  });
-  if (!r.contenuId) throw new Error("Validation sans contenuId");
-  return r.contenuId;
-}
-
-export { ELO_MANUEL_DEFAUT, SLIDES_MANUEL_MAX, SLIDES_MANUEL_MIN };
-
 export async function supprimerLabel(id: string): Promise<void> {
   const { data: lab } = await supabase
     .from("labels")
     .select("slug")
     .eq("id", id)
     .maybeSingle();
-  if (lab?.slug === "ugc-ai-video" || lab?.slug === SLUG_HOOK) {
+  if (lab?.slug === SLUG_HOOK) {
     throw new Error("LABEL_MARQUE_PROTEGE");
   }
   const { error } = await supabase.from("labels").delete().eq("id", id);
   if (error) throw error;
 }
 
-/** Labels thématiques du pool UGC AI VIDEO (jamais la marque système). */
-export async function listerLabelsUgcAiVideo(opts?: {
-  /** @deprecated la marque n’est plus listée */
-  inclureMarque?: boolean;
-  applicationId?: string | null;
-}): Promise<Label[]> {
-  const tous = await listerLabels(opts?.applicationId);
-  return tous.filter((l) => l.ugc_ai_video);
-}
 
-export async function labelsDuHmUgcVideo(profileId: string): Promise<string[]> {
-  const { data, error } = await supabase
-    .from("hm_ugc_video_labels")
-    .select("label_id")
-    .eq("profile_id", profileId);
-  if (error) throw error;
-  return (data ?? []).map((r) => r.label_id as string);
-}
 
-/** Remplace les labels thématiques UGC AI VIDEO d’un HM. */
-export async function setLabelsHmUgcVideo(
-  profileId: string,
-  labelIds: string[],
-): Promise<void> {
-  const { error: delErr } = await supabase
-    .from("hm_ugc_video_labels")
-    .delete()
-    .eq("profile_id", profileId);
-  if (delErr) throw delErr;
-  const uniques = await filtrerIdsLabelsAssignables(labelIds);
-  if (uniques.length === 0) return;
-  const { error } = await supabase.from("hm_ugc_video_labels").insert(
-    uniques.map((label_id) => ({ profile_id: profileId, label_id })),
-  );
-  if (error) throw error;
-}
 
 export async function labelsDuCompte(compteId: string): Promise<string[]> {
   const { data, error } = await supabase
