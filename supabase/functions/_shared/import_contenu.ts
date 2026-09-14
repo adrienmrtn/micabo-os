@@ -1348,8 +1348,8 @@ export async function assurerDeckPourLangue(
       langue,
       variation: false,
       // En placement manuel, le CTA est déjà dans le texte source : il doit
-      // survivre à la traduction, sur la même slide, sans que `micabo.app`
-      // soit traduit. On le dit au traducteur.
+      // survivre à la traduction, sur la même slide, sans que `micabo` soit
+      // traduit. On le dit au traducteur.
       ctaManuel: placementManuel
         ? { slide: deckSource.find((s) => s.position_sophia)?.position ?? null }
         : undefined,
