@@ -162,12 +162,37 @@ dans les deux lignes — le total n'est pas une part de 100 %.
 
 **Placement micabo.** `contenus.placement_manuel` : posé, `integrateSophia` ne
 tourne dans AUCUNE langue. La source part telle quelle, les autres langues sont
-une simple traduction, et le prompt reçoit la consigne de garder `micabo.app`
+une simple traduction, et le prompt reçoit la consigne de garder `micabo`
 littéral, de ne pas déplacer le CTA, de ne pas en inventer un deuxième. Non
 posé, le comportement d'avant tient, `placementParDefaut` compris. Un deck
 manuel est « prêt » dès qu'il a du texte : sans cette nuance,
 `assurerDeckPourLangue` attendait un `position_sophia` qu'aucun modèle n'allait
 plus poser et retraduisait à chaque passage.
+
+## micabo est une application mobile, plus un site (0260, 14/09/2026)
+
+On ne promeut plus le site « micabo.app » mais l'application mobile
+« micabo ». Le nom s'écrit **seul**, en minuscules : pas de `.app`, et aucun
+mot de catégorie devant — ni « le site micabo », ni « l'app micabo », ni « la
+plateforme micabo ». La règle de ton d'origine (minuscules même en début de
+phrase, pour que la slide n'ait pas l'air d'une pub) est conservée.
+
+`micabo.app` reste le **domaine de messagerie interne** (`prenom.n@micabo.app`)
+et l'URL de l'OS : ne jamais les réécrire en cherchant la marque.
+
+Les prompts `placement_micabo`, `pertinence_micabo` et `traduction_tr` portent
+la nouvelle règle. `traduction_tr` disait l'inverse : elle imposait
+« micabo.app sitesi » et interdisait `uygulama`. En turc, le cas grammatical
+s'accole maintenant au nom par une apostrophe : micabo'yu, micabo'ya,
+micabo'da, micabo'dan, « micabo ile ». `ctaSiteTr.ts`, qui forçait la forme
+« site » côté front, est supprimé — il n'était plus appelé que par son test.
+
+Sur l'existant : decks source réécrits, decks traduits **vidés** (ils
+traduisaient une source qui venait de changer ; `assurerDeckPourLangue` les
+refait à l'assignation), posts assignés réécrits, posts publiés intacts. Une
+réécriture de ce genre retire le mot de catégorie AVANT de toucher au nom :
+l'ordre inverse laisse « site micabo'yu », le suffixe turc ayant déjà consommé
+le nom.
 
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
