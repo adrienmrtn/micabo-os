@@ -29,6 +29,7 @@ import {
 } from "@/features/moteur/api";
 import {
   definirFormatContenu,
+  definirPlacementManuel,
   ecrireNoteFile,
   ecrireStructureSlides,
   listerBlocsPng,
@@ -145,6 +146,8 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
   const [musiqueUrl, setMusiqueUrl] = React.useState("");
   const [note, setNote] = React.useState("");
   const [labelIds, setLabelIds] = React.useState<string[]>([]);
+  /** Slide qui porte le CTA micabo écrit à la main. null = placement auto. */
+  const [ctaSlide, setCtaSlide] = React.useState<number | null>(null);
   const [erreur, setErreur] = React.useState<string | null>(null);
 
   const d = detail.data;
@@ -161,6 +164,11 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
     setLabelIds((d.labels ?? []).map((l) => l.id));
     const deckSource = d.langues.find((l) => l.langue === d.langue_source) ?? d.langues[0];
     setHashtags(deckSource?.hashtags ?? "");
+    const porteuse = ((deckSource?.slides ?? []) as Array<{
+      position: number;
+      position_sophia: boolean;
+    }>).find((sl) => sl.position_sophia);
+    setCtaSlide(d.placement_manuel ? (porteuse?.position ?? null) : null);
   }, [d]);
 
   const deckSource = d
@@ -229,8 +237,23 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
     await setLabelsContenu(d.id, labelIds);
     if ((d.file_note ?? "") !== note) await ecrireNoteFile(d.id, note);
 
+    // 5 — Placement micabo. Après l'écriture des textes et la renumérotation :
+    // la position cochée est celle du deck FINAL.
+    const ctaFinal =
+      ctaSlide == null
+        ? null
+        : (travail.findIndex((sl) => sl.position === ctaSlide) + 1 || null);
+    const avantManuel = Boolean(d.placement_manuel);
+    const avantSlide = ((deckSource?.slides ?? []) as Array<{
+      position: number;
+      position_sophia: boolean;
+    }>).find((sl) => sl.position_sophia)?.position ?? null;
+    if (avantManuel !== (ctaFinal != null) || (ctaFinal != null && avantSlide !== ctaFinal)) {
+      await definirPlacementManuel(d.id, d.langue_source, ctaFinal);
+    }
+
     return aplaties;
-  }, [d, travail, deckSource, titre, musiqueTitre, musiqueUrl, tier, cible, formatId, labelIds, note, hashtags]);
+  }, [d, travail, deckSource, titre, musiqueTitre, musiqueUrl, tier, cible, formatId, labelIds, note, hashtags, ctaSlide]);
 
   const sauver = useMutation({
     mutationFn: enregistrer,
@@ -411,6 +434,17 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
         </CardContent>
       </Card>
 
+      <p
+        className={cn(
+          "rounded-md border px-3 py-2 text-xs",
+          ctaSlide != null
+            ? "border-primary/40 bg-primary/5"
+            : "text-muted-foreground",
+        )}
+      >
+        {ctaSlide != null ? t("file.ctaManuel") : t("file.ctaAuto")}
+      </p>
+
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {travail.map((s, index) => (
           <Card key={s.position}>
@@ -472,6 +506,17 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
                 disabled={occupe}
                 onChange={(e) => majSlide(s.position, { texte: e.target.value })}
               />
+
+              <label className="flex items-start gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  disabled={occupe}
+                  checked={ctaSlide === s.position}
+                  onChange={(e) => setCtaSlide(e.target.checked ? s.position : null)}
+                />
+                <span className="text-muted-foreground">{t("file.ctaIci")}</span>
+              </label>
             </CardContent>
           </Card>
         ))}

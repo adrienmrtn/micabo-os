@@ -1183,6 +1183,11 @@ export const en = {
       descendre: "Move later",
       supprimerSlide: "Delete slide",
       sansImage: "No image on this slide.",
+      ctaIci: "micabo goes here — I wrote it myself",
+      ctaManuel:
+        "micabo placement written by hand: no model will move the CTA, in any language. Translations carry it as is, on the same slide.",
+      ctaAuto:
+        "Automatic micabo placement: a model picks the slide and the wording, language by language. Tick a slide to take over.",
       blocsAide: "Click a block to drop it on the image, then drag and resize it.",
       blocsVide: "No blocks saved — add them in Settings.",
       calqueDevant: "Front",

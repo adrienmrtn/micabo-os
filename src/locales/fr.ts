@@ -1187,6 +1187,11 @@ export const fr = {
       descendre: "Reculer d’un cran",
       supprimerSlide: "Supprimer la slide",
       sansImage: "Pas d’image sur cette slide.",
+      ctaIci: "micabo est placé ici, je l’ai écrit à la main",
+      ctaManuel:
+        "Placement micabo écrit à la main : aucun modèle ne replacera le CTA, dans aucune langue. Les traductions le portent tel quel, sur la même slide.",
+      ctaAuto:
+        "Placement micabo automatique : un modèle choisira la slide et la formule, langue par langue. Coche une slide pour reprendre la main.",
       blocsAide: "Clique un bloc pour le poser sur l’image, puis déplace-le et redimensionne-le.",
       blocsVide: "Aucun bloc enregistré — ajoute-les dans les Réglages.",
       calqueDevant: "Devant",

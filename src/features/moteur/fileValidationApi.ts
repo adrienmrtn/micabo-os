@@ -380,3 +380,65 @@ export async function chargerStatsFormats(applicationId?: string | null): Promis
     passages,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Placement micabo écrit à la main
+// ---------------------------------------------------------------------------
+
+/**
+ * Dit où l'admin a posé le CTA micabo dans le deck source, et bascule le
+ * slideshow en placement manuel (0258).
+ *
+ * `position = null` rend la main au moteur : le drapeau retombe, toutes les
+ * marques `position_sophia` du deck source sont effacées, et
+ * `assurerDeckPourLangue` replacera le CTA comme avant.
+ *
+ * Les decks des AUTRES langues sont vidés dans les deux sens : ils portent un
+ * placement qui vient de l'ancienne règle, ils doivent être refaits. Vider un
+ * deck de langue ne coûte qu'une traduction — celle-ci se refait à la demande,
+ * au prochain passage d'un créateur de cette langue.
+ */
+export async function definirPlacementManuel(
+  contenuId: string,
+  langueSource: string,
+  position: number | null,
+): Promise<void> {
+  const { data: decks, error: errD } = await supabase
+    .from("contenu_langues")
+    .select("id, langue, slides")
+    .eq("contenu_id", contenuId);
+  if (errD) throw errD;
+
+  for (const deck of decks ?? []) {
+    const slides = ((deck.slides ?? []) as Array<{
+      position: number;
+      texte_overlay: string | null;
+      position_sophia: boolean;
+    }>);
+    if (deck.langue === langueSource) {
+      const { error } = await supabase
+        .from("contenu_langues")
+        .update({
+          slides: slides.map((s) => ({ ...s, position_sophia: s.position === position })),
+        })
+        .eq("id", deck.id);
+      if (error) throw error;
+    } else if (slides.length > 0) {
+      const { error } = await supabase
+        .from("contenu_langues")
+        .update({ slides: [] })
+        .eq("id", deck.id);
+      if (error) throw error;
+    }
+  }
+
+  const { error } = await supabase
+    .from("contenus")
+    .update({ placement_manuel: position != null })
+    .eq("id", contenuId);
+  if (error) throw error;
+
+  // Les rendus brûlés portent l'ancien texte : ils sont faux dans toutes les
+  // langues dès que le deck bouge.
+  await supabase.from("burn_rendus").delete().eq("contenu_id", contenuId);
+}

@@ -494,6 +494,11 @@ export interface Contenu {
   hook_contenu_id?: string | null;
   /** Format éditorial, facultatif. Ne joue sur rien dans l'assignation (0257). */
   format_id?: string | null;
+  /**
+   * Le CTA micabo est écrit à la main dans le deck source (0258) : aucun
+   * placement automatique, dans aucune langue — les traductions le portent.
+   */
+  placement_manuel?: boolean;
   /** Sortie de file : quand un admin a validé. */
   valide_at?: string | null;
   /** Admin qui a validé (uuid nu, sans FK — voir 0255). */
