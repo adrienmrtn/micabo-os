@@ -33,6 +33,7 @@ import {
   type SuiviMinuit,
 } from "@/features/moteur/api";
 import { nomLangue } from "@/features/moteur/langues";
+import { RelevesManquantsCard } from "@/features/moteur/RelevesManquantsCard";
 import { cn } from "@/lib/utils";
 
 function BanniereAssignation({
@@ -752,6 +753,8 @@ export function AdminMinuitPage() {
               {t("minuit.vnextInactifBanner")}
             </div>
           )}
+
+          <RelevesManquantsCard />
 
           <div className="space-y-1.5 rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
             <p>{t("minuit.eloCronInfo")}</p>

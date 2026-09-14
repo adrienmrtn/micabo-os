@@ -1248,6 +1248,14 @@ export const fr = {
       aide:
         "Vues moyennes sur les passages publiés ET mesurés — le nombre entre parenthèses dit combien. Reposts bonus et posts de test sont exclus. Croisé par label, un slideshow à deux labels compte dans les deux lignes : le total n’est pas une part de 100 %.",
     },
+    releves: {
+      toutMesure: "Relevé à jour — {{n}} passages mesurés.",
+      manquants_one: "{{n}} passage publié sans stats",
+      manquants_other: "{{n}} passages publiés sans stats",
+      detail: "{{publies}} publiés · {{mesures}} mesurés · {{recents}} trop récents (< 45 min) · {{assignes}} assignés pas encore publiés",
+      aide: "Ils restent en tête de file jusqu’à ce qu’ils soient mesurés — plus rien ne se perd quand une passe rate.",
+      relancer: "Relever maintenant",
+    },
     labels: {
       title: "Labels",
       gestion: "Labels / niches",
@@ -1352,6 +1360,11 @@ export const fr = {
       historique: "Passages / stats",
       pasDePassage: "Pas encore assigné à un créateur.",
       statsLigne: "{{vues}} vues · {{likes}} likes · {{coms}} coms",
+      releveLe: "Relevé le {{quand}}",
+      releveInconnu: "Relevé (date inconnue)",
+      releveTropTot: "Publié il y a moins de 45 min — TikTok ne l’a pas encore indexé.",
+      releveManquant: "Publié, jamais mesuré",
+      releverMaintenant: "Relever maintenant",
       ajouterLien: "Ajouter le lien TikTok",
       modifierLien: "modifier",
       lienPlaceholder: "https://www.tiktok.com/@…/photo/…",

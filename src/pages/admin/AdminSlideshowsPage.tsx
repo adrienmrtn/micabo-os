@@ -38,6 +38,7 @@ import { NettoyageEtapes } from "@/components/moteur/NettoyageEtapes";
 import { UpscaleMediaControl } from "@/components/moteur/UpscaleMediaControl";
 import { LabelEditor } from "@/features/moteur/LabelPicker";
 import { remettreEnFile } from "@/features/moteur/fileValidationApi";
+import { etatReleve } from "@/features/moteur/relevesStats";
 import {
   captionnerMediaBiblio,
   collecterMediaIdsContenus,
@@ -67,6 +68,7 @@ import {
   scannerVisageUgcMedia,
   setContenuUgcCompatible,
   setLabelsContenu,
+  lancerRattrapageElo,
   supprimerContenu,
   type ContenuListe,
   type JobReimportPhoto,
@@ -116,6 +118,73 @@ function seedSlideshowDetail(qc: QueryClient, id: string) {
   if (qc.getQueryData(["slideshow", id])) return;
   const seed = detailDepuisListe(qc, id);
   if (seed) qc.setQueryData<SlideshowDetail>(["slideshow", id], seed);
+}
+
+/**
+ * Pourquoi ce passage n'a pas de vues — et quoi faire.
+ *
+ * Sans cette ligne, un passage assigné (rien à mesurer) et un passage publié
+ * jamais relevé (vrai raté) s'affichaient tous deux « — vues », ce qui donnait
+ * l'impression que le relevé était cassé de bout en bout.
+ */
+function EtatRelevePassage({
+  passage,
+}: {
+  passage: {
+    statut: string;
+    publie_at: string | null;
+    vues: number | null;
+    stats_maj_at: string | null;
+    compte_id: string;
+  };
+}) {
+  const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
+  const etat = etatReleve(passage);
+
+  const relever = useMutation({
+    mutationFn: () => lancerRattrapageElo({ compteId: passage.compte_id }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["slideshow"] });
+    },
+  });
+
+  if (etat === "non_publie") return null;
+
+  if (etat === "mesure") {
+    return (
+      <p className="text-[10px] text-muted-foreground">
+        {passage.stats_maj_at
+          ? t("slideshows.releveLe", {
+              quand: new Date(passage.stats_maj_at).toLocaleString(i18n.language),
+            })
+          : t("slideshows.releveInconnu")}
+      </p>
+    );
+  }
+
+  if (etat === "trop_recent") {
+    return <p className="text-[10px] text-muted-foreground">{t("slideshows.releveTropTot")}</p>;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[10px] text-warning">{t("slideshows.releveManquant")}</span>
+      <button
+        type="button"
+        disabled={relever.isPending}
+        onClick={() => relever.mutate()}
+        className="text-[10px] text-primary underline-offset-2 hover:underline"
+      >
+        {relever.isPending ? t("common.loading") : t("slideshows.releverMaintenant")}
+      </button>
+      {relever.isError && (
+        <span className="text-[10px] text-destructive">
+          {(relever.error as Error).message}
+        </span>
+      )}
+    </div>
+  );
 }
 
 function PassageLien({
@@ -1823,6 +1892,7 @@ function DetailSlideshow({
                           coms: p.commentaires?.toLocaleString(i18n.language) ?? "—",
                         })}
                       </p>
+                      <EtatRelevePassage passage={p} />
                       <PassageLien
                         passageId={p.id}
                         postId={p.post_id}

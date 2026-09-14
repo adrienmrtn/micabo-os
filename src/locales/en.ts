@@ -1244,6 +1244,14 @@ export const en = {
       aide:
         "Average views over runs that were published AND measured — the number in brackets says how many. Bonus reposts and test posts are excluded. Crossed by label, a slideshow with two labels counts in both rows: the total is not a share of 100%.",
     },
+    releves: {
+      toutMesure: "Stats up to date — {{n}} runs measured.",
+      manquants_one: "{{n}} published run without stats",
+      manquants_other: "{{n}} published runs without stats",
+      detail: "{{publies}} published · {{mesures}} measured · {{recents}} too recent (< 45 min) · {{assignes}} assigned, not yet published",
+      aide: "They stay at the front of the queue until measured — nothing is lost when a pass fails.",
+      relancer: "Collect now",
+    },
     labels: {
       title: "Labels",
       gestion: "Labels / niches",
@@ -1347,6 +1355,11 @@ export const en = {
       historique: "Passages / stats",
       pasDePassage: "Not assigned to a creator yet.",
       statsLigne: "{{vues}} views · {{likes}} likes · {{coms}} comments",
+      releveLe: "Collected on {{quand}}",
+      releveInconnu: "Collected (date unknown)",
+      releveTropTot: "Published less than 45 min ago — TikTok hasn’t indexed it yet.",
+      releveManquant: "Published, never measured",
+      releverMaintenant: "Collect now",
       ajouterLien: "Add TikTok link",
       modifierLien: "edit",
       lienPlaceholder: "https://www.tiktok.com/@…/photo/…",

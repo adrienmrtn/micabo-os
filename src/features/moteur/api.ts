@@ -5850,7 +5850,7 @@ export async function lireSlideshow(id: string): Promise<SlideshowDetail | null>
       supabase
         .from("passages")
         .select(
-          "id, contenu_id, compte_id, langue, date_publication_prevue, statut, publie_url, vues, likes, commentaires, partages, post_id, created_at, bonus_repost, comptes(handle_tiktok, persona_nom, langue)",
+          "id, contenu_id, compte_id, langue, date_publication_prevue, statut, publie_url, publie_at, vues, likes, commentaires, partages, stats_maj_at, post_id, created_at, bonus_repost, comptes(handle_tiktok, persona_nom, langue)",
         )
         .eq("contenu_id", id)
         .order("date_publication_prevue", { ascending: false }),

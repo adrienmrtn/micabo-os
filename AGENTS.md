@@ -124,6 +124,85 @@ File des comptes INACTIF ou MAUVAISES_VUES, plus les comptes en **essai**
 L'essai de `/admin/essai` (5 jours) est un autre compteur, laissé tel quel :
 80 h est le seuil de la file de surveillance, pas une redéfinition de l'essai.
 
+## File de validation, formats et placement manuel (0257/0258, 14/09/2026)
+
+**Rien n'entre dans le pool sans un admin.** Le pipeline d'import tourne comme
+avant (OCR, pertinence, note /100 et tier d'entrée, nettoyage, format,
+caption), mais il s'arrête sur `statut = 'brouillon'` + `import_statut = 'done'`
+— cette paire, et elle seule, veut dire « en file ». Pas de nouvelle valeur
+d'enum : `assignation_contenu.ts` filtrait déjà sur `valide`. Les variations
+suivent la même porte. Le rejet automatique sous 55 est inchangé, et un
+`rejete` ne repasse jamais par la file.
+
+`/admin/file` ouvre un éditeur par slideshow : réordonner et supprimer des
+slides, corriger le texte du deck source, poser des calques PNG (bibliothèque
+globale `blocs_png`, gérée dans les Réglages), régler titre, format, labels,
+tier, passages dus, musique, hashtags. Le montage est **aplati dans le
+navigateur** — l'Edge n'a ni Pillow ni OpenCV, et le lambda de burn est un
+moteur à part qu'on ne détourne pas. L'aplat est réécrit **sur le
+`storage_path` existant** de l'image propre : `trouverPropreExistant` cherche
+le préfixe `propre/<contenu>/<position>.`, un chemin suffixé casserait la
+reprise d'import (même règle que `format_media.ts`). Le `burn_rendus` de la
+slide est jeté ; `burn_analyses`, lu sur le BRUT qu'on ne touche jamais, reste
+valable.
+
+Refuser = suppression dure, à la main. La purge est un bouton, jamais une
+échéance. Un slideshow validé se remet en file depuis sa fiche : les passages
+et posts déjà créés ne bougent pas (ils portent leur propre copie des slides
+et ne lisent jamais `contenus.statut`), seules les prochaines assignations
+cessent de le piocher.
+
+**Les formats ne jouent sur RIEN dans l'assignation** — ni filtre, ni
+équilibrage, ni départage. Liste globale, facultative sur un slideshow,
+reclassable après coup. Leur seule raison d'être est la carte « Par format »
+des Analytics : vues moyennes sur les passages publiés ET mesurés, passages,
+slideshows, tiers, requalifications, filtrable par langue et période,
+croisable avec les labels. Croisé par label, un slideshow à deux labels compte
+dans les deux lignes — le total n'est pas une part de 100 %.
+
+**Placement micabo.** `contenus.placement_manuel` : posé, `integrateSophia` ne
+tourne dans AUCUNE langue. La source part telle quelle, les autres langues sont
+une simple traduction, et le prompt reçoit la consigne de garder `micabo.app`
+littéral, de ne pas déplacer le CTA, de ne pas en inventer un deuxième. Non
+posé, le comportement d'avant tient, `placementParDefaut` compris. Un deck
+manuel est « prêt » dès qu'il a du texte : sans cette nuance,
+`assurerDeckPourLangue` attendait un `position_sophia` qu'aucun modèle n'allait
+plus poser et retraduisait à chaque passage.
+
+## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
+
+`chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
+jours Paris)`. Un passage raté pendant ces quatre jours n'était **jamais**
+repris : la fenêtre avait avancé. Constat du 14/09/2026 — sur 152 passages
+publiés, 16 avaient `vues IS NULL` **et** `stats_maj_at IS NULL` ; ceux du 07
+et du 08 étaient perdus définitivement.
+
+Le critère est désormais l'état du passage, pas le calendrier
+(`chargerPassagesARelever`) : jamais relevé d'abord, puis relevé il y a plus de
+6 h, sur 30 jours de profondeur, les plus vieux devant. Trois garde-fous
+l'accompagnent :
+
+- **45 minutes de délai plancher** avant tout scrape. Le 13/09, deux posts
+  publiés à 22:03 et 22:07 ont été scrapés à 22:07 : TikTok ne les avait pas
+  indexés, et sans la file ils n'auraient jamais été mesurés.
+- **Scrape profil dimensionné** sur le nombre de passages à retrouver
+  (`postsAScraper` : double, plancher 12, plafond 40). À 12 fixe, un créateur
+  qui poste aussi pour lui poussait nos posts hors de la liste.
+- **25 passages par compte et par passe** : chaque passage sans match coûte un
+  `scrapePost` Apify et l'invocation Edge meurt à 150 s. Le reste part à la
+  passe suivante — il ne se perd plus, c'est tout l'intérêt.
+
+Une **deuxième passe à 13:00 Paris** (`rattrapage-elo-midi`, planifiée par
+`crons_stats_midi_planifier()`, qui ne touche à aucun autre job) s'ajoute à
+minuit : un post du soir est mesuré ~15 h après au lieu de 26 h, et chaque
+passage est vu deux fois avant le J+3 de la requalification.
+
+Corollaire d'affichage : un passage `assigne` n'a rien à mesurer. Les afficher
+comme les publiés jamais relevés donnait l'impression d'un relevé cassé alors
+que 68 passages sur 220 n'étaient simplement pas publiés. `relevesStats.ts`
+tranche les quatre états, et la fiche d'un slideshow porte un bouton « relever
+maintenant » par passage manquant.
+
 ## Burned (0252, 12/09/2026)
 
 Un compte coché `comptes.burned` reçoit ses slides **texte déjà incrusté** : ni

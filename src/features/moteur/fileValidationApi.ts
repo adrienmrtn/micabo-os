@@ -6,6 +6,11 @@
 
 import { supabase } from "@/lib/supabase/client";
 import { slugFormat } from "@/features/moteur/fileValidation";
+import {
+  resumerReleves,
+  type LigneReleve,
+  type ResumeReleves,
+} from "@/features/moteur/relevesStats";
 import type { ContenuStat, PassageStat } from "@/features/moteur/statsFormats";
 import { estTier, tierImport } from "@/features/moteur/tierlist";
 import type { BlocPng, Format } from "@/features/moteur/types";
@@ -441,4 +446,25 @@ export async function definirPlacementManuel(
   // Les rendus brûlés portent l'ancien texte : ils sont faux dans toutes les
   // langues dès que le deck bouge.
   await supabase.from("burn_rendus").delete().eq("contenu_id", contenuId);
+}
+
+// ---------------------------------------------------------------------------
+// Suivi du relevé des stats
+// ---------------------------------------------------------------------------
+
+/**
+ * Compte les passages publiés qui n'ont pas de vues, en séparant ceux qui
+ * viennent d'être publiés de ceux qui manquent vraiment.
+ *
+ * Le moteur relève désormais « ce qui manque » et non plus une fenêtre de
+ * dates : ce compteur est la mesure de ce que la file a encore à rattraper.
+ */
+export async function compterRelevesManquants(): Promise<ResumeReleves> {
+  const { data, error } = await supabase
+    .from("passages")
+    .select("statut, publie_at, vues, stats_maj_at")
+    .order("date_publication_prevue", { ascending: false })
+    .limit(2000);
+  if (error) throw error;
+  return resumerReleves((data ?? []) as LigneReleve[]);
 }
