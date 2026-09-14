@@ -437,5 +437,26 @@ Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
  `ReferenceError`. Test de vie après déploiement : un POST anonyme doit rendre
  `401 {"error":"unauthorized"}` — un chargeur cassé rend un 500.
 
+- **Déploiement du 14/09/2026** (file de validation, formats, placement manuel,
+ relevé des stats). Migrations `0256` → `0259` appliquées, dix chargeurs
+ redéployés, test de vie `401` passé sur les dix. SHA épinglés : `b713af1`
+ pour `manage-users` ; `edb0f0f` pour `assignation`, `assignation-contenu`,
+ `bruler-assignes`, `bruler-texte-test`, `import-contenu`,
+ `renettoyer-contenu` et `revoquer-post` ; `36f01d1` pour `minuit-vnext` et
+ `rattrapage-elo`. `normaliser-format` et `upscale-assignes` n'ont pas bougé
+ (`a82a89e`) : leurs bundles ressortent d'esbuild octet pour octet identiques.
+ Six alias `createClient` ont été renommés au passage (`le`→`pe`, `ne`→`oe`,
+ `me`→`ne`, `ie`→`ae`, `Ee`→`Ae`, `P`→`k`, `H`→`Y`).
+- **Trois fonctions déployées n'ont plus de source ici** depuis `0256` :
+ `papier-cm`, `creation-manuelle` et `assignation-ugc-video`. Elles ne sont
+ plus appelées (ni cron, ni UI) et sont laissées en place : les supprimer
+ détruirait le `papier-cm` v11, dont le code n'a jamais été dans le dépôt.
+ Leurs chargeurs pointent sur d'anciens SHA que GitHub sert toujours, donc
+ elles bootent encore — **ne jamais les rappeler** : `creation-manuelle` pose
+ `statut = 'valide'` et court-circuiterait la file de validation.
+- **Cron ajouté le 14/09/2026** : `rattrapage-elo-midi` (`0 11 * * *`, jobid
+ 47), posé par `crons_stats_midi_planifier()`. Les cinq jobs du pipeline
+ minuit n'ont pas été touchés (jobids 41-45 conservés).
+
 Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
 être en avance sur `main`.
