@@ -213,14 +213,14 @@ function LabelStyleCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1">
-          <Label htmlFor="labStyle">{t("creation.label")}</Label>
+          <Label htmlFor="labStyle">{t("labels.label")}</Label>
           <select
             id="labStyle"
             className={selectClass}
             value={labelId}
             onChange={(e) => setLabelId(e.target.value)}
           >
-            <option value="">{t("creation.choisirLabel")}</option>
+            <option value="">{t("labels.choisirLabel")}</option>
             {(labels.data ?? []).map((l: LabelMoteur) => (
               <option key={l.id} value={l.id}>
                 {l.nom}
@@ -267,14 +267,6 @@ function LabelStyleCard() {
           >
             {sauver.isPending ? t("common.saving") : t("labels.enregistrerStyle")}
           </Button>
-          {labelId ? (
-            <Link
-              to={`/admin/creation?label=${labelId}`}
-              className="text-sm text-primary underline underline-offset-2"
-            >
-              {t("labels.creerPost")}
-            </Link>
-          ) : null}
           {sauver.isError && (
             <p className="text-sm text-destructive">{(sauver.error as Error).message}</p>
           )}

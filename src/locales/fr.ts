@@ -1257,10 +1257,12 @@ export const fr = {
       relancer: "Relever maintenant",
     },
     labels: {
+      label: "Label",
+      choisirLabel: "Choisir un label",
       title: "Labels",
       gestion: "Labels / niches",
       gestionDesc:
-        "Pont entre contenus et créateurs. Le mode UGC AI VIDEO est un checkmark (compte / recruteur), pas un label.",
+        "Pont entre contenus et créateurs : un créateur ne reçoit que les slideshows de ses labels.",
       nom: "Nom",
       couleur: "Couleur",
       genre: "Genre",
@@ -1301,6 +1303,8 @@ export const fr = {
       },
     },
     slideshows: {
+      pinned: "Pinnée",
+      critere: "Critère d’image",
       title: "Slideshows",
       subtitle:
         "TikToks importés : visuels + texte OCR à l'import. Traduction et placement micabo à l'assignation minuit (par langue).",

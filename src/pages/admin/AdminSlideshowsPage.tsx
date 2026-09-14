@@ -6,7 +6,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Check,
   Crop,
@@ -742,10 +742,10 @@ const DeckLangue = React.memo(function DeckLangue({
                   cibleEstSource={montrerOriginel || estSource}
                 />
                 {s.pinned ? (
-                  <p className="text-[10px] text-muted-foreground">{t("creation.pinned")}</p>
+                  <p className="text-[10px] text-muted-foreground">{t("slideshows.pinned")}</p>
                 ) : s.critere ? (
                   <p className="text-[10px] text-muted-foreground">
-                    {t("creation.critere")} : {s.critere}
+                    {t("slideshows.critere")} : {s.critere}
                   </p>
                 ) : null}
               </div>
@@ -2286,12 +2286,6 @@ export function AdminSlideshowsPage() {
               <CardDescription>{t("slideshows.subtitle")}</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" asChild>
-              <Link to="/admin/creation">
-                <PenLine className="size-4" />
-                {t("labels.creerPost")}
-              </Link>
-            </Button>
             <Button
               size="sm"
               variant="outline"

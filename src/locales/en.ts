@@ -1253,10 +1253,12 @@ export const en = {
       relancer: "Collect now",
     },
     labels: {
+      label: "Label",
+      choisirLabel: "Choose a label",
       title: "Labels",
       gestion: "Labels / niches",
       gestionDesc:
-        "Bridge between contents and creators. UGC AI VIDEO mode is a checkmark (account / recruiter), not a label.",
+        "Bridge between contents and creators: a creator only receives slideshows from their own labels.",
       nom: "Name",
       couleur: "Color",
       genre: "Gender",
@@ -1297,6 +1299,8 @@ export const en = {
       },
     },
     slideshows: {
+      pinned: "Pinned",
+      critere: "Image criterion",
       title: "Slideshows",
       subtitle:
         "Imported TikToks: visuals + OCR text at import. Translation and micabo placement at midnight assignment (per language).",
