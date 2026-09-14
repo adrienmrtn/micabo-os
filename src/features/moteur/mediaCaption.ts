@@ -7,15 +7,14 @@ export type CaptionStatut = "ok" | "aucune";
 export type CaptionModele = "florence" | "moondream" | "none";
 
 export function estLabelSysteme(lab: { slug?: string | null } | null | undefined): boolean {
-  const slug = lab?.slug ?? "";
-  return slug === "ugc-ai-video" || slug === SLUG_HOOK;
+  return (lab?.slug ?? "") === SLUG_HOOK;
 }
 
 export function estLabelHook(lab: { slug?: string | null }): boolean {
   return (lab.slug ?? "") === SLUG_HOOK;
 }
 
-/** Hook / ugc-ai-video : jamais une niche posée sur un créateur. */
+/** Hook : jamais une niche posée sur un créateur. */
 export function idsLabelsAssignables(
   labels: Array<{ id?: string | null; slug?: string | null }>,
 ): string[] {

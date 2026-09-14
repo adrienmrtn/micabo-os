@@ -1162,10 +1162,17 @@ async function executerPasImport(
       }
     }
 
-    // 7 — Validation. Le tier a été posé à l'étape 4 ; plus de recalcul de
-    // score par langue. Texte stocké = OCR source uniquement (pas de pub
-    // Sophia, pas de trad) : Sophia + traduction hors-source arrivent à
-    // l'assignation, via `assurerDeckPourLangue`.
+    // 7 — Sortie de pipeline → FILE DE VALIDATION, pas le pool.
+    //
+    // `statut` reste `brouillon` : avec `import_statut = 'done'`, cette paire
+    // veut dire « prêt, en attente d'un admin » (0257). L'assignation filtre
+    // sur `statut = 'valide'`, donc rien ne part chez un créateur avant qu'un
+    // admin ait relu — et éventuellement retouché — le slideshow dans la file.
+    //
+    // Le tier a été posé à l'étape 4 ; plus de recalcul de score par langue.
+    // Texte stocké = OCR source uniquement (pas de pub Sophia, pas de trad) :
+    // Sophia + traduction hors-source arrivent à l'assignation, via
+    // `assurerDeckPourLangue`.
     // Strip texte_original des slides partagées (reste language-agnostique)
     const slidesPropres = slides.map((s) => ({
       position: s.position,
@@ -1176,7 +1183,6 @@ async function executerPasImport(
 
     await marquer(supabase, contenu.id, {
       structure_slides: slidesPropres,
-      statut: "valide",
       import_statut: "done",
       import_etape: "done",
       import_erreur: null,
@@ -1263,10 +1269,17 @@ export async function assurerDeckPourLangue(
 ): Promise<{ slides: SlideLangue[]; hashtags: string }> {
   const { data: contenu } = await supabase
     .from("contenus")
-    .select("id, titre, langue_source, compte_reference_id, structure_slides")
+    .select(
+      "id, titre, langue_source, compte_reference_id, structure_slides, placement_manuel",
+    )
     .eq("id", contenuId)
     .single();
   if (!contenu) throw new Error("Contenu introuvable");
+
+  // L'admin a écrit le CTA lui-même dans le deck source (0258). Plus aucun
+  // placement automatique, dans aucune langue : la langue source part telle
+  // quelle, les autres ne sont qu'une traduction qui emporte le CTA avec elle.
+  const placementManuel = Boolean(contenu.placement_manuel);
 
   let { data: cl } = await supabase
     .from("contenu_langues")
@@ -1290,10 +1303,14 @@ export async function assurerDeckPourLangue(
 
   let deck = [...((cl.slides ?? []) as SlideLangue[])];
   let hashtags = ((cl as { hashtags?: string | null }).hashtags ?? "").trim();
+  // En placement manuel, un deck est prêt dès qu'il a du texte : il n'y a plus
+  // de `position_sophia` à attendre d'un modèle. Sans cette nuance, un deck
+  // manuel dont l'admin n'a coché aucune slide serait retraduit à chaque
+  // passage.
   const pret =
     deck.length > 0 &&
     deck.some((s) => s.texte_overlay) &&
-    deck.some((s) => s.position_sophia);
+    (placementManuel || deck.some((s) => s.position_sophia));
   if (pret) return { slides: deck, hashtags };
 
   const langueSource = contenu.langue_source ?? "fr";
@@ -1330,12 +1347,20 @@ export async function assurerDeckPourLangue(
       rules: regles || undefined,
       langue,
       variation: false,
+      // En placement manuel, le CTA est déjà dans le texte source : il doit
+      // survivre à la traduction, sur la même slide, sans que `micabo.app`
+      // soit traduit. On le dit au traducteur.
+      ctaManuel: placementManuel
+        ? { slide: deckSource.find((s) => s.position_sophia)?.position ?? null }
+        : undefined,
     });
     const parPos = new Map(traductions.slides.map((t) => [t.position, t.translated]));
     deck = deckSource.map((s) => ({
       position: s.position,
       texte_overlay: parPos.get(s.position) ?? "",
-      position_sophia: false,
+      // Le CTA voyage avec la traduction : la slide qui le portait en source le
+      // porte toujours, et rien ne doit le replacer.
+      position_sophia: placementManuel ? s.position_sophia : false,
     }));
     if (traductions.hashtags) hashtags = traductions.hashtags;
     await supabase
@@ -1344,7 +1369,7 @@ export async function assurerDeckPourLangue(
       .eq("id", cl.id);
   }
 
-  if (!deck.some((s) => s.position_sophia)) {
+  if (!placementManuel && !deck.some((s) => s.position_sophia)) {
     const r = await placerSophiaSurDeck(supabase, contenu, cl.id, deck, langue);
     if (r === "retry") {
       const derniere = deck[deck.length - 1];

@@ -1,4 +1,3 @@
-import type { PapierFalUsage, ReglagesPapier } from "./papierReglages";
 import type { Tier } from "./tierlist";
 import type { Qualification } from "./qualification";
 
@@ -34,8 +33,6 @@ export interface CompteReference {
   created_at: string;
 }
 
-export type TypeCompte = "perso" | "cm";
-
 export interface CompteIdentifiants {
   compte_id: string;
   tiktok_email: string;
@@ -48,7 +45,6 @@ export interface CompteIdentifiants {
 
 export interface CompteResumePoster {
   id: string;
-  type_compte: TypeCompte;
   langue: string;
   application_id: string | null;
   application_slug: string | null;
@@ -67,7 +63,6 @@ export interface Compte {
   id: string;
   poster_id: string;
   compte_reference_id: string | null;
-  type_compte: TypeCompte;
   langue: string;
   /** Application associée à ce compte TikTok. */
   application_id: string;
@@ -103,7 +98,6 @@ export interface Compte {
   /** Créateur UGC AI — slideshows ugc_compatible + swap visage persona. */
   ugc_ai: boolean;
   /** Créateur UGC AI VIDEO — marque seule, aucun label ; persona unique partagé. */
-  ugc_ai_video: boolean;
   /** Persona UGC (4 angles) associé à ce créateur. */
   ugc_persona_id: string | null;
   /** Le créateur reçoit ses slides texte déjà incrusté, pas à poser. */
@@ -244,7 +238,6 @@ export interface PosterProfil {
   must_change_password: boolean;
   role: "admin" | "poster" | "hiring_manager" | "directing_manager" | null;
   /** Recruteur UGC AI VIDEO : créateurs = marque vidéo + persona, sans labels. */
-  hm_ugc_ai_video: boolean;
   /** Tous les comptes actifs du créateur (perso + CM). */
   comptes: CompteResumePoster[];
 }
@@ -336,8 +329,6 @@ export interface Reglages {
   nettoyage: ReglagesNettoyage;
   file_labels_comptes: ReglagesFileLabels;
   warmup: ReglagesWarmup;
-  papier: ReglagesPapier;
-  papier_fal_usage: PapierFalUsage;
 }
 
 export interface StatsCompte {
@@ -395,7 +386,6 @@ export interface Label {
   created_at: string;
   application_id: string;
   /** Pool UGC AI VIDEO (HM vidéo + reactions/utilisations). */
-  ugc_ai_video: boolean;
   /** Genre imposé pour les prénoms TikTok des créateurs de ce label. */
   genre: LabelGenre | null;
   /** Thème / style rédigé par l'admin (création semi-manuelle). */
@@ -502,6 +492,41 @@ export interface Contenu {
   creation_mode?: "import" | "manuel";
   /** Slideshow d'origine du hook (musique reprise). */
   hook_contenu_id?: string | null;
+  /** Format éditorial, facultatif. Ne joue sur rien dans l'assignation (0257). */
+  format_id?: string | null;
+  /**
+   * Le CTA micabo est écrit à la main dans le deck source (0258) : aucun
+   * placement automatique, dans aucune langue — les traductions le portent.
+   */
+  placement_manuel?: boolean;
+  /** Sortie de file : quand un admin a validé. */
+  valide_at?: string | null;
+  /** Admin qui a validé (uuid nu, sans FK — voir 0255). */
+  valide_par?: string | null;
+  /** Note libre laissée pendant le passage en file. */
+  file_note?: string | null;
+  created_at: string;
+}
+
+/** Format éditorial d'un slideshow — descriptif, jamais un critère moteur. */
+export interface Format {
+  id: string;
+  nom: string;
+  slug: string;
+  couleur: string | null;
+  description: string | null;
+  actif: boolean;
+  created_at: string;
+}
+
+/** Calque PNG pré-enregistré, posé sur une image depuis la file. */
+export interface BlocPng {
+  id: string;
+  nom: string;
+  storage_path: string;
+  url: string;
+  largeur: number | null;
+  hauteur: number | null;
   created_at: string;
 }
 
@@ -510,6 +535,8 @@ export interface ContenuLangue {
   contenu_id: string;
   langue: string;
   slides: ContenuLangueSlide[];
+  /** Hashtags produits dans la passe de traduction, réutilisés aux passages. */
+  hashtags: string | null;
   score: number;
   nb_passages: number;
   score_maj_at: string | null;

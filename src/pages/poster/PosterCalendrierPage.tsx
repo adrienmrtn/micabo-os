@@ -22,18 +22,14 @@ import {
   demarrerWarmup,
   majMonHandle,
   mesComptes,
-  mesPapierPosts,
   type MonCompte,
-  type PapierPost,
 } from "@/features/moteur/api";
 import {
   comptePrincipal,
   ecrireCompteActif,
-  estCompteCm,
   lireCompteActif,
-} from "@/features/moteur/comptesCm";
-import { IdentifiantsCm } from "@/features/moteur/FormulaireCompteCm";
-import { drapeauLangue, nomLangue } from "@/features/moteur/langues";
+} from "@/features/moteur/comptesPoster";
+import { drapeauLangue } from "@/features/moteur/langues";
 import { WarmupBadge } from "@/features/moteur/WarmupBadge";
 import { statutWarmup } from "@/features/moteur/warmup";
 import { useAuth } from "@/features/auth/AuthContext";
@@ -85,84 +81,7 @@ function grilleDuMois(annee: number, mois: number) {
   return cases;
 }
 
-async function telechargerVideo(url: string, nom: string) {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("download");
-    const blob = await res.blob();
-    const href = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = href;
-    a.download = nom;
-    a.click();
-    URL.revokeObjectURL(href);
-  } catch {
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
-}
 
-function CartePapier({ post }: { post: PapierPost }) {
-  const { t } = useTranslation();
-  const [copie, setCopie] = React.useState<string | null>(null);
-  const [dl, setDl] = React.useState(false);
-
-  const copier = async (texte: string, cle: string) => {
-    await navigator.clipboard?.writeText(texte);
-    setCopie(cle);
-    window.setTimeout(() => setCopie(null), 1500);
-  };
-
-  return (
-    <Card className="border-primary/30 shadow-lifted">
-      <CardContent className="flex h-full flex-col gap-4 p-5">
-        <div className="flex-1 space-y-2">
-          <p className="font-semibold leading-snug">{post.title ?? t("cm.videoDuJour")}</p>
-          <div className="flex flex-wrap gap-1.5">
-            <Badge variant="secondary">{t("cm.badge")}</Badge>
-            <Badge variant="outline">{post.langue.toUpperCase()}</Badge>
-          </div>
-          {post.caption ? (
-            <p className="whitespace-pre-wrap text-sm text-muted-foreground">{post.caption}</p>
-          ) : null}
-          {post.hashtags ? <p className="text-xs text-muted-foreground">{post.hashtags}</p> : null}
-        </div>
-        <div className="flex flex-col gap-2">
-          <Button
-            size="lg"
-            className="w-full"
-            disabled={dl}
-            onClick={() => {
-              setDl(true);
-              void telechargerVideo(
-                post.video_url,
-                `papier-${post.date_publication_prevue}-${post.langue}.mp4`,
-              ).finally(() => setDl(false));
-            }}
-          >
-            <Download />
-            {t("cm.telecharger")}
-          </Button>
-          {post.caption ? (
-            <Button size="sm" variant="outline" onClick={() => void copier(post.caption!, "caption")}>
-              <Copy className="size-3.5" />
-              {copie === "caption" ? t("cm.copieOk") : t("cm.copierCaption")}
-            </Button>
-          ) : null}
-          {post.hashtags ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void copier(post.hashtags!, "tags")}
-            >
-              <Copy className="size-3.5" />
-              {copie === "tags" ? t("cm.copieOk") : t("cm.copierHashtags")}
-            </Button>
-          ) : null}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 function CartePost({ post, creneau }: { post: PostCalendrier; creneau?: number }) {
   const { t } = useTranslation();
@@ -226,7 +145,7 @@ function SelecteurCompte({
               : "rounded-md border px-2.5 py-1 text-xs"
           }
         >
-          {estCompteCm(c) ? t("cm.badge") : t("cm.perso")} · {drapeauLangue(c.langue)}
+          {drapeauLangue(c.langue)}
           {c.handle_tiktok ? ` @${c.handle_tiktok}` : ""}
         </button>
       ))}
@@ -237,7 +156,6 @@ function SelecteurCompte({
 function IdentiteTikTok({ compte }: { compte: MonCompte }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const cm = estCompteCm(compte);
 
   const [editHandle, setEditHandle] = React.useState(false);
   const [handle, setHandle] = React.useState("");
@@ -266,7 +184,7 @@ function IdentiteTikTok({ compte }: { compte: MonCompte }) {
           )}
           <div className="min-w-0 flex-1 space-y-1.5">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {cm ? `${t("cm.badge")} · ${nomLangue(compte.langue)}` : t("identite.titre")}
+              {t("identite.titre")}
             </p>
             {compte.persona_nom && <p className="text-sm font-semibold">{compte.persona_nom}</p>}
 
@@ -325,14 +243,7 @@ function IdentiteTikTok({ compte }: { compte: MonCompte }) {
                 </Button>
               )}
             </div>
-            <p className="pt-1 text-xs text-muted-foreground">
-              {cm ? t("cm.aideCreateur") : t("identite.aide")}
-            </p>
-            {cm && (
-              <div className="pt-2">
-                <IdentifiantsCm compteId={compte.id} editable={false} />
-              </div>
-            )}
+            <p className="pt-1 text-xs text-muted-foreground">{t("identite.aide")}</p>
           </div>
         </div>
       </CardContent>
@@ -357,12 +268,6 @@ export function PosterCalendrierPage() {
   const [compteId, setCompteId] = React.useState<string | null>(null);
   const compte =
     (comptes ?? []).find((c) => c.id === compteId) ?? comptePrincipal(comptes ?? []);
-  const estCm = compte ? estCompteCm(compte) : false;
-  const { data: papiers, isPending: papierPending } = useQuery({
-    queryKey: ["mes-papier-posts", compte?.id],
-    queryFn: () => mesPapierPosts(compte!.id),
-    enabled: Boolean(user?.id && compte?.id && estCm),
-  });
 
   React.useEffect(() => {
     if (!user?.id || !comptes?.length) return;
@@ -389,7 +294,6 @@ export function PosterCalendrierPage() {
     annee: maintenant.getFullYear(),
     mois: maintenant.getMonth(),
   }));
-  const [jourSelectionne, setJourSelectionne] = React.useState(jour);
 
   // Un jour peut porter plusieurs posts : la case affiche donc une liste.
   const parJour = React.useMemo(() => {
@@ -403,28 +307,12 @@ export function PosterCalendrierPage() {
     return carte;
   }, [posts, compte?.id]);
 
-  const parJourPapier = React.useMemo(() => {
-    const carte = new Map<string, PapierPost[]>();
-    for (const post of papiers ?? []) {
-      carte.set(post.date_publication_prevue, [
-        ...(carte.get(post.date_publication_prevue) ?? []),
-        post,
-      ]);
-    }
-    return carte;
-  }, [papiers]);
-
-  if (isPending || (estCm && papierPending)) {
+  if (isPending) {
     return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   }
 
-  const duJour = estCm
-    ? (parJourPapier.get(jourSelectionne) ?? [])
-    : (parJour.get(jour) ?? []);
-  const titreJour =
-    estCm && jourSelectionne !== jour
-      ? t("cm.jourSelectionne", { date: jourSelectionne })
-      : t("calendrier.aujourdhui");
+  const duJour = parJour.get(jour) ?? [];
+  const titreJour = t("calendrier.aujourdhui");
   const cases = grilleDuMois(mois.annee, mois.mois);
   const nomDuMois = new Date(mois.annee, mois.mois, 1).toLocaleDateString(i18n.language, {
     month: "long",
@@ -460,8 +348,8 @@ export function PosterCalendrierPage() {
         />
       )}
 
-      {/* Warmup : le créateur démarre le timer ici (plus côté HM). Pas pour les CM. */}
-      {compte && !estCm && (
+      {/* Warmup : le créateur démarre le timer ici (plus côté HM). */}
+      {compte && (
       <div
         className={cn(
           "flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between",
@@ -528,17 +416,11 @@ export function PosterCalendrierPage() {
         {duJour.length === 0 ? (
           <EmptyState
             icon={<CalendarCheck className="size-5" />}
-            title={estCm ? t("cm.videoPlusTard") : t("calendrier.rien")}
+            title={t("calendrier.rien")}
           />
-        ) : estCm ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {(duJour as PapierPost[]).map((post) => (
-              <CartePapier key={post.id} post={post} />
-            ))}
-          </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
-            {(duJour as PostCalendrier[]).map((post, index) => (
+            {duJour.map((post, index) => (
               <CartePost key={post.id} post={post} creneau={index + 1} />
             ))}
           </div>
@@ -596,35 +478,17 @@ export function PosterCalendrierPage() {
               }
 
               const date = isoDuJour(mois.annee, mois.mois, numero);
-              const duJourCase = estCm
-                ? (parJourPapier.get(date) ?? [])
-                : (parJour.get(date) ?? []);
+              const duJourCase = parJour.get(date) ?? [];
               const estAujourdhui = date === jour;
-              const estSelectionne = estCm && date === jourSelectionne;
 
               return (
                 <div
                   key={date}
-                  role={estCm ? "button" : undefined}
-                  tabIndex={estCm ? 0 : undefined}
-                  onClick={estCm ? () => setJourSelectionne(date) : undefined}
-                  onKeyDown={
-                    estCm
-                      ? (e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            setJourSelectionne(date);
-                          }
-                        }
-                      : undefined
-                  }
                   className={cn(
                     // min-w-0 : sans lui, une pastille au texte long force la
                     // colonne à s'élargir et fait déborder toute la grille.
                     "min-h-20 min-w-0 space-y-1 border-b border-r p-1.5",
                     estAujourdhui && "bg-primary/5",
-                    estSelectionne && "ring-1 ring-inset ring-primary/40",
-                    estCm && "cursor-pointer",
                   )}
                 >
                   <span
@@ -638,32 +502,22 @@ export function PosterCalendrierPage() {
                     {numero}
                   </span>
 
-                  {estCm
-                    ? (duJourCase as PapierPost[]).map((post) => (
-                        <span
-                          key={post.id}
-                          title={post.title ?? undefined}
-                          className="block w-full max-w-full truncate rounded bg-primary/15 px-1.5 py-1 text-[11px] leading-tight text-primary"
-                        >
-                          {post.title ?? t("cm.videoDuJour")}
-                        </span>
-                      ))
-                    : (duJourCase as PostCalendrier[]).map((post) => (
-                        <Link
-                          key={post.id}
-                          to={`/posts/${post.id}`}
-                          title={post.sujet_titre ?? undefined}
-                          className={cn(
-                            "block w-full max-w-full truncate rounded px-1.5 py-1 text-[11px] leading-tight transition-colors",
-                            post.publie_at
-                              ? "bg-success/15 text-success hover:bg-success/25"
-                              : "bg-primary/15 text-primary hover:bg-primary/25",
-                          )}
-                        >
-                          {post.publie_at ? "✓ " : ""}
-                          {post.sujet_titre ?? t("posts.title")}
-                        </Link>
-                      ))}
+                  {duJourCase.map((post) => (
+                    <Link
+                      key={post.id}
+                      to={`/posts/${post.id}`}
+                      title={post.sujet_titre ?? undefined}
+                      className={cn(
+                        "block w-full max-w-full truncate rounded px-1.5 py-1 text-[11px] leading-tight transition-colors",
+                        post.publie_at
+                          ? "bg-success/15 text-success hover:bg-success/25"
+                          : "bg-primary/15 text-primary hover:bg-primary/25",
+                      )}
+                    >
+                      {post.publie_at ? "✓ " : ""}
+                      {post.sujet_titre ?? t("posts.title")}
+                    </Link>
+                  ))}
                 </div>
               );
             })}
@@ -671,7 +525,7 @@ export function PosterCalendrierPage() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          {estCm ? t("cm.calendrierLegende") : t("calendrier.legende")}
+          {t("calendrier.legende")}
         </p>
       </section>
     </div>

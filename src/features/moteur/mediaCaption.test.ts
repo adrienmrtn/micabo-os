@@ -17,9 +17,8 @@ import {
 } from "./mediaCaption";
 
 describe("estLabelSysteme / hook", () => {
-  it("reconnaît hook et ugc-ai-video", () => {
+  it("reconnaît hook", () => {
     expect(estLabelSysteme({ slug: SLUG_HOOK })).toBe(true);
-    expect(estLabelSysteme({ slug: "ugc-ai-video" })).toBe(true);
     expect(estLabelSysteme({ slug: "alpha-male" })).toBe(false);
     expect(estLabelHook({ slug: "Hook" })).toBe(false);
     expect(estLabelHook({ slug: "hook" })).toBe(true);
@@ -29,7 +28,6 @@ describe("estLabelSysteme / hook", () => {
     expect(
       idsLabelsAssignables([
         { id: "hook-id", slug: "hook" },
-        { id: "ugc-id", slug: "ugc-ai-video" },
         { id: "study", slug: "study-aes" },
       ]),
     ).toEqual(["study"]);

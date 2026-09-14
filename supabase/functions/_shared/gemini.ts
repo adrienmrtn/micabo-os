@@ -301,6 +301,12 @@ export async function translateSlideshow(input: {
   /** Demande une formulation différente : c'est ce qui distingue un post
    *  remanié d'une simple copie de son aîné. */
   variation?: boolean;
+  /**
+   * Le CTA micabo a été écrit à la main dans le deck source (0258) : il doit
+   * traverser la traduction intact et rester sur sa slide. `slide` dit
+   * laquelle, quand l'admin l'a cochée.
+   */
+  ctaManuel?: { slide: number | null };
 }): Promise<TraductionSlideshow> {
   const deck = input.slides
     .map((s) => `Slide ${s.position} : "${s.original || "(aucun texte)"}"`)
@@ -323,7 +329,21 @@ Titre / légende de la vidéo source (souvent des hashtags) : ${input.sourceTitl
 Voici toutes les slides du slideshow, dans l'ordre (slide 1 = couverture) :
 ${deck}
 
-Traduis chaque slide en ${langue}. Une slide sans texte reste vide.
+Traduis chaque slide en ${langue}. Une slide sans texte reste vide.${
+    input.ctaManuel
+      ? `
+
+APPEL À L'ACTION — À PRÉSERVER TEL QUEL :
+Ce slideshow contient déjà un appel à l'action micabo, écrit à la main${
+          input.ctaManuel.slide ? ` (slide ${input.ctaManuel.slide})` : ""
+        }.
+- Traduis la phrase qui le porte comme le reste, naturellement en ${langue}.
+- Mais garde « micabo.app » **exactement** ainsi : jamais traduit, jamais
+  transcrit dans un autre alphabet, jamais coupé.
+- Ne le déplace pas sur une autre slide, n'en ajoute pas un deuxième, et n'en
+  invente pas un là où il n'y en a pas.`
+      : ""
+  }
 
 Hashtags (légende TikTok à coller) :
 - Produis EXACTEMENT 3 hashtags en ${langue}, séparés par des espaces.

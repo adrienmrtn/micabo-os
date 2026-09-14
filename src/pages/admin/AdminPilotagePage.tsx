@@ -29,7 +29,7 @@ import { useApplication } from "@/features/moteur/ApplicationContext";
 import {
   exemplesFeedDepuisTexte,
   exemplesFeedVersTexte,
-} from "@/features/moteur/creationManuelle";
+} from "@/features/moteur/promptsFeed";
 import type { Label as LabelMoteur, LabelGenre } from "@/features/moteur/types";
 import { cn } from "@/lib/utils";
 
@@ -54,19 +54,16 @@ function LabelsPilotageCard() {
   const [nom, setNom] = React.useState("");
   const [couleur, setCouleur] = React.useState("#2f6f4e");
   const [genre, setGenre] = React.useState<LabelGenre>("femme");
-  const [ugcAiVideo, setUgcAiVideo] = React.useState(false);
 
   const creer = useMutation({
     mutationFn: () =>
       creerLabel(nom.trim(), couleur, {
-        ugc_ai_video: ugcAiVideo,
         genre,
         application_id: applicationId,
       }),
     onSuccess: () => {
       setNom("");
       setGenre("femme");
-      setUgcAiVideo(false);
       qc.invalidateQueries({ queryKey: ["labels"] });
     },
   });
@@ -122,20 +119,11 @@ function LabelsPilotageCard() {
               <option value="homme">{t("labels.genreHomme")}</option>
             </select>
           </div>
-          <label className="flex items-center gap-2 pb-2 text-xs">
-            <input
-              type="checkbox"
-              checked={ugcAiVideo}
-              onChange={(e) => setUgcAiVideo(e.target.checked)}
-            />
-            {t("labels.ugcAiVideo")}
-          </label>
           <Button type="submit" disabled={creer.isPending || !nom.trim()}>
             {creer.isPending ? t("common.saving") : t("labels.creer")}
           </Button>
         </form>
         <p className="text-xs text-muted-foreground">{t("labels.genreAide")}</p>
-        <p className="text-xs text-muted-foreground">{t("labels.ugcAiVideoAide")}</p>
         <div className="list-enter flex flex-wrap gap-2">
           {(labels.data ?? []).map((lab) => (
             <div
@@ -162,17 +150,6 @@ function LabelsPilotageCard() {
                 <option value="femme">{t("labels.genreFemme")}</option>
                 <option value="homme">{t("labels.genreHomme")}</option>
               </select>
-              {lab.ugc_ai_video && (
-                <Badge variant="outline" className="text-[10px]">
-                  {t("labels.ugcAiVideoBadge")}
-                </Badge>
-              )}
-              <Link
-                to={`/admin/creation?label=${lab.id}`}
-                className="text-[10px] text-primary underline-offset-2 hover:underline"
-              >
-                {t("labels.creerPost")}
-              </Link>
               <button
                 type="button"
                 className="ml-1 text-muted-foreground hover:text-destructive"

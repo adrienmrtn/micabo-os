@@ -20,9 +20,8 @@ import { badgeManager, estRoleManager, useAuth } from "@/features/auth/AuthConte
 import { CompteursPhases, ListeCreateursSuivi } from "@/features/hiring/SuiviCreateurs";
 import { equipesParDm, hmsDuDm, hmsSansDm, nomProfil, resumeHm } from "@/features/hiring/suiviEquipe";
 import { CompteEditor, PostsParJourCompte } from "@/features/moteur/CompteEditor";
-import { estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
 import { ChampsPremierCompte, type PremierCompte } from "@/features/moteur/ChampsPremierCompte";
-import { FormulaireAjouterCompte } from "@/features/moteur/FormulaireCompteCm";
+import { FormulaireAjouterCompte } from "@/features/moteur/FormulaireAjouterCompte";
 import { EnteteCompte } from "@/features/moteur/VignetteCompte";
 import {
   assurerComptePoster,
@@ -33,7 +32,6 @@ import {
   demarrerWarmup,
   skipWarmup,
   labelsDesComptes,
-  labelsDuHmUgcVideo,
   listerComptes,
   listerLabels,
   listerLanguesReference,
@@ -43,10 +41,8 @@ import {
   majPoster,
   majUpwork,
   setLabelsCompte,
-  setLabelsHmUgcVideo,
   supprimerPoster,
 } from "@/features/moteur/api";
-import { LabelPicker } from "@/features/moteur/LabelPicker";
 import { useApplication } from "@/features/moteur/ApplicationContext";
 import { posterMatcheApplication, SLUG_MICABO } from "@/features/moteur/applications";
 import { drapeauLangue, langueInitiale, nomLangue } from "@/features/moteur/langues";
@@ -54,11 +50,6 @@ import { EssaiBadge } from "@/features/moteur/EssaiBadge";
 import { WarmupBadge } from "@/features/moteur/WarmupBadge";
 import { phaseCreateur, type PhaseCreateur } from "@/features/moteur/warmup";
 import type { CompteAvecDetails, Label as LabelType, PosterProfil } from "@/features/moteur/types";
-
-const filtreLabelUgcVideoThematique = (lab: {
-  slug: string;
-  ugc_ai_video: boolean;
-}) => Boolean(lab.ugc_ai_video) && lab.slug !== "ugc-ai-video";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
@@ -365,41 +356,6 @@ function LabelsCompteSelect({
   );
 }
 
-function HmUgcVideoLabelsEditeur({ profileId }: { profileId: string }) {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const q = useQuery({
-    queryKey: ["hm-ugc-video-labels", profileId],
-    queryFn: () => labelsDuHmUgcVideo(profileId),
-  });
-  const [local, setLocal] = React.useState<string[] | null>(null);
-  const ids = local ?? q.data ?? [];
-
-  const maj = useMutation({
-    mutationFn: (next: string[]) => setLabelsHmUgcVideo(profileId, next),
-    onSuccess: () => {
-      setLocal(null);
-      void queryClient.invalidateQueries({ queryKey: ["hm-ugc-video-labels", profileId] });
-    },
-  });
-
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-        {t("posters.hmUgcAiVideoLabels")}
-      </Label>
-      <LabelPicker
-        selected={ids}
-        disabled={maj.isPending || q.isPending}
-        filter={filtreLabelUgcVideoThematique}
-        onChange={(next) => {
-          setLocal(next);
-          maj.mutate(next);
-        }}
-      />
-    </div>
-  );
-}
 
 function BadgeUgc({ label }: { label: string }) {
   return (
@@ -487,9 +443,6 @@ export function AdminPostersPage() {
   const [premierCompte, setPremierCompte] = React.useState<PremierCompte>("perso");
   const [postsParJour, setPostsParJour] = React.useState<1 | 2 | 3>(2);
   const [handleTiktok, setHandleTiktok] = React.useState("");
-  const [cmEmail, setCmEmail] = React.useState("");
-  const [cmPassword, setCmPassword] = React.useState("");
-  const [cmDeuxFa, setCmDeuxFa] = React.useState("");
   const [password, setPassword] = React.useState(MOT_DE_PASSE_INITIAL);
   const [cree, setCree] = React.useState<{
     email: string;
@@ -507,21 +460,15 @@ export function AdminPostersPage() {
         password,
         langue: premierCompte === "aucun" ? undefined : langue || undefined,
         application_slug: applicationSlug,
-        type_compte: premierCompte,
+        avecCompte: premierCompte !== "aucun",
         posts_par_jour: premierCompte === "perso" ? postsParJour : undefined,
         handle_tiktok: handleTiktok,
-        tiktok_email: cmEmail,
-        tiktok_password: cmPassword,
-        tiktok_2fa_note: cmDeuxFa,
       }),
     onSuccess: (r) => {
       setCree({ email: r.email, password, type: premierCompte });
       setPrenom("");
       setNom("");
       setHandleTiktok("");
-      setCmEmail("");
-      setCmPassword("");
-      setCmDeuxFa("");
       setPostsParJour(2);
       setPassword(MOT_DE_PASSE_INITIAL);
       rafraichir();
@@ -534,8 +481,6 @@ export function AdminPostersPage() {
   const [recPrenom, setRecPrenom] = React.useState("");
   const [recNom, setRecNom] = React.useState("");
   const [recLangues, setRecLangues] = React.useState<string[]>([]);
-  const [recUgcAiVideo, setRecUgcAiVideo] = React.useState(false);
-  const [recUgcLabels, setRecUgcLabels] = React.useState<string[]>([]);
   const [recCree, setRecCree] = React.useState<{ email: string } | null>(null);
   const basculerRecLangue = (l: string) =>
     setRecLangues((prev) => (prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l]));
@@ -545,16 +490,12 @@ export function AdminPostersPage() {
         prenom: recPrenom,
         nom: recNom,
         langues: recLangues,
-        ugc_ai_video: recUgcAiVideo,
-        ugc_ai_video_label_ids: recUgcAiVideo ? recUgcLabels : undefined,
       }),
     onSuccess: (r) => {
       setRecCree({ email: r.email });
       setRecPrenom("");
       setRecNom("");
       setRecLangues([]);
-      setRecUgcAiVideo(false);
-      setRecUgcLabels([]);
       rafraichir();
     },
   });
@@ -664,12 +605,6 @@ export function AdminPostersPage() {
             onPostsParJour={setPostsParJour}
             handle={handleTiktok}
             onHandle={setHandleTiktok}
-            email={cmEmail}
-            onEmail={setCmEmail}
-            password={cmPassword}
-            onPassword={setCmPassword}
-            deuxFa={cmDeuxFa}
-            onDeuxFa={setCmDeuxFa}
           />
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="mdp">{t("posters.password")}</Label>
@@ -695,8 +630,7 @@ export function AdminPostersPage() {
               type="submit"
               disabled={
                 creer.isPending ||
-                (premierCompte !== "aucun" && !langue) ||
-                (premierCompte === "cm" && (!cmEmail.trim() || !cmPassword))
+                (premierCompte !== "aucun" && !langue)
               }
             >
               {creer.isPending ? t("common.saving") : t("posters.create")}
@@ -730,11 +664,7 @@ export function AdminPostersPage() {
             </p>
             <p className="pt-1 text-xs text-muted-foreground">{t("posters.transmit")}</p>
             <p className="text-xs text-muted-foreground">
-              {cree.type === "cm"
-                ? t("posters.creeCm")
-                : cree.type === "aucun"
-                  ? t("posters.creeAucun")
-                  : t("warmup.apresCreation")}
+              {cree.type === "aucun" ? t("posters.creeAucun") : t("warmup.apresCreation")}
             </p>
           </div>
         )}
@@ -793,44 +723,13 @@ export function AdminPostersPage() {
             </div>
             <p className="text-xs text-muted-foreground">{t("posters.languesRecruteurAide")}</p>
           </div>
-          <div className="space-y-1.5 sm:col-span-3">
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={recUgcAiVideo}
-                onChange={(e) => {
-                  setRecUgcAiVideo(e.target.checked);
-                  if (!e.target.checked) setRecUgcLabels([]);
-                }}
-              />
-              <span>
-                <span className="font-medium">{t("posters.hmUgcAiVideo")}</span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  {t("posters.hmUgcAiVideoAide")}
-                </span>
-              </span>
-            </label>
-            {recUgcAiVideo && (
-              <div className="space-y-1.5 rounded-md border border-dashed p-3">
-                <Label>{t("posters.hmUgcAiVideoLabels")}</Label>
-                <LabelPicker
-                  selected={recUgcLabels}
-                  onChange={setRecUgcLabels}
-                  filter={filtreLabelUgcVideoThematique}
-                />
-                <p className="text-xs text-muted-foreground">{t("posters.hmUgcAiVideoLabelsAide")}</p>
-              </div>
-            )}
-          </div>
           <div className="sm:col-span-3">
             <Button
               type="submit"
               disabled={
                 creerRec.isPending ||
                 !recPrenom.trim() ||
-                recLangues.length === 0 ||
-                (recUgcAiVideo && recUgcLabels.length === 0)
+                recLangues.length === 0
               }
             >
               {creerRec.isPending ? t("common.saving") : t("posters.creerRecruteur")}
@@ -1001,7 +900,6 @@ export function AdminPostersPage() {
             {badgeManager(poster.role) && (
               <Badge variant="outline">{badgeManager(poster.role)}</Badge>
             )}
-            {poster.hm_ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
             {!poster.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
           </div>
           <DrapeauxLangues codes={langues} />
@@ -1062,17 +960,14 @@ export function AdminPostersPage() {
                   compte={c}
                   extra={
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                      {c.ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
-                      {c.ugc_ai && !c.ugc_ai_video && <BadgeUgc label="UGC" />}
+                      {c.ugc_ai && <BadgeUgc label="UGC" />}
                       <QualificationBadge qualification={c.qualification} size="sm" />
                       <EssaiBadge createdAt={c.created_at} />
-                      {!estCompteCm(c) && (
-                        <WarmupBadge
-                          compteId={c.id}
-                          startedAt={c.warmup_started_at}
-                          endsAt={c.warmup_ends_at}
-                        />
-                      )}
+                      <WarmupBadge
+                        compteId={c.id}
+                        startedAt={c.warmup_started_at}
+                        endsAt={c.warmup_ends_at}
+                      />
                     </div>
                   }
                 />
@@ -1273,7 +1168,6 @@ export function AdminPostersPage() {
                 {badgeManager(fiche.role) && (
                   <Badge variant="outline">{badgeManager(fiche.role)}</Badge>
                 )}
-                {fiche.hm_ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
                 {!fiche.is_active && <Badge variant="secondary">{t("posters.disabled")}</Badge>}
                 {ficheASurveiller != null && ficheASurveiller > 0 && (
                   <Badge variant="warning" title={t("posters.aSurveillerAide")}>
@@ -1288,8 +1182,6 @@ export function AdminPostersPage() {
                 </Label>
                 <LangueRecruteurDropdown recruteur={fiche} />
               </div>
-
-              {fiche.hm_ugc_ai_video && <HmUgcVideoLabelsEditeur profileId={fiche.id} />}
 
               {fiche.role === "hiring_manager" && (
                 <p className="text-sm">
@@ -1519,44 +1411,39 @@ export function AdminPostersPage() {
                               compte={c}
                               extra={
                                 <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                                  {c.ugc_ai_video && <BadgeUgc label={t("posters.ugcAiVideoBadge")} />}
-                                  {c.ugc_ai && !c.ugc_ai_video && <BadgeUgc label="UGC" />}
+                                  {c.ugc_ai && <BadgeUgc label="UGC" />}
                                   <QualificationBadge qualification={c.qualification} size="sm" />
                                   <EssaiBadge createdAt={c.created_at} />
-                                  {!estCompteCm(c) && (
-                                    <span onClick={(e) => e.stopPropagation()}>
-                                      <WarmupBadge
-                                        compteId={c.id}
-                                        startedAt={c.warmup_started_at}
-                                        endsAt={c.warmup_ends_at}
-                                        showStart={ouvert}
-                                        startPending={warmupStart.isPending}
-                                        onStart={() => warmupStart.mutate(c.id)}
-                                        showSkip={ouvert}
-                                        skipPending={warmupSkip.isPending}
-                                        onSkip={() => warmupSkip.mutate(c.id)}
-                                      />
-                                    </span>
-                                  )}
+                                  <span onClick={(e) => e.stopPropagation()}>
+                                    <WarmupBadge
+                                      compteId={c.id}
+                                      startedAt={c.warmup_started_at}
+                                      endsAt={c.warmup_ends_at}
+                                      showStart={ouvert}
+                                      startPending={warmupStart.isPending}
+                                      onStart={() => warmupStart.mutate(c.id)}
+                                      showSkip={ouvert}
+                                      skipPending={warmupSkip.isPending}
+                                      onSkip={() => warmupSkip.mutate(c.id)}
+                                    />
+                                  </span>
                                 </div>
                               }
                             />
                           </div>
                           {ouvert && (
                             <div className="space-y-3 border-t pt-3">
-                              {!estCompteCm(c) && (
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                  <LangueCompteSelect compte={c} />
-                                  <LabelsCompteSelect
-                                    compteId={c.id}
-                                    actifs={labs}
-                                    applicationId={c.application_id}
-                                  />
-                                  <div className="sm:col-span-2">
-                                    <PostsParJourCompte compte={c} />
-                                  </div>
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <LangueCompteSelect compte={c} />
+                                <LabelsCompteSelect
+                                  compteId={c.id}
+                                  actifs={labs}
+                                  applicationId={c.application_id}
+                                />
+                                <div className="sm:col-span-2">
+                                  <PostsParJourCompte compte={c} />
                                 </div>
-                              )}
+                              </div>
                               <CompteEditor compte={c} />
                             </div>
                           )}
@@ -1569,7 +1456,6 @@ export function AdminPostersPage() {
                 <FormulaireAjouterCompte
                   posterId={fiche.id}
                   languesProposees={langues.data ?? []}
-                  languesPrisesCm={languesCmPrises(ficheComptes)}
                   applications={applications.data ?? []}
                 />
               </div>

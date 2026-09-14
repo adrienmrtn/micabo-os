@@ -2,12 +2,10 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
-import { estCompteCm } from "@/features/moteur/comptesCm";
 import { drapeauLangue } from "@/features/moteur/langues";
 
 export type CompteVignette = {
   id: string;
-  type_compte?: string | null;
   langue: string;
   application_id?: string | null;
   application_slug?: string | null;
@@ -16,15 +14,6 @@ export type CompteVignette = {
   avatar_url?: string | null;
   score?: number | null;
 };
-
-export function BadgeTypeCompte({ compte }: { compte: { type_compte?: string | null } }) {
-  const { t } = useTranslation();
-  return (
-    <Badge variant={estCompteCm(compte) ? "default" : "outline"}>
-      {estCompteCm(compte) ? t("cm.badge") : t("cm.perso")}
-    </Badge>
-  );
-}
 
 export function AvatarCompte({
   url,
@@ -74,7 +63,6 @@ export function EnteteCompte({
       <AvatarCompte url={compte.avatar_url} taille={compact ? "sm" : "md"} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
-          <BadgeTypeCompte compte={compte} />
           {(compte.application_slug || compte.application_id) && (
             <Badge variant="secondary">{compte.application_slug ?? "app"}</Badge>
           )}

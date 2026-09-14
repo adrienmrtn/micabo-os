@@ -32,13 +32,10 @@ import { AdminCalendrierPage } from "@/pages/admin/AdminCalendrierPage";
 import { AdminCreateurPage } from "@/pages/admin/AdminCreateurPage";
 import { AdminMinuitPage } from "@/pages/admin/AdminMinuitPage";
 import { AdminSlideshowsPage } from "@/pages/admin/AdminSlideshowsPage";
+import { AdminFilePage } from "@/pages/admin/AdminFilePage";
 import { AdminPostDetailPage } from "@/pages/admin/AdminPostDetailPage";
 import { AdminTestsPage } from "@/pages/admin/AdminTestsPage";
 import { AdminUgcPersonasPage } from "@/pages/admin/AdminUgcPersonasPage";
-import { AdminUgcSlideshowsPage } from "@/pages/admin/AdminUgcSlideshowsPage";
-import { AdminUgcVideosPage } from "@/pages/admin/AdminUgcVideosPage";
-import { AdminPapierPage } from "@/pages/admin/AdminPapierPage";
-import { AdminCreationPage } from "@/pages/admin/AdminCreationPage";
 import { PosterCalendrierPage } from "@/pages/poster/PosterCalendrierPage";
 import { PosterReferralPage } from "@/pages/poster/PosterReferralPage";
 import { PosterPostPage } from "@/pages/poster/PosterPostPage";
@@ -74,8 +71,7 @@ export function AppRouter() {
             <Route path="/admin/sources" element={<AdminSourcesPage />} />
             <Route path="/admin/contenus" element={<Navigate to="/admin/slideshows" replace />} />
             <Route path="/admin/slideshows" element={<AdminSlideshowsPage />} />
-            <Route path="/admin/creation" element={<AdminCreationPage />} />
-            <Route path="/admin/papier" element={<AdminPapierPage />} />
+            <Route path="/admin/file" element={<AdminFilePage />} />
             <Route path="/admin/assignation-sources" element={<Navigate to="/admin/sources" replace />} />
             <Route path="/admin/reproduisibles" element={<Navigate to="/admin/slideshows" replace />} />
             <Route path="/admin/posters" element={<AdminPostersPage />} />
@@ -93,8 +89,6 @@ export function AppRouter() {
             <Route path="/admin/documents" element={<AdminDocumentsPage />} />
             <Route path="/admin/assistant" element={<AdminChatbotPage />} />
             <Route path="/admin/ugc/personas" element={<AdminUgcPersonasPage />} />
-            <Route path="/admin/ugc/slideshows" element={<AdminUgcSlideshowsPage />} />
-            <Route path="/admin/ugc/videos" element={<AdminUgcVideosPage />} />
           </Route>
         </Route>
 

@@ -24,10 +24,9 @@ export async function listerComptesEssai(now: Date = new Date()): Promise<Compte
   const { data, error } = await supabase
     .from("comptes")
     .select(
-      "id, created_at, poster_id, handle_tiktok, persona_nom, avatar_url, langue, posts_par_jour, ugc_ai_video, profiles(prenom, nom, email)",
+      "id, created_at, poster_id, handle_tiktok, persona_nom, avatar_url, langue, posts_par_jour, profiles(prenom, nom, email)",
     )
     .eq("is_active", true)
-    .eq("ugc_ai_video", false)
     .gte("created_at", depuis)
     .order("created_at", { ascending: false });
   if (error) throw error;

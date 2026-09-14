@@ -28,8 +28,49 @@ import { aujourdhuiParis } from "./supabase.ts";
 import { qualifierComptes, type QualificationResultat } from "./qualification_comptes.ts";
 
 export const RATTRAPAGE_JOURS_DEFAUT = 4;
-/** Profil TikTok scrapé — garder bas pour rester sous le timeout Edge 150s / compte. */
+
+/**
+ * Profil TikTok scrapé, par compte.
+ *
+ * Plancher, pas valeur fixe : un créateur qui poste aussi pour lui pousse nos
+ * posts hors des N premiers, et le match par URL échoue. On dimensionne donc
+ * sur le nombre de passages à retrouver (`postsAScraper`), plafonné pour rester
+ * sous le timeout Edge de 150 s par compte.
+ */
 const POSTS_RELEVES = 12;
+const POSTS_RELEVES_MAX = 40;
+
+/**
+ * Un post scrapé plus tôt que ça n'est pas encore indexé par TikTok : le
+ * scrape rend « pas de match », ou pire, des vues quasi nulles qui faussent la
+ * moyenne du cycle. Le 13/09/2026, deux posts publiés à 22:03 et 22:07 ont été
+ * scrapés à 22:07 — jamais mesurés.
+ */
+const DELAI_MIN_RELEVE_MS = 45 * 60_000;
+
+/**
+ * Un relevé n'est refait que s'il a vieilli. En dessous, une deuxième passe
+ * dans la même journée ne rescraperait que du déjà-vu.
+ */
+const RAFRAICHIR_APRES_MS = 6 * 3600_000;
+
+/**
+ * Profondeur maximale de la file « ce qui manque ». Au-delà, un passage n'a
+ * plus d'intérêt statistique : le cycle qui l'attendait a été requalifié de
+ * force depuis longtemps (CYCLE_TIMEOUT_JOURS = 14).
+ */
+const RATTRAPAGE_PROFONDEUR_JOURS = 30;
+
+/**
+ * Passages relevés par compte et par passe.
+ *
+ * La file « ce qui manque » peut être longue au premier passage après un
+ * incident : chaque passage sans match coûte un `scrapePost` Apify, et
+ * l'invocation Edge meurt à 150 s. On en prend une tranche, les plus vieux
+ * d'abord ; le reste part à la passe suivante (13:00 ou minuit) — il ne se
+ * perd plus, c'est tout l'intérêt de la file.
+ */
+const PASSAGES_PAR_PASSE = 25;
 /** Fenêtre (±h) pour matcher le « dernier post » profil vs date attendue. */
 const COHERENCE_HEURES = 36;
 /** Max d’entrées détaillées dans le brief (UI). */
@@ -158,6 +199,17 @@ function tokensTexte(s: string): Set<string> {
   );
 }
 
+/**
+ * Profondeur de scrape du profil pour retrouver `n` passages.
+ *
+ * Le double, plancher `POSTS_RELEVES`, plafond `POSTS_RELEVES_MAX` : il faut
+ * de la marge pour les posts personnels du créateur, sans faire exploser le
+ * temps Apify (et le coût) sur un compte qui n'a qu'un post à relever.
+ */
+export function postsAScraper(n: number): number {
+  return Math.min(POSTS_RELEVES_MAX, Math.max(POSTS_RELEVES, n * 2));
+}
+
 /** Similarité Jaccard simple sur tokens ≥3 car. */
 function similariteTexte(a: string, b: string): number {
   const A = tokensTexte(a);
@@ -193,28 +245,68 @@ type PassageFenetre = {
   commentaires: number | null;
   partages: number | null;
   slides: unknown;
-  /** Stats relues dans ce run → ELO langue doit suivre même si déjà maj. */
+  /** Dernier relevé réussi — null = jamais mesuré (prioritaire). */
+  stats_maj_at?: string | null;
 };
 
-async function chargerPassagesFenetre(
+/**
+ * Les passages à relever : CE QUI MANQUE, pas une tranche de calendrier.
+ *
+ * L'ancienne version sélectionnait `date_publication_prevue IN (4 derniers
+ * jours Paris)`. Un passage raté pendant ces quatre jours — scrape tombé,
+ * post publié en retard, post poussé hors du profil scrapé — n'était JAMAIS
+ * repris : la fenêtre avait avancé. Le 14/09/2026, sur 152 passages publiés,
+ * 16 étaient à `vues = null` ET `stats_maj_at = null` ; ceux du 07 et du 08
+ * étaient perdus pour de bon.
+ *
+ * Désormais le critère est l'état du passage :
+ *   - jamais relevé (`stats_maj_at is null`) → prioritaire ;
+ *   - relevé il y a plus de `RAFRAICHIR_APRES_MS` → rafraîchi ;
+ *   - publié il y a moins de `DELAI_MIN_RELEVE_MS` → laissé mûrir.
+ *
+ * Les plus vieux manquants passent devant : ce sont eux qui bloquent une
+ * requalification de cycle.
+ */
+async function chargerPassagesARelever(
   supabase: Supabase,
-  dates: string[],
   compteId: string | null,
+  opts: { profondeurJours?: number } = {},
 ): Promise<PassageFenetre[]> {
+  const profondeur = Math.max(1, opts.profondeurJours ?? RATTRAPAGE_PROFONDEUR_JOURS);
+  const depuis = ajouterJoursParis(aujourdhuiParis(), -profondeur);
+
   let q = supabase
     .from("passages")
     .select(
-      "id, contenu_id, compte_id, langue, publie_url, publie_at, date_publication_prevue, vues, likes, commentaires, partages, slides",
+      "id, contenu_id, compte_id, langue, publie_url, publie_at, date_publication_prevue, vues, likes, commentaires, partages, slides, stats_maj_at",
     )
     .eq("statut", "publie")
-    .in("date_publication_prevue", dates)
-    .not("publie_url", "is", null);
+    .not("publie_url", "is", null)
+    .gte("date_publication_prevue", depuis);
 
   if (compteId) q = q.eq("compte_id", compteId);
 
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []) as PassageFenetre[];
+
+  const maintenant = Date.now();
+  const candidats = ((data ?? []) as PassageFenetre[]).filter((p) => {
+    const publie = p.publie_at ? Date.parse(p.publie_at) : NaN;
+    // Publié à l'instant : TikTok ne l'a pas encore indexé.
+    if (Number.isFinite(publie) && maintenant - publie < DELAI_MIN_RELEVE_MS) return false;
+    if (!p.stats_maj_at) return true;
+    const releve = Date.parse(p.stats_maj_at);
+    if (!Number.isFinite(releve)) return true;
+    return maintenant - releve >= RAFRAICHIR_APRES_MS;
+  });
+
+  // Jamais relevé d'abord, puis du plus ancien au plus récent.
+  return candidats.sort((a, b) => {
+    const aJamais = a.stats_maj_at ? 1 : 0;
+    const bJamais = b.stats_maj_at ? 1 : 0;
+    if (aJamais !== bJamais) return aJamais - bJamais;
+    return (a.date_publication_prevue ?? "").localeCompare(b.date_publication_prevue ?? "");
+  });
 }
 
 async function ecrireStats(
@@ -293,8 +385,14 @@ async function releverStatsFenetre(
     let relevesCompte = 0;
     let sansMatchCompte = 0;
     try {
-      journal.push("info", `@${handle} — scrape profil (${liste.length} passage(s))`);
-      const enLigne = await scrapeStats(handle, POSTS_RELEVES);
+      // Le profil doit contenir nos posts : si le créateur en a 9 à retrouver
+      // et poste aussi pour lui, 12 ne suffisent pas. On prend de la marge.
+      const aScraper = postsAScraper(liste.length);
+      journal.push(
+        "info",
+        `@${handle} — scrape profil (${liste.length} passage(s), ${aScraper} posts lus)`,
+      );
+      const enLigne = await scrapeStats(handle, aScraper);
       const parId = new Map(enLigne.map((p) => [idDuLien(p.webVideoUrl), p]));
       journal.push("info", `@${handle} — ${enLigne.length} post(s) TikTok scrapés`);
 
@@ -720,20 +818,31 @@ export async function rattrapageElo(
     };
   }
 
-  const jours = Math.max(1, Math.min(14, opts.jours ?? RATTRAPAGE_JOURS_DEFAUT));
+  // `jours` ne borne plus la sélection (c'est l'état du passage qui décide) :
+  // il ne sert qu'à dater le brief et la profondeur de la file.
+  const jours = Math.max(1, Math.min(RATTRAPAGE_PROFONDEUR_JOURS, opts.jours ?? RATTRAPAGE_JOURS_DEFAUT));
   const dryRun = Boolean(opts.dryRun);
-  const { debut, fin, dates } = joursFenetreParis(jours);
+  const { debut, fin } = joursFenetreParis(jours);
   const handles = new Map<string, string | null>();
 
   journal.push(
     "info",
     `Démarrage rattrapage${dryRun ? " (dry-run)" : ""}`,
-    `fenêtre ${debut} → ${fin} (${jours}j)` +
+    `file « ce qui manque » sur ${RATTRAPAGE_PROFONDEUR_JOURS} j` +
       (opts.compteId ? ` · compte ${opts.compteId.slice(0, 8)}` : " · tous comptes"),
   );
 
-  const passages = await chargerPassagesFenetre(supabase, dates, opts.compteId ?? null);
-  journal.push("info", `${passages.length} passage(s) publiés avec lien dans la fenêtre`);
+  const enFile = await chargerPassagesARelever(supabase, opts.compteId ?? null);
+  const passages = enFile.slice(0, PASSAGES_PAR_PASSE);
+  const jamais = passages.filter((p) => !p.stats_maj_at).length;
+  journal.push(
+    "info",
+    `${passages.length} passage(s) à relever`,
+    `${jamais} jamais mesuré(s) · ${passages.length - jamais} à rafraîchir` +
+      (enFile.length > passages.length
+        ? ` · ${enFile.length - passages.length} reporté(s) à la passe suivante`
+        : ""),
+  );
 
   // Compte isolé sans passage dans la fenêtre : scraper quand même pour les metrics.
   if (opts.compteId && passages.length === 0) {

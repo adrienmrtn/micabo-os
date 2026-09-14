@@ -29,8 +29,8 @@ import { useApplication } from "@/features/moteur/ApplicationContext";
 import { SLUG_MICABO } from "@/features/moteur/applications";
 import { ChampsPremierCompte, type PremierCompte } from "@/features/moteur/ChampsPremierCompte";
 import { langueInitiale } from "@/features/moteur/langues";
-import { comptePrincipal, estCompteCm, languesCmPrises } from "@/features/moteur/comptesCm";
-import { FormulaireAjouterCompte } from "@/features/moteur/FormulaireCompteCm";
+import { comptePrincipal } from "@/features/moteur/comptesPoster";
+import { FormulaireAjouterCompte } from "@/features/moteur/FormulaireAjouterCompte";
 import { EnteteCompte } from "@/features/moteur/VignetteCompte";
 import { WarmupBadge } from "@/features/moteur/WarmupBadge";
 import type { PosterProfil } from "@/features/moteur/types";
@@ -141,15 +141,13 @@ function LignePoster({ poster: p }: { poster: PosterProfil }) {
                     compact
                     compte={c}
                     extra={
-                      !estCompteCm(c) ? (
-                        <div className="mt-1">
-                          <WarmupBadge
-                            compteId={c.id}
-                            startedAt={c.warmup_started_at}
-                            endsAt={c.warmup_ends_at}
-                          />
-                        </div>
-                      ) : undefined
+                      <div className="mt-1">
+                        <WarmupBadge
+                          compteId={c.id}
+                          startedAt={c.warmup_started_at}
+                          endsAt={c.warmup_ends_at}
+                        />
+                      </div>
                     }
                   />
                 </div>
@@ -220,7 +218,6 @@ function LignePoster({ poster: p }: { poster: PosterProfil }) {
       <FormulaireAjouterCompte
         posterId={p.id}
         languesProposees={langues.data ?? []}
-        languesPrisesCm={languesCmPrises(comptes)}
         applications={applications.data ?? []}
       />
     </div>
@@ -248,9 +245,6 @@ export function HiringPosterPage() {
   const [premierCompte, setPremierCompte] = React.useState<PremierCompte>("perso");
   const [postsParJour, setPostsParJour] = React.useState<1 | 2 | 3>(2);
   const [handleTiktok, setHandleTiktok] = React.useState("");
-  const [cmEmail, setCmEmail] = React.useState("");
-  const [cmPassword, setCmPassword] = React.useState("");
-  const [cmDeuxFa, setCmDeuxFa] = React.useState("");
   const [cree, setCree] = React.useState<{
     email: string;
     persona: boolean;
@@ -260,7 +254,6 @@ export function HiringPosterPage() {
   // Langues gérées par le recruteur : un créateur = une langue, choisie à
   // chaque embauche. Plusieurs langues gérées → créateurs de langues différentes.
   // Aucune langue posée (ex. admin) → toutes les langues cibles.
-  const modeUgcAiVideo = Boolean(profil?.hm_ugc_ai_video);
   const mesLangues = (profil?.langues ?? []).filter((l) => langues.data?.includes(l));
   const languesChoix = mesLangues.length > 0 ? mesLangues : (langues.data ?? []);
 
@@ -281,12 +274,9 @@ export function HiringPosterPage() {
         password: MOT_DE_PASSE,
         langue,
         application_slug: applicationSlug,
-        type_compte: premierCompte,
+        avecCompte: premierCompte !== "aucun",
         posts_par_jour: premierCompte === "perso" ? postsParJour : undefined,
         handle_tiktok: handleTiktok,
-        tiktok_email: cmEmail,
-        tiktok_password: cmPassword,
-        tiktok_2fa_note: cmDeuxFa,
       }),
     onSuccess: (r) => {
       setCree({
@@ -298,9 +288,6 @@ export function HiringPosterPage() {
       setNom("");
       setPostsParJour(2);
       setHandleTiktok("");
-      setCmEmail("");
-      setCmPassword("");
-      setCmDeuxFa("");
       queryClient.invalidateQueries({ queryKey: ["posters"] });
     },
   });
@@ -314,7 +301,7 @@ export function HiringPosterPage() {
             {t("hiring.title")}
           </CardTitle>
           <CardDescription>
-            {modeUgcAiVideo ? t("hiring.subtitleUgcAiVideo") : t("hiring.subtitle")}
+            {t("hiring.subtitle")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -347,12 +334,6 @@ export function HiringPosterPage() {
               onPostsParJour={setPostsParJour}
               handle={handleTiktok}
               onHandle={setHandleTiktok}
-              email={cmEmail}
-              onEmail={setCmEmail}
-              password={cmPassword}
-              onPassword={setCmPassword}
-              deuxFa={cmDeuxFa}
-              onDeuxFa={setCmDeuxFa}
             />
             <div className="sm:col-span-2 space-y-3">
               <Button
@@ -360,7 +341,7 @@ export function HiringPosterPage() {
                 disabled={
                   creer.isPending ||
                   !langue ||
-                  (premierCompte === "cm" && (!cmEmail.trim() || !cmPassword))
+                  false
                 }
               >
                 {creer.isPending ? t("hiring.enCours") : t("hiring.create")}
@@ -399,16 +380,10 @@ export function HiringPosterPage() {
                 <span className="text-muted-foreground">{t("posters.password")} : </span>
                 <code className="rounded bg-muted px-1">{MOT_DE_PASSE}</code>
               </p>
-              {cree.type === "cm" ? (
-                <p className="pt-1 text-xs text-muted-foreground">{t("posters.creeCm")}</p>
-              ) : (
-                <>
-                  <p className="pt-1 text-xs text-muted-foreground">
-                    {cree.persona ? t("hiring.personaOk") : t("hiring.personaPlusTard")}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{t("warmup.apresCreation")}</p>
-                </>
-              )}
+              <p className="pt-1 text-xs text-muted-foreground">
+                {cree.persona ? t("hiring.personaOk") : t("hiring.personaPlusTard")}
+              </p>
+              <p className="text-xs text-muted-foreground">{t("warmup.apresCreation")}</p>
             </div>
           )}
         </CardContent>

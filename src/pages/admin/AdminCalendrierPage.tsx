@@ -72,7 +72,7 @@ export function AdminCalendrierPage() {
   const duJour = React.useMemo(() => {
     let list = (posts ?? []).filter((p) => p.date_publication_prevue === date);
     if (filtreLangue) list = list.filter((p) => p.langue === filtreLangue);
-    if (filtreType === "ugc") list = list.filter((p) => p.ugc_ai && !p.ugc_ai_video);
+    if (filtreType === "ugc") list = list.filter((p) => p.ugc_ai);
     return list;
   }, [posts, date, filtreLangue, filtreType]);
 
@@ -92,7 +92,7 @@ export function AdminCalendrierPage() {
         avatar: postsCompte[0]?.avatar_url ?? null,
         langue: postsCompte[0]?.langue ?? null,
         qualification: postsCompte[0]?.qualification ?? "PASSABLE",
-        ugc: Boolean(postsCompte[0]?.ugc_ai) && !postsCompte[0]?.ugc_ai_video,
+        ugc: Boolean(postsCompte[0]?.ugc_ai),
         postes: postsCompte.filter(estPoste).length,
         vides: postsCompte.filter((p) => p.slideshow_vide && !estPoste(p)).length,
       }))

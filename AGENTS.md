@@ -8,9 +8,30 @@ révision ~10 min/jour.
 - Ton : étude, examens, notes, révisions.
 - Jamais de culture générale.
 - Jamais le mot d’un autre produit dans un CTA (écrire `micabo` en minuscules).
-- UGC AI VIDEO : laisser dormant, ne pas l’allumer.
-- File Settings / least-used : jamais de label `ugc_ai_video` (ex. `test`)
-  sur un créateur slideshow.
+
+## Retrait des modules annexes (0256, 14/09/2026)
+
+Quatre modules sont **partis** : « Create a post » (`/admin/creation` +
+`creation-manuelle`), « CM paper » (`/admin/papier` + `papier-cm` + les étapes
+`papier_cm` / `papier_assign` de minuit + le type de compte `cm`), « AI
+slideshows » (`/admin/ugc/slideshows`, une page vide) et « AI Videos »
+(`/admin/ugc/videos` + `assignation-ugc-video`). La marque système
+`ugc-ai-video` est supprimée de `labels` ; `hook` reste.
+
+**Le schéma reste dormant** : rien n’est droppé. Les cinq tables `papier_*`
+(0 ligne), `ugc_video_posts`, `comptes.type_compte`, `comptes.ugc_ai_video`,
+`labels.ugc_ai_video`, `profiles.hm_ugc_ai_video` et `hm_ugc_video_labels`
+sont toujours là — plus personne ne les écrit. Un compte n’a donc plus qu’un
+type, et `comptesPoster.ts` a remplacé `comptesCm.ts`.
+
+Ce qui **reste allumé** et ne doit pas être confondu avec le retrait : les
+personas UGC (`/admin/ugc/personas`), le face swap slideshow (`comptes.ugc_ai`,
+`contenus.ugc_compatible`, `ugc_face_swap.ts`) et le burn.
+
+Deux morceaux ont été **sauvés** de fichiers supprimés parce que le moteur s’en
+sert encore : `resoudreVisuelsAssignation` (garnissage d’une slide depuis la
+biblio du label) vit dans `_shared/visuels_assignation.ts`, et les exemples
+feed d’un label dans `src/features/moteur/promptsFeed.ts`.
 
 ## Tierlist des slideshows (0250, en prod depuis le 11/09/2026)
 
@@ -102,6 +123,85 @@ File des comptes INACTIF ou MAUVAISES_VUES, plus les comptes en **essai**
 
 L'essai de `/admin/essai` (5 jours) est un autre compteur, laissé tel quel :
 80 h est le seuil de la file de surveillance, pas une redéfinition de l'essai.
+
+## File de validation, formats et placement manuel (0257/0258, 14/09/2026)
+
+**Rien n'entre dans le pool sans un admin.** Le pipeline d'import tourne comme
+avant (OCR, pertinence, note /100 et tier d'entrée, nettoyage, format,
+caption), mais il s'arrête sur `statut = 'brouillon'` + `import_statut = 'done'`
+— cette paire, et elle seule, veut dire « en file ». Pas de nouvelle valeur
+d'enum : `assignation_contenu.ts` filtrait déjà sur `valide`. Les variations
+suivent la même porte. Le rejet automatique sous 55 est inchangé, et un
+`rejete` ne repasse jamais par la file.
+
+`/admin/file` ouvre un éditeur par slideshow : réordonner et supprimer des
+slides, corriger le texte du deck source, poser des calques PNG (bibliothèque
+globale `blocs_png`, gérée dans les Réglages), régler titre, format, labels,
+tier, passages dus, musique, hashtags. Le montage est **aplati dans le
+navigateur** — l'Edge n'a ni Pillow ni OpenCV, et le lambda de burn est un
+moteur à part qu'on ne détourne pas. L'aplat est réécrit **sur le
+`storage_path` existant** de l'image propre : `trouverPropreExistant` cherche
+le préfixe `propre/<contenu>/<position>.`, un chemin suffixé casserait la
+reprise d'import (même règle que `format_media.ts`). Le `burn_rendus` de la
+slide est jeté ; `burn_analyses`, lu sur le BRUT qu'on ne touche jamais, reste
+valable.
+
+Refuser = suppression dure, à la main. La purge est un bouton, jamais une
+échéance. Un slideshow validé se remet en file depuis sa fiche : les passages
+et posts déjà créés ne bougent pas (ils portent leur propre copie des slides
+et ne lisent jamais `contenus.statut`), seules les prochaines assignations
+cessent de le piocher.
+
+**Les formats ne jouent sur RIEN dans l'assignation** — ni filtre, ni
+équilibrage, ni départage. Liste globale, facultative sur un slideshow,
+reclassable après coup. Leur seule raison d'être est la carte « Par format »
+des Analytics : vues moyennes sur les passages publiés ET mesurés, passages,
+slideshows, tiers, requalifications, filtrable par langue et période,
+croisable avec les labels. Croisé par label, un slideshow à deux labels compte
+dans les deux lignes — le total n'est pas une part de 100 %.
+
+**Placement micabo.** `contenus.placement_manuel` : posé, `integrateSophia` ne
+tourne dans AUCUNE langue. La source part telle quelle, les autres langues sont
+une simple traduction, et le prompt reçoit la consigne de garder `micabo.app`
+littéral, de ne pas déplacer le CTA, de ne pas en inventer un deuxième. Non
+posé, le comportement d'avant tient, `placementParDefaut` compris. Un deck
+manuel est « prêt » dès qu'il a du texte : sans cette nuance,
+`assurerDeckPourLangue` attendait un `position_sophia` qu'aucun modèle n'allait
+plus poser et retraduisait à chaque passage.
+
+## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
+
+`chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
+jours Paris)`. Un passage raté pendant ces quatre jours n'était **jamais**
+repris : la fenêtre avait avancé. Constat du 14/09/2026 — sur 152 passages
+publiés, 16 avaient `vues IS NULL` **et** `stats_maj_at IS NULL` ; ceux du 07
+et du 08 étaient perdus définitivement.
+
+Le critère est désormais l'état du passage, pas le calendrier
+(`chargerPassagesARelever`) : jamais relevé d'abord, puis relevé il y a plus de
+6 h, sur 30 jours de profondeur, les plus vieux devant. Trois garde-fous
+l'accompagnent :
+
+- **45 minutes de délai plancher** avant tout scrape. Le 13/09, deux posts
+  publiés à 22:03 et 22:07 ont été scrapés à 22:07 : TikTok ne les avait pas
+  indexés, et sans la file ils n'auraient jamais été mesurés.
+- **Scrape profil dimensionné** sur le nombre de passages à retrouver
+  (`postsAScraper` : double, plancher 12, plafond 40). À 12 fixe, un créateur
+  qui poste aussi pour lui poussait nos posts hors de la liste.
+- **25 passages par compte et par passe** : chaque passage sans match coûte un
+  `scrapePost` Apify et l'invocation Edge meurt à 150 s. Le reste part à la
+  passe suivante — il ne se perd plus, c'est tout l'intérêt.
+
+Une **deuxième passe à 13:00 Paris** (`rattrapage-elo-midi`, planifiée par
+`crons_stats_midi_planifier()`, qui ne touche à aucun autre job) s'ajoute à
+minuit : un post du soir est mesuré ~15 h après au lieu de 26 h, et chaque
+passage est vu deux fois avant le J+3 de la requalification.
+
+Corollaire d'affichage : un passage `assigne` n'a rien à mesurer. Les afficher
+comme les publiés jamais relevés donnait l'impression d'un relevé cassé alors
+que 68 passages sur 220 n'étaient simplement pas publiés. `relevesStats.ts`
+tranche les quatre états, et la fiche d'un slideshow porte un bouton « relever
+maintenant » par passage manquant.
 
 ## Burned (0252, 12/09/2026)
 
@@ -197,6 +297,26 @@ Le reste du chemin :
   comprend pas, et **toutes** les slides repartent en classique.
   `excludeFiles` sort du lambda ce qui ne sert pas à `api/burn.py` (front,
   sources Edge, docs) : ~9 Mo, de l'hygiène, pas la solution.
+
+  **Et cette variable est posée sur Production SEULEMENT.** Conséquence, à
+  connaître avant de s'inquiéter : **tout déploiement Preview échoue**, sur
+  chaque PR, avec « Total bundle size (303.16 MB) exceeds the maximum function
+  size (225 MB) ». Vérifié le 14/09/2026 sur les vingt derniers déploiements :
+  7 production sur 7 en READY (avec `lambdaRuntimeStats: {"python":1}`), 13
+  preview sur 13 en ERROR, de la PR #60 à la #67. Le front, lui, se construit :
+  l'erreur tombe APRÈS le `vite build`, au moment d'empaqueter le lambda.
+
+  Donc : un rouge sur un preview ne dit rien du code de la PR, et **ne bloque
+  pas le merge** — le déploiement production qui suit passe. Pour avoir des
+  previews verts, ajouter `VERCEL_SUPPORT_LARGE_FUNCTIONS=1` à
+  l'environnement **Preview** du projet Vercel (Settings → Environment
+  Variables), en plus de Production.
+
+  Pister `requirements.txt` au passage : les bornes sont ouvertes
+  (`opencv-python-headless>=4.9`). 303 Mo mesurés contre ~261 Mo attendus avec
+  OpenCV 4.9 : la résolution est montée en 5.x. Ça ne fait pas passer sous les
+  225 Mo — même épinglé à 4.9 on reste au-dessus, d'où la variable — mais
+  épingler éviterait qu'un futur saut de version surprenne la production.
 
 Le contrôle du moteur est `qa_selftest`, dans le moteur : il tourne sur chaque
 slide et son rapport remonte jusqu'à la carte « Text burn-in (preview) » du
@@ -336,6 +456,27 @@ Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
  et reporter le nom dans le chargeur, sinon la fonction boote sur un
  `ReferenceError`. Test de vie après déploiement : un POST anonyme doit rendre
  `401 {"error":"unauthorized"}` — un chargeur cassé rend un 500.
+
+- **Déploiement du 14/09/2026** (file de validation, formats, placement manuel,
+ relevé des stats). Migrations `0256` → `0259` appliquées, dix chargeurs
+ redéployés, test de vie `401` passé sur les dix. SHA épinglés : `b713af1`
+ pour `manage-users` ; `edb0f0f` pour `assignation`, `assignation-contenu`,
+ `bruler-assignes`, `bruler-texte-test`, `import-contenu`,
+ `renettoyer-contenu` et `revoquer-post` ; `36f01d1` pour `minuit-vnext` et
+ `rattrapage-elo`. `normaliser-format` et `upscale-assignes` n'ont pas bougé
+ (`a82a89e`) : leurs bundles ressortent d'esbuild octet pour octet identiques.
+ Six alias `createClient` ont été renommés au passage (`le`→`pe`, `ne`→`oe`,
+ `me`→`ne`, `ie`→`ae`, `Ee`→`Ae`, `P`→`k`, `H`→`Y`).
+- **Trois fonctions déployées n'ont plus de source ici** depuis `0256` :
+ `papier-cm`, `creation-manuelle` et `assignation-ugc-video`. Elles ne sont
+ plus appelées (ni cron, ni UI) et sont laissées en place : les supprimer
+ détruirait le `papier-cm` v11, dont le code n'a jamais été dans le dépôt.
+ Leurs chargeurs pointent sur d'anciens SHA que GitHub sert toujours, donc
+ elles bootent encore — **ne jamais les rappeler** : `creation-manuelle` pose
+ `statut = 'valide'` et court-circuiterait la file de validation.
+- **Cron ajouté le 14/09/2026** : `rattrapage-elo-midi` (`0 11 * * *`, jobid
+ 47), posé par `crons_stats_midi_planifier()`. Les cinq jobs du pipeline
+ minuit n'ont pas été touchés (jobids 41-45 conservés).
 
 Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
 être en avance sur `main`.

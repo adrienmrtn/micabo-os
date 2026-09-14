@@ -19,7 +19,7 @@ export function LabelPicker({
   selected: string[];
   onChange: (ids: string[]) => void;
   disabled?: boolean;
-  filter?: (lab: { id: string; slug: string; ugc_ai_video: boolean }) => boolean;
+  filter?: (lab: { id: string; slug: string }) => boolean;
 }) {
   const { t } = useTranslation();
   const { applicationId } = useApplication();

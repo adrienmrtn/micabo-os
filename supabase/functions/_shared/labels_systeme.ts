@@ -1,12 +1,15 @@
-/** Marques système : pas des niches d’assignation (créateurs / contenus / sources). */
+/**
+ * Marques système : pas des niches d’assignation (créateurs / contenus / sources).
+ *
+ * `ugc-ai-video` est parti avec la page AI Videos (14/09/2026) ; la garde SQL
+ * de `0241_hook_pas_assignable.sql` le cite encore, elle ne matchera plus.
+ */
 export const SLUG_HOOK = "hook";
-export const SLUG_UGC_AI_VIDEO = "ugc-ai-video";
 
-export const SLUGS_LABELS_SYSTEME = [SLUG_HOOK, SLUG_UGC_AI_VIDEO] as const;
+export const SLUGS_LABELS_SYSTEME = [SLUG_HOOK] as const;
 
 export function estLabelSysteme(lab: { slug?: string | null } | null | undefined): boolean {
-  const slug = lab?.slug ?? "";
-  return slug === SLUG_HOOK || slug === SLUG_UGC_AI_VIDEO;
+  return (lab?.slug ?? "") === SLUG_HOOK;
 }
 
 /** IDs utilisables pour un créateur / une intersection minuit. */

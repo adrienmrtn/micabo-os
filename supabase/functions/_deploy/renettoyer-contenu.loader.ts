@@ -14,7 +14,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "d6b88a0b1d40fe0954ca2082713e406de95a1bfa";
+const SHA = "edb0f0fabe1296f70b2360eb6d39bc4ef76f2eca";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/renettoyer-contenu.bundle.js`;
 

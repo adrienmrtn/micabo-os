@@ -8,7 +8,6 @@ describe("horsFileValidation", () => {
       horsFileValidation({
         postId: "a",
         statut: "assigne",
-        ugcAiVideo: false,
         deja: new Set(),
       }),
     ).toBe(false);
@@ -16,23 +15,13 @@ describe("horsFileValidation", () => {
       horsFileValidation({
         postId: "a",
         statut: "assigne",
-        ugcAiVideo: false,
         deja: new Set(["a"]),
-      }),
-    ).toBe(true);
-    expect(
-      horsFileValidation({
-        postId: "b",
-        statut: "assigne",
-        ugcAiVideo: true,
-        deja: new Set(),
       }),
     ).toBe(true);
     expect(
       horsFileValidation({
         postId: "c",
         statut: "publie",
-        ugcAiVideo: false,
         deja: new Set(),
       }),
     ).toBe(true);
