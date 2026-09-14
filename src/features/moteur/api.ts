@@ -5486,6 +5486,8 @@ export interface ContenuListe extends Contenu {
   nb_posts?: number;
   /** URL des visuels nettoyés indexés par media_id. */
   mediaUrls?: Record<string, string>;
+  /** storage_path du propre par media_id (réécriture depuis la file). */
+  mediaChemins?: Record<string, string>;
   /** visage_premier_plan par media_id (scan UGC). */
   mediaVisages?: Record<string, boolean | null>;
   /** Captions + Hook par media_id. */
@@ -5503,6 +5505,8 @@ async function metasMediasPropres(
   contenus: Contenu[],
 ): Promise<{
   urls: Record<string, string>;
+  /** Chemin storage du propre — la file en a besoin pour réécrire l'image. */
+  chemins: Record<string, string>;
   visages: Record<string, boolean | null>;
   captions: Record<
     string,
@@ -5522,7 +5526,7 @@ async function metasMediasPropres(
       ),
     ),
   ];
-  if (mediaIds.length === 0) return { urls: {}, visages: {}, captions: {} };
+  if (mediaIds.length === 0) return { urls: {}, chemins: {}, visages: {}, captions: {} };
   // Uniquement storage propre/ — jamais le brut TikTok (même si texte_restant
   // est flagué : c'est encore le JPEG Fal, pas le raw).
   const { data } = await supabase
@@ -5530,6 +5534,7 @@ async function metasMediasPropres(
     .select("id, url, storage_path, visage_premier_plan, caption, caption_statut, est_hook")
     .in("id", mediaIds);
   const urls: Record<string, string> = {};
+  const chemins: Record<string, string> = {};
   const visages: Record<string, boolean | null> = {};
   const captions: Record<
     string,
@@ -5544,6 +5549,7 @@ async function metasMediasPropres(
     const id = m.id as string;
     if (path.startsWith("propre/")) {
       urls[id] = m.url as string;
+      chemins[id] = path;
     }
     visages[id] = (m.visage_premier_plan as boolean | null) ?? null;
     captions[id] = {
@@ -5552,7 +5558,7 @@ async function metasMediasPropres(
       est_hook: Boolean(m.est_hook),
     };
   }
-  return { urls, visages, captions };
+  return { urls, chemins, visages, captions };
 }
 
 export type { StatsCompteSlideshows };
@@ -5729,10 +5735,12 @@ async function enrichirContenusListe(contenus: Contenu[]): Promise<ContenuListe[
         .filter((id): id is string => Boolean(id)),
     );
     const urls: Record<string, string> = {};
+    const chemins: Record<string, string> = {};
     const visages: Record<string, boolean | null> = {};
     const captions: NonNullable<ContenuListe["mediaCaptions"]> = {};
     for (const mid of idsContenu) {
       if (metas.urls[mid]) urls[mid] = metas.urls[mid];
+      if (metas.chemins[mid]) chemins[mid] = metas.chemins[mid];
       if (mid in metas.visages) visages[mid] = metas.visages[mid];
       if (mid in metas.captions) captions[mid] = metas.captions[mid];
     }
@@ -5744,6 +5752,7 @@ async function enrichirContenusListe(contenus: Contenu[]): Promise<ContenuListe[
       passages_cycle: cyclePar.get(c.id) ?? 0,
       nb_posts: postsPar.get(c.id) ?? 0,
       mediaUrls: urls,
+      mediaChemins: chemins,
       mediaVisages: visages,
       mediaCaptions: captions,
     };
@@ -5870,6 +5879,7 @@ export async function lireSlideshow(id: string): Promise<SlideshowDetail | null>
     ugc_compatible: Boolean(c.ugc_compatible),
     labels,
     mediaUrls: metas.urls,
+    mediaChemins: metas.chemins,
     mediaVisages: metas.visages,
     mediaCaptions: metas.captions,
     scores: (langues ?? []).map((l) => ({

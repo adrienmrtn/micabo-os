@@ -6,7 +6,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Check,
   Crop,
@@ -16,6 +16,7 @@ import {
   Rocket,
   ScanText,
   Sparkles,
+  Inbox,
   Trash2,
   X,
 } from "lucide-react";
@@ -36,6 +37,7 @@ import {
 import { NettoyageEtapes } from "@/components/moteur/NettoyageEtapes";
 import { UpscaleMediaControl } from "@/components/moteur/UpscaleMediaControl";
 import { LabelEditor } from "@/features/moteur/LabelPicker";
+import { remettreEnFile } from "@/features/moteur/fileValidationApi";
 import {
   captionnerMediaBiblio,
   collecterMediaIdsContenus,
@@ -1132,12 +1134,26 @@ function DetailSlideshow({
       detailDepuisListe(queryClient, id),
   });
 
+  const naviguer = useNavigate();
+
   const supprimer = useMutation({
     mutationFn: () => supprimerContenu(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["slideshows"] });
       void queryClient.removeQueries({ queryKey: ["slideshow", id] });
       onFermer();
+    },
+  });
+
+  // Rouvrir un slideshow validé : il repart en file, où tout est modifiable
+  // (texte, images, format, labels, tier). Les passages et posts déjà créés
+  // ne bougent pas — seules les PROCHAINES assignations cessent de le piocher.
+  const rouvrir = useMutation({
+    mutationFn: () => remettreEnFile(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["slideshows"] });
+      void queryClient.invalidateQueries({ queryKey: ["file"] });
+      naviguer("/admin/file");
     },
   });
 
@@ -1832,6 +1848,27 @@ function DetailSlideshow({
             </section>
 
             <section className="space-y-2 border-t pt-4">
+              {d.statut === "valide" && (
+                <>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    disabled={rouvrir.isPending}
+                    onClick={() => rouvrir.mutate()}
+                  >
+                    <Inbox className="size-4" />
+                    {rouvrir.isPending ? t("common.loading") : t("slideshows.remettreEnFile")}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    {t("slideshows.remettreEnFileAide")}
+                  </p>
+                  {rouvrir.isError && (
+                    <p className="text-xs text-destructive">
+                      {(rouvrir.error as Error).message}
+                    </p>
+                  )}
+                </>
+              )}
               <Button
                 variant="outline"
                 className="w-full text-destructive hover:text-destructive"

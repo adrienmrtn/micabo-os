@@ -1162,10 +1162,17 @@ async function executerPasImport(
       }
     }
 
-    // 7 — Validation. Le tier a été posé à l'étape 4 ; plus de recalcul de
-    // score par langue. Texte stocké = OCR source uniquement (pas de pub
-    // Sophia, pas de trad) : Sophia + traduction hors-source arrivent à
-    // l'assignation, via `assurerDeckPourLangue`.
+    // 7 — Sortie de pipeline → FILE DE VALIDATION, pas le pool.
+    //
+    // `statut` reste `brouillon` : avec `import_statut = 'done'`, cette paire
+    // veut dire « prêt, en attente d'un admin » (0257). L'assignation filtre
+    // sur `statut = 'valide'`, donc rien ne part chez un créateur avant qu'un
+    // admin ait relu — et éventuellement retouché — le slideshow dans la file.
+    //
+    // Le tier a été posé à l'étape 4 ; plus de recalcul de score par langue.
+    // Texte stocké = OCR source uniquement (pas de pub Sophia, pas de trad) :
+    // Sophia + traduction hors-source arrivent à l'assignation, via
+    // `assurerDeckPourLangue`.
     // Strip texte_original des slides partagées (reste language-agnostique)
     const slidesPropres = slides.map((s) => ({
       position: s.position,
@@ -1176,7 +1183,6 @@ async function executerPasImport(
 
     await marquer(supabase, contenu.id, {
       structure_slides: slidesPropres,
-      statut: "valide",
       import_statut: "done",
       import_etape: "done",
       import_erreur: null,

@@ -319,7 +319,9 @@ export async function creerVariation(
       musique_url: candidat.musique_url,
       musique_titre: candidat.musique_titre,
       musique_plateforme: candidat.musique_plateforme,
-      statut: "valide",
+      // File de validation, comme un import (0257) : une variation n'entre pas
+      // dans le pool sans qu'un admin l'ait relue.
+      statut: "brouillon",
       import_statut: "done",
       import_etape: "variation",
       parent_id: candidat.contenuId,

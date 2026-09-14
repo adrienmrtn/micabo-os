@@ -19,6 +19,10 @@ import {
   listerLabels,
 } from "@/features/moteur/api";
 import { LANGUES_CIBLES, nomLangue } from "@/features/moteur/langues";
+import {
+  ReglagesBlocsPng,
+  ReglagesFormats,
+} from "@/features/moteur/ReglagesFormatsBlocs";
 import { PASSAGES_PAR_TIER, TIERS } from "@/features/moteur/tierlist";
 import {
   SCHEMA_ASSIGNATION,
@@ -498,6 +502,9 @@ export function AdminReglagesPage() {
           </section>
         </CardContent>
       </Card>
+
+      <ReglagesFormats />
+      <ReglagesBlocsPng />
 
       {/* ── Warmup + file labels ── */}
       <Card>

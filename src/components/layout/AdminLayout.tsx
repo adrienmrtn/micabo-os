@@ -12,6 +12,7 @@ import {
   GitCompare,
   Hourglass,
   Images,
+  Inbox,
   ListOrdered,
   MessageCircle,
   MessageSquareQuote,
@@ -61,6 +62,12 @@ export function AdminLayout() {
               label: t("nav.sources"),
               icon: AtSign,
               description: t("navDesc.sources"),
+            },
+            {
+              to: "/admin/file",
+              label: t("nav.file"),
+              icon: Inbox,
+              description: t("navDesc.file"),
             },
             {
               to: "/admin/slideshows",

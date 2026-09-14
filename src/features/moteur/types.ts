@@ -492,6 +492,36 @@ export interface Contenu {
   creation_mode?: "import" | "manuel";
   /** Slideshow d'origine du hook (musique reprise). */
   hook_contenu_id?: string | null;
+  /** Format éditorial, facultatif. Ne joue sur rien dans l'assignation (0257). */
+  format_id?: string | null;
+  /** Sortie de file : quand un admin a validé. */
+  valide_at?: string | null;
+  /** Admin qui a validé (uuid nu, sans FK — voir 0255). */
+  valide_par?: string | null;
+  /** Note libre laissée pendant le passage en file. */
+  file_note?: string | null;
+  created_at: string;
+}
+
+/** Format éditorial d'un slideshow — descriptif, jamais un critère moteur. */
+export interface Format {
+  id: string;
+  nom: string;
+  slug: string;
+  couleur: string | null;
+  description: string | null;
+  actif: boolean;
+  created_at: string;
+}
+
+/** Calque PNG pré-enregistré, posé sur une image depuis la file. */
+export interface BlocPng {
+  id: string;
+  nom: string;
+  storage_path: string;
+  url: string;
+  largeur: number | null;
+  hauteur: number | null;
   created_at: string;
 }
 
@@ -500,6 +530,8 @@ export interface ContenuLangue {
   contenu_id: string;
   langue: string;
   slides: ContenuLangueSlide[];
+  /** Hashtags produits dans la passe de traduction, réutilisés aux passages. */
+  hashtags: string | null;
   score: number;
   nb_passages: number;
   score_maj_at: string | null;

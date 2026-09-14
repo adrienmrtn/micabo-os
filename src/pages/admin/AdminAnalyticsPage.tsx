@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { lancerMetriques, statsComptes, statsPosts } from "@/features/moteur/api";
+import { StatsFormatsCard } from "@/features/moteur/StatsFormatsCard";
 import type { StatsPost } from "@/features/moteur/types";
 
 /** Un post « viral » : ≥ 7 jours après publication (N+7) ET plus de 30 000 vues.
@@ -362,6 +363,8 @@ export function AdminAnalyticsPage() {
           ))}
         </CardContent>
       </Card>
+
+      <StatsFormatsCard />
     </div>
   );
 }
