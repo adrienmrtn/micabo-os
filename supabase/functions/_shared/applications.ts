@@ -67,7 +67,7 @@ export function placementParDefaut(langue: string, slug = SLUG_MICABO): string {
     pl: "zamień notatki we flashcards i powtarzaj 10 minut dziennie. micabo jest do tego super.",
     ro: "transformă-ți notițele în flashcards și repetă 10 minute pe zi. micabo e top pentru asta.",
     sv: "gör flashcards av anteckningarna och repetera 10 minuter om dagen. micabo är toppen för det.",
-    tr: "notlarını flashcard'a çevir, günde 10 dakika tekrarla. micabo tam bunun için.",
+    tr: "notlarını flashcard'a çevir, günde 10 dakika tekrarla. micabo.app sitesi tam bunun için.",
   };
   if (slug && slug !== SLUG_MICABO) {
     return par[langue] ?? par.en;

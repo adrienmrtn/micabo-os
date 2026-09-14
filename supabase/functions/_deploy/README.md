@@ -76,14 +76,15 @@ Les alias `createClient` bougent à chaque rebuild : le 14/09/2026,
 tous d'un coup et relire l'alias dans chaque bundle est plus sûr que de
 supposer qu'un bundle « n'a pas bougé ».
 
-Bascule micabo (0260, 14/09/2026) : sept bundles changent — `assignation`
-(`pe`), `assignation-contenu` (`oe`), `import-contenu` (`Le`), `minuit-vnext`
-(`Ae`), `revoquer-post` (`ae`), `bruler-assignes` (`k` -> **`I`**) et
-`bruler-texte-test` (`J`). Les cinq autres sortent d'esbuild identiques et
-gardent leur SHA. Seul `bruler-assignes` a changé d'alias : les rebuilds ne les
-bougent pas tous, mais on ne peut pas le deviner — les regénérer tous et
-relire chaque `import{createClient as …}` reste la seule méthode sûre.
+Aller-retour micabo (0260 puis 0261, 14/09/2026) : les sept mêmes bundles ont
+bougé deux fois — `assignation`, `assignation-contenu`, `import-contenu`,
+`minuit-vnext`, `revoquer-post`, `bruler-assignes`, `bruler-texte-test`. Les
+cinq autres n'ont pas bronché. Seul `bruler-assignes` a changé d'alias, dans
+les deux sens.
 
-Rappel pratique : comparer un bundle fraîchement construit au bundle du dépôt
-ne dit rien tant qu'on n'a pas retiré l'`import{createClient …}`. Le dépôt le
-stocke déjà retiré, donc tout bundle brut paraît « changé ».
+Deux pièges vérifiés à cette occasion :
+- comparer un bundle fraîchement construit au bundle du dépôt ne dit rien tant
+  qu'on n'a pas retiré l'`import{createClient …}` : le dépôt le stocke déjà
+  retiré, donc tout bundle brut paraît « changé » ;
+- revenir en arrière sur une source ne redonne pas forcément le bundle
+  d'avant. Le vérifier, ne pas le supposer.

@@ -162,37 +162,44 @@ dans les deux lignes — le total n'est pas une part de 100 %.
 
 **Placement micabo.** `contenus.placement_manuel` : posé, `integrateSophia` ne
 tourne dans AUCUNE langue. La source part telle quelle, les autres langues sont
-une simple traduction, et le prompt reçoit la consigne de garder `micabo`
+une simple traduction, et le prompt reçoit la consigne de garder `micabo.app`
 littéral, de ne pas déplacer le CTA, de ne pas en inventer un deuxième. Non
 posé, le comportement d'avant tient, `placementParDefaut` compris. Un deck
 manuel est « prêt » dès qu'il a du texte : sans cette nuance,
 `assurerDeckPourLangue` attendait un `position_sophia` qu'aucun modèle n'allait
 plus poser et retraduisait à chaque passage.
 
-## micabo est une application mobile, plus un site (0260, 14/09/2026)
+## micabo.app est un SITE, et le reste (0260 puis 0261, 14/09/2026)
 
-On ne promeut plus le site « micabo.app » mais l'application mobile
-« micabo ». Le nom s'écrit **seul**, en minuscules : pas de `.app`, et aucun
-mot de catégorie devant — ni « le site micabo », ni « l'app micabo », ni « la
-plateforme micabo ». La règle de ton d'origine (minuscules même en début de
-phrase, pour que la slide n'ait pas l'air d'une pub) est conservée.
+Aller-retour le même jour : 0260 avait basculé la marque sur l'application
+mobile « micabo » (nom nu, sans `.app`), 0261 est revenu au site. La règle qui
+tient est celle d'origine : **« le site micabo.app »**, en minuscules même en
+début de phrase, « el sitio micabo.app » en espagnol, « the site micabo.app »
+en anglais, et en turc la forme agglutinée « micabo.app sitesi / sitesini /
+sitesine / sitesiyle » — jamais « site micabo.app », l'ordre français.
 
-`micabo.app` reste le **domaine de messagerie interne** (`prenom.n@micabo.app`)
-et l'URL de l'OS : ne jamais les réécrire en cherchant la marque.
+Deux choses que l'aller-retour a laissées derrière lui, à savoir :
 
-Les prompts `placement_micabo`, `pertinence_micabo` et `traduction_tr` portent
-la nouvelle règle. `traduction_tr` disait l'inverse : elle imposait
-« micabo.app sitesi » et interdisait `uygulama`. En turc, le cas grammatical
-s'accole maintenant au nom par une apostrophe : micabo'yu, micabo'ya,
-micabo'da, micabo'dan, « micabo ile ». `ctaSiteTr.ts`, qui forçait la forme
-« site » côté front, est supprimé — il n'était plus appelé que par son test.
+- **Les 176 decks traduits vidés par 0260 ne sont pas revenus.** Les vider
+  était le geste correct à ce moment (ils traduisaient une source qui venait de
+  changer) mais il est sans retour : `assurerDeckPourLangue` les refait à
+  l'assignation, avec le prompt courant. Comme le prompt redit « le site
+  micabo.app », ils repartent justes — c'est du crédit Gemini, pas une perte de
+  contenu.
+- **Le texte des slides est canonique, pas d'origine.** La bascule écrasait
+  l'information « quel mot de catégorie précédait le nom » : « le site
+  micabo.app » et « micabo.app » nu donnaient tous deux « micabo ». Le retour
+  remet donc « le site micabo.app » partout, y compris là où la slide disait
+  le nom nu. C'est la forme que le prompt impose de toute façon.
 
-Sur l'existant : decks source réécrits, decks traduits **vidés** (ils
-traduisaient une source qui venait de changer ; `assurerDeckPourLangue` les
-refait à l'assignation), posts assignés réécrits, posts publiés intacts. Une
-réécriture de ce genre retire le mot de catégorie AVANT de toucher au nom :
-l'ordre inverse laisse « site micabo'yu », le suffixe turc ayant déjà consommé
-le nom.
+La leçon générale : une réécriture de marque sur du texte existant n'est pas
+réversible dès qu'elle fusionne deux formes en une. Avant d'en lancer une,
+garder une colonne ou une table avec l'avant — sinon le retour ne peut être
+qu'une reconstruction.
+
+`micabo.app` reste par ailleurs le **domaine de messagerie interne**
+(`prenom.n@micabo.app`), et `micabo` tout court le nom de l'OS et de la
+plateforme : ne jamais les réécrire en cherchant la marque produit.
 
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 

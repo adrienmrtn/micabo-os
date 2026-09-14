@@ -338,8 +338,8 @@ Ce slideshow contient déjà un appel à l'action micabo, écrit à la main${
           input.ctaManuel.slide ? ` (slide ${input.ctaManuel.slide})` : ""
         }.
 - Traduis la phrase qui le porte comme le reste, naturellement en ${langue}.
-- Mais garde « micabo » **exactement** ainsi : jamais traduit, jamais
-  transcrit dans un autre alphabet, jamais coupé, et jamais suivi de « .app ».
+- Mais garde « micabo.app » **exactement** ainsi : jamais traduit, jamais
+  transcrit dans un autre alphabet, jamais coupé.
 - Ne le déplace pas sur une autre slide, n'en ajoute pas un deuxième, et n'en
   invente pas un là où il n'y en a pas.`
       : ""
@@ -526,9 +526,9 @@ Ne remplace jamais la slide 1 (couverture). Le placement de ${input.marque === "
 UNIQUEMENT : ${autoriseesTxt}. Écris 3 variantes qui remplacent son texte.
 Chaque variante DOIT :
 ${input.marque === "micabo"
-    ? `- MENTION DE micabo (toujours en minuscules, le nom SEUL) selon le TON des slides, sans formule publicitaire. micabo est une APPLICATION MOBILE : ne l'appelle jamais un site, mais n'écris pas non plus « l'app micabo » — le nom seul suffit. INTERDIT : « micabo.app », « le site micabo », « la plateforme micabo ».${
+    ? `- MENTION DE micabo.app (toujours en minuscules, avec .app) selon le TON des slides, sans formule publicitaire.${
         code === "tr"
-          ? `\n- TURC : « micabo » seul, avec le suffixe de cas accolé par une apostrophe quand la phrase l'exige : micabo'yu, micabo'ya, micabo'da, micabo'dan, ou « micabo ile ». INTERDIT : « micabo.app », le mot « site » / « sitesi » sous toutes ses formes, et « indir / App Store » en formule publicitaire.`
+          ? `\n- TURC : micabo.app est un SITE, jamais une appli. Écris « micabo.app sitesi / sitesiyle / sitesini / sitesine ». INTERDIT : uygulama, indir, App Store, « site micabo.app » (mot site avant le nom), « micabo.app ile » sans sitesi.`
           : ""
       }`
     : `- MENTION DE SOPHIA selon le TON des slides : si elles TUTOIENT (2e personne du
