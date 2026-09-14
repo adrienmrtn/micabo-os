@@ -1156,6 +1156,14 @@ export const en = {
       enAttenteDesc: "Oldest first. Open one to review it.",
       introuvable: "Slideshow not found — it may have been deleted.",
       retour: "Back to the queue",
+      rang: "{{rang}} / {{total}}",
+      precedent: "Previous slideshow",
+      suivant: "Next slideshow",
+      quitterSansEnregistrer:
+        "Some edits are not saved. Leave this slideshow and lose them?",
+      bilanTitre: "How this slideshow performed",
+      bilanDesc:
+        "Its past runs: account, date, views and post link. The record, not the visual alone, is what says whether to keep it.",
       enregistrer: "Save",
       valider: "Validate",
       rejeter: "Delete",
@@ -1359,6 +1367,8 @@ export const en = {
       historique: "Passages / stats",
       pasDePassage: "Not assigned to a creator yet.",
       statsLigne: "{{vues}} views · {{likes}} likes · {{coms}} comments",
+      bilanPassages:
+        "{{n}} runs · {{publies}} published · {{vues}} views total · {{moyenne}} on average",
       releveLe: "Collected on {{quand}}",
       releveInconnu: "Collected (date unknown)",
       releveTropTot: "Published less than 45 min ago — TikTok hasn’t indexed it yet.",

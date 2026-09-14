@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Check, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,7 @@ import {
   triees,
   type CalquePng,
 } from "@/features/moteur/fileValidation";
+import { PassagesSlideshow } from "@/features/moteur/PassagesSlideshow";
 import { useApplication } from "@/features/moteur/ApplicationContext";
 import { nomLangue } from "@/features/moteur/langues";
 import { TIERS, type Tier } from "@/features/moteur/tierlist";
@@ -124,7 +125,25 @@ function Vignette({ contenu, actif, onClick }: {
   );
 }
 
-function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void }) {
+function Editeur({
+  contenuId,
+  rang,
+  total,
+  onQuitter,
+  onAller,
+  onTraite,
+}: {
+  contenuId: string;
+  /** Position dans la file, 1-indexée. */
+  rang: number;
+  total: number;
+  /** Sortir vers la liste. */
+  onQuitter: () => void;
+  /** Naviguer sans rien décider. */
+  onAller: (delta: -1 | 1) => void;
+  /** Validé ou rejeté : passer au suivant. */
+  onTraite: () => void;
+}) {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const editeurs = React.useRef(new Map<number, EditeurSlideHandle | null>());
@@ -149,6 +168,26 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
   /** Slide qui porte le CTA micabo écrit à la main. null = placement auto. */
   const [ctaSlide, setCtaSlide] = React.useState<number | null>(null);
   const [erreur, setErreur] = React.useState<string | null>(null);
+  /** Une retouche attend d'être écrite. Garde-fou avant de changer de slideshow. */
+  const [modifie, setModifie] = React.useState(false);
+
+  /**
+   * Enrobe un setState pour marquer l'éditeur sale au moment même où il écrit.
+   * Enchaîner 121 slideshows veut dire cliquer « suivant » vite : un setModifie
+   * oublié sur un champ ferait partir une retouche sans un mot.
+   */
+  function edite<T>(set: React.Dispatch<React.SetStateAction<T>>) {
+    return (v: React.SetStateAction<T>) => {
+      setModifie(true);
+      set(v);
+    };
+  }
+
+  /** Quitter ce slideshow : confirme si une retouche n'est pas enregistrée. */
+  function quitterVers(action: () => void) {
+    if (modifie && !window.confirm(t("file.quitterSansEnregistrer"))) return;
+    action();
+  }
 
   const d = detail.data;
   React.useEffect(() => {
@@ -169,6 +208,7 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
       position_sophia: boolean;
     }>).find((sl) => sl.position_sophia);
     setCtaSlide(d.placement_manuel ? (porteuse?.position ?? null) : null);
+    setModifie(false);
   }, [d]);
 
   const deckSource = d
@@ -270,8 +310,9 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
       await validerSlideshow(contenuId);
     },
     onSuccess: () => {
+      setModifie(false);
       void qc.invalidateQueries({ queryKey: ["file"] });
-      onFini();
+      onTraite();
     },
     onError: (e) => setErreur((e as Error).message),
   });
@@ -279,8 +320,9 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
   const rejeter = useMutation({
     mutationFn: () => supprimerContenu(contenuId),
     onSuccess: () => {
+      setModifie(false);
       void qc.invalidateQueries({ queryKey: ["file"] });
-      onFini();
+      onTraite();
     },
     onError: (e) => setErreur((e as Error).message),
   });
@@ -293,7 +335,7 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
   if (!d || !travail) return <EmptyState title={t("file.introuvable")} />;
 
   const majSlide = (position: number, patch: Partial<SlideTravail>) =>
-    setTravail((prev) =>
+    edite(setTravail)((prev) =>
       (prev ?? []).map((s) => (s.position === position ? { ...s, ...patch } : s)),
     );
 
@@ -303,6 +345,10 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
         <div className="min-w-0">
           <h2 className="truncate text-lg font-semibold tracking-tight">{d.titre || "—"}</h2>
           <p className="text-xs text-muted-foreground">
+            <span className="tabular-nums font-medium text-foreground">
+              {t("file.rang", { rang, total })}
+            </span>
+            {" · "}
             {nomLangue(d.langue_source)}
             {d.source?.handle_tiktok ? ` · @${d.source.handle_tiktok}` : ""}
             {d.vues_source != null
@@ -311,9 +357,34 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
             {d.tier_note_import != null ? ` · ${Math.round(d.tier_note_import)}/100` : ""}
           </p>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          <Button size="sm" variant="ghost" onClick={onFini} disabled={occupe}>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => quitterVers(onQuitter)}
+            disabled={occupe}
+          >
             {t("file.retour")}
+          </Button>
+          <Button
+            size="icon"
+            variant="outline"
+            className="size-8"
+            aria-label={t("file.precedent")}
+            disabled={occupe || rang <= 1}
+            onClick={() => quitterVers(() => onAller(-1))}
+          >
+            <ArrowLeft className="size-3.5" />
+          </Button>
+          <Button
+            size="icon"
+            variant="outline"
+            className="size-8"
+            aria-label={t("file.suivant")}
+            disabled={occupe || rang >= total}
+            onClick={() => quitterVers(() => onAller(1))}
+          >
+            <ArrowRight className="size-3.5" />
           </Button>
           <Button size="sm" variant="outline" onClick={() => sauver.mutate()} disabled={occupe}>
             {sauver.isPending ? t("common.saving") : t("file.enregistrer")}
@@ -347,7 +418,7 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1 sm:col-span-2">
             <Label htmlFor="file-titre">{t("file.titre")}</Label>
-            <Input id="file-titre" value={titre} onChange={(e) => setTitre(e.target.value)} />
+            <Input id="file-titre" value={titre} onChange={(e) => edite(setTitre)(e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label htmlFor="file-format">{t("file.format")}</Label>
@@ -355,7 +426,7 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
               id="file-format"
               className={selectClass}
               value={formatId}
-              onChange={(e) => setFormatId(e.target.value)}
+              onChange={(e) => edite(setFormatId)(e.target.value)}
             >
               <option value="">{t("file.formatAucun")}</option>
               {(formats.data ?? [])
@@ -370,7 +441,7 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
           </div>
           <div className="space-y-1">
             <Label>{t("file.labels")}</Label>
-            <LabelPicker selected={labelIds} onChange={setLabelIds} />
+            <LabelPicker selected={labelIds} onChange={edite(setLabelIds)} />
           </div>
           <div className="space-y-1">
             <Label htmlFor="file-tier">{t("file.tier")}</Label>
@@ -378,7 +449,7 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
               id="file-tier"
               className={selectClass}
               value={tier}
-              onChange={(e) => setTier(e.target.value)}
+              onChange={(e) => edite(setTier)(e.target.value)}
             >
               <option value="">—</option>
               {TIERS.map((x: Tier) => (
@@ -395,7 +466,7 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
               type="number"
               min={0}
               value={cible}
-              onChange={(e) => setCible(Number(e.target.value))}
+              onChange={(e) => edite(setCible)(Number(e.target.value))}
             />
           </div>
           <div className="space-y-1">
@@ -403,7 +474,7 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
             <Input
               id="file-mus-titre"
               value={musiqueTitre}
-              onChange={(e) => setMusiqueTitre(e.target.value)}
+              onChange={(e) => edite(setMusiqueTitre)(e.target.value)}
             />
           </div>
           <div className="space-y-1">
@@ -411,7 +482,7 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
             <Input
               id="file-mus-url"
               value={musiqueUrl}
-              onChange={(e) => setMusiqueUrl(e.target.value)}
+              onChange={(e) => edite(setMusiqueUrl)(e.target.value)}
             />
           </div>
           <div className="space-y-1 sm:col-span-2">
@@ -419,7 +490,7 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
             <Input
               id="file-hashtags"
               value={hashtags}
-              onChange={(e) => setHashtags(e.target.value)}
+              onChange={(e) => edite(setHashtags)(e.target.value)}
             />
           </div>
           <div className="space-y-1 sm:col-span-2">
@@ -428,9 +499,23 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
               id="file-note"
               rows={2}
               value={note}
-              onChange={(e) => setNote(e.target.value)}
+              onChange={(e) => edite(setNote)(e.target.value)}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("file.bilanTitre")}</CardTitle>
+          <CardDescription>{t("file.bilanDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PassagesSlideshow
+            contenuId={d.id}
+            passages={d.passages ?? []}
+            chargement={detail.isFetching}
+          />
         </CardContent>
       </Card>
 
@@ -458,7 +543,7 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
                     className="size-7"
                     aria-label={t("file.monter")}
                     disabled={index === 0}
-                    onClick={() => setTravail((p) => deplacerSlide(p ?? [], s.position, -1))}
+                    onClick={() => edite(setTravail)((p) => deplacerSlide(p ?? [], s.position, -1))}
                   >
                     <ChevronLeft className="size-3.5" />
                   </Button>
@@ -468,7 +553,7 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
                     className="size-7"
                     aria-label={t("file.descendre")}
                     disabled={index === travail.length - 1}
-                    onClick={() => setTravail((p) => deplacerSlide(p ?? [], s.position, 1))}
+                    onClick={() => edite(setTravail)((p) => deplacerSlide(p ?? [], s.position, 1))}
                   >
                     <ChevronRight className="size-3.5" />
                   </Button>
@@ -478,7 +563,7 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
                     className="size-7 text-destructive hover:text-destructive"
                     aria-label={t("file.supprimerSlide")}
                     disabled={travail.length <= 1}
-                    onClick={() => setTravail((p) => retirerSlide(p ?? [], s.position))}
+                    onClick={() => edite(setTravail)((p) => retirerSlide(p ?? [], s.position))}
                   >
                     <Trash2 className="size-3.5" />
                   </Button>
@@ -513,7 +598,7 @@ function Editeur({ contenuId, onFini }: { contenuId: string; onFini: () => void 
                   className="mt-0.5"
                   disabled={occupe}
                   checked={ctaSlide === s.position}
-                  onChange={(e) => setCtaSlide(e.target.checked ? s.position : null)}
+                  onChange={(e) => edite(setCtaSlide)(e.target.checked ? s.position : null)}
                 />
                 <span className="text-muted-foreground">{t("file.ctaIci")}</span>
               </label>
@@ -530,6 +615,14 @@ export function AdminFilePage() {
   const qc = useQueryClient();
   const { applicationId } = useApplication();
   const [ouvert, setOuvert] = React.useState<string | null>(null);
+  /**
+   * L'ordre de la file, figé à l'ouverture du premier slideshow.
+   *
+   * Valider retire le slideshow de la liste, qui se recharge : se repérer dans
+   * la liste vivante ferait sauter la place à chaque validation. L'ordre figé
+   * garde « le suivant » là où il était quand on est entré.
+   */
+  const [ordre, setOrdre] = React.useState<string[]>([]);
 
   const file = useQuery({
     queryKey: ["file", "liste", applicationId],
@@ -549,7 +642,24 @@ export function AdminFilePage() {
   });
 
   if (ouvert) {
-    return <Editeur contenuId={ouvert} onFini={() => setOuvert(null)} />;
+    const i = ordre.indexOf(ouvert);
+    const aller = (delta: -1 | 1) => {
+      const cible = ordre[i + delta];
+      if (cible) setOuvert(cible);
+    };
+    return (
+      <Editeur
+        // Remontage à chaque slideshow : les calques posés, les refs de canvas
+        // et le drapeau « modifié » ne doivent rien garder du précédent.
+        key={ouvert}
+        contenuId={ouvert}
+        rang={i + 1}
+        total={ordre.length}
+        onQuitter={() => setOuvert(null)}
+        onAller={aller}
+        onTraite={() => setOuvert(ordre[i + 1] ?? null)}
+      />
+    );
   }
 
   const liste = file.data ?? [];
@@ -594,7 +704,10 @@ export function AdminFilePage() {
                 key={c.id}
                 contenu={c}
                 actif={false}
-                onClick={() => setOuvert(c.id)}
+                onClick={() => {
+                  setOrdre(liste.map((x) => x.id));
+                  setOuvert(c.id);
+                }}
               />
             ))}
           </CardContent>

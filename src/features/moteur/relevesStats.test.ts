@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { etatReleve, resumerReleves } from "./relevesStats";
+import { bilanPassages, etatReleve, resumerReleves } from "./relevesStats";
 
 const MAINTENANT = Date.parse("2026-09-14T12:00:00Z");
 const ilYa = (minutes: number) =>
@@ -66,5 +66,58 @@ describe("resumerReleves", () => {
       tropRecents: 2,
       nonPublies: 68,
     });
+  });
+});
+
+describe("bilanPassages", () => {
+  const T0 = Date.parse("2026-09-14T12:00:00Z");
+  const publie = (vues: number | null, publieAt = "2026-09-01T10:00:00Z") => ({
+    statut: "publie",
+    publie_at: publieAt,
+    vues,
+  });
+
+  it("ne fait la moyenne que sur les passages mesurés", () => {
+    const b = bilanPassages(
+      [
+        publie(1000),
+        publie(3000),
+        publie(null), // publié, jamais relevé
+        { statut: "assigne", publie_at: null, vues: null }, // rien à mesurer
+      ],
+      T0,
+    );
+    expect(b.total).toBe(4);
+    expect(b.publies).toBe(3);
+    expect(b.mesures).toBe(2);
+    expect(b.vues).toBe(4000);
+    // 4000 / 2, et non 4000 / 4 : compter les non-mesurés comme zéro
+    // afficherait 1 000 pour un slideshow qui fait réellement 2 000.
+    expect(b.moyenne).toBe(2000);
+  });
+
+  it("ne prétend pas à une moyenne quand rien n'est mesuré", () => {
+    const b = bilanPassages([publie(null), { statut: "assigne", publie_at: null, vues: null }], T0);
+    expect(b.moyenne).toBeNull();
+    expect(b.vues).toBe(0);
+  });
+
+  it("compte zéro vue comme une mesure", () => {
+    // Un post qui a fait 0 vue EST mesuré : l'écarter remonterait la moyenne
+    // des slideshows qui se plantent.
+    const b = bilanPassages([publie(0), publie(100)], T0);
+    expect(b.mesures).toBe(2);
+    expect(b.moyenne).toBe(50);
+  });
+
+  it("ne compte pas un post trop récent comme un raté", () => {
+    const b = bilanPassages([publie(null, new Date(T0 - 10 * 60_000).toISOString())], T0);
+    expect(b.tropRecents).toBe(1);
+    expect(b.manquants).toBe(0);
+    expect(b.moyenne).toBeNull();
+  });
+
+  it("rend un bilan vide sans passage", () => {
+    expect(bilanPassages([], T0)).toMatchObject({ total: 0, vues: 0, moyenne: null });
   });
 });

@@ -72,3 +72,39 @@ export function resumerReleves(lignes: LigneReleve[], maintenant = Date.now()): 
   }
   return out;
 }
+
+export interface BilanPassages extends ResumeReleves {
+  total: number;
+  vues: number;
+  /** null quand rien n'est mesuré : « 0 de moyenne » serait un mensonge. */
+  moyenne: number | null;
+}
+
+/**
+ * Ce qu'un slideshow a donné, pour décider de le garder.
+ *
+ * La moyenne ne porte que sur les passages mesurés — même règle que
+ * `etatReleve` : un passage assigné ou publié jamais relevé compterait comme
+ * zéro vue et écraserait la moyenne sans rien vouloir dire.
+ *
+ * Elle compte en revanche TOUS les passages mesurés, reposts bonus compris,
+ * contrairement à la carte « Par format ». Ici le chiffre est affiché juste
+ * au-dessus de la liste des passages : il doit être la somme de ce qu'on lit
+ * en dessous, sinon on ne lui fait plus confiance.
+ */
+export function bilanPassages(
+  lignes: LigneReleve[],
+  maintenant = Date.now(),
+): BilanPassages {
+  const base = resumerReleves(lignes, maintenant);
+  const vues = lignes.reduce(
+    (s, l) => (etatReleve(l, maintenant) === "mesure" ? s + (l.vues ?? 0) : s),
+    0,
+  );
+  return {
+    ...base,
+    total: lignes.length,
+    vues,
+    moyenne: base.mesures > 0 ? Math.round(vues / base.mesures) : null,
+  };
+}

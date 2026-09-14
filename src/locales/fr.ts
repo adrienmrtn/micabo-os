@@ -1160,6 +1160,14 @@ export const fr = {
       enAttenteDesc: "Du plus ancien au plus récent. Ouvre-en un pour le relire.",
       introuvable: "Slideshow introuvable — il a peut-être été supprimé.",
       retour: "Retour à la file",
+      rang: "{{rang}} / {{total}}",
+      precedent: "Slideshow précédent",
+      suivant: "Slideshow suivant",
+      quitterSansEnregistrer:
+        "Des retouches ne sont pas enregistrées. Quitter ce slideshow et les perdre ?",
+      bilanTitre: "Ce que ce slideshow a donné",
+      bilanDesc:
+        "Ses passages passés : compte, date, vues et lien du post. C’est le bilan, pas le visuel seul, qui dit s’il faut le garder.",
       enregistrer: "Enregistrer",
       valider: "Valider",
       rejeter: "Supprimer",
@@ -1364,6 +1372,8 @@ export const fr = {
       historique: "Passages / stats",
       pasDePassage: "Pas encore assigné à un créateur.",
       statsLigne: "{{vues}} vues · {{likes}} likes · {{coms}} coms",
+      bilanPassages:
+        "{{n}} passages · {{publies}} publiés · {{vues}} vues au total · {{moyenne}} de moyenne",
       releveLe: "Relevé le {{quand}}",
       releveInconnu: "Relevé (date inconnue)",
       releveTropTot: "Publié il y a moins de 45 min — TikTok ne l’a pas encore indexé.",
