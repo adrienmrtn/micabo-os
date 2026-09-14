@@ -298,6 +298,26 @@ Le reste du chemin :
   `excludeFiles` sort du lambda ce qui ne sert pas à `api/burn.py` (front,
   sources Edge, docs) : ~9 Mo, de l'hygiène, pas la solution.
 
+  **Et cette variable est posée sur Production SEULEMENT.** Conséquence, à
+  connaître avant de s'inquiéter : **tout déploiement Preview échoue**, sur
+  chaque PR, avec « Total bundle size (303.16 MB) exceeds the maximum function
+  size (225 MB) ». Vérifié le 14/09/2026 sur les vingt derniers déploiements :
+  7 production sur 7 en READY (avec `lambdaRuntimeStats: {"python":1}`), 13
+  preview sur 13 en ERROR, de la PR #60 à la #67. Le front, lui, se construit :
+  l'erreur tombe APRÈS le `vite build`, au moment d'empaqueter le lambda.
+
+  Donc : un rouge sur un preview ne dit rien du code de la PR, et **ne bloque
+  pas le merge** — le déploiement production qui suit passe. Pour avoir des
+  previews verts, ajouter `VERCEL_SUPPORT_LARGE_FUNCTIONS=1` à
+  l'environnement **Preview** du projet Vercel (Settings → Environment
+  Variables), en plus de Production.
+
+  Pister `requirements.txt` au passage : les bornes sont ouvertes
+  (`opencv-python-headless>=4.9`). 303 Mo mesurés contre ~261 Mo attendus avec
+  OpenCV 4.9 : la résolution est montée en 5.x. Ça ne fait pas passer sous les
+  225 Mo — même épinglé à 4.9 on reste au-dessus, d'où la variable — mais
+  épingler éviterait qu'un futur saut de version surprenne la production.
+
 Le contrôle du moteur est `qa_selftest`, dans le moteur : il tourne sur chaque
 slide et son rapport remonte jusqu'à la carte « Text burn-in (preview) » du
 Moteur, qui affiche l'original TikTok et le rendu brûlé côte à côte, avec les
