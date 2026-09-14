@@ -40,6 +40,7 @@ import {
   renettoyerSlide,
   reordonnerSlides,
 } from "@/features/moteur/api";
+import { verifierLienPublication } from "@/features/moteur/lienPublication";
 import {
   appliquerEvenement,
   etapesInitiales,
@@ -419,14 +420,18 @@ export function PosterPostPage() {
     onSuccess: rafraichir,
   });
 
+  // Un lien qui n'est pas un lien de POST rend le passage impossible à mesurer,
+  // pour toujours : on le dit AVANT l'envoi, pas après (voir `lienPublication.ts`).
+  const verdictLien = verifierLienPublication(lienPublie);
+  const lienTouche = lienPublie.trim().length > 0;
+
   const publier = useMutation({
     mutationFn: () => {
-      const lien = lienPublie.trim();
-      if (!lien) throw new Error(t("posts.lienObligatoire"));
+      if (!verdictLien.ok) throw new Error(t(`posts.lien_${verdictLien.motif}`));
       return majPost(id!, {
         statut: "publie",
         publie_at: new Date().toISOString(),
-        publie_url: lien,
+        publie_url: verdictLien.url!,
       });
     },
     onSuccess: rafraichir,
@@ -830,7 +835,13 @@ export function PosterPostPage() {
                   onChange={(e) => setLienPublie(e.target.value)}
                   required
                 />
-                <p className="text-xs text-muted-foreground">{t("posts.lienObligatoireAide")}</p>
+                {lienTouche && !verdictLien.ok ? (
+                  <p className="text-xs text-destructive">
+                    {t(`posts.lien_${verdictLien.motif}`)}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t("posts.lienObligatoireAide")}</p>
+                )}
               </div>
 
               {publier.isError && (
@@ -841,7 +852,7 @@ export function PosterPostPage() {
 
               <Button
                 className="w-full"
-                disabled={publier.isPending || !lienPublie.trim()}
+                disabled={publier.isPending || !verdictLien.ok}
                 onClick={() => publier.mutate()}
               >
                 {publier.isPending ? t("common.saving") : t("posts.marquerPublie")}

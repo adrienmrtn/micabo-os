@@ -67,6 +67,7 @@ import {
   SLUG_HOOK,
 } from "./mediaCaption";
 import { fusionnerTexteSlide } from "./deckSlides";
+import { verifierLienPublication } from "./lienPublication";
 import type { CompteResumePoster } from "./types";
 import {
   CLE_REMARQUES,
@@ -1567,10 +1568,18 @@ export async function reordonnerSlides(slides: PostSlide[]): Promise<void> {
   }
 }
 
+/**
+ * Un post marqué publié DOIT porter un lien de post, pas n'importe quelle
+ * chaîne. Sans ça, le relevé des stats ne peut jamais rapprocher le passage et
+ * il reste à zéro vue pour toujours (voir `lienPublication.ts`).
+ */
+function exigerLienPost(publieUrl: string | null | undefined): void {
+  const v = verifierLienPublication(String(publieUrl ?? ""));
+  if (!v.ok) throw new Error(`LIEN_PUBLICATION_${(v.motif ?? "vide").toUpperCase()}`);
+}
+
 export async function majPost(id: string, patch: Partial<Post>): Promise<void> {
-  if (patch.statut === "publie" && !String(patch.publie_url ?? "").trim()) {
-    throw new Error("Lien TikTok obligatoire pour marquer comme publié");
-  }
+  if (patch.statut === "publie") exigerLienPost(patch.publie_url);
   const { error } = await supabase.from("posts").update(patch).eq("id", id);
   if (error) throw error;
 
@@ -1596,9 +1605,7 @@ export async function majPassage(
     publie_url: string | null;
   }>,
 ): Promise<void> {
-  if (patch.statut === "publie" && !String(patch.publie_url ?? "").trim()) {
-    throw new Error("Lien TikTok obligatoire pour marquer comme publié");
-  }
+  if (patch.statut === "publie") exigerLienPost(patch.publie_url);
   const { error } = await supabase.from("passages").update(patch).eq("id", id);
   if (error) throw error;
 }
