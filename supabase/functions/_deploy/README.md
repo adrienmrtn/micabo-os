@@ -88,3 +88,14 @@ Deux pièges vérifiés à cette occasion :
   retiré, donc tout bundle brut paraît « changé » ;
 - revenir en arrière sur une source ne redonne pas forcément le bundle
   d'avant. Le vérifier, ne pas le supposer.
+
+Troisième passage sur la marque (0263, 15/09/2026) : les mêmes sept bundles
+rebougent — `assignation`, `assignation-contenu`, `import-contenu`,
+`minuit-vnext`, `revoquer-post`, `bruler-assignes`, `bruler-texte-test` — et
+ressortent d'esbuild **identiques à ceux de la bascule d'avant-hier**. Seul
+`bruler-assignes` change d'alias, `k` -> `I`, comme au premier passage : sur ce
+tree, l'alias suit l'état du code, il ne dérive pas.
+
+Ce qui vaut pour la prochaine fois : un aller-retour de source redonne bien le
+bundle d'avant, mais il faut le VÉRIFIER (`git show <sha>:<bundle> | cmp -`),
+pas le supposer.

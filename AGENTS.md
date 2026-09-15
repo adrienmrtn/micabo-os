@@ -162,44 +162,51 @@ dans les deux lignes — le total n'est pas une part de 100 %.
 
 **Placement micabo.** `contenus.placement_manuel` : posé, `integrateSophia` ne
 tourne dans AUCUNE langue. La source part telle quelle, les autres langues sont
-une simple traduction, et le prompt reçoit la consigne de garder `micabo.app`
+une simple traduction, et le prompt reçoit la consigne de garder `micabo`
 littéral, de ne pas déplacer le CTA, de ne pas en inventer un deuxième. Non
 posé, le comportement d'avant tient, `placementParDefaut` compris. Un deck
 manuel est « prêt » dès qu'il a du texte : sans cette nuance,
 `assurerDeckPourLangue` attendait un `position_sophia` qu'aucun modèle n'allait
 plus poser et retraduisait à chaque passage.
 
-## micabo.app est un SITE, et le reste (0260 puis 0261, 14/09/2026)
+## La marque : « micabo » nu (0260, 0261 puis 0263, 15/09/2026)
 
-Aller-retour le même jour : 0260 avait basculé la marque sur l'application
-mobile « micabo » (nom nu, sans `.app`), 0261 est revenu au site. La règle qui
-tient est celle d'origine : **« le site micabo.app »**, en minuscules même en
-début de phrase, « el sitio micabo.app » en espagnol, « the site micabo.app »
-en anglais, et en turc la forme agglutinée « micabo.app sitesi / sitesini /
-sitesine / sitesiyle » — jamais « site micabo.app », l'ordre français.
+Trois passages sur ce texte en deux jours : 0260 bascule sur « micabo », 0261
+revient au site micabo.app, 0263 rebascule. **L'état qui tient est « micabo »
+nu** : le nom seul, en minuscules même en début de phrase, sans `.app` et sans
+mot de catégorie devant — ni « le site micabo », ni « l'app micabo », ni « la
+plateforme micabo ». Le contexte de la slide fait le reste.
 
-Deux choses que l'aller-retour a laissées derrière lui, à savoir :
+En turc le cas grammatical s'accole au nom par une apostrophe : micabo'yu,
+micabo'ya, micabo'da, micabo'dan, « micabo ile ». Jamais « sitesi » sous aucune
+forme.
 
-- **Les 176 decks traduits vidés par 0260 ne sont pas revenus.** Les vider
-  était le geste correct à ce moment (ils traduisaient une source qui venait de
-  changer) mais il est sans retour : `assurerDeckPourLangue` les refait à
-  l'assignation, avec le prompt courant. Comme le prompt redit « le site
-  micabo.app », ils repartent justes — c'est du crédit Gemini, pas une perte de
-  contenu.
-- **Le texte des slides est canonique, pas d'origine.** La bascule écrasait
-  l'information « quel mot de catégorie précédait le nom » : « le site
-  micabo.app » et « micabo.app » nu donnaient tous deux « micabo ». Le retour
-  remet donc « le site micabo.app » partout, y compris là où la slide disait
-  le nom nu. C'est la forme que le prompt impose de toute façon.
+**Avant toute nouvelle bascule, sauvegarder.** 0262 pose
+`micabo_marque_sauvegarde` et y range le texte d'avant sous une étiquette
+(`avant_micabo_nu_2026_09_15`). C'est la leçon des deux premiers aller-retours :
+la réécriture **fusionne deux formes en une** — « le site micabo.app » et
+« micabo.app » nu donnent tous deux « micabo » — donc l'inverse ne peut être
+qu'une reconstruction canonique, jamais une restitution. Avec la sauvegarde,
+le retour se fait en relisant la valeur d'avant.
 
-La leçon générale : une réécriture de marque sur du texte existant n'est pas
-réversible dès qu'elle fusionne deux formes en une. Avant d'en lancer une,
-garder une colonne ou une table avec l'avant — sinon le retour ne peut être
-qu'une reconstruction.
+Deux autres choses apprises, qui valent au-delà de micabo :
+
+- **Retirer le mot de catégorie AVANT de toucher au nom.** L'ordre inverse
+  laisse « site micabo'yu » : la règle turque des suffixes a déjà consommé le
+  nom et le mot orphelin reste.
+- **Une suite de `regexp_replace` remord sur sa propre sortie.** « micabo ile »
+  devenait « micabo.app sitesi.app sitesiyle ». Passer par une sentinelle
+  (`chr(1)`) et ne rétablir qu'à la fin.
+
+Les decks traduits sont **vidés** à chaque bascule, pas réécrits : ils
+traduisent une source qui vient de changer. `assurerDeckPourLangue` les refait
+à l'assignation avec le prompt courant. C'est du crédit Gemini, pas du contenu
+perdu — et rien pour les slideshows qui seront rejetés d'ici là.
 
 `micabo.app` reste par ailleurs le **domaine de messagerie interne**
-(`prenom.n@micabo.app`), et `micabo` tout court le nom de l'OS et de la
-plateforme : ne jamais les réécrire en cherchant la marque produit.
+(`prenom.n@micabo.app`) et l'URL de l'OS, et `micabo` tout court le nom de
+l'OS et de la plateforme : ne jamais les réécrire en cherchant la marque
+produit. Les posts déjà **publiés** ne sont jamais touchés non plus.
 
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
