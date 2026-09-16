@@ -14,6 +14,7 @@ import {
   chargerPersonaUgc,
 } from "./ugc_face_swap.ts";
 import {
+  estDoublonContenuJour,
   estErreurQuotaPostsJour,
   manquantsJusquaQuota,
   quotaPostsParJour,
@@ -419,7 +420,16 @@ export async function assignerCompteJour(
       })
       .select("id")
       .single();
-    if (error) throw error;
+    if (error) {
+      // Course perdue : un autre worker a posé ce slideshow sur ce compte
+      // aujourd'hui pendant qu'on fabriquait le deck. `contenusSession` le
+      // porte déjà, la tentative suivante en piochera un autre.
+      if (estDoublonContenuJour(error)) {
+        log(`Doublon du jour évité (course) — ${choisi.contenuId.slice(0, 8)} déjà posé`);
+        continue;
+      }
+      throw error;
+    }
 
     // Pont poster : le calendrier / détail créateur lit encore `posts` +
     // `post_slides`. On matérialise un post déjà cuit (pipeline done) et on
