@@ -190,7 +190,7 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
       kind: "logic",
       api: "requalification.requalifierContenus",
       detail:
-        "Cycle complet + tous les passages réglés — mesurés (J+3) ou périmés (J+5 sans publication ni relevé) → m = moyenne des mesurés → nouveau tier + nouveau cycle. Un run compte requalifie les slideshows qu'il vient de mesurer ; la fin de file repasse sur tout. Timeout 14 j en filet.",
+        "Cycle complet + tous les passages réglés — mesurés (J+2) ou périmés (J+5 sans publication ni relevé) → m = moyenne des mesurés → nouveau tier + nouveau cycle. Un run compte requalifie les slideshows qu'il vient de mesurer ; la fin de file repasse sur tout. Timeout 14 j en filet.",
     },
     {
       id: "snapshot",
@@ -202,7 +202,7 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
   ],
   constants: [
     { cle: "RATTRAPAGE_JOURS_DEFAUT", valeur: "4", detail: "Jours Paris (fenêtre)" },
-    { cle: "MESURE_JOURS", valeur: "3", detail: "Vues stabilisées avant de compter un passage" },
+    { cle: "MESURE_JOURS", valeur: "2", detail: "Vues stabilisées avant de compter un passage (~96 % du plateau)" },
     {
       cle: "PASSAGE_PERIME_JOURS",
       valeur: "5",

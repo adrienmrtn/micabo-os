@@ -71,7 +71,7 @@ il se clôt **au relevé** et non à la fin du drain. Deux corrections au même
 symptôme : un slideshow restait à `x/x` sans que rien ne bouge.
 
 - **Réglé = mesuré ou périmé** (`passageRegle`). Mesuré : publié, vues connues,
-  ≥ 3 jours (`MESURE_JOURS`). Périmé : jamais publié 5 jours après le créneau
+  ≥ 2 jours (`MESURE_JOURS`). Périmé : jamais publié 5 jours après le créneau
   prévu, ou publié sans relevé 5 jours après la publication
   (`PASSAGE_PERIME_JOURS`, au-dessus de la fenêtre de scrape de 4 jours). Avant,
   la clôture exigeait que *tous* les passages soient mesurés : un seul créateur
@@ -88,7 +88,19 @@ symptôme : un slideshow restait à `x/x` sans que rien ne bouge.
   cycle en entier quel que soit le compte qui a déclenché le run. La passe
   complète de fin de file reste, comme filet.
 
-Ce qui n'a **pas** changé : `MESURE_JOURS` (3 jours), le timeout 14 jours, les
+`MESURE_JOURS` passe de 3 à 2 jours (16/09/2026), sur la courbe réelle du
+projet et non au jugé : vues médianes 676 à J+0, 1 073 à J+1, 1 491 à J+2, puis
+un plateau à ~1 400-1 620 de J+4 à J+6. À J+2 on tient déjà **~96 %** du
+plateau — le troisième jour n'achetait presque rien et coûtait un jour sur
+chaque cycle. La mesure reste dans la fenêtre de scrape (4 j) et chaque passage
+est toujours vu deux fois avant l'échéance, grâce à la passe de 13:00.
+
+Le biais résiduel est connu et assumé : mesurer plus tôt sous-compte de
+quelques pour cent, donc un slideshow pile sur une borne de bande (surtout la
+barre des 1 000 vues, C → B) peut tomber un cran plus bas qu'avec l'ancien
+délai. Les bandes n'ont pas été retouchées.
+
+Ce qui n'a **pas** changé : le timeout 14 jours, les
 bandes, et le tirage — un S+ à 16 passages met toujours 16 fois plus longtemps
 à remplir son cycle qu'un C à 1, puisque le tirage est uniforme *par slideshow*
 et non *par passage dû*.
@@ -263,7 +275,7 @@ l'accompagnent :
 Une **deuxième passe à 13:00 Paris** (`rattrapage-elo-midi`, planifiée par
 `crons_stats_midi_planifier()`, qui ne touche à aucun autre job) s'ajoute à
 minuit : un post du soir est mesuré ~15 h après au lieu de 26 h, et chaque
-passage est vu deux fois avant le J+3 de la requalification.
+passage est vu deux fois avant le J+2 de la requalification.
 
 Corollaire d'affichage : un passage `assigne` n'a rien à mesurer. Les afficher
 comme les publiés jamais relevés donnait l'impression d'un relevé cassé alors

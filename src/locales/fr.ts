@@ -1551,7 +1551,7 @@ export const fr = {
       schemaKindPersist: "persist",
       nettoyageOrdre: "Ordre des providers",
       tierlistTitre: "Tierlist des slideshows",
-      tierlistAide: "Un slideshow porte un tier unique (plus d’ELO par langue). Le tier fixe le nombre de passages à effectuer ; une fois le cycle fait et mesuré (J+3 après publication), minuit requalifie sur la moyenne des vues. Bandes : <600 D · 600–1 000 C · 1 000–5 000 B · 5 000–30 000 A · 30 000–150 000 S · ≥150 000 S+, jamais plus d’un cran de descente. Sortir de D demande 1 000 vues.",
+      tierlistAide: "Un slideshow porte un tier unique (plus d’ELO par langue). Le tier fixe le nombre de passages à effectuer ; une fois tous les passages du cycle réglés — mesurés (J+2 après publication) ou périmés (5 j sans publication ni relevé) — on requalifie sur la moyenne des vues mesurées. Bandes : <600 D · 600–1 000 C · 1 000–5 000 B · 5 000–30 000 A · 30 000–150 000 S · ≥150 000 S+, jamais plus d’un cran de descente. Sortir de D demande 1 000 vues.",
       tierlistPassages: "{{n}} passage(s) par cycle",
       assignationTirageAide: "Tirage au hasard parmi les slideshows qui ont encore des passages dus (labels du créateur, toutes langues — le deck est traduit à la demande). S’il n’y a pas assez de passages dus, un slideshow en D est repêché avec un cycle d’un passage. Le quota du créateur ne baisse jamais.",
       eloImportParams: "Note d’import (premier placement)",
