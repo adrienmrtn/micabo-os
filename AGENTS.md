@@ -546,5 +546,19 @@ Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
  47), posé par `crons_stats_midi_planifier()`. Les cinq jobs du pipeline
  minuit n'ont pas été touchés (jobids 41-45 conservés).
 
+- **Déploiement du 16/09/2026** (clôture de cycle sur les passages réglés).
+ Deux chargeurs seulement : `rattrapage-elo` (v15) et `minuit-vnext` (v20),
+ épinglés sur `b733cda` — ce sont les deux qui embarquent `rattrapage_elo.ts`.
+ Test de vie `401` passé sur les deux, aucun log d'erreur derrière. Alias :
+ `rattrapage-elo` reste sur `Y`, `minuit-vnext` passe de `Ae` à `$e`.
+ Quatre autres bundles ont bougé au même rebuild — `assignation-contenu`,
+ `bruler-texte-test`, `import-contenu`, `revoquer-post` : ils tirent
+ `tierlist.ts`, esbuild élague les exports ajoutés mais permute ses
+ identifiants minifiés (P↔k, _↔w, et deux paires chacun pour les deux
+ derniers). Diff à taille constante, aucun changement de comportement : les
+ bundles sont dans le dépôt, **leurs chargeurs restent épinglés sur `9d9d0c7`**
+ et n'ont pas été redéployés. À reprendre au prochain déploiement de ces
+ quatre-là.
+
 Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
 être en avance sur `main`.
