@@ -7,7 +7,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "b733cda7abf5a8f8d178fb4cfc85ceb1bfee9a74";
+const SHA = "330048129ca27c9b478cfa6541b2e7e575fdf3dd";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/rattrapage-elo.bundle.js`;
 
