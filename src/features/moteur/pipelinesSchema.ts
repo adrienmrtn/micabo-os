@@ -186,11 +186,11 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
     {
       id: "requalif",
       rang: "⑥",
-      label: "Requalification tierlist (fin de file)",
+      label: "Requalification tierlist (à chaque relevé)",
       kind: "logic",
       api: "requalification.requalifierContenus",
       detail:
-        "Cycle complet + tous les passages mesurés (J+3) → m = moyenne des vues → nouveau tier + nouveau cycle. Timeout 14 j sur les cycles qui traînent.",
+        "Cycle complet + tous les passages réglés — mesurés (J+3) ou périmés (J+5 sans publication ni relevé) → m = moyenne des mesurés → nouveau tier + nouveau cycle. Un run compte requalifie les slideshows qu'il vient de mesurer ; la fin de file repasse sur tout. Timeout 14 j en filet.",
     },
     {
       id: "snapshot",
@@ -203,6 +203,11 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
   constants: [
     { cle: "RATTRAPAGE_JOURS_DEFAUT", valeur: "4", detail: "Jours Paris (fenêtre)" },
     { cle: "MESURE_JOURS", valeur: "3", detail: "Vues stabilisées avant de compter un passage" },
+    {
+      cle: "PASSAGE_PERIME_JOURS",
+      valeur: "5",
+      detail: "Jamais publié / jamais relevé → écrit en perte, ne retient plus le cycle",
+    },
     { cle: "CYCLE_TIMEOUT_JOURS", valeur: "14", detail: "Cycle qui traîne → requalif forcée" },
     { cle: "VUES_REPOST_BONUS", valeur: "50 000", detail: "Seuil du repost J+7" },
     { cle: "COMPTE_MAX_POSTS", valeur: "10", detail: "Derniers posts mesurés seulement" },

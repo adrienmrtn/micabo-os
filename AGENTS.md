@@ -48,11 +48,11 @@ plus lu par le moteur.
   nous. Une seule ligne `contenu_langues` est créée (langue source) ; les
   autres langues arrivent à la demande, à l'assignation (`assurerDeckPourLangue`).
 - Cycle : les passages du cycle sont ceux créés depuis `tier_maj_at`, hors
-  reposts bonus et hors posts test. Quand ils sont tous publiés **et** mesurés
-  (3 jours après publication), minuit requalifie sur `m` = moyenne des vues :
-  bandes absolues (<600 D · <1 000 C · <5 000 B · <30 000 A · <150 000 S ·
-  sinon S+), jamais plus d'un cran de descente, et il faut 1 000 vues pour
-  sortir de D. Cycle qui traîne → requalification forcée à 14 jours.
+  reposts bonus et hors posts test. Quand ils sont tous **réglés**, on
+  requalifie sur `m` = moyenne des vues mesurées : bandes absolues (<600 D ·
+  <1 000 C · <5 000 B · <30 000 A · <150 000 S · sinon S+), jamais plus d'un
+  cran de descente, et il faut 1 000 vues pour sortir de D. Cycle qui traîne →
+  requalification forcée à 14 jours.
 - Assignation : tirage **au hasard** parmi les slideshows du pool (labels ∩,
   toutes langues) qui ont encore des passages dus — mais **un C n'est tiré que
   si le pool n'a plus rien en B ou mieux**. Plus de softmax, plus de pénalité
@@ -63,6 +63,35 @@ plus lu par le moteur.
 - Repost bonus : un passage > 50 000 vues rejoue le même post sur le même
   compte à J+7 (`reposts_bonus`). Hors cycle, mais dans le quota du jour ;
   abandonné si le créneau est passé.
+
+## Clôture d'un cycle (0257, 16/09/2026)
+
+Un cycle se clôt sur des passages **réglés**, pas sur des passages publiés, et
+il se clôt **au relevé** et non à la fin du drain. Deux corrections au même
+symptôme : un slideshow restait à `x/x` sans que rien ne bouge.
+
+- **Réglé = mesuré ou périmé** (`passageRegle`). Mesuré : publié, vues connues,
+  ≥ 3 jours (`MESURE_JOURS`). Périmé : jamais publié 5 jours après le créneau
+  prévu, ou publié sans relevé 5 jours après la publication
+  (`PASSAGE_PERIME_JOURS`, au-dessus de la fenêtre de scrape de 4 jours). Avant,
+  la clôture exigeait que *tous* les passages soient mesurés : un seul créateur
+  qui ne postait pas gelait le slideshow les 14 jours du timeout, alors que les
+  trois autres passages avaient déjà rendu leur verdict. `m` ne se calcule
+  toujours que sur les mesurés ; les périmés sont écrits en perte
+  (`passagesPerimes` dans le brief). Cycle entièrement périmé → `m` null, tier
+  inchangé, cycle rouvert : le slideshow repart en circulation au lieu
+  d'attendre.
+- **Requalification au relevé.** `requalifierContenus` accepte `contenuIds` et
+  un run compte requalifie les slideshows qu'il vient de mesurer. C'était réservé
+  au run « tous comptes » par prudence — à tort : la fonction relit les passages
+  par `contenu_id`, pas par compte, donc ciblée sur un slideshow elle voit son
+  cycle en entier quel que soit le compte qui a déclenché le run. La passe
+  complète de fin de file reste, comme filet.
+
+Ce qui n'a **pas** changé : `MESURE_JOURS` (3 jours), le timeout 14 jours, les
+bandes, et le tirage — un S+ à 16 passages met toujours 16 fois plus longtemps
+à remplir son cycle qu'un C à 1, puisque le tirage est uniforme *par slideshow*
+et non *par passage dû*.
 
 ## Qualification des créateurs (0253, 12/09/2026)
 
@@ -516,6 +545,20 @@ Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
 - **Cron ajouté le 14/09/2026** : `rattrapage-elo-midi` (`0 11 * * *`, jobid
  47), posé par `crons_stats_midi_planifier()`. Les cinq jobs du pipeline
  minuit n'ont pas été touchés (jobids 41-45 conservés).
+
+- **Déploiement du 16/09/2026** (clôture de cycle sur les passages réglés).
+ Deux chargeurs seulement : `rattrapage-elo` (v15) et `minuit-vnext` (v20),
+ épinglés sur `b733cda` — ce sont les deux qui embarquent `rattrapage_elo.ts`.
+ Test de vie `401` passé sur les deux, aucun log d'erreur derrière. Alias :
+ `rattrapage-elo` reste sur `Y`, `minuit-vnext` passe de `Ae` à `$e`.
+ Quatre autres bundles ont bougé au même rebuild — `assignation-contenu`,
+ `bruler-texte-test`, `import-contenu`, `revoquer-post` : ils tirent
+ `tierlist.ts`, esbuild élague les exports ajoutés mais permute ses
+ identifiants minifiés (P↔k, _↔w, et deux paires chacun pour les deux
+ derniers). Diff à taille constante, aucun changement de comportement : les
+ bundles sont dans le dépôt, **leurs chargeurs restent épinglés sur `9d9d0c7`**
+ et n'ont pas été redéployés. À reprendre au prochain déploiement de ces
+ quatre-là.
 
 Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
 être en avance sur `main`.

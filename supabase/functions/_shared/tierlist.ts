@@ -64,6 +64,13 @@ export const REPOST_BONUS_JOURS = 7;
 
 /** Un passage n'est « mesuré » qu'après ce délai (vues stabilisées). */
 export const MESURE_JOURS = 3;
+/**
+ * Passé ce délai, un passage ne comptera jamais : le créateur n'a pas publié,
+ * ou le relevé n'a jamais accroché le post. Au-dessus de la fenêtre de scrape
+ * (`RATTRAPAGE_JOURS_DEFAUT` = 4 j) pour ne pas condamner un passage qu'on est
+ * encore en train de relever.
+ */
+export const PASSAGE_PERIME_JOURS = 5;
 /** Cycle qui traîne (passages jamais publiés) : requalification forcée. */
 export const CYCLE_TIMEOUT_JOURS = 14;
 
@@ -140,6 +147,87 @@ export function passageMesure(
   const t = Date.parse(p.publie_at);
   if (!Number.isFinite(t)) return false;
   return maintenant - t >= MESURE_JOURS * 86_400_000;
+}
+
+/**
+ * Un passage périmé ne comptera plus jamais dans un cycle.
+ *
+ * Deux façons de mourir : jamais publié (le créateur a laissé passer son
+ * créneau) ou publié sans relevé au-delà de la fenêtre de scrape. Sans cette
+ * notion, un seul créateur qui ne poste pas gèle son slideshow pendant les
+ * 14 jours du timeout — alors que les autres passages du cycle, eux, ont
+ * livré leur verdict.
+ */
+export function passagePerime(
+  p: {
+    statut: string;
+    publie_at: string | null;
+    vues: number | null;
+    date_publication_prevue?: string | null;
+  },
+  maintenant = Date.now(),
+): boolean {
+  if (passageMesure(p, maintenant)) return false;
+  const limite = PASSAGE_PERIME_JOURS * 86_400_000;
+
+  // Publié, mais le relevé ne l'a jamais accroché : la fenêtre est passée.
+  if (p.statut === "publie" && p.publie_at) {
+    const t = Date.parse(p.publie_at);
+    return Number.isFinite(t) && maintenant - t >= limite;
+  }
+
+  // Jamais publié : on part du créneau qu'il aurait dû tenir. Fin de journée
+  // UTC (donc un peu après la fin de journée Paris) — on préfère attendre deux
+  // heures de trop que condamner un passage publié tard.
+  if (!p.date_publication_prevue) return false;
+  const prevu = Date.parse(`${p.date_publication_prevue}T23:59:59Z`);
+  return Number.isFinite(prevu) && maintenant - prevu >= limite;
+}
+
+/**
+ * Un passage est « réglé » quand il ne peut plus changer le verdict du cycle :
+ * mesuré (il pèse dans la moyenne) ou périmé (il ne pèsera jamais). Un cycle se
+ * clôt sur des passages réglés, pas sur des passages publiés.
+ */
+export function passageRegle(
+  p: {
+    statut: string;
+    publie_at: string | null;
+    vues: number | null;
+    date_publication_prevue?: string | null;
+  },
+  maintenant = Date.now(),
+): boolean {
+  return passageMesure(p, maintenant) || passagePerime(p, maintenant);
+}
+
+/**
+ * Bilan d'un cycle : ce qui pèse, ce qui est écrit en perte, et si on peut
+ * trancher. Pur — pour que le moteur et l'écran comptent pareil.
+ *
+ * Le cycle se clôt quand il est rempli (`cible` passages) **et** que chacun
+ * d'eux est réglé. `m` ne se calcule que sur les mesurés : un passage périmé
+ * ne vaut pas zéro vue, il ne vaut rien du tout — le compter à zéro ferait
+ * chuter un slideshow parce qu'un créateur n'a pas posté.
+ */
+export function bilanCycle(
+  cycle: Array<{
+    statut: string;
+    publie_at: string | null;
+    vues: number | null;
+    date_publication_prevue?: string | null;
+  }>,
+  cible: number,
+  maintenant = Date.now(),
+): { mesures: number; perimes: number; clos: boolean; m: number | null } {
+  const mesures = cycle.filter((p) => passageMesure(p, maintenant));
+  const perimes = cycle.filter((p) => passagePerime(p, maintenant));
+  // Un passage ne peut pas être les deux : « réglés » = mesurés + périmés.
+  const clos = cycle.length >= cible && mesures.length + perimes.length === cycle.length;
+  const m = mesures.length > 0
+    ? mesures.reduce((s, p) => s + Number(p.vues ?? 0), 0) / mesures.length
+    : null;
+  return { mesures: mesures.length, perimes: perimes.length, clos, m };
 }
 
 function jourParis(iso: string): string {
