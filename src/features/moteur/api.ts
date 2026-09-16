@@ -3811,6 +3811,8 @@ export type RequalificationDetail = {
   /** Moyenne des vues mesurées du cycle (null = cycle sans mesure). */
   m: number | null;
   passagesMesures: number;
+  /** Passages du cycle écrits en perte (jamais publiés, jamais relevés). */
+  passagesPerimes: number;
   passagesCible: number;
   nouveauCible: number;
   timeout: boolean;

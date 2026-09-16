@@ -554,7 +554,8 @@ function journalRequalif(journal: Journal, r: RequalificationResultat): void {
       d.apres === d.avant ? "info" : "ok",
       `Tier ${fleche} · ${(d.titre ?? d.contenuId).slice(0, 40)}`,
       `m=${d.m == null ? "—" : Math.round(d.m)} vues sur ${d.passagesMesures}/${d.passagesCible}` +
-        ` passage(s)${d.timeout ? " · timeout 14 j" : ""} → ${d.nouveauCible} passage(s) à faire`,
+        ` passage(s)${d.passagesPerimes > 0 ? ` · ${d.passagesPerimes} périmé(s)` : ""}` +
+        `${d.timeout ? " · timeout 14 j" : ""} → ${d.nouveauCible} passage(s) à faire`,
     );
   }
 }
@@ -939,8 +940,14 @@ export async function rattrapageElo(
     journal.push("ok", `Repost bonus planifié le ${r.jour}`, `${r.vues} vues`);
   }
 
-  // Requalification tierlist + snapshot : uniquement sur un run « tous comptes »
-  // (un run compte isolé ne voit qu'une partie des passages d'un cycle).
+  // Requalification tierlist : sur un run « tous comptes », la passe complète ;
+  // sur un run compte isolé, les slideshows que CE run vient de mesurer.
+  //
+  // Un run compte ne voit qu'une partie des passages d'un cycle — mais
+  // `requalifierContenus` relit les passages par `contenu_id`, pas par compte.
+  // Ciblée sur un slideshow, la passe voit donc son cycle en entier, quel que
+  // soit le compte qui a déclenché le run. C'est ce qui permet de requalifier
+  // dans la minute qui suit le relevé décisif au lieu d'attendre la fin du drain.
   let requalif = requalifVide();
   let snapshot: Awaited<ReturnType<typeof snapshotVuesGlobales>> | undefined;
   if (!opts.compteId) {
@@ -952,6 +959,12 @@ export async function rattrapageElo(
         journal.push("warn", `${abandons} repost(s) bonus abandonné(s) (J+7 dépassé)`);
       }
       snapshot = await snapshotVuesGlobales(supabase, journal);
+    }
+  } else {
+    const touches = [...new Set(passages.map((p) => p.contenu_id))];
+    if (touches.length > 0) {
+      requalif = await requalifierContenus(supabase, { dryRun, contenuIds: touches });
+      journalRequalif(journal, requalif);
     }
   }
 

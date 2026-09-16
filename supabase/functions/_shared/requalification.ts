@@ -3,14 +3,16 @@
  * ELO langue.
  *
  * Un slideshow a un cycle ouvert : `passages_cible` passages à effectuer depuis
- * `tier_maj_at`. Quand tous ces passages sont publiés ET mesurés (≥ 3 jours
- * après publication, les vues sont stabilisées), on calcule `m` = moyenne des
- * vues du cycle, on requalifie le tier (`_shared/tierlist.ts`) et on ouvre un
- * nouveau cycle au format du nouveau tier.
+ * `tier_maj_at`. Quand tous ces passages sont **réglés** — mesurés (≥ 3 jours
+ * après publication, les vues sont stabilisées) ou périmés (jamais publiés,
+ * jamais relevés) — on calcule `m` = moyenne des vues mesurées du cycle, on
+ * requalifie le tier (`_shared/tierlist.ts`) et on ouvre un nouveau cycle au
+ * format du nouveau tier.
  *
- * Un cycle qui traîne (passages jamais publiés) est requalifié de force au bout
- * de 14 jours sur les passages réellement mesurés — sinon un slideshow reste
- * bloqué à vie sur un créateur qui ne poste pas.
+ * Clore sur les passages *réglés* et non sur les passages *publiés* est ce qui
+ * empêche un seul créateur qui ne poste pas de geler un slideshow jusqu'au
+ * timeout : ses trois autres passages ont déjà rendu leur verdict, on tranche
+ * dessus au lieu d'attendre 14 jours. Le timeout reste, comme filet.
  *
  * Ce module gère aussi les reposts bonus : un passage qui dépasse 50 000 vues
  * replanifie le MÊME post sur le MÊME compte à J+7.
@@ -18,10 +20,10 @@
 import { lireParLots } from "./lots.ts";
 import { aujourdhuiParis } from "./supabase.ts";
 import {
+  bilanCycle,
   CYCLE_TIMEOUT_JOURS,
   estTier,
   jourRepostBonus,
-  passageMesure,
   passagesPourTier,
   requalifier,
   VUES_REPOST_BONUS,
@@ -34,9 +36,11 @@ export interface RequalificationDetail {
   titre: string | null;
   avant: Tier;
   apres: Tier;
-  /** Moyenne des vues mesurées du cycle (null = cycle vide requalifié au timeout). */
+  /** Moyenne des vues mesurées du cycle (null = aucun passage mesuré). */
   m: number | null;
   passagesMesures: number;
+  /** Passages du cycle écrits en perte (jamais publiés, jamais relevés). */
+  passagesPerimes: number;
   passagesCible: number;
   nouveauCible: number;
   /** Cycle clos par le timeout 14 j plutôt que par les passages effectués. */
@@ -49,7 +53,7 @@ export interface RequalificationResultat {
   montees: number;
   descentes: number;
   inchanges: number;
-  /** Cycles rouverts sans aucun passage mesuré (timeout sec). */
+  /** Cycles rouverts sans aucun passage mesuré (tout périmé, ou timeout sec). */
   cyclesVides: number;
   details: RequalificationDetail[];
 }
@@ -68,10 +72,19 @@ interface PassageCycle {
   compte_id: string;
   created_at: string;
   statut: string;
+  date_publication_prevue: string | null;
   publie_at: string | null;
   vues: number | null;
   bonus_repost: boolean | null;
   posts?: PostLie;
+}
+
+interface ContenuCycle {
+  id: string;
+  titre: string | null;
+  tier: string | null;
+  passages_cible: number | null;
+  tier_maj_at: string | null;
 }
 
 /**
@@ -80,7 +93,12 @@ interface PassageCycle {
  */
 export async function requalifierContenus(
   supabase: Supabase,
-  opts: { dryRun?: boolean; contenuId?: string | null } = {},
+  opts: {
+    dryRun?: boolean;
+    contenuId?: string | null;
+    /** Restreint la passe à ces slideshows (run compte : ceux qu'il vient de mesurer). */
+    contenuIds?: string[] | null;
+  } = {},
 ): Promise<RequalificationResultat> {
   const out: RequalificationResultat = {
     examines: 0,
@@ -92,16 +110,33 @@ export async function requalifierContenus(
     details: [],
   };
 
-  let q = supabase
-    .from("contenus")
-    .select("id, titre, tier, passages_cible, tier_maj_at")
-    .not("tier", "is", null)
-    .gt("passages_cible", 0);
-  if (opts.contenuId) q = q.eq("id", opts.contenuId);
+  const cibles = opts.contenuIds ?? (opts.contenuId ? [opts.contenuId] : null);
+  if (cibles && cibles.length === 0) return out;
 
-  const { data: contenus, error } = await q;
-  if (error) throw error;
-  const actifs = (contenus ?? []).filter((c) => estTier(c.tier) && c.tier_maj_at);
+  const lireContenus = (lot: string[] | null) => {
+    const q = supabase
+      .from("contenus")
+      .select("id, titre, tier, passages_cible, tier_maj_at")
+      .not("tier", "is", null)
+      .gt("passages_cible", 0);
+    return lot ? q.in("id", lot) : q;
+  };
+
+  let contenus: ContenuCycle[];
+  if (cibles) {
+    // `in(...)` par lots : la liste vient d'un run compte, mais rien ne garantit
+    // qu'elle reste sous le garde-fou de `serviceClient`.
+    contenus = await lireParLots<ContenuCycle>(
+      cibles,
+      "Requalification — slideshows ciblés",
+      (lot) => lireContenus(lot),
+    );
+  } else {
+    const { data, error } = await lireContenus(null);
+    if (error) throw error;
+    contenus = (data ?? []) as ContenuCycle[];
+  }
+  const actifs = contenus.filter((c) => estTier(c.tier) && c.tier_maj_at);
   out.examines = actifs.length;
   if (actifs.length === 0) return out;
 
@@ -116,7 +151,8 @@ export async function requalifierContenus(
       supabase
         .from("passages")
         .select(
-          "id, contenu_id, compte_id, created_at, statut, publie_at, vues, bonus_repost, posts(est_test)",
+          "id, contenu_id, compte_id, created_at, statut, date_publication_prevue," +
+            " publie_at, vues, bonus_repost, posts(est_test)",
         )
         .in("contenu_id", lot)
         .gte("created_at", debut),
@@ -140,17 +176,16 @@ export async function requalifierContenus(
     const cycle = (parContenu.get(c.id as string) ?? []).filter(
       (p) => Date.parse(p.created_at) >= debutCycle,
     );
-    const mesures = cycle.filter((p) => passageMesure(p, maintenant));
-
-    const cycleFait = cycle.length >= cible && mesures.length === cycle.length;
+    // Réglé = mesuré ou périmé. Un passage encore en vol (assigné d'hier, publié
+    // avant-hier) retient le cycle ; un passage mort ne le retient plus.
+    const bilan = bilanCycle(cycle, cible, maintenant);
     const expire = maintenant - debutCycle >= CYCLE_TIMEOUT_JOURS * 86_400_000;
-    if (!cycleFait && !expire) continue;
+    if (!bilan.clos && !expire) continue;
 
-    const m = mesures.length > 0
-      ? mesures.reduce((s, p) => s + Number(p.vues ?? 0), 0) / mesures.length
-      : null;
+    const m = bilan.m;
 
-    // Timeout sans aucune mesure : on rouvre le cycle, tier inchangé.
+    // Aucun passage mesuré (tout périmé, ou timeout sec) : on rouvre le cycle,
+    // tier inchangé — le slideshow repart en circulation plutôt que de dormir.
     const apres = m == null ? tier : requalifier(tier, m);
     const nouveauCible = passagesPourTier(apres);
 
@@ -177,10 +212,11 @@ export async function requalifierContenus(
       avant: tier,
       apres,
       m,
-      passagesMesures: mesures.length,
+      passagesMesures: bilan.mesures,
+      passagesPerimes: bilan.perimes,
       passagesCible: cible,
       nouveauCible,
-      timeout: !cycleFait,
+      timeout: !bilan.clos,
     });
   }
 
