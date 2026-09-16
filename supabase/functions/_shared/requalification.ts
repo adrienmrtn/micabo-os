@@ -3,7 +3,7 @@
  * ELO langue.
  *
  * Un slideshow a un cycle ouvert : `passages_cible` passages à effectuer depuis
- * `tier_maj_at`. Quand tous ces passages sont **réglés** — mesurés (≥ 3 jours
+ * `tier_maj_at`. Quand tous ces passages sont **réglés** — mesurés (≥ 2 jours
  * après publication, les vues sont stabilisées) ou périmés (jamais publiés,
  * jamais relevés) — on calcule `m` = moyenne des vues mesurées du cycle, on
  * requalifie le tier (`_shared/tierlist.ts`) et on ouvre un nouveau cycle au

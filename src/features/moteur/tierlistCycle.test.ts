@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   bilanCycle,
   jourRepostBonus,
+  MESURE_JOURS,
   PASSAGE_PERIME_JOURS,
   passageMesure,
   passagePerime,
@@ -31,10 +32,10 @@ const noShow = (depuis: number) => ({
 });
 
 describe("passageMesure", () => {
-  it("attend 3 jours après la publication", () => {
-    const p = { statut: "publie", publie_at: ilYA(2), vues: 4200 };
+  it("attend MESURE_JOURS après la publication", () => {
+    const p = { statut: "publie", publie_at: ilYA(MESURE_JOURS - 1), vues: 4200 };
     expect(passageMesure(p, maintenant)).toBe(false);
-    expect(passageMesure({ ...p, publie_at: ilYA(3) }, maintenant)).toBe(true);
+    expect(passageMesure({ ...p, publie_at: ilYA(MESURE_JOURS) }, maintenant)).toBe(true);
   });
 
   it("exige des vues relevées", () => {
@@ -75,7 +76,7 @@ describe("passagePerime / passageRegle", () => {
   it("laisse le cycle attendre un passage encore en vol", () => {
     // Le créateur a encore son créneau.
     expect(passageRegle(noShow(1), maintenant)).toBe(false);
-    // Publié hier : vues pas stabilisées, on attend J+3.
+    // Publié hier : vues pas stabilisées, on attend MESURE_JOURS.
     expect(passageRegle(mesure(1, 800), maintenant)).toBe(false);
   });
 

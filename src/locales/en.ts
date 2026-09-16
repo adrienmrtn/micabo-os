@@ -1546,7 +1546,7 @@ export const en = {
       schemaKindPersist: "persist",
       nettoyageOrdre: "Provider order",
       tierlistTitre: "Slideshow tier list",
-      tierlistAide: "A slideshow carries a single tier (no more per-language ELO). The tier sets how many runs it owes; once the cycle is done and measured (3 days after publishing), midnight requalifies on average views. Bands: <600 D · 600–1,000 C · 1,000–5,000 B · 5,000–30,000 A · 30,000–150,000 S · ≥150,000 S+, never more than one drop at a time. Leaving D takes 1,000 views.",
+      tierlistAide: "A slideshow carries a single tier (no more per-language ELO). The tier sets how many runs it owes; once every run of the cycle is settled — measured (2 days after publishing) or written off (5 days with no post and no stats) — it requalifies on average measured views. Bands: <600 D · 600–1,000 C · 1,000–5,000 B · 5,000–30,000 A · 30,000–150,000 S · ≥150,000 S+, never more than one drop at a time. Leaving D takes 1,000 views.",
       tierlistPassages: "{{n}} run(s) per cycle",
       assignationTirageAide: "Random draw among slideshows that still owe runs (creator labels, any language — decks are translated on demand). When not enough runs are due, a D slideshow is drawn back with a one-run cycle. A creator quota never goes down.",
       eloImportParams: "Import score (first placement)",

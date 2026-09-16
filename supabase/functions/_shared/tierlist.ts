@@ -62,8 +62,19 @@ export const VUES_REPOST_BONUS = 50_000;
 /** Décalage du repost bonus, en jours. */
 export const REPOST_BONUS_JOURS = 7;
 
-/** Un passage n'est « mesuré » qu'après ce délai (vues stabilisées). */
-export const MESURE_JOURS = 3;
+/**
+ * Un passage n'est « mesuré » qu'après ce délai (vues stabilisées).
+ *
+ * Passé de 3 à 2 jours le 16/09/2026, sur la courbe réelle du projet : vues
+ * médianes 676 à J+0, 1 073 à J+1, 1 491 à J+2, puis un plateau à ~1 400-1 620
+ * de J+4 à J+6. À J+2 on tient déjà ~96 % du plateau — le troisième jour
+ * n'achetait presque rien et coûtait un jour sur chaque cycle.
+ *
+ * Deux garde-fous tiennent toujours : la fenêtre de scrape fait 4 jours
+ * (`RATTRAPAGE_JOURS_DEFAUT`) et la deuxième passe de 13:00 Paris voit chaque
+ * passage deux fois avant l'échéance.
+ */
+export const MESURE_JOURS = 2;
 /**
  * Passé ce délai, un passage ne comptera jamais : le créateur n'a pas publié,
  * ou le relevé n'a jamais accroché le post. Au-dessus de la fenêtre de scrape
