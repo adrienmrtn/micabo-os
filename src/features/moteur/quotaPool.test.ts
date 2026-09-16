@@ -6,6 +6,7 @@ import {
   verdictPool,
   type EtatPoolCompte,
 } from "../../../supabase/functions/_shared/quota_pool";
+import { estDoublonContenuJour } from "../../../supabase/functions/_shared/assignation_quota";
 
 const base: EtatPoolCompte = {
   labelsTxt: "Étude",
@@ -67,5 +68,34 @@ describe("messagePool", () => {
   it("distingue un deck impossible d'un pool trop mince", () => {
     expect(messagePool({ ...base, echecsDeck: 3 })).toContain("deck impossible");
     expect(messagePool({ ...base, candidats: 1, manquants: 2 })).toContain("trop mince");
+  });
+});
+
+describe("estDoublonContenuJour", () => {
+  it("reconnaît la violation de l'index unique du jour", () => {
+    expect(
+      estDoublonContenuJour({
+        code: "23505",
+        message:
+          'duplicate key value violates unique constraint "passages_compte_contenu_jour_uidx"',
+        details: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("ignore une autre violation d'unicité", () => {
+    // Un autre index unique ne doit pas faire repiocher silencieusement.
+    expect(
+      estDoublonContenuJour({
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "passages_post_id_uidx"',
+      }),
+    ).toBe(false);
+  });
+
+  it("ignore une erreur qui n'est pas une violation d'unicité", () => {
+    expect(estDoublonContenuJour({ code: "23503", message: "fk" })).toBe(false);
+    expect(estDoublonContenuJour(null)).toBe(false);
+    expect(estDoublonContenuJour("passages_compte_contenu_jour_uidx")).toBe(false);
   });
 });

@@ -105,6 +105,59 @@ bandes, et le tirage — un S+ à 16 passages met toujours 16 fois plus longtemp
 à remplir son cycle qu'un C à 1, puisque le tirage est uniforme *par slideshow*
 et non *par passage dû*.
 
+## Posts orphelins et doublon du jour (0264, 17/09/2026)
+
+Symptôme unique, deux causes : le panneau des incomplets affichait « 1/2 post(s) »
+et le bouton Assigner répondait « Quota déjà rempli (2/2) ». Les deux avaient
+raison — ils ne comptaient pas la même chose.
+
+**Posts orphelins.** `materialiserPostDepuisPassage` écrit le `posts`, puis les
+`post_slides`, puis lie `passages.post_id`. Les deux premiers échecs rollbackent
+le post proprement ; rien ne protège la **mort du process** entre les slides et
+le lien — l'invocation Edge meurt à 150 s (`IDLE_TIMEOUT`, vu le 16/09 à 22:07,
+et les orphelins apparaissent chaque nuit entre 22:00:1x et 22:00:5x). Le post
+reste, le passage reste sans `post_id`, `purgerAssignationIncomplete` le supprime
+à la passe suivante : post orphelin.
+
+Le compteur de quota lit `Math.max(passages, posts)` — pour rester cohérent avec
+le trigger `posts_enforce_quota_jour()` — donc l'orphelin remplit le quota sans
+passage. Le créateur poste une fois au lieu de deux, et **rien ne peut le
+débloquer**. Un orphelin publié est pire : le créateur le voit et le poste, mais
+il est invisible au moteur (pas de vues, pas de crédit de cycle, rien dans la
+qualification).
+
+`rattacher_posts_orphelins(p_depuis date)` recolle. `posts.sujet_id` est null sur
+tous les orphelins, donc le contenu se retrouve par les **médias** : celui dont
+`structure_slides` contient tous les `post_slides.media_id` du post. Strict — un
+contenu mal attribué fausserait son cycle. Le passage reprend le `created_at` du
+post, pour retomber dans le cycle auquel il appartenait. Un orphelin non publié
+qui doublonne un passage du jour est supprimé plutôt que rattaché : c'est un
+doublon, pas un passage manquant. Idempotent.
+
+Premier passage (17/09) : **14 rattachés, 2 doublons supprimés, 4 non résolus**
+sur 19 orphelins depuis le 10/09.
+
+**Doublon du jour.** `choisirContenu` exclut les slideshows déjà sortis du jour
+par une lecture en base et une liste en mémoire — les deux locales à un appel.
+Deux workers concurrents sur le même compte lisent avant que l'autre n'ait
+committé et tirent le même slideshow (hugo.notes813, 15/09 à 22:00:41 et
+22:00:43). Le trigger `posts_enforce_quota_jour()` compte les posts, pas
+lesquels. L'index `passages_compte_contenu_jour_uidx` ferme la course en base ;
+l'assignation attrape la violation (`estDoublonContenuJour`) et repioche au lieu
+de planter.
+
+L'index ne porte que sur `date_publication_prevue >= 2026-09-18`. Deux doublons
+historiques existent, et chez louise.revisions565 le 08/09 les **deux posts ont
+réellement été publiés** (4 540 et 1 042 vues). Ce sont des faits ; on ne
+réécrit pas l'historique pour faire passer une contrainte. Les reposts bonus
+sont exclus de l'index — ils rejouent le même contenu sur le même compte
+volontairement.
+
+**Ce qui n'est pas fait** : la cause racine du n°1 reste. Tant que l'invocation
+peut mourir entre les deux écritures, des orphelins réapparaîtront chaque nuit.
+`rattacher_posts_orphelins()` est un soin, pas un vaccin — à relancer, ou à
+planifier.
+
 ## Qualification des créateurs (0253, 12/09/2026)
 
 L'ELO compte est **retiré** — colonnes `comptes.score` / `score_maj_at`

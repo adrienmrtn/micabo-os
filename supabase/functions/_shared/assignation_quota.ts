@@ -41,3 +41,20 @@ export function estErreurQuotaPostsJour(err: unknown): boolean {
   }
   return /quota_posts_jour/i.test(morceaux.join(" "));
 }
+
+/**
+ * Doublon du jour rattrapé par l'index unique
+ * `passages_compte_contenu_jour_uidx` (0264).
+ *
+ * `choisirContenu` exclut déjà les slideshows sortis le jour même, mais ses
+ * deux garde-fous — lecture en base, liste en mémoire — sont locaux à un
+ * appel : deux workers concurrents sur le même compte lisent avant que
+ * l'autre n'ait committé. La base tranche, le moteur repioche.
+ */
+export function estDoublonContenuJour(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const o = err as { code?: unknown; message?: unknown; details?: unknown };
+  if (String(o.code ?? "") !== "23505") return false;
+  const txt = `${String(o.message ?? "")} ${String(o.details ?? "")}`;
+  return /passages_compte_contenu_jour_uidx/i.test(txt);
+}
