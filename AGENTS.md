@@ -106,6 +106,67 @@ bandes, et le tirage — un S+ met toujours plus longtemps à remplir son cycle
 qu'un C, puisque le tirage est uniforme *par slideshow* et non *par passage dû*
 (l'écart est passé de 16× à 8× le 17/09, en divisant les quotas par deux).
 
+## Publication atomique, quotas divisés, file court-circuitable (0265/0266, 17/09/2026)
+
+**La cause racine des orphelins est fermée.** `creer_publication_atomique()`
+remplace la séquence en quatre appels PostgREST de `materialiserPostDepuisPassage` :
+`passages` → `posts` → `post_slides` → lien, plus le solde du repost bonus, dans
+**une seule transaction**. La mort du process ne laisse plus rien derrière elle —
+c'était le trou que 0264 ne pouvait que soigner après coup. Les quatre
+suppressions de compensation manuelles côté TS ont disparu avec.
+
+L'ordre `passages` d'abord est délibéré : il ne décide pas de la correction (la
+transaction s'en charge) mais de **quelle erreur gagne**, et l'appelant en dépend.
+23505 sur `passages_compte_contenu_jour_uidx` → il repioche un slideshow ;
+`quota_posts_jour` (P0001) → il arrête le compte. Insérer `posts` en premier
+ferait dire « quota plein » là où il faut repiocher.
+
+**Aucun bloc `exception` dans la fonction, et c'est structurel.** En plpgsql,
+`begin … exception … end` ouvre une sous-transaction : attraper puis poursuivre
+committe l'état déjà écrit — exactement l'orphelin qu'on supprime. Et le TS
+reconnaît ses deux cas au SQLSTATE et au texte ; réemballer une erreur lui ferait
+traiter un quota plein comme une panne.
+
+**Le piège qu'a créé le regroupement : deadlock 40P01.** L'`insert into passages`
+prend un `FOR KEY SHARE` sur la ligne `comptes` (FK `passages.compte_id`), puis le
+trigger `posts_enforce_quota_jour()` réclame un `FOR UPDATE` sur **cette même
+ligne**. Dans une seule transaction c'est une montée en verrou : deux workers
+concurrents sur le même compte détiennent chacun le KEY SHARE que l'autre doit
+évincer. Tant que les écritures étaient dans des transactions séparées, le KEY
+SHARE tombait au commit du passage et le cas n'existait pas — la fusion le crée.
+Un `perform 1 from public.comptes where id = p_compte_id for update;` en tête
+donne à toutes les transactions le même ordre d'acquisition. Reproduit puis
+vérifié éteint sur PostgreSQL 16.
+
+**Ce qui reste dehors, volontairement** : la traduction + Sophia
+(`assurerDeckPourLangue`), la résolution des visuels, le face swap UGC et
+l'upscale. Le verrou du trigger est tenu jusqu'au COMMIT ; y glisser un appel
+Gemini sérialiserait tous les workers du compte.
+
+**Quotas divisés par deux** (`PASSAGES_PAR_TIER` : B 2→1, A 4→2, S 8→4, S+ 16→8).
+La grille n'est **pas rétroactive** — `passages_cible` n'est réécrit qu'à la
+requalification — donc le stock a été repris à la main le 17/09, uniquement à la
+baisse. Effet immédiat et attendu : la réserve passe de **85 à 40 passages dus**,
+soit **2,5 → 1,2 jour** d'autonomie à 34 posts/jour. Chaque slideshow est reposté
+moitié moins, donc le pool se vide deux fois plus vite : c'est un arbitrage en
+faveur de la fraîcheur, payé en débit d'import et de validation.
+
+**L'entonnoir du pool** (`pool_global.ts`, pur, + `PoolGlobalCard`). Bibliothèque →
+validés → cycles ouverts → réellement tirables, avec les jours d'autonomie et la
+concentration du top 5. Les deux étages qui coûtaient le plus n'étaient visibles
+nulle part : la file de validation (95 slideshows dormants le 16/09 sur 166) et
+`prioriserTiersHauts`, qui verrouille **tous** les C tant qu'un seul B+ doit un
+passage — d'où « toujours les 4 ou 5 mêmes », et d'où le fait qu'un C ne peut
+jamais remonter puisqu'il faut être posté pour être mesuré.
+
+**Court-circuit de la file** (`comptes_reference.skip_validation`, 0266). Un
+interrupteur par source : à `on`, ses imports naissent `valide` au lieu de
+`brouillon`. Ne surcharge jamais un `rejete` — un refus explicite reste un refus.
+
+**`MESURE_JOURS` 3 → 2.** Justifié par la courbe mesurée : médianes 676 (J+0),
+1 073 (J+1), 1 491 (J+2), plateau 1 400–1 620 de J+4 à J+6. J+2 vaut ~96 % du
+plateau ; le troisième jour d'attente n'achetait plus rien.
+
 ## Posts orphelins et doublon du jour (0264, 17/09/2026)
 
 Symptôme unique, deux causes : le panneau des incomplets affichait « 1/2 post(s) »
@@ -154,10 +215,10 @@ réécrit pas l'historique pour faire passer une contrainte. Les reposts bonus
 sont exclus de l'index — ils rejouent le même contenu sur le même compte
 volontairement.
 
-**Ce qui n'est pas fait** : la cause racine du n°1 reste. Tant que l'invocation
-peut mourir entre les deux écritures, des orphelins réapparaîtront chaque nuit.
-`rattacher_posts_orphelins()` est un soin, pas un vaccin — à relancer, ou à
-planifier.
+**Suite** : la cause racine du n°1 est fermée depuis 0265 — la publication naît
+en une transaction, l'invocation ne peut plus mourir entre deux écritures.
+`rattacher_posts_orphelins()` reste pour l'historique et les orphelins d'avant le
+17/09 ; il est idempotent, donc sans risque à relancer.
 
 ## Qualification des créateurs (0253, 12/09/2026)
 

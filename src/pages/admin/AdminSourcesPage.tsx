@@ -7,6 +7,7 @@ import { RefreshCw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -648,6 +649,21 @@ function LigneSource({
                 </div>
               </div>
             )}
+            <div className="flex items-center gap-2">
+              <Switch
+                id={`file-source-${source.id}`}
+                checked={source.skip_validation}
+                disabled={basculerFile.isPending}
+                onCheckedChange={() => basculerFile.mutate()}
+              />
+              <label
+                htmlFor={`file-source-${source.id}`}
+                className="cursor-pointer text-xs text-muted-foreground"
+                title={t("sources.skipValidationAide")}
+              >
+                {t("sources.skipValidation")}
+              </label>
+            </div>
           </div>
         </div>
 
@@ -667,17 +683,6 @@ function LigneSource({
           />
           <Button size="sm" variant="outline" onClick={() => basculer.mutate()}>
             {source.is_active ? t("sources.deactivate") : t("sources.activate")}
-          </Button>
-          <Button
-            size="sm"
-            variant={source.skip_validation ? "default" : "outline"}
-            disabled={basculerFile.isPending}
-            title={t("sources.skipValidationAide")}
-            onClick={() => basculerFile.mutate()}
-          >
-            {source.skip_validation
-              ? t("sources.skipValidationOn")
-              : t("sources.skipValidationOff")}
           </Button>
           <Button
             size="sm"

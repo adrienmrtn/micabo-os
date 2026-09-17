@@ -663,8 +663,7 @@ export const en = {
       postsVeilleDesc: "Yesterday’s published posts ranked by views.",
     },
     sources: {
-      skipValidationOn: "Queue: skipped",
-      skipValidationOff: "Queue: review",
+      skipValidation: "Skip the validation queue",
       skipValidationAide: "When skipped, slideshows imported from this source are validated automatically at the tier gate and join the pool without review. Otherwise they wait in the validation queue, where the engine cannot see them.",
       title: "Reference accounts",
       subtitle:

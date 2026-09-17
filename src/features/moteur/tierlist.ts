@@ -9,6 +9,7 @@ export {
   passagePerime,
   passageRegle,
   PASSAGE_PERIME_JOURS,
+  RATTRAPAGE_JOURS_DEFAUT,
   CYCLE_TIMEOUT_JOURS,
   estTier,
   indexTier,
