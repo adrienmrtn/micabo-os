@@ -68,6 +68,10 @@ export async function syncLabelsMediasDuContenu(
 /**
  * Choisit un visuel propre (sans texte) partageant au moins un label du contenu,
  * hors médias déjà utilisés dans la structure. Prefers least-used.
+ *
+ * `exclu_concurrent` écarte les visuels montrant la marque d'un concurrent
+ * (logo ou écran d'appli dans la photo). Le tri par `used_count` croissant
+ * les ferait remonter en tête dès qu'on les retire d'une slide.
  */
 export async function mediaPropreMemeLabel(
   supabase: Supabase,
@@ -103,6 +107,7 @@ export async function mediaPropreMemeLabel(
         .in("id", candidats)
         .eq("texte_restant", false)
         .like("storage_path", "propre/%")
+        .eq("exclu_concurrent", false)
         .order("used_count", { ascending: true })
         .limit(30);
       const pick = (medias ?? [])[0];
@@ -132,6 +137,7 @@ export async function mediaPropreMemeLabel(
         .in("contenu_id", contenuIds)
         .eq("texte_restant", false)
         .like("storage_path", "propre/%")
+        .eq("exclu_concurrent", false)
         .order("used_count", { ascending: true })
         .limit(30);
       const pick = (medias ?? []).find((m) => !exclus.has(m.id as string));
@@ -154,6 +160,7 @@ export async function mediaPropreMemeLabel(
       .neq("contenu_id", opts.contenuId)
       .eq("texte_restant", false)
       .like("storage_path", "propre/%")
+      .eq("exclu_concurrent", false)
       .order("used_count", { ascending: true })
       .limit(30);
     const pick = (medias ?? []).find((m) => !exclus.has(m.id as string));
