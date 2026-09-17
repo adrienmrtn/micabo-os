@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   nettoyerTexteDeck,
   normaliserMarque,
+  retirerMentionConcurrent,
   retirerTiretsLongs,
 } from "../../../supabase/functions/_shared/marque";
 
@@ -135,5 +136,56 @@ describe("nettoyerTexteDeck", () => {
   it("est idempotente", () => {
     const une = nettoyerTexteDeck("Try Micabo — now", "en");
     expect(nettoyerTexteDeck(une, "en")).toBe(une);
+  });
+});
+
+describe("retirerMentionConcurrent", () => {
+  it("retire la phrase, pas seulement le nom", () => {
+    // Effacer le seul nom laisserait « Focus, ceux sur YouTube ne servent à
+    // rien » : une recommandation orpheline, pire que l'original.
+    const avant = "J'écoute des sons\nbinauraux\n10 hz = mémoire\nJ'utilise l'appli Hustly\nFocus, ceux sur YouTube\nne servent à rien";
+    const apres = retirerMentionConcurrent(avant);
+    expect(apres).not.toMatch(/hustly/i);
+    expect(apres).not.toMatch(/Focus, ceux sur YouTube/);
+    expect(apres).toContain("10 hz = mémoire");
+  });
+
+  it("coupe à la phrase quand la slide tient sur une seule ligne", () => {
+    const avant = "Cero distracciones, luz tenue y sonidos binaurales. Me recomendó la app Hustly Focus porque los de YouTube no funcionan.";
+    const apres = retirerMentionConcurrent(avant);
+    expect(apres).toBe("Cero distracciones, luz tenue y sonidos binaurales.");
+  });
+
+  it("ne vide jamais une slide, même sans aucune ponctuation", () => {
+    // Sept slides du corpus n'ont aucune ponctuation : la remontée avalait tout.
+    const avant = "écouter des sons binaux\npour booster ma\nconcentration\nj'utilise l'app Hustly focus\ncar ceux sur youtube sont\ninefficaces";
+    const apres = retirerMentionConcurrent(avant);
+    expect(apres).not.toBe("");
+    expect(apres).toContain("concentration");
+    expect(apres).not.toMatch(/hustly/i);
+  });
+
+  it("retire une amorce restée en suspens", () => {
+    const avant = "Utilise les sons\nbinauraux sur une app\ncomme Hustly Focus pour\nbooster ta concentration";
+    expect(retirerMentionConcurrent(avant)).not.toMatch(/une app\s*$/);
+  });
+
+  it("retire la mention en turc", () => {
+    const avant = "binaural sesler dinliyorum\n\nhustly focus uygulamasını kullanıyorum\nyoutube'dakiler işe yaramaz";
+    const apres = retirerMentionConcurrent(avant);
+    expect(apres).toBe("binaural sesler dinliyorum");
+  });
+
+  it("laisse intact un texte sans concurrent", () => {
+    expect(retirerMentionConcurrent("révise 10 minutes par jour")).toBe("révise 10 minutes par jour");
+  });
+
+  it("est idempotente", () => {
+    const une = retirerMentionConcurrent("j'utilise l'app Hustly focus\npour me concentrer");
+    expect(retirerMentionConcurrent(une)).toBe(une);
+  });
+
+  it("est branchée dans nettoyerTexteDeck", () => {
+    expect(nettoyerTexteDeck("Utilise Micabo\nj'utilise l'app Hustly focus", "fr")).not.toMatch(/hustly/i);
   });
 });
