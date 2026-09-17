@@ -144,22 +144,37 @@ begin
   --    et l'écriture restait ouverte — ici elle est fermée pour de bon, et une
   --    slide sans visuel dégrade le post au lieu de perdre la publication.
   --
-  --    `distinct on (position)` : le deck peut porter deux slides de même
-  --    position (positions tantôt number tantôt string en JSONB), ce qui
-  --    violerait unique (post_id, position) et ferait tomber toute la
-  --    transaction sur un 23505 que l'appelant confondrait avec un doublon
-  --    du jour.
+  --    Positions : `->>` puis cast, jamais `->` — le deck les porte tantôt en
+  --    number, tantôt en string. Deux slides de même position, ou une slide
+  --    sans position, signalent un deck malformé : on lève plutôt que de
+  --    dédupliquer en silence, ce qui pourrait faire disparaître le CTA. Le
+  --    23505 sur post_slides ne matche pas `estDoublonContenuJour` (il teste le
+  --    nom de l'index), donc l'appelant repiocherait — mais un message explicite
+  --    vaut mieux qu'une violation de contrainte opaque dans les logs.
+  if exists (
+    select 1 from jsonb_array_elements(p_slides) as s(elem)
+    where s.elem->>'position' is null
+  ) then
+    raise exception 'creer_publication_atomique : slide sans position (contenu=%)', p_contenu_id;
+  end if;
+  if (select count(distinct (s.elem->>'position')::integer)
+        from jsonb_array_elements(p_slides) as s(elem))
+     <> jsonb_array_length(p_slides) then
+    raise exception 'creer_publication_atomique : positions en double dans le deck (contenu=%)',
+      p_contenu_id;
+  end if;
+
   insert into public.post_slides (
     post_id, position, media_id, texte_overlay, position_sophia, reference_url
   )
-  select distinct on (((s.elem->>'position')::integer))
+  select
     v_post_id,
     (s.elem->>'position')::integer,
     m.id,
     coalesce(s.elem->>'texte_overlay', ''),
     coalesce((s.elem->>'position_sophia')::boolean, false),
     v.elem->>'reference_url'
-  from jsonb_array_elements(p_slides) with ordinality as s(elem, ord)
+  from jsonb_array_elements(p_slides) as s(elem)
   left join lateral (
     select ve.elem
     from jsonb_array_elements(coalesce(p_visuels, '[]'::jsonb)) as ve(elem)
@@ -168,8 +183,7 @@ begin
   ) v on true
   left join public.media_library m
     on m.id = nullif(v.elem->>'media_id', '')::uuid
-  where s.elem->>'position' is not null
-  order by ((s.elem->>'position')::integer), s.ord;
+  order by ((s.elem->>'position')::integer);
 
   -- 4) Le lien. Dans la même transaction, donc jamais dissociable des trois
   --    écritures précédentes — c'est tout l'objet de cette fonction.
