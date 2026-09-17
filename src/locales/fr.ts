@@ -665,8 +665,7 @@ export const fr = {
       postsVeilleDesc: "Classement des posts publiés hier par nombre de vues.",
     },
     sources: {
-      skipValidationOn: "File : sautée",
-      skipValidationOff: "File : validation",
+      skipValidation: "Sauter la file de validation",
       skipValidationAide: "Quand c'est « sautée », les slideshows importés de cette source sont validés d'office à la porte du tier — ils rejoignent le pool sans relecture. Sinon ils attendent en file de validation, où ils sont invisibles au moteur.",
       title: "Comptes de référence",
       subtitle:
