@@ -367,21 +367,48 @@ manuel est « prêt » dès qu'il a du texte : sans cette nuance,
 `assurerDeckPourLangue` attendait un `position_sophia` qu'aucun modèle n'allait
 plus poser et retraduisait à chaque passage.
 
-## La marque : « micabo » nu (0260, 0261 puis 0263, 15/09/2026)
+## La marque : « l'appli micabo » (0260 → 0263, puis 0267 le 17/09/2026)
 
-Trois passages sur ce texte en deux jours : 0260 bascule sur « micabo », 0261
-revient au site micabo.app, 0263 rebascule. **L'état qui tient est « micabo »
-nu** : le nom seul, en minuscules même en début de phrase, sans `.app` et sans
-mot de catégorie devant — ni « le site micabo », ni « l'app micabo », ni « la
-plateforme micabo ». Le contexte de la slide fait le reste.
+Quatrième passage sur ce texte : 0260 bascule sur « micabo », 0261 revient au
+site micabo.app, 0263 rebascule sur le nom nu, **0267 ajoute le mot de
+catégorie**.
 
-En turc le cas grammatical s'accole au nom par une apostrophe : micabo'yu,
-micabo'ya, micabo'da, micabo'dan, « micabo ile ». Jamais « sitesi » sous aucune
-forme.
+**L'état courant est « l'appli micabo »** : le nom toujours en minuscules même
+en début de phrase, sans `.app`, mais **précédé du mot de catégorie** — « l'appli
+micabo » ou « l'application micabo ». Le nom nu ne suffit pas : une slide se lit
+en une seconde et ne dit pas ce qu'est micabo. Restent interdits « le site
+micabo » et « la plateforme micabo » : c'est une application mobile.
+
+Par langue : `the micabo app` (en), `la app micabo` (es), `die micabo-App` (de),
+`micabo uygulaması` (tr). Quand la phrase dit déjà « une appli comme micabo », ne
+rien ajouter — la catégorie y est.
+
+**Le turc est le piège.** C'est une langue agglutinante : le cas se collait au
+nom par une apostrophe (micabo'yu, micabo'ya, micabo'da, micabo'dan). En insérant
+`uygulaması` (izafet), **le suffixe de cas migre sur le possessif** :
+
+| avant | après |
+|---|---|
+| micabo'ya yükle | micabo uygulamasına yükle |
+| micabo'yu kullan | micabo uygulamasını kullan |
+| micabo'da test | micabo uygulamasında test |
+| micabo'dan yardım | micabo uygulamasından yardım |
+
+Remplacer bêtement « micabo » par « micabo uygulaması » produirait
+« micabo uygulaması'yu », qui n'existe pas. Les formes suffixées se traitent donc
+AVANT la forme nue. Et la règle de l'accusatif devant `kullan-` a besoin d'un
+garde `(?!\s*uygulama)`, sans quoi elle remord sur sa propre sortie et donne
+« micabo uygulamasını uygulamasını kullan » — le défaut a été pris au test, pas
+en production. Jamais « sitesi » sous aucune forme.
+
+**La règle vit dans une fonction SQL**, `micabo_avec_article(texte, langue)`
+(0267), et non dans une requête jetable : le prochain qui bascule la marque la
+relit, la rejoue à l'identique sur du texte neuf, et voit les cas limites déjà
+traités.
 
 **Avant toute nouvelle bascule, sauvegarder.** 0262 pose
 `micabo_marque_sauvegarde` et y range le texte d'avant sous une étiquette
-(`avant_micabo_nu_2026_09_15`). C'est la leçon des deux premiers aller-retours :
+(`avant_micabo_nu_2026_09_15`, puis `avant_appli_micabo_2026_09_17` : 236 lignes — 130 `contenu_langues`, 47 passages, 49 `post_slides`, 10 prompts). C'est la leçon des deux premiers aller-retours :
 la réécriture **fusionne deux formes en une** — « le site micabo.app » et
 « micabo.app » nu donnent tous deux « micabo » — donc l'inverse ne peut être
 qu'une reconstruction canonique, jamais une restitution. Avec la sauvegarde,
@@ -396,8 +423,13 @@ Deux autres choses apprises, qui valent au-delà de micabo :
   devenait « micabo.app sitesi.app sitesiyle ». Passer par une sentinelle
   (`chr(1)`) et ne rétablir qu'à la fin.
 
-Les decks traduits sont **vidés** à chaque bascule, pas réécrits : ils
-traduisent une source qui vient de changer. `assurerDeckPourLangue` les refait
+0267 fait exception à la règle ci-dessous et **réécrit** les decks au lieu de
+les vider : ajouter un mot de catégorie ne change pas le sens du texte, donc
+payer une retraduction complète n'aurait rien acheté. Les passages et
+`post_slides` NON PUBLIÉS sont réécrits avec ; les publiés, jamais.
+
+Pour une bascule qui change le sens, en revanche, les decks traduits sont
+**vidés**, pas réécrits : ils traduisent une source qui vient de changer. `assurerDeckPourLangue` les refait
 à l'assignation avec le prompt courant. C'est du crédit Gemini, pas du contenu
 perdu — et rien pour les slideshows qui seront rejetés d'ici là.
 
