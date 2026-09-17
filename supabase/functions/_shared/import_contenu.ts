@@ -981,6 +981,24 @@ async function executerPasImport(
         });
       }
 
+      // Source en « saute la file » : le slideshow est validé d'office, ici et
+      // pas plus tôt — c'est le moment où il vient de passer la porte du tier,
+      // donc où on le sait importable.
+      //
+      // Aucun risque de le voir partir inachevé : le tireur exige AUSSI
+      // `import_statut = 'done'`, qui n'arrive qu'à la toute fin du pipeline.
+      // On ne repasse jamais un `rejete` en `valide`.
+      if (contenu.statut !== "valide" && contenu.statut !== "rejete") {
+        const { data: src } = await supabase
+          .from("comptes_reference")
+          .select("skip_validation")
+          .eq("id", contenu.compte_reference_id)
+          .maybeSingle();
+        if (src?.skip_validation) {
+          await marquer(supabase, contenu.id, { statut: "valide" });
+        }
+      }
+
       await assurerLangueSource(supabase, contenu.id, langueSource);
 
       // Sync OCR → deck langue source (toujours, base pour traductions ultérieures).
