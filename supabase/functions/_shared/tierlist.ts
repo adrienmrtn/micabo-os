@@ -89,11 +89,15 @@ export const REPOST_BONUS_JOURS = 7;
 export const MESURE_JOURS = 2;
 /**
  * Passé ce délai, un passage ne comptera jamais : le créateur n'a pas publié,
- * ou le relevé n'a jamais accroché le post. Au-dessus de la fenêtre de scrape
- * (`RATTRAPAGE_JOURS_DEFAUT` = 4 j) pour ne pas condamner un passage qu'on est
- * encore en train de relever.
+ * ou le relevé n'a jamais accroché le post. Doit rester AU-DESSUS de la fenêtre
+ * de scrape (`RATTRAPAGE_JOURS_DEFAUT`) pour ne pas condamner un passage qu'on
+ * est encore en train de relever.
+ *
+ * Passé de 5 à 3 jours le 17/09/2026 : un créneau raté gelait le cycle deux
+ * jours de plus que nécessaire, et c'est le dernier passage non réglé qui
+ * retient toute la requalification.
  */
-export const PASSAGE_PERIME_JOURS = 5;
+export const PASSAGE_PERIME_JOURS = 3;
 /** Cycle qui traîne (passages jamais publiés) : requalification forcée. */
 export const CYCLE_TIMEOUT_JOURS = 14;
 

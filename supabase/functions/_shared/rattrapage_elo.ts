@@ -27,7 +27,7 @@ import { type Supabase } from "./scoring.ts";
 import { aujourdhuiParis } from "./supabase.ts";
 import { qualifierComptes, type QualificationResultat } from "./qualification_comptes.ts";
 
-export const RATTRAPAGE_JOURS_DEFAUT = 4;
+export const RATTRAPAGE_JOURS_DEFAUT = 2;
 
 /**
  * Profil TikTok scrapé, par compte.
