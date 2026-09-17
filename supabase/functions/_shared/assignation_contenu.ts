@@ -6,7 +6,7 @@ import { assurerDeckPourLangue } from "./import_contenu.ts";
 import { estTier, prioriserTiersHauts, type Tier } from "./tierlist.ts";
 import { LOT_IDS, lireParLots } from "./lots.ts";
 import { mapPool } from "./parallel.ts";
-import { serviceClient } from "./supabase.ts";
+import { serviceClient, messageErreur } from "./supabase.ts";
 import { extraireLabelsAssignables } from "./labels_systeme.ts";
 import { messagePool, type EtatPoolCompte } from "./quota_pool.ts";
 import {
@@ -16,6 +16,7 @@ import {
 import {
   estDoublonContenuJour,
   estErreurQuotaPostsJour,
+  estPanneRpc,
   manquantsJusquaQuota,
   quotaPostsParJour,
 } from "./assignation_quota.ts";
@@ -287,7 +288,9 @@ export async function assignerCompteJour(
       const bonus = await assignerRepostsBonusDuJour(supabase, compte.id as string, jour, log);
       if (bonus.length > 0) log(`${bonus.length} repost(s) bonus assigné(s)`);
     } catch (e) {
-      log(`Reposts bonus ignorés : ${e instanceof Error ? e.message : String(e)}`);
+      // L'erreur d'un .rpc() est un objet PostgrestError, pas une Error :
+      // `String(e)` donnerait « [object Object] ».
+      log(`Reposts bonus ignorés : ${messageErreur(e)}`);
     }
   }
 
@@ -404,42 +407,14 @@ export async function assignerCompteJour(
     // Hashtags issus de la traduction si dispo, sinon jeu localisé de repli.
     const hashtags = hashtagsDeck || hashtagsPour(langue, `${compte.id}-${jour}-${crees.length}`);
 
-    const { data: passage, error } = await supabase
-      .from("passages")
-      .insert({
-        contenu_id: choisi.contenuId,
-        compte_id: compte.id,
-        langue,
-        date_publication_prevue: jour,
-        statut: "assigne",
-        slides,
-        musique_url: choisi.musique_url,
-        musique_titre: choisi.musique_titre,
-        musique_plateforme: choisi.musique_plateforme,
-        hashtags,
-      })
-      .select("id")
-      .single();
-    if (error) {
-      // Course perdue : un autre worker a posé ce slideshow sur ce compte
-      // aujourd'hui pendant qu'on fabriquait le deck. `contenusSession` le
-      // porte déjà, la tentative suivante en piochera un autre.
-      if (estDoublonContenuJour(error)) {
-        log(`Doublon du jour évité (course) — ${choisi.contenuId.slice(0, 8)} déjà posé`);
-        continue;
-      }
-      throw error;
-    }
-
-    // Pont poster : le calendrier / détail créateur lit encore `posts` +
-    // `post_slides`. On matérialise un post déjà cuit (pipeline done) et on
-    // le lie via passages.post_id — plus de type recycle/remanie/nouveau.
-    let postId: string;
+    // Passage + post + post_slides + lien : une seule transaction (0265). Un
+    // process tué en cours de route ne laisse plus rien derrière lui.
+    let creation: { passage_id: string; post_id: string };
     try {
-      postId = await materialiserPostDepuisPassage(supabase, {
-        passageId: passage.id,
+      creation = await creerPublicationAtomique(supabase, {
         compteId: compte.id as string,
         contenuId: choisi.contenuId,
+        langue,
         jour,
         slides,
         musique_url: choisi.musique_url,
@@ -449,17 +424,30 @@ export async function assignerCompteJour(
         estTest,
       });
     } catch (e) {
-      // Pas de transaction multi-tables : nettoyer le passage pour ne pas
-      // bloquer le quota, puis piocher un autre contenu.
-      log(`Matérialisation échouée : ${e instanceof Error ? e.message : String(e)}`);
-      await supabase.from("passages").delete().eq("id", passage.id);
+      // Trois issues distinctes, reconnues au SQLSTATE et au texte — c'est
+      // pour ça que la fonction SQL ne rattrape rien.
+      if (estDoublonContenuJour(e)) {
+        // Course perdue : un autre worker a posé ce slideshow sur ce compte
+        // aujourd'hui pendant qu'on fabriquait le deck. `contenusSession` le
+        // porte déjà, la tentative suivante en piochera un autre.
+        log(`Doublon du jour évité (course) — ${choisi.contenuId.slice(0, 8)} déjà posé`);
+        continue;
+      }
       if (estErreurQuotaPostsJour(e)) {
         log("Quota déjà rempli (course SQL) — stop");
         break;
       }
+      // Panne d'infrastructure (fonction absente du cache PostgREST, schéma
+      // désynchronisé…) : elle se reproduira à chaque tentative. L'ancien code
+      // faisait `throw` sur l'échec du passage ; sans ça, on brûlerait
+      // `manquants + 8` decks — donc autant d'appels de traduction — avant
+      // d'abandonner, et le diagnostic accuserait la traduction à tort.
+      if (estPanneRpc(e)) throw e;
+      log(`Création échouée : ${messageErreur(e)}`);
       echecsDeck += 1;
       continue;
     }
+    const postId = creation.post_id;
     log(`Post ${postId.slice(0, 8)} créé`);
 
     // UGC AI : swap Nano Banana sur slides à visage (hors upscale ensuite).
@@ -480,7 +468,7 @@ export async function assignerCompteJour(
       }
     }
 
-    crees.push(passage.id);
+    crees.push(creation.passage_id);
     log(`Passage ${crees.length}/${manquants} prêt`);
   }
 
@@ -602,20 +590,24 @@ interface SlideLangue {
 }
 
 /**
- * Crée le `posts` + `post_slides` que le poster consomme, liés au passage.
- * Deck déjà traduit + Sophia (assurerDeckPourLangue) → pipeline_statut = done.
+ * Crée une publication complète : passage + post + post_slides + lien, en UNE
+ * transaction côté Postgres (`creer_publication_atomique`, 0265).
  *
- * Important : un `media_id` fantôme (média supprimé) faisait échouer l'INSERT
- * `post_slides` (FK) après création du post — passage orphelin + post vide.
- * On nullifie les médias absents, et on rollback le post si les slides
- * n'ont pas pu être écrites.
+ * Ici on ne fait plus que des LECTURES avant l'appel : le contenu (pour
+ * `sujet_id` et `structure_slides`) et la résolution des visuels. Les quatre
+ * écritures partent ensemble. Un process tué — l'Edge coupe à 150 s — ne laisse
+ * donc plus de post orphelin derrière lui.
+ *
+ * La fonction SQL ne rattrape aucune exception, volontairement : l'appelant
+ * distingue trois issues au SQLSTATE et au texte (doublon du jour → repiocher,
+ * quota plein → arrêter, le reste → échec de deck).
  */
-async function materialiserPostDepuisPassage(
+async function creerPublicationAtomique(
   supabase: Supabase,
   args: {
-    passageId: string;
     compteId: string;
     contenuId: string;
+    langue: string;
     jour: string;
     slides: SlideLangue[];
     musique_url: string | null;
@@ -623,8 +615,10 @@ async function materialiserPostDepuisPassage(
     musique_plateforme: string | null;
     hashtags: string;
     estTest?: boolean;
+    bonusRepost?: boolean;
+    repostBonusId?: string;
   },
-): Promise<string> {
+): Promise<{ passage_id: string; post_id: string }> {
   const { data: contenu, error: errC } = await supabase
     .from("contenus")
     .select("id, sujet_id, structure_slides, titre")
@@ -661,73 +655,50 @@ async function materialiserPostDepuisPassage(
     );
   }
 
-  const mediaIds = [
-    ...new Set(
-      [...mediaResolus.values(), ...structure.map((s) => s.media_id)]
-        .filter((id): id is string => typeof id === "string" && id.length > 0),
-    ),
-  ];
-  const mediaOk = new Set<string>();
-  if (mediaIds.length > 0) {
-    const { data: existants } = await supabase
-      .from("media_library")
-      .select("id")
-      .in("id", mediaIds);
-    for (const m of existants ?? []) mediaOk.add(m.id as string);
-  }
-
-  const { data: post, error: errP } = await supabase
-    .from("posts")
-    .insert({
-      compte_id: args.compteId,
-      sujet_id: contenu.sujet_id ?? null,
-      type: "contenu",
-      statut: "assigne",
-      date_publication_prevue: args.jour,
-      musique_url: args.musique_url,
-      musique_titre: args.musique_titre,
-      musique_plateforme: args.musique_plateforme,
-      hashtags: args.hashtags,
-      pipeline_statut: "done",
-      pipeline_etape: null,
-      pipeline_erreur: null,
-      est_test: Boolean(args.estTest),
-    })
-    .select("id")
-    .single();
-  if (errP || !post) throw errP ?? new Error("Création post pont échouée");
-
-  const rows = args.slides.map((s) => {
-    const visuel = parPos.get(Number(s.position));
-    const mid = mediaResolus.get(Number(s.position)) ?? visuel?.media_id ?? null;
+  // Un visuel par position. Plus de pré-vérification d'existence en TS : la
+  // fonction SQL fait un `left join media_library` et écrit NULL si le média a
+  // disparu. La fenêtre entre la lecture et l'écriture, qui laissait passer une
+  // FK violée, est fermée pour de bon.
+  const visuels = args.slides.map((s) => {
+    const position = Number(s.position);
+    const visuel = parPos.get(position);
     return {
-      post_id: post.id,
-      position: Number(s.position),
-      media_id: mid && mediaOk.has(mid) ? mid : null,
-      texte_overlay: s.texte_overlay ?? "",
-      position_sophia: Boolean(s.position_sophia),
+      position,
+      media_id: mediaResolus.get(position) ?? visuel?.media_id ?? null,
       reference_url: visuel?.reference_url ?? visuel?.raw_url ?? null,
     };
   });
 
-  const { error: errS } = await supabase.from("post_slides").insert(rows);
-  if (errS) {
-    await supabase.from("posts").delete().eq("id", post.id);
-    throw errS;
-  }
+  const { data, error } = await supabase.rpc("creer_publication_atomique", {
+    p_compte_id: args.compteId,
+    p_contenu_id: args.contenuId,
+    p_langue: args.langue,
+    p_jour: args.jour,
+    p_slides: args.slides.map((s) => ({
+      position: Number(s.position),
+      texte_overlay: s.texte_overlay ?? "",
+      position_sophia: Boolean(s.position_sophia),
+    })),
+    p_visuels: visuels,
+    p_visuels_resolution: visuelsLogs,
+    p_sujet_id: contenu.sujet_id ?? null,
+    p_musique_url: args.musique_url,
+    p_musique_titre: args.musique_titre,
+    p_musique_plateforme: args.musique_plateforme,
+    p_hashtags: args.hashtags,
+    p_est_test: Boolean(args.estTest),
+    p_bonus_repost: Boolean(args.bonusRepost),
+    p_repost_bonus_id: args.repostBonusId ?? null,
+  });
+  // On jette l'objet d'erreur TEL QUEL : `estDoublonContenuJour` exige
+  // `code === "23505"`, que `new Error(error.message)` perdrait.
+  if (error) throw error;
 
-  const { error: errL } = await supabase
-    .from("passages")
-    .update({
-      post_id: post.id,
-      visuels_resolution: visuelsLogs,
-    })
-    .eq("id", args.passageId);
-  if (errL) {
-    await supabase.from("posts").delete().eq("id", post.id);
-    throw errL;
+  const res = data as { passage_id?: string; post_id?: string } | null;
+  if (!res?.passage_id || !res?.post_id) {
+    throw new Error("creer_publication_atomique n'a rien renvoyé");
   }
-  return post.id as string;
+  return { passage_id: res.passage_id, post_id: res.post_id };
 }
 
 /**
@@ -778,56 +749,36 @@ export async function assignerRepostsBonusDuJour(
     }
 
     const langue = (source.langue as string) ?? (repost.langue as string);
-    const { data: passage, error: errP } = await supabase
-      .from("passages")
-      .insert({
-        contenu_id: repost.contenu_id,
-        compte_id: compteId,
-        langue,
-        date_publication_prevue: jour,
-        statut: "assigne",
-        slides,
-        musique_url: source.musique_url,
-        musique_titre: source.musique_titre,
-        musique_plateforme: source.musique_plateforme,
-        hashtags: source.hashtags,
-        bonus_repost: true,
-      })
-      .select("id")
-      .single();
-    if (errP || !passage) {
-      log(`Repost bonus échoué : ${errP?.message ?? "insert passage"}`);
-      continue;
-    }
-
+    // `p_repost_bonus_id` solde `reposts_bonus` DANS la transaction : sinon une
+    // mort entre le commit et la mise à jour laissait le repost en « prevu »,
+    // et il repartait le lendemain — l'index anti-doublon du jour ne le
+    // rattrape pas, il exclut les reposts bonus.
+    let creation: { passage_id: string; post_id: string };
     try {
-      await materialiserPostDepuisPassage(supabase, {
-        passageId: passage.id,
+      creation = await creerPublicationAtomique(supabase, {
         compteId,
         contenuId: repost.contenu_id as string,
+        langue,
         jour,
         slides,
-        musique_url: source.musique_url,
-        musique_titre: source.musique_titre,
-        musique_plateforme: source.musique_plateforme,
+        musique_url: source.musique_url as string | null,
+        musique_titre: source.musique_titre as string | null,
+        musique_plateforme: source.musique_plateforme as string | null,
         hashtags: (source.hashtags as string | null) ?? "",
         estTest: false,
+        bonusRepost: true,
+        repostBonusId: repost.id as string,
       });
     } catch (e) {
-      await supabase.from("passages").delete().eq("id", passage.id);
       if (estErreurQuotaPostsJour(e)) {
         log("Repost bonus : quota du jour déjà plein — reporté");
         break;
       }
-      log(`Repost bonus non matérialisé : ${e instanceof Error ? e.message : String(e)}`);
+      log(`Repost bonus non matérialisé : ${messageErreur(e)}`);
       continue;
     }
 
-    await supabase
-      .from("reposts_bonus")
-      .update({ statut: "fait", passage_id: passage.id })
-      .eq("id", repost.id);
-    crees.push(passage.id);
+    crees.push(creation.passage_id);
     log(
       `Repost bonus J+7 (${repost.vues_declencheur ?? "?"} vues) — slideshow ` +
         `${String(repost.contenu_id).slice(0, 8)} rejoué à l'identique`,

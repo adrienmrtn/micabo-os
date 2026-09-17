@@ -36,7 +36,8 @@ feed d’un label dans `src/features/moteur/promptsFeed.ts`.
 ## Tierlist des slideshows (0250, en prod depuis le 11/09/2026)
 
 Un slideshow porte **un tier** (`contenus.tier` : D, C, B, A, S, S+) et un
-nombre de passages à effectuer (`passages_cible` : 0/1/2/4/8/16). Il n'y a plus
+nombre de passages à effectuer (`passages_cible` : 0/1/1/2/4/8, divisé par deux
+le 17/09/2026). Il n'y a plus
 d'ELO par langue — `contenu_langues.score` est **gelé** (historique) et n'est
 plus lu par le moteur.
 
@@ -101,9 +102,9 @@ barre des 1 000 vues, C → B) peut tomber un cran plus bas qu'avec l'ancien
 délai. Les bandes n'ont pas été retouchées.
 
 Ce qui n'a **pas** changé : le timeout 14 jours, les
-bandes, et le tirage — un S+ à 16 passages met toujours 16 fois plus longtemps
-à remplir son cycle qu'un C à 1, puisque le tirage est uniforme *par slideshow*
-et non *par passage dû*.
+bandes, et le tirage — un S+ met toujours plus longtemps à remplir son cycle
+qu'un C, puisque le tirage est uniforme *par slideshow* et non *par passage dû*
+(l'écart est passé de 16× à 8× le 17/09, en divisant les quotas par deux).
 
 ## Posts orphelins et doublon du jour (0264, 17/09/2026)
 

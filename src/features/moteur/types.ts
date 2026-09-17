@@ -29,6 +29,11 @@ export interface CompteReference {
   /** Ordre d'assignation PAR LANGUE : { fr: 2, de: 1, … } (l'emporte sur le global). */
   ordre_par_langue: Record<string, number>;
   is_active: boolean;
+  /**
+   * `true` = les slideshows importés de cette source sont validés d'office à la
+   * porte du tier, sans passer par la file de validation.
+   */
+  skip_validation: boolean;
   dernier_scrape_at: string | null;
   created_at: string;
 }

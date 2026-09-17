@@ -561,6 +561,10 @@ function LigneSource({
     mutationFn: () => majSource(source.id, { is_active: !source.is_active }),
     onSuccess: rafraichir,
   });
+  const basculerFile = useMutation({
+    mutationFn: () => majSource(source.id, { skip_validation: !source.skip_validation }),
+    onSuccess: rafraichir,
+  });
   const changerGenre = useMutation({
     mutationFn: (g: "homme" | "femme") => majSource(source.id, { genre: g }),
     onSuccess: rafraichir,
@@ -663,6 +667,17 @@ function LigneSource({
           />
           <Button size="sm" variant="outline" onClick={() => basculer.mutate()}>
             {source.is_active ? t("sources.deactivate") : t("sources.activate")}
+          </Button>
+          <Button
+            size="sm"
+            variant={source.skip_validation ? "default" : "outline"}
+            disabled={basculerFile.isPending}
+            title={t("sources.skipValidationAide")}
+            onClick={() => basculerFile.mutate()}
+          >
+            {source.skip_validation
+              ? t("sources.skipValidationOn")
+              : t("sources.skipValidationOff")}
           </Button>
           <Button
             size="sm"
