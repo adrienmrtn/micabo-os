@@ -106,7 +106,103 @@ export function retirerTiretsLongs(texte: string): string {
     .replace(/,\s*,/g, ",");
 }
 
-/** Les deux passes, dans l'ordre : c'est ce qu'on applique à un deck source. */
+
+/**
+ * Marques concurrentes à ne jamais laisser passer dans une slide.
+ *
+ * Le 17/09/2026 on a trouvé « Hustly Focus » dans 14 slideshows source, 23 decks
+ * traduits et 22 passages : les TikTok d'origine portaient un placement payé
+ * pour cette app, et le pipeline l'a republié tel quel. Un compte micabo faisait
+ * donc la publicité argumentée d'un concurrent — slide entière, avec témoignage.
+ *
+ * Le prompt de traduction l'interdit depuis toujours (« aucune mention d'un
+ * produit tiers »), mais un deck en LANGUE SOURCE ne traverse pas le
+ * traducteur : rien ne l'attrapait. D'où ce filtre, purement mécanique.
+ *
+ * Liste volontairement COURTE. `placement_micabo` en connaît beaucoup d'autres
+ * (Anki, Quizlet, Notion…), mais lui les REMPLACE par micabo dans une slide
+ * choisie, ce qui est un travail de rédaction. Ici on coupe à l'aveugle : une
+ * coupe automatique sur « Anki » détruirait des comparatifs légitimes. On
+ * n'ajoute un nom ici que s'il ne doit JAMAIS apparaître, sous aucune forme.
+ */
+export const CONCURRENTS_INTERDITS = ["hustly"];
+
+/** Amorces qui introduisent une app : orphelines après la coupe, elles partent. */
+const AMORCE = /((l'|une |la |una |the )?app(li|lication)?s?|uygulama(sını|yla)?|comme)\s*$/i;
+
+/**
+ * Retire la PHRASE qui nomme un concurrent, pas seulement son nom.
+ *
+ * Effacer le seul nom est pire que de ne rien faire : le texte des slides est
+ * découpé en lignes courtes et la mention traverse les retours à la ligne.
+ *
+ *   "J'utilise l'appli Hustly\nFocus, ceux sur YouTube\nne servent à rien"
+ *
+ * Le nom retiré, il reste « Focus, ceux sur YouTube ne servent à rien » : une
+ * recommandation qui ne dit même plus de quoi. On coupe donc la phrase entière.
+ *
+ * Trois passes, dans cet ordre — chacune existe à cause d'un cas réel du corpus :
+ *  1. intra-ligne, parce qu'une slide tient parfois sur UNE ligne de plusieurs
+ *     phrases (le cas espagnol « Burbuja de concentración… ») ;
+ *  2. ligne à ligne, avec repli sans remontée si la slide se viderait (sept
+ *     slides françaises n'ont aucune ponctuation et la remontée avalait tout) ;
+ *  3. retrait de l'amorce restée en suspens (« … je vous conseille l'app »).
+ *
+ * Miroir de la fonction SQL `retirer_mention_concurrent` (0269), qui a servi à
+ * reprendre le stock. Les deux doivent rester d'accord.
+ */
+export function retirerMentionConcurrent(
+  texte: string,
+  marques: string[] = CONCURRENTS_INTERDITS,
+): string {
+  if (!texte) return texte;
+  const vise = (l: string) => marques.some((m) => l.toLowerCase().includes(m));
+  if (!vise(texte)) return texte;
+
+  // 1 — intra-ligne.
+  const lignes = texte.split("\n").map((l) => {
+    if (!vise(l)) return l;
+    const phrases = l.split(/(?<=[.!?])\s+/);
+    return phrases.length > 1 ? phrases.filter((p) => !vise(p)).join(" ").trim() : l;
+  });
+  if (!vise(lignes.join("\n"))) return lignes.join("\n").trim();
+
+  // 2 — ligne à ligne, avec repli.
+  let res = "";
+  for (const remonter of [true, false]) {
+    const src = lignes;
+    const garder = src.map(() => true);
+    for (let i = 0; i < src.length; i += 1) {
+      if (!vise(src[i]!)) continue;
+      let j = i;
+      if (remonter) {
+        while (j > 0 && src[j - 1]!.trim() !== "" && !/[.!?:)»"]$/.test(src[j - 1]!.trim()) &&
+               !src[j - 1]!.includes("=")) j -= 1;
+      }
+      let k = i;
+      while (k < src.length - 1 && !/[.!?]$/.test(src[k]!.trim()) && src[k + 1]!.trim() !== "") k += 1;
+      for (let x = j; x <= k; x += 1) garder[x] = false;
+    }
+    const gardees: string[] = [];
+    for (let i = 0; i < src.length; i += 1) {
+      if (!garder[i]) continue;
+      if (src[i]!.trim() === "" && gardees.length > 0 && gardees[gardees.length - 1]!.trim() === "") continue;
+      gardees.push(src[i]!);
+    }
+    res = gardees.join("\n").trim();
+    if (res !== "") break;
+  }
+
+  // 3 — amorce en suspens.
+  while (AMORCE.test(res)) {
+    const coupe = res.lastIndexOf("\n");
+    res = coupe === -1 ? "" : res.slice(0, coupe).trim();
+    if (res === "") break;
+  }
+  return res;
+}
+
+/** Les trois passes, dans l'ordre : c'est ce qu'on applique à un deck source. */
 export function nettoyerTexteDeck(texte: string, langue: string): string {
-  return normaliserMarque(retirerTiretsLongs(texte), langue);
+  return normaliserMarque(retirerTiretsLongs(retirerMentionConcurrent(texte)), langue);
 }
