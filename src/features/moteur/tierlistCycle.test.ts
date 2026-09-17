@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   bilanCycle,
+  CYCLE_TIMEOUT_JOURS,
   jourRepostBonus,
   MESURE_JOURS,
   PASSAGE_PERIME_JOURS,
+  RATTRAPAGE_JOURS_DEFAUT,
   passageMesure,
   passagePerime,
   passageRegle,
@@ -139,5 +141,33 @@ describe("bilanCycle", () => {
     expect(b.clos).toBe(true);
     expect(b.mesures).toBe(3);
     expect(b.m).toBe(2_000);
+  });
+});
+
+/**
+ * Ces trois constantes ne sont pas indépendantes, et le vérifier coûte moins
+ * cher que de s'en apercevoir sur la tierlist.
+ *
+ * Le 17/09/2026, descendre la fenêtre de scrape à 2 jours en gardant
+ * MESURE_JOURS = 2 aurait fait lire, à J+2, une valeur de vues figée à J+1 : le
+ * post sort de la fenêtre de relevé avant d'être mesuré. Sur la courbe du
+ * projet (médianes 1 073 à J+1 contre 1 491 à J+2) c'est ~72 % du réel, et la
+ * bande C/B étant à 1 000 vues pile, tout ce qui vit entre 1 000 et 1 491
+ * basculait en C — le palier dont `prioriserTiersHauts` ne fait jamais
+ * remonter personne.
+ */
+describe("invariants des délais", () => {
+  it("relève encore le post au moment où on le mesure", () => {
+    // Sinon `vues` est figé avant l'échéance de mesure : on juge sur du vieux.
+    expect(RATTRAPAGE_JOURS_DEFAUT).toBeGreaterThan(MESURE_JOURS);
+  });
+
+  it("ne périme pas un passage qu'on est encore en train de relever", () => {
+    expect(PASSAGE_PERIME_JOURS).toBeGreaterThan(RATTRAPAGE_JOURS_DEFAUT);
+  });
+
+  it("laisse le timeout de cycle au-dessus de tout le reste", () => {
+    // Le filet des cycles qui traînent doit rester le dernier recours.
+    expect(CYCLE_TIMEOUT_JOURS).toBeGreaterThan(PASSAGE_PERIME_JOURS);
   });
 });

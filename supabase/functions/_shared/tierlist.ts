@@ -82,9 +82,10 @@ export const REPOST_BONUS_JOURS = 7;
  * de J+4 à J+6. À J+2 on tient déjà ~96 % du plateau — le troisième jour
  * n'achetait presque rien et coûtait un jour sur chaque cycle.
  *
- * Deux garde-fous tiennent toujours : la fenêtre de scrape fait 4 jours
- * (`RATTRAPAGE_JOURS_DEFAUT`) et la deuxième passe de 13:00 Paris voit chaque
- * passage deux fois avant l'échéance.
+ * Deux garde-fous tiennent toujours : la fenêtre de scrape reste strictement
+ * au-dessus (`RATTRAPAGE_JOURS_DEFAUT`, 3 j depuis le 17/09), donc le post est
+ * encore relevé quand on le mesure, et la deuxième passe de 13:00 Paris voit
+ * chaque passage deux fois avant l'échéance.
  */
 export const MESURE_JOURS = 2;
 /**
@@ -93,11 +94,27 @@ export const MESURE_JOURS = 2;
  * de scrape (`RATTRAPAGE_JOURS_DEFAUT`) pour ne pas condamner un passage qu'on
  * est encore en train de relever.
  *
- * Passé de 5 à 3 jours le 17/09/2026 : un créneau raté gelait le cycle deux
- * jours de plus que nécessaire, et c'est le dernier passage non réglé qui
- * retient toute la requalification.
+ * Passé de 5 à 4 jours le 17/09/2026, en même temps que la fenêtre de scrape
+ * (4 -> 3) : un créneau raté gelait le cycle un jour de plus que nécessaire, et
+ * c'est le dernier passage non réglé qui retient toute la requalification.
+ *
+ * Descendre plus bas exigerait de toucher aussi à MESURE_JOURS. Les trois
+ * constantes sont liées : fenêtre > mesure (le relevé doit encore couvrir le
+ * post quand on lit ses vues) et péremption > fenêtre. À 4/3/2 les deux
+ * tiennent ; à 3/2/2 la première saute et l'on mesurerait à J+2 un chiffre figé
+ * à J+1 — ~72 % du réel sur la courbe du projet, de quoi faire basculer en C
+ * tout ce qui vit entre 1 000 et 1 491 vues.
  */
-export const PASSAGE_PERIME_JOURS = 3;
+export const PASSAGE_PERIME_JOURS = 4;
+/**
+ * Profondeur par défaut du relevé de vues, en jours (aujourd'hui compris).
+ *
+ * Vit ici, et pas dans `rattrapage_elo.ts`, parce qu'elle n'est pas un réglage
+ * du relevé : c'est le troisième terme d'un trio ordonné —
+ * `MESURE_JOURS < RATTRAPAGE_JOURS_DEFAUT < PASSAGE_PERIME_JOURS`. Séparées,
+ * ces constantes se sont désynchronisées sans que rien ne le signale.
+ */
+export const RATTRAPAGE_JOURS_DEFAUT = 3;
 /** Cycle qui traîne (passages jamais publiés) : requalification forcée. */
 export const CYCLE_TIMEOUT_JOURS = 14;
 
