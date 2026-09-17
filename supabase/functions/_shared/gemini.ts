@@ -340,6 +340,11 @@ Ce slideshow contient déjà un appel à l'action micabo, écrit à la main${
 - Traduis la phrase qui le porte comme le reste, naturellement en ${langue}.
 - Mais garde « micabo » **exactement** ainsi : jamais traduit, jamais
   transcrit dans un autre alphabet, jamais coupé, et jamais suivi de « .app ».
+- PRÉCISE que c'est une application, dans la langue cible : « l'appli micabo »,
+  « the micabo app », « la app micabo », « micabo uygulaması »… Jamais le nom nu.
+  En turc, le suffixe de cas se pose sur le possessif (micabo uygulamasını), pas
+  sur le nom. Si la phrase source dit déjà « une appli comme micabo », n'ajoute
+  rien : la catégorie y est déjà.
 - Ne le déplace pas sur une autre slide, n'en ajoute pas un deuxième, et n'en
   invente pas un là où il n'y en a pas.`
       : ""
@@ -526,9 +531,9 @@ Ne remplace jamais la slide 1 (couverture). Le placement de ${input.marque === "
 UNIQUEMENT : ${autoriseesTxt}. Écris 3 variantes qui remplacent son texte.
 Chaque variante DOIT :
 ${input.marque === "micabo"
-    ? `- MENTION DE micabo (toujours en minuscules, le nom SEUL) selon le TON des slides, sans formule publicitaire. micabo est une APPLICATION MOBILE : ne l'appelle jamais un site, mais n'écris pas non plus « l'app micabo » — le nom seul suffit. INTERDIT : « micabo.app », « le site micabo », « la plateforme micabo ».${
+    ? `- MENTION DE micabo (toujours en minuscules) selon le TON des slides, sans formule publicitaire. micabo est une APPLICATION MOBILE, et il faut TOUJOURS le préciser : écris « l'appli micabo » ou « l'application micabo », jamais le nom nu — une slide se lit en une seconde et ne dit pas ce qu'est micabo, c'est le mot de catégorie qui fait ce travail. INTERDIT : « micabo.app », « le site micabo », « la plateforme micabo ».${
         code === "tr"
-          ? `\n- TURC : « micabo » seul, avec le suffixe de cas accolé par une apostrophe quand la phrase l'exige : micabo'yu, micabo'ya, micabo'da, micabo'dan, ou « micabo ile ». INTERDIT : « micabo.app », le mot « site » / « sitesi » sous toutes ses formes, et « indir / App Store » en formule publicitaire.`
+          ? `\n- TURC : « micabo uygulaması » (izafet), jamais le nom nu. Le suffixe de cas se pose sur le POSSESSIF, pas sur le nom : micabo uygulamasını, micabo uygulamasına, micabo uygulamasında, micabo uygulamasından, ou « micabo uygulaması ile ». Jamais « micabo'yu » seul, et jamais « micabo uygulaması'yu », qui n'existe pas. INTERDIT : « micabo.app », le mot « site » / « sitesi » sous toutes ses formes, et « indir / App Store » en formule publicitaire.`
           : ""
       }`
     : `- MENTION DE SOPHIA selon le TON des slides : si elles TUTOIENT (2e personne du

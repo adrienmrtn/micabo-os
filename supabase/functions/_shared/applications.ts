@@ -54,20 +54,20 @@ export function clePromptPlacement(slug: string | null | undefined): string {
 
 export function placementParDefaut(langue: string, slug = SLUG_MICABO): string {
   const par: Record<string, string> = {
-    fr: "transforme tes cours en flashcards et révise 10 minutes par jour. micabo est top pour ça, il les crée à partir de tes notes.",
-    en: "turn your notes into flashcards and review 10 minutes a day. micabo is great for that, it builds them from your notes.",
-    de: "mach aus deinen notizen flashcards und wiederhole 10 minuten am tag. micabo ist super dafür, es erstellt sie aus deinen unterlagen.",
-    es: "pasa tus apuntes a flashcards y repasa 10 minutos al día. micabo va genial para eso, las crea desde tus notas.",
-    it: "trasforma i tuoi appunti in flashcards e ripassa 10 minuti al giorno. micabo è top per questo, le crea dalle tue note.",
-    pt: "transforma as tuas notas em flashcards e revê 10 minutos por dia. o micabo é ótimo para isso, cria-as a partir das tuas notas.",
-    cs: "proměň poznámky ve flashcards a opakuj 10 minut denně. micabo je na to ideální, vytvoří je z tvých zápisků.",
-    nl: "zet je notities om in flashcards en herhaal 10 minuten per dag. micabo is daar top voor, het maakt ze van je notities.",
-    el: "μετέτρεψε τις σημειώσεις σου σε flashcards και επανάλαβε 10 λεπτά τη μέρα. το micabo είναι ιδανικό γι' αυτό.",
-    hu: "alakítsd a jegyzeteid flashcardokká, és ismételj napi 10 percet. a micabo pont erre jó.",
-    pl: "zamień notatki we flashcards i powtarzaj 10 minut dziennie. micabo jest do tego super.",
-    ro: "transformă-ți notițele în flashcards și repetă 10 minute pe zi. micabo e top pentru asta.",
-    sv: "gör flashcards av anteckningarna och repetera 10 minuter om dagen. micabo är toppen för det.",
-    tr: "notlarını flashcard'a çevir, günde 10 dakika tekrarla. micabo tam bunun için.",
+    fr: "transforme tes cours en flashcards et révise 10 minutes par jour. l'appli micabo est top pour ça, elle les crée à partir de tes notes.",
+    en: "turn your notes into flashcards and review 10 minutes a day. the micabo app is great for that, it builds them from your notes.",
+    de: "mach aus deinen notizen flashcards und wiederhole 10 minuten am tag. die micabo-App ist super dafür, sie erstellt sie aus deinen unterlagen.",
+    es: "pasa tus apuntes a flashcards y repasa 10 minutos al día. la app micabo va genial para eso, las crea desde tus notas.",
+    it: "trasforma i tuoi appunti in flashcards e ripassa 10 minuti al giorno. l'app micabo è top per questo, le crea dalle tue note.",
+    pt: "transforma as tuas notas em flashcards e revê 10 minutos por dia. a app micabo é ótima para isso, cria-as a partir das tuas notas.",
+    cs: "proměň poznámky ve flashcards a opakuj 10 minut denně. aplikace micabo je na to ideální, vytvoří je z tvých zápisků.",
+    nl: "zet je notities om in flashcards en herhaal 10 minuten per dag. de micabo-app is daar top voor, hij maakt ze van je notities.",
+    el: "μετέτρεψε τις σημειώσεις σου σε flashcards και επανάλαβε 10 λεπτά τη μέρα. η εφαρμογή micabo είναι ιδανική γι' αυτό.",
+    hu: "alakítsd a jegyzeteid flashcardokká, és ismételj napi 10 percet. a micabo alkalmazás pont erre jó.",
+    pl: "zamień notatki we flashcards i powtarzaj 10 minut dziennie. aplikacja micabo jest do tego super.",
+    ro: "transformă-ți notițele în flashcards și repetă 10 minute pe zi. aplicația micabo e top pentru asta.",
+    sv: "gör flashcards av anteckningarna och repetera 10 minuter om dagen. micabo-appen är toppen för det.",
+    tr: "notlarını flashcard'a çevir, günde 10 dakika tekrarla. micabo uygulaması tam bunun için.",
   };
   if (slug && slug !== SLUG_MICABO) {
     return par[langue] ?? par.en;
