@@ -292,6 +292,59 @@ export function normaliserHashtags(brut: string): string {
   return tags.join(" ");
 }
 
+/**
+ * Hashtags seuls, sans toucher au texte.
+ *
+ * Un deck en LANGUE SOURCE ne passe pas par `translateSlideshow` — c'est tout
+ * l'intérêt : son texte est natif et performe mieux que du traduit. Mais les
+ * hashtags naissaient DANS cette traduction, donc ces decks n'en avaient
+ * aucun : au 17/09/2026, 133 decks sur 206 (86 anglais et 47 français), qui
+ * retombaient tous sur le pool statique de `assignation_contenu.ts`.
+ *
+ * On demande donc les hashtags à part. L'appel est court (pas de deck à
+ * réécrire) et le résultat est rangé dans `contenu_langues.hashtags`, donc payé
+ * une seule fois par slideshow et par langue.
+ */
+export async function genererHashtags(input: {
+  slides: Array<{ position: number; texte: string }>;
+  sourceTitle: string;
+  langue?: string;
+}): Promise<string> {
+  const code = input.langue ?? "fr";
+  const langue = LANGUES[code] ?? code;
+  const deck = input.slides
+    .filter((s) => s.texte.trim())
+    .map((s) => `Slide ${s.position} : "${s.texte}"`)
+    .join("\n");
+  if (!deck) return "";
+
+  const prompt = `LANGUE DE SORTIE : ${langue.toUpperCase()}.
+
+Voici un slideshow TikTok éducatif. Tu ne dois RIEN traduire ni réécrire : tu
+produis seulement sa légende.
+
+Titre / légende d'origine (souvent des hashtags) : ${input.sourceTitle || "(aucun)"}
+
+${deck}
+
+Produis EXACTEMENT 3 hashtags en ${langue} :
+- ils collent au sujet PRÉCIS de ces slides, jamais une liste générique ;
+- si la légende d'origine contient des hashtags, adapte-les naturellement en
+  ${langue} (équivalents locaux, pas de calque mot-à-mot) ;
+- style TikTok natif : un seul mot par tag, préfixe #, pas d'emoji, pas de
+  phrase, pas de #fyp ni #pourtoi ni équivalent attrape-tout.
+
+Réponds uniquement en JSON, sans bloc de code : {"hashtags":"#tag1 #tag2 #tag3"}`;
+
+  try {
+    const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }]);
+    const raw = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
+    return normaliserHashtags(String(JSON.parse(raw).hashtags ?? ""));
+  } catch {
+    return "";
+  }
+}
+
 export async function translateSlideshow(input: {
   slides: Array<{ position: number; original: string }>;
   sourceTitle: string;

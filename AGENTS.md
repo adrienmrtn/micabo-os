@@ -367,6 +367,59 @@ manuel est « prêt » dès qu'il a du texte : sans cette nuance,
 `assurerDeckPourLangue` attendait un `position_sophia` qu'aucun modèle n'allait
 plus poser et retraduisait à chaque passage.
 
+## Un deck en langue source ne traversait aucune règle (0268, 17/09/2026)
+
+`assurerDeckPourLangue` sortait directement quand la langue du compte est celle
+du slideshow :
+
+```ts
+if (langue === langueSource) { deck = deckSource; }   // ← rien d'autre
+else if (...) { translateSlideshow(...) }             // ← toutes les règles
+```
+
+Or `translateSlideshow` était le SEUL endroit où vivaient la casse de la marque,
+l'interdiction du tiret long, le filtre anti-publicité **et la génération des
+hashtags**. Un deck publié dans sa propre langue n'en voyait rien.
+
+Au 17/09 : **133 decks sur 206 (65 %)**, et la corrélation dans les données était
+exacte — 14 fautes de marque, **toutes** dans ce groupe, zéro dans les traduits ;
+86 decks anglais sur 86 sans hashtags ; 10 tirets longs sur 86.
+
+**On ne fait pas repasser ces decks par un modèle.** Le texte source performe
+mieux que le traduit (médiane 4 540 vues contre 1 386 au 17/09) : le réécrire
+détruirait ce qui marche. Trois pièces à la place :
+
+- `_shared/marque.ts` — module PUR, sans réseau : `normaliserMarque` (casse +
+  mot de catégorie, turc compris) et `retirerTiretsLongs`. Appliqué au chemin
+  source, et **aussi** au chemin traduit en filet : le prompt porte déjà ces
+  règles, un modèle n'est pas une garantie, et les deux passes sont idempotentes.
+- `genererHashtags` (gemini.ts) — appel court qui ne demande QUE la légende, sans
+  toucher au texte. Rangé dans `contenu_langues.hashtags`, donc payé une fois.
+- La génération des hashtags est **commune aux deux chemins et placée après
+  eux**. C'est délibéré : la condition des branches porte sur le TEXTE, pas sur
+  la légende, donc un deck traduit sans hashtags ne serait rentré dans aucune et
+  serait retombé indéfiniment sur le pool statique.
+
+`hashtags` entre aussi dans le test `pret`. Sans ça, un deck avec du texte mais
+sans légende était « prêt » à vie et CHAQUE passage retombait sur le repli.
+
+### Le pool de repli : deux défauts, même correctif
+
+`HASHTAGS` (assignation_contenu.ts) ne contenait **pas le turc**, et repliait sur
+`?? HASHTAGS.fr`. Le turc est la plus grosse langue du réseau : deux TikTok
+turcs sont partis en ligne avec des hashtags **français** (`#pourtoi #savoir
+#fyp` le 08/09, `#apprendre #culturegenerale #developpementpersonnel` le 13/09).
+Une langue inconnue rend maintenant une chaîne **vide** — un post sans légende
+vaut mieux qu'un post qui signale la mauvaise audience à l'algorithme — et le
+drain le journalise.
+
+Le pool disait par ailleurs Sophia (`#culturegenerale`, `#savoir`, `#cultura`,
+`#booktok`) sur un réseau **micabo**, alors que le dépôt écrit lui-même
+« micabo = progrès en cours, pas culture générale ». Réécrit autour des
+révisions, des fiches et des examens, et les attrape-tout (`#fyp`, `#pourtoi`)
+sont retirés : le prompt de `genererHashtags` les interdit, le repli ne va pas
+dire l'inverse.
+
 ## La marque : « l'appli micabo » (0260 → 0263, puis 0267 le 17/09/2026)
 
 Quatrième passage sur ce texte : 0260 bascule sur « micabo », 0261 revient au
