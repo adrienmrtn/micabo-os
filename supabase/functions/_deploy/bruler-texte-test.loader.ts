@@ -8,7 +8,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "289065cc7b26763fb7ef0ca23a9cda568ff98c89";
+const SHA = "471b2296f6ded57cf6a5d5b88a2a064b87c6c433";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/bruler-texte-test.bundle.js`;
 

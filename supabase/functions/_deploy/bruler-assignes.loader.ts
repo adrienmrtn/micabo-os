@@ -8,7 +8,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "9d9d0c710fc9766aee386597b95ca05848de9dab";
+const SHA = "471b2296f6ded57cf6a5d5b88a2a064b87c6c433";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/bruler-assignes.bundle.js`;
 
