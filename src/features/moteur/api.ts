@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase/client";
 import { LANGUES_CIBLES } from "@/features/moteur/langues";
+import { estTier, indexTier } from "@/features/moteur/tierlist";
 import type { Role } from "@/features/auth/AuthContext";
 import type { EvenementEtape } from "@/features/moteur/nettoyageEtapes";
 import type {
@@ -6467,4 +6468,116 @@ export async function marquerNudgeLu(id: string): Promise<void> {
     .update({ lu_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Pool global : où part le stock, et pour combien de temps
+// ---------------------------------------------------------------------------
+
+import type { ComptagesPool } from "../../../supabase/functions/_shared/pool_global";
+export type { ComptagesPool };
+
+export interface PoolGlobalDetail {
+  comptages: ComptagesPool;
+  /** Passages non-test, hors repost bonus, des 7 derniers jours, par slideshow. */
+  passagesParContenu: number[];
+  /** Slideshows distincts réellement postés aujourd'hui. */
+  distinctsAujourdhui: number;
+}
+
+/**
+ * Compte chaque étage de l'entonnoir avec EXACTEMENT les filtres du tireur
+ * (`choisirContenu`) : `statut = 'valide'`, `import_statut = 'done'`, un tier,
+ * `passages_cible > 0`, et les passages du cycle courant hors reposts bonus et
+ * hors posts de test.
+ *
+ * Si ces filtres divergent un jour de ceux du moteur, l'écran mentira — c'est
+ * pour ça qu'ils sont recopiés ici plutôt que devinés.
+ */
+export async function chargerPoolGlobal(): Promise<PoolGlobalDetail> {
+  const jourParis = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" })
+    .format(new Date());
+  const ilY7Jours = new Date(Date.now() - 7 * 86_400_000).toISOString();
+
+  const [contenusRes, comptesRes, passagesRes] = await Promise.all([
+    supabase
+      .from("contenus")
+      .select("id, statut, import_statut, tier, passages_cible, tier_maj_at"),
+    supabase.from("comptes").select("posts_par_jour").eq("is_active", true),
+    supabase
+      .from("passages")
+      .select("contenu_id, created_at, date_publication_prevue, bonus_repost, posts(est_test)")
+      .gte("created_at", ilY7Jours),
+  ]);
+  if (contenusRes.error) throw contenusRes.error;
+  if (comptesRes.error) throw comptesRes.error;
+  if (passagesRes.error) throw passagesRes.error;
+
+  const contenus = contenusRes.data ?? [];
+  const passages = (passagesRes.data ?? []) as unknown as Array<{
+    contenu_id: string;
+    created_at: string;
+    date_publication_prevue: string | null;
+    bonus_repost: boolean | null;
+    posts?: { est_test?: boolean | null } | Array<{ est_test?: boolean | null }> | null;
+  }>;
+
+  const estTest = (p: (typeof passages)[number]) => {
+    const po = Array.isArray(p.posts) ? p.posts[0] : p.posts;
+    return Boolean(po?.est_test);
+  };
+  const compte = passages.filter((p) => !p.bonus_repost && !estTest(p));
+
+  // Passages du CYCLE courant de chaque slideshow, pour en déduire les dus.
+  const faitsParContenu = new Map<string, number>();
+  for (const c of contenus) {
+    if (!c.tier_maj_at) continue;
+    const debut = Date.parse(c.tier_maj_at as string);
+    const n = compte.filter(
+      (p) => p.contenu_id === c.id && Date.parse(p.created_at) >= debut,
+    ).length;
+    faitsParContenu.set(c.id as string, n);
+  }
+
+  const valides = contenus.filter(
+    (c) => c.statut === "valide" && c.import_statut === "done",
+  );
+  const ouverts = valides.filter(
+    (c) => estTier(c.tier) && Number(c.passages_cible ?? 0) > 0 && c.tier_maj_at,
+  );
+  const dus = ouverts.filter(
+    (c) => Number(c.passages_cible ?? 0) - (faitsParContenu.get(c.id as string) ?? 0) > 0,
+  );
+
+  const comptages: ComptagesPool = {
+    bibliotheque: contenus.length,
+    rejetes: contenus.filter((c) => c.statut === "rejete").length,
+    brouillons: contenus.filter((c) => c.statut === "brouillon").length,
+    valides: valides.length,
+    cyclesOuverts: ouverts.length,
+    dusBPlus: dus.filter((c) => estTier(c.tier) && indexTier(c.tier) >= indexTier("B")).length,
+    dusC: dus.filter((c) => c.tier === "C").length,
+    passagesDus: dus.reduce(
+      (s, c) =>
+        s + Math.max(0, Number(c.passages_cible ?? 0) - (faitsParContenu.get(c.id as string) ?? 0)),
+      0,
+    ),
+    postsParJour: (comptesRes.data ?? []).reduce(
+      (s, c) => s + Number(c.posts_par_jour ?? 0),
+      0,
+    ),
+  };
+
+  const parContenu = new Map<string, number>();
+  for (const p of compte) {
+    parContenu.set(p.contenu_id, (parContenu.get(p.contenu_id) ?? 0) + 1);
+  }
+
+  return {
+    comptages,
+    passagesParContenu: [...parContenu.values()],
+    distinctsAujourdhui: new Set(
+      compte.filter((p) => p.date_publication_prevue === jourParis).map((p) => p.contenu_id),
+    ).size,
+  };
 }

@@ -16,6 +16,7 @@ import {
 import {
   estDoublonContenuJour,
   estErreurQuotaPostsJour,
+  estPanneRpc,
   manquantsJusquaQuota,
   quotaPostsParJour,
 } from "./assignation_quota.ts";
@@ -287,7 +288,9 @@ export async function assignerCompteJour(
       const bonus = await assignerRepostsBonusDuJour(supabase, compte.id as string, jour, log);
       if (bonus.length > 0) log(`${bonus.length} repost(s) bonus assigné(s)`);
     } catch (e) {
-      log(`Reposts bonus ignorés : ${e instanceof Error ? e.message : String(e)}`);
+      // L'erreur d'un .rpc() est un objet PostgrestError, pas une Error :
+      // `String(e)` donnerait « [object Object] ».
+      log(`Reposts bonus ignorés : ${messageErreur(e)}`);
     }
   }
 
@@ -434,6 +437,12 @@ export async function assignerCompteJour(
         log("Quota déjà rempli (course SQL) — stop");
         break;
       }
+      // Panne d'infrastructure (fonction absente du cache PostgREST, schéma
+      // désynchronisé…) : elle se reproduira à chaque tentative. L'ancien code
+      // faisait `throw` sur l'échec du passage ; sans ça, on brûlerait
+      // `manquants + 8` decks — donc autant d'appels de traduction — avant
+      // d'abandonner, et le diagnostic accuserait la traduction à tort.
+      if (estPanneRpc(e)) throw e;
       log(`Création échouée : ${messageErreur(e)}`);
       echecsDeck += 1;
       continue;

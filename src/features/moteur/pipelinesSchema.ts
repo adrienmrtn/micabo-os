@@ -278,7 +278,7 @@ export const SCHEMA_ASSIGNATION: PipelineAction = {
       label: "Tirage au hasard parmi les passages dus",
       kind: "logic",
       detail:
-        "passages dus = passages_cible − passages du cycle · un S+ sort plus souvent parce qu'il en doit 16",
+        "passages dus = passages_cible − passages du cycle · un S+ sort plus souvent parce qu'il en doit 8",
       onFail: "Aucun passage dû → repêchage d'un slideshow en D (cycle d'1 passage)",
     },
     {

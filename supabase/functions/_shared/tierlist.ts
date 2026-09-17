@@ -18,14 +18,26 @@ export type Tier = "D" | "C" | "B" | "A" | "S" | "S+";
 /** Du plus faible au plus fort — l'index sert au clamp de descente. */
 export const TIERS: readonly Tier[] = ["D", "C", "B", "A", "S", "S+"] as const;
 
-/** Passages à effectuer sur un cycle, par tier. */
+/**
+ * Passages à effectuer sur un cycle, par tier.
+ *
+ * Divisés par deux le 17/09/2026. Le tirage étant uniforme *par slideshow* et
+ * non *par passage dû*, le nombre de passages fixe surtout la DURÉE pendant
+ * laquelle un slideshow reste dans le pool — un S+ à 16 passages mettait seize
+ * fois plus longtemps qu'un C à remplir son cycle, donc à être requalifié, donc
+ * à sortir de son gel une fois à x/x. Moitié moins de passages, c'est moitié
+ * moins d'attente entre deux verdicts, et un pool qui tourne deux fois plus.
+ *
+ * B tombe à 1, à égalité avec C : le nombre de passages ne distingue plus ces
+ * deux tiers, seule `prioriserTiersHauts` le fait — un B sort avant un C.
+ */
 export const PASSAGES_PAR_TIER: Record<Tier, number> = {
   D: 0,
   C: 1,
-  B: 2,
-  A: 4,
-  S: 8,
-  "S+": 16,
+  B: 1,
+  A: 2,
+  S: 4,
+  "S+": 8,
 };
 
 /** Bandes absolues de vues moyennes → tier visé. */

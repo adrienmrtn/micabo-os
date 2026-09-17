@@ -58,3 +58,17 @@ export function estDoublonContenuJour(err: unknown): boolean {
   const txt = `${String(o.message ?? "")} ${String(o.details ?? "")}`;
   return /passages_compte_contenu_jour_uidx/i.test(txt);
 }
+
+/**
+ * Panne d'appel RPC, par opposition à un échec métier.
+ *
+ * PostgREST préfixe ses propres codes par `PGRST` : fonction absente du cache
+ * de schéma (PGRST202), surcharge ambiguë (PGRST203)… Ces erreurs ne dépendent
+ * pas du slideshow tiré, donc réessayer avec un autre est inutile — et coûteux,
+ * chaque tentative repayant une traduction complète.
+ */
+export function estPanneRpc(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = String((err as { code?: unknown }).code ?? "");
+  return /^PGRST/i.test(code);
+}

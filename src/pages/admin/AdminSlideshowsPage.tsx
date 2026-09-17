@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { PoolGlobalCard } from "@/features/moteur/PoolGlobalCard";
 import { indexTier, type Tier } from "@/features/moteur/tierlist";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -2084,6 +2085,7 @@ export function AdminSlideshowsPage() {
 
   return (
     <div className="space-y-4">
+      <PoolGlobalCard />
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-2">

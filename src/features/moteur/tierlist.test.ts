@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   passagesPourTier,
+  TIERS,
   prioriserTiersHauts,
   requalifier,
   tierDepuisEloLegacy,
@@ -10,13 +11,20 @@ import {
 } from "./tierlist";
 
 describe("passagesPourTier", () => {
-  it("suit la grille D 0 → S+ 16", () => {
+  it("suit la grille D 0 → S+ 8 (divisée par deux le 17/09)", () => {
     expect(passagesPourTier("D")).toBe(0);
     expect(passagesPourTier("C")).toBe(1);
-    expect(passagesPourTier("B")).toBe(2);
-    expect(passagesPourTier("A")).toBe(4);
-    expect(passagesPourTier("S")).toBe(8);
-    expect(passagesPourTier("S+")).toBe(16);
+    expect(passagesPourTier("B")).toBe(1);
+    expect(passagesPourTier("A")).toBe(2);
+    expect(passagesPourTier("S")).toBe(4);
+    expect(passagesPourTier("S+")).toBe(8);
+  });
+
+  it("ne décroît jamais quand le tier monte", () => {
+    // B et C sont désormais à égalité (1) : c'est prioriserTiersHauts qui les
+    // départage, plus le nombre de passages.
+    const grille = TIERS.map((t) => passagesPourTier(t));
+    expect(grille).toEqual([...grille].sort((a, b) => a - b));
   });
 });
 

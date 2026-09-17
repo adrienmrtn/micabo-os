@@ -85,6 +85,24 @@ begin
       p_contenu_id, p_compte_id;
   end if;
 
+  -- 0) Le verrou du compte, AVANT tout le reste. C'est le point le plus
+  --    délicat de cette fonction.
+  --
+  --    L'INSERT dans `passages` prend un FOR KEY SHARE sur la ligne `comptes`
+  --    (FK passages.compte_id), puis le trigger posts_enforce_quota_jour
+  --    demande un FOR UPDATE sur CETTE MÊME ligne. Dans une seule transaction
+  --    c'est une montée en verrou — et deux transactions concurrentes sur le
+  --    même compte se bloquent mutuellement : chacune détient le KEY SHARE que
+  --    l'autre doit attendre pour passer en FOR UPDATE. Deadlock 40P01.
+  --
+  --    Tant que les écritures étaient dans des transactions séparées, le KEY
+  --    SHARE tombait au commit du passage et le cas n'existait pas ; la fusion
+  --    le crée. On prend donc le verrou le plus fort d'abord, ce qui donne à
+  --    toutes les transactions le même ordre d'acquisition. Le FOR KEY SHARE
+  --    de la FK devient alors un non-événement, et le FOR UPDATE du trigger
+  --    est déjà détenu.
+  perform 1 from public.comptes where id = p_compte_id for update;
+
   -- 1) Le passage. post_id reste null le temps de créer le post : la FK
   --    l'autorise, et c'est ce qui laisse l'index anti-doublon trancher avant
   --    le trigger de quota.
@@ -164,9 +182,18 @@ begin
   --    l'index anti-doublon ne le rattrape pas (il exclut bonus_repost). On le
   --    solde ici, dans la même transaction.
   if p_repost_bonus_id is not null then
+    -- La garde sur `statut` ferme la course entre deux drains : sans elle, les
+    -- deux soldent le même repost et créent chacun leur publication — et
+    -- l'index anti-doublon du jour ne les rattrape pas, il exclut les reposts
+    -- bonus. Si un autre worker est passé avant, on lève : la transaction
+    -- entière est annulée et aucune publication en double n'est créée.
     update public.reposts_bonus
        set statut = 'fait', passage_id = v_passage_id
-     where id = p_repost_bonus_id;
+     where id = p_repost_bonus_id
+       and statut = 'prevu';
+    if not found then
+      raise exception 'creer_publication_atomique : repost bonus % deja solde', p_repost_bonus_id;
+    end if;
   end if;
 
   return jsonb_build_object('passage_id', v_passage_id, 'post_id', v_post_id);
