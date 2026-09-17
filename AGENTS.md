@@ -106,6 +106,48 @@ bandes, et le tirage — un S+ met toujours plus longtemps à remplir son cycle
 qu'un C, puisque le tirage est uniforme *par slideshow* et non *par passage dû*
 (l'écart est passé de 16× à 8× le 17/09, en divisant les quotas par deux).
 
+## Les trois délais du cycle sont un trio ordonné (17/09/2026)
+
+`MESURE_JOURS` **(2)** `< RATTRAPAGE_JOURS_DEFAUT` **(3)** `< PASSAGE_PERIME_JOURS` **(4)**.
+
+Ce n'est pas une convention d'écriture, ce sont deux contraintes dures :
+
+- **fenêtre > mesure** — le relevé doit encore couvrir le post au moment où on
+  lit ses vues. `joursFenetreParis(n)` couvre les `n` derniers jours, aujourd'hui
+  compris : à 2, un post publié à J0 est relevé à J0 et J+1 puis **sort de la
+  fenêtre**, alors que `passageMesure` se déclenche à J+2. On mesurerait donc à
+  J+2 un chiffre figé à J+1 — sur la courbe du projet, 1 073 contre 1 491 de
+  médiane, ~72 % du réel. La bande C/B étant à 1 000 vues pile, tout ce qui vit
+  entre 1 000 et 1 491 basculerait en C, le palier dont `prioriserTiersHauts` ne
+  fait jamais remonter personne. Garder `MESURE_JOURS = 2` sous une fenêtre de 2
+  est donc **strictement pire** qu'assumer J+1 : même précision, un jour perdu.
+- **péremption > fenêtre** — ne pas condamner un passage qu'on est encore en
+  train de relever. Un périmé est exclu de la moyenne ; le périmer trop tôt fait
+  requalifier sur moins de données, et un cycle entièrement périmé donne
+  `m = null`, donc tier inchangé. On jetterait du signal réel.
+
+Le 17/09 ces délais passent de 2/4/5 à **2/3/4** : un jour gagné sur la
+péremption, un sur le relevé, zéro perte de précision.
+
+`RATTRAPAGE_JOURS_DEFAUT` **vit désormais dans `tierlist.ts`**, pas dans
+`rattrapage_elo.ts`. Ce n'est pas un réglage du relevé, c'est le terme du milieu
+du trio — les séparer est précisément ce qui leur a permis de se désynchroniser
+sans que rien ne le signale. `rattrapage_elo.ts` la réexporte, aucun appelant ne
+change. Effet de bord utile : le test peut enfin la lire, alors qu'importer
+`rattrapage_elo.ts` depuis Vitest tire `supabase.ts` et son specifier `jsr:`,
+que Vite ne résout pas.
+
+**Trois tests verrouillent les deux inégalités** et la position de
+`CYCLE_TIMEOUT_JOURS` au-dessus du reste (`tierlistCycle.test.ts`). Ne pas les
+supprimer pour faire passer un changement de constante : c'est exactement le
+cas qu'ils gardent.
+
+**Déploiement** : cinq chargeurs sur `6b84048` — `assignation-contenu` (v22),
+`assignation` (v23), `minuit-vnext` (v24), `rattrapage-elo` (v18) et
+`revoquer-post` (v22). Les sept autres bundles ressortent identiques. Les cinq
+alias `createClient` sont inchangés (`re`, `ue`, `Ee`, `Y`, `oe`), les douze
+sentinelles présentes, test de vie 401 sur les cinq, aucun `ReferenceError`.
+
 ## Publication atomique, quotas divisés, file court-circuitable (0265/0266, 17/09/2026)
 
 **La cause racine des orphelins est fermée.** `creer_publication_atomique()`
