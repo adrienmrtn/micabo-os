@@ -50,18 +50,41 @@ export async function chargerAssignationReglages(
   };
 }
 
-// Repli si la traduction n'a pas renvoyé de hashtags. Jeu localisé — aucun appel IA.
+/**
+ * Repli quand le deck n'a pas de légende. Jeu localisé, aucun appel IA.
+ *
+ * Deux défauts corrigés le 17/09/2026 :
+ *
+ * 1. LE TURC MANQUAIT, et le repli était `?? HASHTAGS.fr`. Le turc est la plus
+ *    grosse langue du réseau (8 comptes, 152 passages) : deux TikTok turcs sont
+ *    partis en ligne avec « #pourtoi #savoir #fyp » et « #apprendre
+ *    #culturegenerale #developpementpersonnel » les 08 et 13/09. Une langue
+ *    inconnue rend maintenant une chaîne VIDE — un post sans légende vaut mieux
+ *    qu'un post qui signale la mauvaise audience à l'algorithme.
+ *
+ * 2. LE POSITIONNEMENT ÉTAIT CELUI DE SOPHIA (#culturegenerale, #savoir,
+ *    #cultura, #booktok) alors que les 17 comptes actifs sont micabo. Le dépôt
+ *    l'écrit lui-même : « micabo = progrès en cours, pas culture générale ».
+ *    Les tags parlent désormais de révisions, de fiches et d'examens — ce que
+ *    l'IA produit déjà quand elle s'en charge (#methodedetude #revision
+ *    #partiels). Les attrape-tout (#fyp, #pourtoi) sont retirés : le prompt de
+ *    `genererHashtags` les interdit, le repli ne va pas dire l'inverse.
+ */
 const HASHTAGS: Record<string, string[]> = {
-  fr: ["#apprendre", "#culturegenerale", "#developpementpersonnel", "#booktok", "#pourtoi", "#savoir", "#fyp"],
-  en: ["#learning", "#selfimprovement", "#booktok", "#foryou", "#knowledge", "#fyp"],
-  de: ["#lernen", "#selbstverbesserung", "#booktok", "#fürdich", "#wissen", "#fyp"],
-  it: ["#imparare", "#crescitapersonale", "#booktok", "#perte", "#cultura", "#fyp"],
-  es: ["#aprender", "#desarrollopersonal", "#booktok", "#parati", "#cultura", "#fyp"],
-  pt: ["#aprender", "#desenvolvimentopessoal", "#booktok", "#paravoce", "#cultura", "#fyp"],
+  fr: ["#revisions", "#flashcards", "#methodedetude", "#examens", "#partiels", "#etudiant", "#bac"],
+  en: ["#studytips", "#flashcards", "#studytok", "#revision", "#exams", "#studentlife", "#activerecall"],
+  es: ["#estudiar", "#flashcards", "#examenes", "#tecnicasdeestudio", "#selectividad", "#universidad"],
+  tr: ["#dersçalışma", "#sınav", "#çalışmataktikleri", "#yks", "#tyt", "#öğrenci", "#tekrar"],
+  de: ["#lernen", "#karteikarten", "#lerntipps", "#prüfung", "#abitur", "#studium"],
+  it: ["#studiare", "#esami", "#metodidistudio", "#maturità", "#universita", "#ripasso"],
+  pt: ["#estudar", "#flashcards", "#exames", "#metodosdeestudo", "#enem", "#universidade"],
 };
 
 function hashtagsPour(langue: string, seed: string): string {
-  const pool = HASHTAGS[langue] ?? HASHTAGS.fr;
+  const pool = HASHTAGS[langue];
+  // Pas de repli vers une autre langue : mieux vaut aucune légende qu'une
+  // légende qui vise le mauvais pays.
+  if (!pool) return "";
   let h = 0;
   for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const debut = h % pool.length;
@@ -404,8 +427,15 @@ export async function assignerCompteJour(
       continue;
     }
     log(`Deck prêt (${slides.length} slides) — matérialisation…`);
-    // Hashtags issus de la traduction si dispo, sinon jeu localisé de repli.
+    // Hashtags issus du deck si dispo, sinon jeu localisé de repli.
     const hashtags = hashtagsDeck || hashtagsPour(langue, `${compte.id}-${jour}-${crees.length}`);
+    if (!hashtags) {
+      // Visible dans le journal du drain : une langue sans pool est une
+      // omission à corriger, pas un cas normal.
+      log(`Aucun hashtag pour la langue « ${langue} » — post sans légende`);
+    } else if (!hashtagsDeck) {
+      log(`Hashtags de repli (${langue}) — le deck n'en portait pas`);
+    }
 
     // Passage + post + post_slides + lien : une seule transaction (0265). Un
     // process tué en cours de route ne laisse plus rien derrière lui.

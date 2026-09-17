@@ -12,6 +12,7 @@ import {
   mimeDepuisBase64,
   ocrFrame,
   scoreRelevance,
+  genererHashtags,
   translateSlideshow,
 } from "./gemini.ts";
 import {
@@ -63,6 +64,7 @@ import {
   resoudreApplicationImport,
 } from "./applications.ts";
 import { lireParLots } from "./lots.ts";
+import { nettoyerTexteDeck } from "./marque.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
 
 export type Supabase = ReturnType<typeof serviceClient>;
@@ -1325,9 +1327,14 @@ export async function assurerDeckPourLangue(
   // de `position_sophia` à attendre d'un modèle. Sans cette nuance, un deck
   // manuel dont l'admin n'a coché aucune slide serait retraduit à chaque
   // passage.
+  // `hashtags` fait partie du test : sans lui, un deck qui a du texte mais pas de
+  // légende était « prêt » à vie, et CHAQUE passage retombait sur le pool
+  // statique de `assignation_contenu.ts` — c'est ce qui a envoyé des hashtags
+  // français sur deux TikTok turcs les 08 et 13/09/2026.
   const pret =
     deck.length > 0 &&
     deck.some((s) => s.texte_overlay) &&
+    hashtags.length > 0 &&
     (placementManuel || deck.some((s) => s.position_sophia));
   if (pret) return { slides: deck, hashtags };
 
@@ -1346,7 +1353,17 @@ export async function assurerDeckPourLangue(
   }
 
   if (langue === langueSource) {
-    deck = deckSource;
+    // Pas de traduction ici — le texte natif performe mieux que du traduit et on
+    // ne veut pas le faire réécrire. Mais `translateSlideshow` portait AUSSI la
+    // casse de la marque, l'interdiction du tiret long et les hashtags, et ce
+    // chemin n'en voyait rien : 133 decks sur 206 au 17/09/2026, dont les 14
+    // fautes de marque relevées en base. On applique donc les règles qui ne
+    // demandent pas de modèle, et on va chercher les hashtags à part.
+    deck = deckSource.map((s) => ({
+      ...s,
+      texte_overlay: nettoyerTexteDeck(s.texte_overlay ?? "", langue),
+    }));
+    await supabase.from("contenu_langues").update({ slides: deck }).eq("id", cl.id);
   } else if (deck.length === 0 || deck.every((s) => !s.texte_overlay)) {
     const voix = await voixSource(supabase, contenu.compte_reference_id);
     const dedie = await chargerPrompt(supabase, `traduction_${langue}`);
@@ -1375,7 +1392,9 @@ export async function assurerDeckPourLangue(
     const parPos = new Map(traductions.slides.map((t) => [t.position, t.translated]));
     deck = deckSource.map((s) => ({
       position: s.position,
-      texte_overlay: parPos.get(s.position) ?? "",
+      // Filet : le prompt porte déjà ces règles, mais un modèle n'est pas une
+      // garantie. Les deux passes sont idempotentes, les repasser ne coûte rien.
+      texte_overlay: nettoyerTexteDeck(parPos.get(s.position) ?? "", langue),
       // Le CTA voyage avec la traduction : la slide qui le portait en source le
       // porte toujours, et rien ne doit le replacer.
       position_sophia: placementManuel ? s.position_sophia : false,
@@ -1385,6 +1404,24 @@ export async function assurerDeckPourLangue(
       .from("contenu_langues")
       .update({ slides: deck, hashtags: hashtags || null })
       .eq("id", cl.id);
+  }
+
+  // Hashtags — commun aux deux chemins, et volontairement APRÈS eux.
+  //
+  // Un deck peut porter du texte sans légende de deux façons : jamais traduit
+  // (langue source), ou traduit avant que la génération de hashtags n'existe.
+  // Le second cas ne repasse dans aucune des deux branches ci-dessus — leur
+  // condition porte sur le TEXTE, pas sur la légende — donc le traiter là aurait
+  // laissé ces decks retomber indéfiniment sur le pool statique.
+  if (!hashtags && deck.some((s) => s.texte_overlay)) {
+    hashtags = await genererHashtags({
+      slides: deck.map((s) => ({ position: s.position, texte: s.texte_overlay ?? "" })),
+      sourceTitle: contenu.titre ?? "",
+      langue,
+    });
+    if (hashtags) {
+      await supabase.from("contenu_langues").update({ hashtags }).eq("id", cl.id);
+    }
   }
 
   if (!placementManuel && !deck.some((s) => s.position_sophia)) {
