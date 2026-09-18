@@ -29,6 +29,7 @@ import {
   supprimerPost,
   type PostCalendrierAdmin,
 } from "@/features/moteur/api";
+import { HistoriqueQualification } from "@/features/moteur/HistoriqueQualification";
 import { EssaiBadge } from "@/features/moteur/EssaiBadge";
 import { nomLangue } from "@/features/moteur/langues";
 import { cn } from "@/lib/utils";
@@ -326,6 +327,16 @@ export function AdminCreateurPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("adminCreateur.historiqueQualif")}</CardTitle>
+          <CardDescription>{t("adminCreateur.historiqueQualifDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <HistoriqueQualification compteId={compteId} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

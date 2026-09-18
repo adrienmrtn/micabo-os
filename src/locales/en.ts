@@ -1389,6 +1389,12 @@ export const en = {
       masquerOriginal: "Hide original visuals",
       visuels: "Visuals",
       historique: "Passages / stats",
+      historiqueTier: "Cycles / tiers",
+      historiqueTierVide: "No cycle change recorded yet.",
+      cibleHistorique: "target {{avant}} → {{apres}}",
+      motif_placement: "placement",
+      motif_requalification: "requalification",
+      motif_ajustement: "adjustment",
       pasDePassage: "Not assigned to a creator yet.",
       statsLigne: "{{vues}} views · {{likes}} likes · {{coms}} comments",
       bilanPassages:
@@ -1907,6 +1913,11 @@ export const en = {
       aucunPostJour: "No posts planned that day for this creator.",
       historique: "Publications",
       historiqueDesc: "History of published posts / pasted links.",
+      historiqueQualif: "Account grades",
+      historiqueQualifDesc:
+        "Every grade change, most recent first. Recomputed at the end of the drain, or set by hand.",
+      historiqueQualifVide: "No grade change recorded yet.",
+      qualifManuelle: "set by hand",
       historiqueVide: "No publications yet.",
     },
     adminPost: {
