@@ -2247,6 +2247,61 @@ export async function lireCompteCreateur(compteId: string): Promise<CompteCreate
   };
 }
 
+export interface EntreeTierHistorique {
+  id: string;
+  tier_avant: string | null;
+  tier_apres: string | null;
+  passages_cible_avant: number | null;
+  passages_cible_apres: number | null;
+  motif: string;
+  fait_le: string;
+}
+
+/** Journal des cycles d'un slideshow : B → B, A → S, avec la date. */
+export async function listerHistoriqueTier(
+  contenuId: string,
+): Promise<EntreeTierHistorique[]> {
+  const { data, error } = await supabase
+    .from("contenu_tier_historique")
+    .select(
+      "id, tier_avant, tier_apres, passages_cible_avant, passages_cible_apres, motif, fait_le",
+    )
+    .eq("contenu_id", contenuId)
+    .order("fait_le", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as EntreeTierHistorique[];
+}
+
+export interface EntreeQualificationHistorique {
+  id: string;
+  qualification_avant: Qualification | null;
+  qualification_apres: Qualification;
+  manuelle: boolean;
+  fait_le: string;
+}
+
+/** Journal des cases d'un compte : BIEN → STAR, avec la date. */
+export async function listerHistoriqueQualification(
+  compteId: string,
+): Promise<EntreeQualificationHistorique[]> {
+  const { data, error } = await supabase
+    .from("compte_qualification_historique")
+    .select("id, qualification_avant, qualification_apres, manuelle, fait_le")
+    .eq("compte_id", compteId)
+    .order("fait_le", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((e) => ({
+    id: e.id as string,
+    qualification_avant:
+      e.qualification_avant == null
+        ? null
+        : normaliserQualification(e.qualification_avant),
+    qualification_apres: normaliserQualification(e.qualification_apres),
+    manuelle: Boolean(e.manuelle),
+    fait_le: e.fait_le as string,
+  }));
+}
+
 /** Supprime un post et ses slides (cascade). Action admin, depuis le calendrier. */
 /** Supprime TOUS les posts (non-test) d'une journée. Renvoie le nombre supprimé. */
 export async function supprimerPostsDuJour(date: string): Promise<number> {

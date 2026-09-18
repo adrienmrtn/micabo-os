@@ -1394,6 +1394,12 @@ export const fr = {
       masquerOriginal: "Masquer les visuels d'origine",
       visuels: "Visuels",
       historique: "Passages / stats",
+      historiqueTier: "Cycles / tiers",
+      historiqueTierVide: "Aucun changement de cycle enregistré.",
+      cibleHistorique: "cible {{avant}} → {{apres}}",
+      motif_placement: "placement",
+      motif_requalification: "requalification",
+      motif_ajustement: "ajustement",
       pasDePassage: "Pas encore assigné à un créateur.",
       statsLigne: "{{vues}} vues · {{likes}} likes · {{coms}} coms",
       bilanPassages:
@@ -1908,6 +1914,11 @@ export const fr = {
       aucunPostJour: "Aucun post prévu ce jour-là pour ce créateur.",
       historique: "Publications",
       historiqueDesc: "Historique des posts publiés / liens collés.",
+      historiqueQualif: "Cases du compte",
+      historiqueQualifDesc:
+        "Chaque changement de case, du plus récent au plus ancien. Recalculé en fin de drain, ou posé à la main.",
+      historiqueQualifVide: "Aucun changement de case enregistré.",
+      qualifManuelle: "posée à la main",
       historiqueVide: "Aucune publication pour l’instant.",
     },
     adminPost: {

@@ -38,6 +38,7 @@ import { NettoyageEtapes } from "@/components/moteur/NettoyageEtapes";
 import { UpscaleMediaControl } from "@/components/moteur/UpscaleMediaControl";
 import { LabelEditor } from "@/features/moteur/LabelPicker";
 import { remettreEnFile } from "@/features/moteur/fileValidationApi";
+import { HistoriqueTier } from "@/features/moteur/HistoriqueTier";
 import { PassagesSlideshow } from "@/features/moteur/PassagesSlideshow";
 import {
   captionnerMediaBiblio,
@@ -1711,6 +1712,13 @@ function DetailSlideshow({
                 passages={d.passages ?? []}
                 chargement={detail.isFetching}
               />
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("slideshows.historiqueTier")}
+              </h3>
+              <HistoriqueTier contenuId={d.id} />
             </section>
 
             <section className="space-y-2">
