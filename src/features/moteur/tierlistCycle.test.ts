@@ -7,6 +7,8 @@ import {
   MESURE_JOURS,
   PASSAGE_PERIME_JOURS,
   RATTRAPAGE_JOURS_DEFAUT,
+  RECUL_MEME_COMPTE_JOURS,
+  REPOST_BONUS_JOURS,
   passageMesure,
   passagePerime,
   passageRegle,
@@ -169,5 +171,25 @@ describe("invariants des délais", () => {
   it("laisse le timeout de cycle au-dessus de tout le reste", () => {
     // Le filet des cycles qui traînent doit rester le dernier recours.
     expect(CYCLE_TIMEOUT_JOURS).toBeGreaterThan(PASSAGE_PERIME_JOURS);
+  });
+});
+
+/**
+ * Un slideshow qui revient sur le même compte est soit une décision, soit un
+ * bug. Le 19/09/2026 c'était un bug : la fenêtre anti-doublon ne couvrait que
+ * le jour même, et 46 posts sont repartis en ligne à l'identique.
+ */
+describe("retour d'un slideshow sur le même compte", () => {
+  it("laisse le repost bonus rester le seul répéteur délibéré", () => {
+    // Le repost bonus rejoue volontairement à J+7 (> 50 000 vues, tracé par
+    // `bonus_repost`). Si le tirage ordinaire pouvait produire la même
+    // répétition au même moment, un doublon ne serait plus lisible en base.
+    expect(RECUL_MEME_COMPTE_JOURS).toBeGreaterThan(REPOST_BONUS_JOURS);
+  });
+
+  it("couvre plus que le cycle le plus long", () => {
+    // Un cycle qui traîne est requalifié de force à 14 jours ; le recul doit
+    // survivre à ce délai, sinon un slideshow peut revenir avant d'être jugé.
+    expect(RECUL_MEME_COMPTE_JOURS).toBeGreaterThan(CYCLE_TIMEOUT_JOURS);
   });
 });

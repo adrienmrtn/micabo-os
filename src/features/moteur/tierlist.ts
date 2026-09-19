@@ -19,6 +19,7 @@ export {
   NOTE_IMPORT_MIN,
   PASSAGES_PAR_TIER,
   passagesPourTier,
+  RECUL_MEME_COMPTE_JOURS,
   REPOST_BONUS_JOURS,
   requalifier,
   SORTIE_D_MIN_VUES,

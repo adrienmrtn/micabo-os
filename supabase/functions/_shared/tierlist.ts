@@ -75,6 +75,24 @@ export const VUES_REPOST_BONUS = 50_000;
 export const REPOST_BONUS_JOURS = 7;
 
 /**
+ * Recul minimum avant qu'un slideshow puisse revenir sur le MÊME compte.
+ *
+ * Jusqu'au 19/09/2026, `choisirContenu` n'excluait que les slideshows déjà
+ * sortis **le jour même** : un contenu publié le 16 redevenait tirable le 17.
+ * Sur 17 comptes actifs, 15 ont reçu au moins un doublon et **46 sont partis
+ * deux fois en ligne**, avec des écarts de 1 à 10 jours — le tout sans qu'un
+ * seul pool soit épuisé (105+ inédits par compte, plus de 50 jours d'autonomie).
+ *
+ * Doit rester AU-DESSUS de `REPOST_BONUS_JOURS`. Rejouer un post sur le même
+ * compte est une décision qui se prend, pas un hasard de tirage : elle a son
+ * mécanisme (> 50 000 vues, J+7, `bonus_repost = true`, hors cycle). Si le
+ * recul descendait à 7 jours ou moins, le tirage ordinaire pourrait produire
+ * la même répétition au même moment, sans le mérite ni la traçabilité — et on
+ * ne saurait plus lire un doublon en base.
+ */
+export const RECUL_MEME_COMPTE_JOURS = 30;
+
+/**
  * Un passage n'est « mesuré » qu'après ce délai (vues stabilisées).
  *
  * Passé de 3 à 2 jours le 16/09/2026, sur la courbe réelle du projet : vues
