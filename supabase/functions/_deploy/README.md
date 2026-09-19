@@ -99,3 +99,15 @@ tree, l'alias suit l'état du code, il ne dérive pas.
 Ce qui vaut pour la prochaine fois : un aller-retour de source redonne bien le
 bundle d'avant, mais il faut le VÉRIFIER (`git show <sha>:<bundle> | cmp -`),
 pas le supposer.
+
+Garde-fou concurrent (0270, 17/09/2026) : `media_labels.ts` filtre désormais
+`exclu_concurrent`. Deux bundles le portent — `import-contenu` (`Le`) et
+`renettoyer-contenu` (`H`) — et aucun n'a changé d'alias.
+
+`minuit-vnext` ressort d'esbuild **différent sans porter le changement** :
+`mediaPropreMemeLabel` y est tree-shaken, et la seule divergence est le
+minifieur qui permute deux noms courts (`x` ↔ `S`), à longueur d'octets
+identique. Son bundle est resté celui du dépôt — un rebuild futur le verra
+« changé » sans raison, c'est ce churn-là et rien d'autre. Vérifier la
+longueur et chercher le symbole attendu avant de conclure qu'un bundle doit
+repartir.

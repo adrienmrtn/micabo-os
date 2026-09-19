@@ -3,7 +3,13 @@ import {
   type SlideStructureVisuels,
 } from "./visuels_assignation.ts";
 import { assurerDeckPourLangue } from "./import_contenu.ts";
-import { estTier, prioriserTiersHauts, type Tier } from "./tierlist.ts";
+import {
+  RECUL_MEME_COMPTE_JOURS,
+  ajouterJoursParis,
+  estTier,
+  prioriserTiersHauts,
+  type Tier,
+} from "./tierlist.ts";
 import { LOT_IDS, lireParLots } from "./lots.ts";
 import { mapPool } from "./parallel.ts";
 import { serviceClient, messageErreur } from "./supabase.ts";
@@ -924,21 +930,25 @@ async function choisirContenu(
   );
   if (contenus.length === 0) return null;
 
-  // Déjà sorti aujourd'hui sur ce compte : les posts d'un même jour doivent
-  // être différents (un même slideshow peut revenir un autre jour).
-  const dujour = await lireParLots<PassageHisto>(
+  // Déjà sorti RÉCEMMENT sur ce compte. La fenêtre portait sur le jour même
+  // jusqu'au 19/09/2026 — « un même slideshow peut revenir un autre jour » —
+  // et c'est exactement ce qu'elle laissait faire : 46 posts sont partis deux
+  // fois en ligne sur le même compte, à 1 à 10 jours d'écart. L'historique
+  // était pourtant en base, il n'était simplement jamais relu au-delà du jour.
+  const depuis = ajouterJoursParis(jour, -RECUL_MEME_COMPTE_JOURS);
+  const recents = await lireParLots<PassageHisto>(
     contenus.map((c) => c.id),
-    "Passages du jour",
+    `Passages des ${RECUL_MEME_COMPTE_JOURS} derniers jours`,
     (lot) =>
       supabase
         .from("passages")
         .select("contenu_id, date_publication_prevue, posts(est_test)")
         .eq("compte_id", compteId)
-        .eq("date_publication_prevue", jour)
+        .gte("date_publication_prevue", depuis)
         .in("contenu_id", lot),
   );
   const exclus = new Set<string>(dejaCreesCetteSession);
-  for (const h of dujour) {
+  for (const h of recents) {
     if (opts.exclureTestsHisto && estPassageDeTest(h.posts)) continue;
     exclus.add(h.contenu_id);
   }

@@ -57,13 +57,75 @@ plus lu par le moteur.
 - Assignation : tirage **au hasard** parmi les slideshows du pool (labels ∩,
   toutes langues) qui ont encore des passages dus — mais **un C n'est tiré que
   si le pool n'a plus rien en B ou mieux**. Plus de softmax, plus de pénalité
-  de saturation, plus de « jamais deux fois le même post » (mais jamais deux
-  fois le même jour sur le même compte). S'il n'y a pas assez de passages dus,
+  de saturation, plus de « jamais deux fois le même post » — mais **jamais deux
+  fois sur le même compte à moins de 30 jours** (`RECUL_MEME_COMPTE_JOURS`,
+  19/09/2026 ; la fenêtre était d'un jour et laissait passer les doublons). S'il n'y a pas assez de passages dus,
   un slideshow en D est repêché avec un cycle d'un passage.
 - Le quota d'un créateur (`posts_par_jour`) **ne baisse plus jamais**.
 - Repost bonus : un passage > 50 000 vues rejoue le même post sur le même
   compte à J+7 (`reposts_bonus`). Hors cycle, mais dans le quota du jour ;
   abandonné si le créneau est passé.
+
+## Un slideshow revenait sur le même compte au bout d'un jour (19/09/2026)
+
+Signalé par une créatrice : « the system is showing me posts that I have
+already published previously (exact duplicates) », ses deux recharges
+consommées sur un post identique à celui qu'elle avait publié trois jours plus
+tôt. Elle avait raison, et le défaut n'était pas chez elle.
+
+`choisirContenu` n'excluait que les slideshows déjà sortis **le jour même** —
+et le commentaire l'assumait : « un même slideshow peut revenir un autre jour ».
+L'historique était pourtant complet en base ; il n'était simplement jamais relu
+au-delà du jour.
+
+Sur 17 comptes actifs : **15 touchés, 53 paires compte/slideshow répétées, 58
+passages en double, dont 46 réellement repartis en ligne**, à 1 à 10 jours
+d'écart. Aucun pool n'était épuisé — la créatrice avait **112 slideshows jamais
+vus sur un pool de 126**.
+
+`RECUL_MEME_COMPTE_JOURS = 30` vit dans `tierlist.ts`, à côté de
+`REPOST_BONUS_JOURS`, et pas à côté du filtre : c'est la même leçon que le trio
+des délais de cycle. Deux tests verrouillent qu'il reste **au-dessus du repost
+bonus (7)** et **au-dessus du timeout de cycle (14)**.
+
+- **> repost bonus** : rejouer un post sur le même compte est une décision qui
+  se prend — > 50 000 vues, J+7, `bonus_repost = true`, hors cycle. Si le
+  tirage ordinaire pouvait produire la même répétition au même moment, un
+  doublon ne serait plus lisible en base.
+- **> timeout de cycle** : un slideshow doit avoir été jugé avant de pouvoir
+  revenir.
+
+**L'index ne peut pas porter cette règle.** `passages_compte_contenu_jour_uidx`
+est un index unique sur `(compte_id, contenu_id, date_publication_prevue)` : il
+ferme la course entre deux workers du même jour, et c'est tout ce qu'un unique
+sait exprimer. Une fenêtre glissante demanderait un `EXCLUDE … USING gist` sur
+un `daterange`, que les 58 doublons historiques feraient échouer à la création
+— et dont la violation remonterait sous un SQLSTATE que `estDoublonContenuJour`
+ne sait pas lire. La règle des 30 jours vit donc dans l'applicatif ; l'index
+garde son rôle, plus étroit.
+
+**Pool vidé par l'exclusion** : `choisirContenu` rend `null`, l'appelant
+journalise « Plus de candidat dans le pool » et s'arrête. Un post de moins vaut
+mieux qu'un doublon. Marge mesurée au 19/09 : 105+ inédits par compte, plus de
+50 jours d'autonomie.
+
+**Reprise des données.** Les 8 doublons encore non publiés du jour ont été
+supprimés (sauvegardés dans `doublons_sauvegarde`) puis réassignés par
+`kick_edge_micabo('assignation-contenu', …)` — zéro doublon au retirage.
+
+Deux choses n'ont **pas** été faites, volontairement :
+
+- **Ne pas passer par `revoquer-post` en admin pour dédoublonner.**
+  `doitRejeterSlideshow` rejette le slideshow *pour tout le monde* dès que le
+  rôle n'est pas `poster` : on aurait sorti 8 bons slideshows du pool pour un
+  problème qui ne concernait qu'un compte.
+- **Ne pas toucher au doublon assigné du 12/09** (asya.ders680, `d97efcc0`). Il
+  appartient à un cycle **déjà clos** — `tier_maj_at` au 18/09 — donc il a
+  compté dans la note B du slideshow. Le supprimer réécrirait un historique
+  fermé.
+
+Les 46 doublons déjà en ligne ne sont pas rattrapables et n'ont pas été
+touchés.
 
 ## Clôture d'un cycle (0257, 16/09/2026)
 
@@ -816,3 +878,17 @@ Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
 
 Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
 être en avance sur `main`.
+
+- **Déploiement du 19/09/2026** (recul de 30 jours sur le même compte). Cinq
+ chargeurs sur `5eb7487` : `assignation-contenu` (v26), `assignation` (v27),
+ `minuit-vnext` (v28), `revoquer-post` (v26) et `rattrapage-elo` (v19). Test de
+ vie `401` passé sur les cinq. **Quatre alias `createClient` ont été renommés**
+ — `le`→`ue`, `ge`→`fe`, `Re`→`Ie`, `ce`→`pe` — au même rebuild : les relire
+ dans les bundles, ne jamais les supposer stables.
+
+ `rattrapage-elo` ne porte pas le correctif et a quand même été redéployé : son
+ bundle sort à +4 octets parce que `RECUL_MEME_COMPTE_JOURS`, importé nulle
+ part chez lui, est tree-shaké et laisse une frontière de `var`
+ (`Ve=7,Fe=2` → `Ve=7;var Fe=2`). Le redéployer coûte moins cher que de laisser
+ une dérive dépôt/prod à expliquer au prochain rebuild — c'est la dette que le
+ 16/09 avait laissée sur quatre bundles.
