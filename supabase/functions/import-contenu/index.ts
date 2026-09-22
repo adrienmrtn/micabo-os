@@ -14,6 +14,7 @@ import {
   STATUTS_REPRENABLES,
   traiterImportFile,
 } from "../_shared/import_contenu.ts";
+import { pasAAvance } from "../_shared/import_progres.ts";
 import {
   annulerMajSources,
   demarrerMajSources,
@@ -261,6 +262,27 @@ Deno.serve(async (request) => {
   }
 });
 
+/**
+ * Chaînes simultanées au-delà desquelles un worker ne se remplace plus.
+ *
+ * Même largeur que la fenêtre de `claimContenu` : au-delà, un worker de plus
+ * ne peut rien réclamer que les huit autres ne réclament déjà, il ne fait
+ * qu'ajouter un `update` concurrent sur les mêmes lignes.
+ */
+const MAX_CHAINES = 8;
+
+/** Chaînes vivantes, mesurées par les baux en cours — pas d'état à tenir. */
+async function tropDeChaines(
+  supabase: ReturnType<typeof serviceClient>,
+): Promise<boolean> {
+  const { count } = await supabase
+    .from("contenus")
+    .select("id", { count: "exact", head: true })
+    .eq("import_statut", "running")
+    .gt("import_lease_until", new Date().toISOString());
+  return (count ?? 0) >= MAX_CHAINES;
+}
+
 async function continuer(
   supabase: ReturnType<typeof serviceClient>,
   extra: {
@@ -271,6 +293,8 @@ async function continuer(
     error?: string;
     elo?: unknown;
   },
+  /** Ce pas a-t-il fait avancer quelque chose ? `undefined` = non concerné. */
+  progres?: boolean,
 ): Promise<{
   action: string;
   more: boolean;
@@ -279,6 +303,17 @@ async function continuer(
   fileId?: string;
   error?: string;
 }> {
+  // Un worker qui n'a rien fait avancer ne se remplace pas. Sans ça, une seule
+  // ligne stérile entretient une chaîne éternelle : relâchée `pending` avec un
+  // bail nul, elle est re-réclamée par le successeur, indéfiniment — et
+  // `hasMoreWork` répond « oui » puisqu'elle est justement libre.
+  if (progres === false) return { ...extra, more: false };
+
+  // Et une chaîne productive ne se remplace que sous le plafond : le cron
+  // injecte 12 chaînes/minute et n'en retire jamais aucune, donc sans borne la
+  // population ne fait que croître.
+  if (await tropDeChaines(supabase)) return { ...extra, more: false };
+
   if (await hasMoreWork(supabase)) return { ...extra, more: true };
   const tick = await tickMajSources(supabase);
   return { ...extra, more: tick.more };
@@ -303,13 +338,14 @@ async function runWorker(
         action: r.reporte ? "scrape_reporte" : "scrape_failed",
         fileId: file.id,
         error: r.erreur,
-      });
+      }, /* progres */ false); // scrape reporté ou raté : rien produit, le
+      // cron reprendra la ligne quand son bail aura expiré.
     }
     return continuer(supabase, {
       action: "scrape",
       fileId: file.id,
       contenuId: r.contenuId,
-    });
+    }, /* progres */ true);
   }
 
   const contenu = await claimContenu(supabase);
@@ -319,15 +355,17 @@ async function runWorker(
       const tick = await tickMajSources(supabase);
       return { action: tick.action, more: tick.more };
     }
+    const etapeAvant = String(backfill.import_etape ?? "");
     const r = await avancerImport(supabase, backfill);
     await relacherContenuApresPas(supabase, backfill.id, r.etape);
     return continuer(supabase, {
       action: "backfill",
       contenuId: backfill.id,
       etape: r.etape,
-    });
+    }, pasAAvance(etapeAvant, r));
   }
 
+  const etapeAvant = String(contenu.import_etape ?? "");
   const r = await avancerImport(supabase, contenu);
   await relacherContenuApresPas(supabase, contenu.id, r.etape);
 
@@ -336,7 +374,8 @@ async function runWorker(
     contenuId: contenu.id,
     etape: r.etape,
     ...(r.elo ? { elo: r.elo } : {}),
-  });
+    // Même mesure que `avancerImport` : le progrès se constate.
+  }, pasAAvance(etapeAvant, r));
 }
 
 async function hasMoreWork(

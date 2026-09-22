@@ -63,6 +63,7 @@ import {
   placementParDefaut,
   resoudreApplicationImport,
 } from "./applications.ts";
+import { decisionPas, pasAAvance } from "./import_progres.ts";
 import { lireParLots } from "./lots.ts";
 import { nettoyerTexteDeck } from "./marque.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
@@ -845,12 +846,31 @@ export async function avancerImport(
   supabase: Supabase,
   contenu: ContenuRow,
 ): Promise<AvancerImportResultat> {
+  const etapeAvant = String(contenu.import_etape ?? "");
   const r = await executerPasImport(supabase, contenu);
   const tentatives = Number(contenu.import_tentatives ?? 0);
+
+  // Le progrès se CONSTATE, il ne se déclare pas — la règle et le pourquoi
+  // vivent dans `import_progres.ts`, module pur et testé.
+  const decision = decisionPas(tentatives, pasAAvance(etapeAvant, r));
+
   try {
-    await marquer(supabase, contenu.id, {
-      import_tentatives: r.progres ? 0 : tentatives + 1,
-    });
+    if (decision.sortDeLaFile) {
+      // Sortie de file. `done` est le seul statut que `claimContenu` ne
+      // reprend pas — `STATUTS_REPRENABLES` contient `failed` — et l'étape
+      // `failed` est terminale, donc `relacherContenuApresPas` ne la repassera
+      // pas en `pending`. La ligne reste visible et diagnosticable dans
+      // `/admin/file` ; elle ne tourne plus.
+      await marquer(supabase, contenu.id, {
+        import_tentatives: decision.steriles,
+        import_statut: "done",
+        import_etape: "failed",
+        import_erreur:
+          `${decision.steriles} pas sans changement d'étape à « ${etapeAvant} » — sorti de la file`,
+      });
+      return { ...r, etape: "failed", progres: false };
+    }
+    await marquer(supabase, contenu.id, { import_tentatives: decision.steriles });
   } catch {
     // Bookkeeping de priorité : ne doit jamais faire échouer le passage.
   }

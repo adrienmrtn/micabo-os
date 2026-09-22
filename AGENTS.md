@@ -867,6 +867,29 @@ tout le monde. 119 boots/min → 0 en deux minutes.
 plafond de chaînes ; et `import_tentatives` incrémenté **avant** le pas. Tant
 que ce n’est pas fait, l’auto-chaînage seul draine plus vite que douze jobs.
 
+
+### Le correctif (22/09/2026)
+
+Trois pièces, dans `import-contenu` :
+
+- **`_shared/import_progres.ts`**, module PUR (réexporté par
+  `src/features/moteur/importProgres.ts`, 10 tests). `pasAAvance(etapeAvant, r)`
+  exige `r.progres` **et** un changement d'`import_etape` : le progrès se
+  constate, il ne se déclare pas. `decisionPas` tient le compteur et sort une
+  ligne de la file au-delà de `MAX_PAS_STERILES` (5) — `import_statut = 'done'`
+  + `import_etape = 'failed'`, le seul couple que `claimContenu` ne reprend pas
+  (`STATUTS_REPRENABLES` contient `failed`, pas `done`). Le plafond garde une
+  marge parce que le nettoyage traite **une slide par pas** : à 1, une ligne
+  lente mais saine serait écartée.
+- **`avancerImport`** appelle ces deux fonctions au lieu de croire `r.progres`.
+- **`continuer()`** prend `progres` en paramètre et ne rechaîne plus un worker
+  stérile ; et même productif, il ne se remplace que sous `MAX_CHAINES` (8, la
+  largeur de la fenêtre de `claimContenu`), mesuré par les baux vivants. Sans
+  ce plafond, le cron injecte 12 chaînes/minute et n'en retire jamais aucune.
+
+Les douze jobs peuvent être rallumés une fois ce correctif déployé
+(`cron.alter_job(jobid, active := true)`), pas avant.
+
 ## Prod ≠ dépôt (à savoir avant de déployer)
 
 Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
