@@ -6,6 +6,7 @@
  */
 export {
   decisionPas,
+  decisionPasDejaCompte,
   etapeAChange,
   MAX_PASSES_MEME_ETAPE,
 } from "../../../supabase/functions/_shared/import_progres";

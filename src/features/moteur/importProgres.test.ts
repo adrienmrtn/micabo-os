@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { decisionPas, etapeAChange, MAX_PASSES_MEME_ETAPE } from "./importProgres";
+import {
+  decisionPas,
+  decisionPasDejaCompte,
+  etapeAChange,
+  MAX_PASSES_MEME_ETAPE,
+} from "./importProgres";
 
 describe("etapeAChange", () => {
   it("voit le franchissement d'une étape", () => {
@@ -70,5 +75,44 @@ describe("decisionPas", () => {
   it("tolère un compteur absurde en base", () => {
     expect(decisionPas(-3, false).passes).toBe(1);
     expect(decisionPas(2.7, false).passes).toBe(3);
+  });
+});
+
+describe("decisionPasDejaCompte", () => {
+  // `claimContenu` incrémente au claim pour qu'un pas qui tue l'isolat compte
+  // quand même son essai. La fin de pas ne doit donc PAS re-compter.
+  it("ne re-compte pas un essai déjà compté au claim", () => {
+    expect(decisionPasDejaCompte(1, false)).toEqual({ passes: 1, sortDeLaFile: false });
+    expect(decisionPasDejaCompte(9, false)).toEqual({ passes: 9, sortDeLaFile: false });
+  });
+
+  it("remet à zéro au franchissement d'étape", () => {
+    expect(decisionPasDejaCompte(30, true)).toEqual({ passes: 0, sortDeLaFile: false });
+  });
+
+  it("sort la ligne de la file au plafond", () => {
+    expect(decisionPasDejaCompte(MAX_PASSES_MEME_ETAPE, false)).toEqual({
+      passes: MAX_PASSES_MEME_ETAPE,
+      sortDeLaFile: true,
+    });
+  });
+
+  // Le cas réel du 22/09 : cinq lignes réclamées en boucle, chaque pas tuant
+  // l'isolat avant d'écrire quoi que ce soit. Compté au claim, le compteur
+  // monte malgré tout et la ligne finit par sortir.
+  it("éjecte une ligne dont chaque pas tue le worker", () => {
+    let passes = 0;
+    let sortie = false;
+    for (let i = 0; i < 200 && !sortie; i += 1) {
+      passes += 1; // l'incrément du claim, seul écrit qui survive
+      sortie = decisionPasDejaCompte(passes, false).sortDeLaFile;
+    }
+    expect(sortie).toBe(true);
+    expect(passes).toBe(MAX_PASSES_MEME_ETAPE);
+  });
+
+  it("n'écrit jamais un compteur sous 1 quand l'étape n'a pas bougé", () => {
+    expect(decisionPasDejaCompte(0, false).passes).toBe(1);
+    expect(decisionPasDejaCompte(-5, false).passes).toBe(1);
   });
 });

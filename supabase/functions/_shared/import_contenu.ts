@@ -63,7 +63,7 @@ import {
   placementParDefaut,
   resoudreApplicationImport,
 } from "./applications.ts";
-import { decisionPas, etapeAChange } from "./import_progres.ts";
+import { decisionPasDejaCompte, etapeAChange } from "./import_progres.ts";
 import { lireParLots } from "./lots.ts";
 import { nettoyerTexteDeck } from "./marque.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
@@ -848,13 +848,12 @@ export async function avancerImport(
 ): Promise<AvancerImportResultat> {
   const etapeAvant = String(contenu.import_etape ?? "");
   const r = await executerPasImport(supabase, contenu);
-  const tentatives = Number(contenu.import_tentatives ?? 0);
+  // La ligne arrive DÉJÀ comptée : `claimContenu` a incrémenté au claim, pour
+  // qu'un pas qui tue l'isolat compte quand même son essai. Ici on ne fait donc
+  // que remettre à zéro sur un franchissement d'étape, ou éjecter au plafond.
+  const passes = Number(contenu.import_tentatives ?? 0);
 
-  // `import_tentatives` compte les passes consécutives sur la MÊME étape, pas
-  // les pas que le pipeline déclare stériles : un pas peut se tromper sur ce
-  // qu'il a fait, `import_etape` avant/après non. Règle et pourquoi dans
-  // `import_progres.ts`, module pur et testé.
-  const decision = decisionPas(tentatives, etapeAChange(etapeAvant, r));
+  const decision = decisionPasDejaCompte(passes, etapeAChange(etapeAvant, r));
 
   try {
     if (decision.sortDeLaFile) {
@@ -1823,7 +1822,7 @@ export async function claimContenu(
   const libre = `import_lease_until.is.null,import_lease_until.lt."${now}"`;
   const { data: candidats } = await supabase
     .from("contenus")
-    .select("id")
+    .select("id, import_tentatives")
     .in("import_statut", ["pending", "running", "failed"])
     .or(libre)
     .order("import_tentatives", { ascending: true })
@@ -1838,6 +1837,13 @@ export async function claimContenu(
       .update({
         import_statut: "running",
         import_lease_until: lease,
+        // L'essai se compte ICI, pas à la fin du pas. Un pas qui tue l'isolat
+        // (timeout Edge 150 s) ne revient jamais écrire quoi que ce soit : le
+        // 22/09/2026, cinq lignes ont tourné deux heures avec
+        // `import_tentatives` figé à 0, donc toujours en tête du tri, bloquant
+        // les 57 lignes derrière elles. Compté au claim, un tel pas est
+        // pénalisé même s'il ne rend jamais la main.
+        import_tentatives: Number(c.import_tentatives ?? 0) + 1,
       })
       .eq("id", c.id)
       .in("import_statut", ["pending", "running", "failed"])
