@@ -7,6 +7,8 @@
 export {
   decisionPas,
   decisionPasDejaCompte,
+  ETAPES_APRES_FORMAT,
+  ETAPES_ELO_OU_APRES,
   etapeAChange,
   MAX_PASSES_MEME_ETAPE,
 } from "../../../supabase/functions/_shared/import_progres";

@@ -107,3 +107,29 @@ export function decisionPasDejaCompte(
   const n = Math.max(1, Math.floor(passes));
   return { passes: n, sortDeLaFile: n >= max };
 }
+
+/** Étapes à partir desquelles on ne repose plus `import_etape = 'format'`. */
+export const ETAPES_APRES_FORMAT = new Set(["format", "caption", "done"]);
+
+/**
+ * Étapes à partir desquelles on ne repose plus `import_etape = 'elo'`.
+ *
+ * `format` manquait ici, dans une condition écrite en chaîne de `!==`. Un
+ * contenu à `format` retombait donc en `elo`, d'où la branche 5c le renvoyait
+ * aussitôt en `format` : aller-retour infini.
+ *
+ * Invisible à tous les garde-fous, et c'est le pire de l'affaire : chaque
+ * bascule est un VRAI changement d'`import_etape`, donc `progres: true` est
+ * honnête et le compteur de passes se remet à zéro à chaque tour. Constaté le
+ * 22/09/2026 — `elo` 12→16→17→14 et `format` 15→11→10→13, somme constante à
+ * 27, pendant que 57 contenus à `ocr` attendaient derrière, jamais servis.
+ */
+export const ETAPES_ELO_OU_APRES = new Set([
+  "elo",
+  "nettoyage",
+  "format",
+  "caption",
+  "traduction",
+  "sophia",
+  "done",
+]);

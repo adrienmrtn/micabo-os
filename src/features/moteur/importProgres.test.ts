@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   decisionPas,
   decisionPasDejaCompte,
+  ETAPES_APRES_FORMAT,
+  ETAPES_ELO_OU_APRES,
   etapeAChange,
   MAX_PASSES_MEME_ETAPE,
 } from "./importProgres";
@@ -114,5 +116,32 @@ describe("decisionPasDejaCompte", () => {
   it("n'écrit jamais un compteur sous 1 quand l'étape n'a pas bougé", () => {
     expect(decisionPasDejaCompte(0, false).passes).toBe(1);
     expect(decisionPasDejaCompte(-5, false).passes).toBe(1);
+  });
+});
+
+describe("ordre des étapes d'import", () => {
+  // L'invariant qui manquait le 22/09/2026. `format` était dans
+  // ETAPES_APRES_FORMAT mais pas dans ETAPES_ELO_OU_APRES : un contenu à
+  // `format` retombait en `elo`, d'où la branche format le renvoyait en
+  // `format`. Aller-retour infini, et invisible — chaque bascule est un vrai
+  // changement d'étape, donc `progres: true` est honnête et le compteur de
+  // passes se remet à zéro à chaque tour.
+  it("toute étape qui bloque le retour à format bloque aussi le retour à elo", () => {
+    for (const etape of ETAPES_APRES_FORMAT) {
+      expect(ETAPES_ELO_OU_APRES.has(etape)).toBe(true);
+    }
+  });
+
+  it("format est des deux côtés — c'est précisément l'oubli d'origine", () => {
+    expect(ETAPES_APRES_FORMAT.has("format")).toBe(true);
+    expect(ETAPES_ELO_OU_APRES.has("format")).toBe(true);
+  });
+
+  // Une étape antérieure à elo doit pouvoir y mener, sinon le pipeline
+  // n'avance plus du tout.
+  it("les étapes d'avant elo n'y sont pas", () => {
+    for (const etape of ["ocr", "pertinence", "backfill", ""]) {
+      expect(ETAPES_ELO_OU_APRES.has(etape)).toBe(false);
+    }
   });
 });
