@@ -803,47 +803,69 @@ les cinq jobs minuit / ELO. Les douze jobs du drain d’import n’en font pas
 partie — voir la section suivante. Après un `db push` suivi du désenfilage
 général, vérifier les deux familles, pas seulement celle du planificateur.
 
-## Le drain d’import n’avait plus de cron (0271, 22/09/2026)
+## Le drain d’import n’avait plus de cron — et le rebrancher l’a arrêté (0271, 22/09/2026)
 
-`0149_import_file_serveur.sql` posait douze jobs `import-contenu-drain-1..12`,
-tous à la minute — « 12 workers / minute = parallélisation agressive ».
+`0149_import_file_serveur.sql` posait douze jobs `import-contenu-drain-1..12` à
+la minute — « 12 workers / minute = parallélisation agressive ».
 `0156_pause_verifyclean_crons.sql` les a **désactivés** pour couper les dépenses
-continues. Depuis, ils avaient **disparu** de `cron.job` : le désenfilage
-général d’un `db push` les a balayés, et le planificateur ne les connaît pas.
-Le parallélisme n’était donc pas en panne — il n’était plus branché, et
-personne ne pouvait le voir puisque l’import marchait quand même.
+continues, puis le désenfilage général d’un `db push` les a fait **disparaître**
+de `cron.job` : le planificateur ne connaît que les cinq jobs minuit / ELO.
 
 Ce qui drainait à la place : le seul auto-chaînage Edge de
 `import-contenu/index.ts`, `kickWorkers(request, 1)`, prévu comme **filet** et
-pas comme moteur. Un worker traite UN pas de pipeline pour UN contenu puis se
-remplace par un seul successeur — donc une file à un seul fil.
+pas comme moteur.
 
-Mesuré le 22/09 sur l’import de `jeanne.wilgo` (139 contenus créés en 16 min) :
-**~1,3 contenu/minute** franchissant une étape, pour cinq étapes par contenu
-(`pertinence → elo → nettoyage → format → caption → done`). Plus de six heures
-de file. `nettoyage` est le poste lourd : upscale SeedVR par Fal **slide par
-slide**, ~13 s chacune.
+**Les rebrancher a dégradé, puis arrêté l’import.** Débit mesuré sur l’étape
+`pertinence`, import de `jeanne.wilgo` (139 contenus) :
 
-**Ne pas rejouer 0149** : il clone la commande du job `preparation-nuit` pour en
-hériter l’hôte et le secret, or ce job n’existe plus — le bloc sort sur son
-`raise notice` sans rien poser. 0271 écrit la commande en clair via
-`kick_edge_micabo` + `jsonb_build_object`.
+| jobs actifs | contenus/min |
+|---|---|
+| 0 (auto-chaînage seul) | **1,33** |
+| 12 | 2,50 puis 0,64 |
+| 4 | 0,21 |
+| 0 | **0,00** — arrêt complet |
 
-**Pourquoi douze est sûr alors que deux ne l’était pas.** Le commentaire de
-`index.ts` documente une panne réelle : à `kickWorkers(request, 2)`, la file se
-dédoublait à chaque pas et saturait les Edge Functions — tout le reste répondait
-« Failed to send a request ». Douze chaînes injectées par minute est **linéaire,
-pas exponentiel**, et le bail de `claimContenu` (`LEASE_MS`, 8 min) borne le
-reste : un worker qui ne trouve rien à réclamer rend `more: false` et s’éteint
-sans se rechaîner. La population se limite d’elle-même au travail disponible.
-Le levier de parallélisme est donc le **nombre de chaînes amorcées**, jamais le
-fan-out interne du worker.
+Trois défauts se combinent, **aucun n’est dans le cron**.
 
-**Ces douze jobs coûtent.** C’est précisément ce que 0156 avait coupé. Ils
-tournent à vide sans frais notables (un claim qui ne trouve rien), mais une file
-pleine consomme du Fal et du Gemini en continu. Les désactiver quand plus aucun
-import n’est prévu se fait job par job
-(`cron.alter_job(jobid, active := false)`), pas en rejouant un planificateur.
+1. **La population de workers est conservée, pas bornée.** `continuer()` rend
+   `more: await hasMoreWork()` — « il reste du travail en file », et NON « j’ai
+   réussi à réclamer quelque chose ». Chaque worker se rechaîne donc à un
+   successeur même bredouille : la population ne décroît jamais tant que la file
+   n’est pas vide, et chaque tick de cron l’augmente définitivement. Une chaîne
+   n’est pas « un worker par minute » : c’est une boucle de ~2 s, soit
+   ~25 boots/min à elle seule. On est monté à **~120 boots/min**.
+   `rattrapage-elo` échappe à ça parce qu’il a un verrou `busy` explicite
+   (`eloDrainEstVerrouille`) ; `import-contenu` n’en a **aucun**.
+2. **La fenêtre de claim est étroite et déterministe.** `claimContenu` lit les
+   **8 mêmes** candidats pour tout le monde (`import_tentatives`,
+   `pertinence_score`, `created_at`), puis chacun tente un `update` conditionnel
+   dessus. À 120 workers, Postgres sérialise les verrous sur ces 8 lignes et les
+   isolats meurent au timeout avant d’aboutir.
+3. **Des lignes empoisonnées, antérieures au cron.** 24 contenus arrêtés à
+   `elo` / `format`, aux `pertinence_score` les plus bas donc en tête du tri.
+   Réclamées, elles tuent l’isolat (timeout Edge 150 s, `shutdown` sans **aucune**
+   ligne de log applicatif), donc `relacherContenuApresPas` n’est jamais atteint,
+   donc `import_tentatives` n’est **jamais incrémenté** — et elles reviennent en
+   tête au bail suivant. Les 62 contenus à `pertinence` derrière elles
+   n’étaient jamais atteignables.
+
+Le code prévoit pourtant le cas 3 : « `import_tentatives` en premier critère :
+un diaporama qui enchaîne les passages stériles passe derrière les imports frais
+au lieu d’aspirer tous les workers ». Le mécanisme existe, il ne se déclenche
+pas, parce que le compteur est écrit **après** le pas et que le pas tue le
+process.
+
+**Reprise du 22/09** : `import_tentatives + 1` sur les 24 lignes bloquées. Le
+travail a repris dans la minute — 0 → 129 lignes de log applicatif par minute —
+sans toucher au cron. Le park de la file (bail futur sur toutes les lignes) est
+le seul levier qui tue un troupeau déjà lancé : il fait rendre `more: false` à
+tout le monde. 119 boots/min → 0 en deux minutes.
+
+**Les douze jobs existent, éteints** (0271). Avant de les activer il faut, dans
+`import-contenu` : un verrou de concurrence sur le modèle de
+`eloDrainEstVerrouille` ; un `more` qui reflète le claim et non la file, ou un
+plafond de chaînes ; et `import_tentatives` incrémenté **avant** le pas. Tant
+que ce n’est pas fait, l’auto-chaînage seul draine plus vite que douze jobs.
 
 ## Prod ≠ dépôt (à savoir avant de déployer)
 
