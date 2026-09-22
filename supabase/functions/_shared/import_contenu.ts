@@ -63,7 +63,7 @@ import {
   placementParDefaut,
   resoudreApplicationImport,
 } from "./applications.ts";
-import { decisionPas, pasAAvance } from "./import_progres.ts";
+import { decisionPas, etapeAChange } from "./import_progres.ts";
 import { lireParLots } from "./lots.ts";
 import { nettoyerTexteDeck } from "./marque.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
@@ -850,9 +850,11 @@ export async function avancerImport(
   const r = await executerPasImport(supabase, contenu);
   const tentatives = Number(contenu.import_tentatives ?? 0);
 
-  // Le progrès se CONSTATE, il ne se déclare pas — la règle et le pourquoi
-  // vivent dans `import_progres.ts`, module pur et testé.
-  const decision = decisionPas(tentatives, pasAAvance(etapeAvant, r));
+  // `import_tentatives` compte les passes consécutives sur la MÊME étape, pas
+  // les pas que le pipeline déclare stériles : un pas peut se tromper sur ce
+  // qu'il a fait, `import_etape` avant/après non. Règle et pourquoi dans
+  // `import_progres.ts`, module pur et testé.
+  const decision = decisionPas(tentatives, etapeAChange(etapeAvant, r));
 
   try {
     if (decision.sortDeLaFile) {
@@ -862,15 +864,15 @@ export async function avancerImport(
       // pas en `pending`. La ligne reste visible et diagnosticable dans
       // `/admin/file` ; elle ne tourne plus.
       await marquer(supabase, contenu.id, {
-        import_tentatives: decision.steriles,
+        import_tentatives: decision.passes,
         import_statut: "done",
         import_etape: "failed",
         import_erreur:
-          `${decision.steriles} pas sans changement d'étape à « ${etapeAvant} » — sorti de la file`,
+          `${decision.passes} passes consécutives à l'étape « ${etapeAvant} » sans la franchir — sorti de la file`,
       });
       return { ...r, etape: "failed", progres: false };
     }
-    await marquer(supabase, contenu.id, { import_tentatives: decision.steriles });
+    await marquer(supabase, contenu.id, { import_tentatives: decision.passes });
   } catch {
     // Bookkeeping de priorité : ne doit jamais faire échouer le passage.
   }

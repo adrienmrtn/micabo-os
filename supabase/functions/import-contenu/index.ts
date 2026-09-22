@@ -14,7 +14,6 @@ import {
   STATUTS_REPRENABLES,
   traiterImportFile,
 } from "../_shared/import_contenu.ts";
-import { pasAAvance } from "../_shared/import_progres.ts";
 import {
   annulerMajSources,
   demarrerMajSources,
@@ -355,17 +354,15 @@ async function runWorker(
       const tick = await tickMajSources(supabase);
       return { action: tick.action, more: tick.more };
     }
-    const etapeAvant = String(backfill.import_etape ?? "");
     const r = await avancerImport(supabase, backfill);
     await relacherContenuApresPas(supabase, backfill.id, r.etape);
     return continuer(supabase, {
       action: "backfill",
       contenuId: backfill.id,
       etape: r.etape,
-    }, pasAAvance(etapeAvant, r));
+    }, r.progres);
   }
 
-  const etapeAvant = String(contenu.import_etape ?? "");
   const r = await avancerImport(supabase, contenu);
   await relacherContenuApresPas(supabase, contenu.id, r.etape);
 
@@ -374,8 +371,11 @@ async function runWorker(
     contenuId: contenu.id,
     etape: r.etape,
     ...(r.elo ? { elo: r.elo } : {}),
-    // Même mesure que `avancerImport` : le progrès se constate.
-  }, pasAAvance(etapeAvant, r));
+    // Le rechaînage suit la déclaration du pas : `nettoyage` et `caption`
+    // travaillent par lots de slides sans changer d'étape, et doivent bien
+    // enchaîner. La boucle, elle, est coupée par le plafond de passes dans
+    // `avancerImport`, pas ici.
+  }, r.progres);
 }
 
 async function hasMoreWork(
