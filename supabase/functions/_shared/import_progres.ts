@@ -85,3 +85,25 @@ export function decisionPas(
   const n = Math.max(0, Math.floor(passes)) + 1;
   return { passes: n, sortDeLaFile: n >= max };
 }
+
+/**
+ * Même décision quand l'essai a **déjà** été compté au claim.
+ *
+ * `claimContenu` incrémente `import_tentatives` au moment où il pose le bail,
+ * et pas à la fin du pas : sinon un pas qui tue l'isolat (timeout Edge 150 s)
+ * ne revient jamais écrire son essai. Le 22/09/2026, cinq lignes ont tourné
+ * deux heures avec un compteur figé à 0 — donc toujours en tête du tri de
+ * `claimContenu` — en bloquant les 57 lignes derrière elles.
+ *
+ * Le prix à payer est ici : à la fin d'un pas, il ne faut surtout pas
+ * re-compter, seulement remettre à zéro si l'étape a été franchie.
+ */
+export function decisionPasDejaCompte(
+  passes: number,
+  etapeChangee: boolean,
+  max: number = MAX_PASSES_MEME_ETAPE,
+): DecisionPas {
+  if (etapeChangee) return { passes: 0, sortDeLaFile: false };
+  const n = Math.max(1, Math.floor(passes));
+  return { passes: n, sortDeLaFile: n >= max };
+}
