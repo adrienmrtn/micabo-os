@@ -63,7 +63,12 @@ import {
   placementParDefaut,
   resoudreApplicationImport,
 } from "./applications.ts";
-import { decisionPasDejaCompte, etapeAChange } from "./import_progres.ts";
+import {
+  decisionPasDejaCompte,
+  ETAPES_APRES_FORMAT,
+  ETAPES_ELO_OU_APRES,
+  etapeAChange,
+} from "./import_progres.ts";
 import { lireParLots } from "./lots.ts";
 import { nettoyerTexteDeck } from "./marque.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
@@ -93,7 +98,6 @@ const SLIDES_CAPTION_PAR_PASSAGE = 2;
 /** 1 slide / passage nettoyage : Fal≤90s + store doit tenir sous le mur Edge ~150s. */
 const SLIDES_NETTOYAGE_PAR_PASSAGE = 1;
 /** Étapes qui prouvent que l'alignement des formats a déjà eu lieu. */
-const ETAPES_APRES_FORMAT = new Set(["format", "caption", "done"]);
 /**
  * Apify `resultsPerPage` pour le listing d'un profil. À 100, un compte qui a
  * publié 150 slideshows n'en révélait que la première tranche : le reste était
@@ -1046,10 +1050,7 @@ async function executerPasImport(
         }
       }
 
-      if (contenu.import_etape !== "elo" && contenu.import_etape !== "nettoyage" &&
-          contenu.import_etape !== "caption" &&
-          contenu.import_etape !== "traduction" && contenu.import_etape !== "sophia" &&
-          contenu.import_etape !== "done") {
+      if (!ETAPES_ELO_OU_APRES.has(String(contenu.import_etape ?? ""))) {
         await marquer(supabase, contenu.id, { import_etape: "elo" });
         return { etape: "elo", elo, progres: true };
       }

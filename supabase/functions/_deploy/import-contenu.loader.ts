@@ -7,7 +7,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "35a6fd66fe1ce86a7d096eccb7e0cdd4acff4951";
+const SHA = "6c57410e4fa6b403483c19fb16ac9969fc9a1bc0";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/import-contenu.bundle.js`;
 
