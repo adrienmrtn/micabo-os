@@ -798,6 +798,53 @@ lui seul tient l’hôte et le secret. Corps JSON avec `jsonb_build_object`, jam
 un `'{"…":…}'::jsonb` écrit à la main — les guillemets ressortent échappés
 quand la migration passe par un outil, et le job casse en silence au tick.
 
+**Le planificateur ne couvre pas tout.** `crons_minuit_planifier()` ne repose que
+les cinq jobs minuit / ELO. Les douze jobs du drain d’import n’en font pas
+partie — voir la section suivante. Après un `db push` suivi du désenfilage
+général, vérifier les deux familles, pas seulement celle du planificateur.
+
+## Le drain d’import n’avait plus de cron (0271, 22/09/2026)
+
+`0149_import_file_serveur.sql` posait douze jobs `import-contenu-drain-1..12`,
+tous à la minute — « 12 workers / minute = parallélisation agressive ».
+`0156_pause_verifyclean_crons.sql` les a **désactivés** pour couper les dépenses
+continues. Depuis, ils avaient **disparu** de `cron.job` : le désenfilage
+général d’un `db push` les a balayés, et le planificateur ne les connaît pas.
+Le parallélisme n’était donc pas en panne — il n’était plus branché, et
+personne ne pouvait le voir puisque l’import marchait quand même.
+
+Ce qui drainait à la place : le seul auto-chaînage Edge de
+`import-contenu/index.ts`, `kickWorkers(request, 1)`, prévu comme **filet** et
+pas comme moteur. Un worker traite UN pas de pipeline pour UN contenu puis se
+remplace par un seul successeur — donc une file à un seul fil.
+
+Mesuré le 22/09 sur l’import de `jeanne.wilgo` (139 contenus créés en 16 min) :
+**~1,3 contenu/minute** franchissant une étape, pour cinq étapes par contenu
+(`pertinence → elo → nettoyage → format → caption → done`). Plus de six heures
+de file. `nettoyage` est le poste lourd : upscale SeedVR par Fal **slide par
+slide**, ~13 s chacune.
+
+**Ne pas rejouer 0149** : il clone la commande du job `preparation-nuit` pour en
+hériter l’hôte et le secret, or ce job n’existe plus — le bloc sort sur son
+`raise notice` sans rien poser. 0271 écrit la commande en clair via
+`kick_edge_micabo` + `jsonb_build_object`.
+
+**Pourquoi douze est sûr alors que deux ne l’était pas.** Le commentaire de
+`index.ts` documente une panne réelle : à `kickWorkers(request, 2)`, la file se
+dédoublait à chaque pas et saturait les Edge Functions — tout le reste répondait
+« Failed to send a request ». Douze chaînes injectées par minute est **linéaire,
+pas exponentiel**, et le bail de `claimContenu` (`LEASE_MS`, 8 min) borne le
+reste : un worker qui ne trouve rien à réclamer rend `more: false` et s’éteint
+sans se rechaîner. La population se limite d’elle-même au travail disponible.
+Le levier de parallélisme est donc le **nombre de chaînes amorcées**, jamais le
+fan-out interne du worker.
+
+**Ces douze jobs coûtent.** C’est précisément ce que 0156 avait coupé. Ils
+tournent à vide sans frais notables (un claim qui ne trouve rien), mais une file
+pleine consomme du Fal et du Gemini en continu. Les désactiver quand plus aucun
+import n’est prévu se fait job par job
+(`cron.alter_job(jobid, active := false)`), pas en rejouant un planificateur.
+
 ## Prod ≠ dépôt (à savoir avant de déployer)
 
 Ce dépôt n’est **pas** la source de vérité de tout ce qui tourne sur
