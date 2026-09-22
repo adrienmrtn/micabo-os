@@ -63,6 +63,7 @@ import {
   placementParDefaut,
   resoudreApplicationImport,
 } from "./applications.ts";
+import { decisionPas, etapeAChange } from "./import_progres.ts";
 import { lireParLots } from "./lots.ts";
 import { nettoyerTexteDeck } from "./marque.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
@@ -845,12 +846,33 @@ export async function avancerImport(
   supabase: Supabase,
   contenu: ContenuRow,
 ): Promise<AvancerImportResultat> {
+  const etapeAvant = String(contenu.import_etape ?? "");
   const r = await executerPasImport(supabase, contenu);
   const tentatives = Number(contenu.import_tentatives ?? 0);
+
+  // `import_tentatives` compte les passes consécutives sur la MÊME étape, pas
+  // les pas que le pipeline déclare stériles : un pas peut se tromper sur ce
+  // qu'il a fait, `import_etape` avant/après non. Règle et pourquoi dans
+  // `import_progres.ts`, module pur et testé.
+  const decision = decisionPas(tentatives, etapeAChange(etapeAvant, r));
+
   try {
-    await marquer(supabase, contenu.id, {
-      import_tentatives: r.progres ? 0 : tentatives + 1,
-    });
+    if (decision.sortDeLaFile) {
+      // Sortie de file. `done` est le seul statut que `claimContenu` ne
+      // reprend pas — `STATUTS_REPRENABLES` contient `failed` — et l'étape
+      // `failed` est terminale, donc `relacherContenuApresPas` ne la repassera
+      // pas en `pending`. La ligne reste visible et diagnosticable dans
+      // `/admin/file` ; elle ne tourne plus.
+      await marquer(supabase, contenu.id, {
+        import_tentatives: decision.passes,
+        import_statut: "done",
+        import_etape: "failed",
+        import_erreur:
+          `${decision.passes} passes consécutives à l'étape « ${etapeAvant} » sans la franchir — sorti de la file`,
+      });
+      return { ...r, etape: "failed", progres: false };
+    }
+    await marquer(supabase, contenu.id, { import_tentatives: decision.passes });
   } catch {
     // Bookkeeping de priorité : ne doit jamais faire échouer le passage.
   }

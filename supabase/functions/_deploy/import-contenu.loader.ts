@@ -7,7 +7,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "91d76e8ac0976ba2b6edc3583b923a6e3c0ffb9d";
+const SHA = "a0e846a58ec28a140f0d2f0a3ffe66aa2955d622";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/import-contenu.bundle.js`;
 
@@ -21,4 +21,6 @@ if (!src.includes("clockworks~tiktok-scraper") || !src.includes("Deno.serve")) {
 }
 // esbuild renomme l'alias d'un rebuild à l'autre : relire le
 // `import{createClient as …}` du bundle avant de l'effacer, et reporter le nom ici.
+// 22/09/2026 : `Le` → `je` → `Le` au fil des rebuilds du correctif de boucle.
+// Ne jamais le supposer stable : le relire dans le bundle à chaque fois.
 new Function("Le", src)(createClient);
