@@ -803,6 +803,55 @@ les cinq jobs minuit / ELO. Les douze jobs du drain d’import n’en font pas
 partie — voir la section suivante. Après un `db push` suivi du désenfilage
 général, vérifier les deux familles, pas seulement celle du planificateur.
 
+## Le concurrent dans les visuels : interface dehors, logo dedans (22/09/2026)
+
+La source `jeanne.wilgo` est une créatrice du concurrent. Ses 395 slides ont été
+balayées une par une pour répondre à une question précise : **où le concurrent
+est-il visible dans l'image**, et sous quelle forme. La réponse n'est pas binaire,
+et c'est tout l'intérêt — 27 slideshows sur 73 en portent un, en deux familles que
+rien ne distingue à la vignette.
+
+- **Interface (16 slideshows, 19 slides) → sortis de la file.** Une capture
+  d'écran de l'appli : écran de quiz avec avatar et bouton « Continuer », écran
+  « Grammaire » avec la mascotte et « Lancer un quiz +10xp », écran « Français »
+  avec ses onglets et sa liste de chapitres, carte « Montrer mon devoir ». C'est
+  le produit du concurrent en démonstration ; le nettoyage de texte n'y peut rien,
+  il ne lit pas les pixels.
+- **Logo ou mascotte seuls (11 slideshows, 11 slides) → gardés en file.** Une
+  fiche App Store (icône, « Ouvrir », note 4,6, classement N°2 ou N°8 Éducation),
+  une ligne de résultat de recherche, ou l'icône sur un écran d'accueil avec son
+  libellé. Un logo se recouvre ou se recadre ; une interface, non.
+- **Les 46 restants ont été validés en lot** et sont entrés dans le pool.
+
+**La mascotte n'apparaît jamais en décor.** C'est toujours l'icône de l'appli ou
+un élément DANS l'interface. Donc « mascotte sans interface » veut dire, sans
+exception, « surface de boutique ou écran d'accueil » — ce qui est précisément ce
+qui se retouche.
+
+**Sortir = `rejete`, pas la suppression dure.** Le bouton « refuser » de
+`/admin/file` supprime pour de bon ; ici le geste porte sur 16 lignes d'un coup,
+sur un jugement visuel. `assignation_contenu.ts` ne pioche que `valide` et un
+`rejete` ne repasse jamais par la file : même effet, et on peut revenir si on
+décide plus tard de recadrer la slide fautive plutôt que de jeter le slideshow.
+Aucun des 16 n'avait encore de passage — rien en vol n'a été touché.
+
+`file_wilgo_sauvegarde_22_09` garde l'état d'avant des 73, avec la catégorie et
+la position de la slide en cause. Même leçon que `micabo_marque_sauvegarde`
+(0262) et `doublons_sauvegarde` (0264) : une décision en lot se reprend en
+relisant l'état d'avant, jamais en le reconstruisant. RLS activée, pas de policy
+— seul le `service_role` la lit.
+
+**Ce que la détection automatique ne sait pas faire, et pourquoi c'est noté ici.**
+Une passe ORB+RANSAC sur un gabarit de la mascotte **confirme mais n'exclut pas** :
+un slideshow dont l'icône occupe un quart de la slide est ressorti à **0 inlier**,
+parce que ces captures sont des captures de captures, trop floues pour qu'ORB y
+trouve des coins stables. Un détecteur d'encarts clairs rate lui aussi 7 des 29
+positifs connus. Les deux servent à cadrer le zoom, pas à décider. Le classement
+final est visuel, et c'est un balayage sur planche-contact qui avait d'abord fait
+compter 9 slideshows d'interface au lieu de 16 : à cette taille on voit qu'il y a
+un encart, pas ce qu'il montre. **Toute reprise de ce sujet se fait au zoom, une
+famille à la fois.**
+
 ## Le drain d’import n’avait plus de cron — et le rebrancher l’a arrêté (0271, 22/09/2026)
 
 `0149_import_file_serveur.sql` posait douze jobs `import-contenu-drain-1..12` à
