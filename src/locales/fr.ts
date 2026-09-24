@@ -364,6 +364,12 @@ export const fr = {
       ameliorerAide:
         "Met en forme, complète, corrige les fautes, et traduit en anglais. N'ajoute pas de reproches que tu n'as pas écrits. Tu envoies ensuite.",
       passer: "Passer",
+      retirer: "Retirer ce slideshow",
+      retirerConfirm:
+        "Retirer ce slideshow ? Il sort du pool et ne sera plus assigné. Les posts prévus qui le portent sont refaits tout de suite avec un autre slideshow. Les posts déjà publiés ne bougent pas.",
+      retirerOk:
+        "Slideshow retiré du pool. {{retires}} post(s) prévu(s) repris, {{refaits}} refait(s) par le moteur.",
+      retirerSansContenu: "Slideshow introuvable pour ce post.",
       envoyer: "Envoyer au créateur",
       videTitre: "File du jour vide",
       videAide: "Aucun slideshow publié aujourd'hui à reviewer — ou tout est déjà envoyé / passé.",
