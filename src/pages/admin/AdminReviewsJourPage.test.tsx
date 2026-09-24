@@ -52,10 +52,7 @@ vi.mock("@/features/moteur/api", () => ({
   }),
   ameliorerReview: vi.fn(async (texte: string) => `EN: ${texte}`),
   ecrireReglage: vi.fn(async () => undefined),
-  retirerSlideshow: vi.fn(async (contenuId: string) => {
-    file = file.filter((x) => x.contenuId !== contenuId);
-    return { retires: 2, refaits: 2, publiesIntacts: 1 };
-  }),
+  retirerSlideshow: vi.fn(async () => ({ retires: 0, refaits: 0, publiesIntacts: 1 })),
 }));
 
 function renderPage() {
@@ -122,15 +119,30 @@ describe("AdminReviewsJourPage", () => {
       expect(screen.getByText("Révisions examen")).toBeInTheDocument();
     });
   });
-  it("retire le slideshow courant et passe au suivant", async () => {
+  it("retire le slideshow, sort le post de la file et passe au suivant", async () => {
     const confirmer = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPage();
     await screen.findByText("Flashcards cellules");
 
     fireEvent.click(screen.getByRole("button", { name: /Remove this slideshow/i }));
 
+    // Le post courant est publié : le retrait ne le touche pas, c'est le skip
+    // qui le sort de la file. Sans lui, l'écran ne bougerait pas.
     await waitFor(() => expect(screen.getByText("Révisions examen")).toBeTruthy());
     expect(screen.queryByText("Flashcards cellules")).toBeNull();
+    confirmer.mockRestore();
+  });
+
+  it("dit clairement qu'aucun post prévu n'utilisait le slideshow", async () => {
+    const confirmer = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage();
+    await screen.findByText("Flashcards cellules");
+
+    fireEvent.click(screen.getByRole("button", { name: /Remove this slideshow/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/No scheduled post was using it/i)).toBeTruthy(),
+    );
     confirmer.mockRestore();
   });
 

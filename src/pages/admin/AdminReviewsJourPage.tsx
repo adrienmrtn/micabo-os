@@ -117,13 +117,21 @@ export function AdminReviewsJourPage() {
   // refaits tout de suite, chez tous les créateurs qui l'avaient au planning.
   const [retraitMsg, setRetraitMsg] = React.useState<string | null>(null);
   const retirer = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!courant?.contenuId) throw new Error(t("reviewsJour.retirerSansContenu"));
-      return retirerSlideshow(courant.contenuId);
+      const r = await retirerSlideshow(courant.contenuId);
+      // Le post courant est PUBLIÉ, donc le retrait ne le touche pas (c'est
+      // voulu) et il resterait en tête de file : l'écran ne bougerait pas.
+      // On le sort de la file comme « Passer » — reviewer un créateur sur un
+      // slideshow qu'on vient de juger inutilisable n'a aucun sens.
+      await passerFileJour(courant.postId, jour);
+      return r;
     },
     onSuccess: (r) => {
       setRetraitMsg(
-        t("reviewsJour.retirerOk", { retires: r.retires, refaits: r.refaits }),
+        r.retires === 0
+          ? t("reviewsJour.retirerOkSansPost")
+          : t("reviewsJour.retirerOk", { retires: r.retires, refaits: r.refaits }),
       );
       setTexte("");
       setEmployees([]);
@@ -429,7 +437,9 @@ export function AdminReviewsJourPage() {
             {retraitMsg && (
               <p
                 className={
-                  retirer.isError ? "text-sm text-destructive" : "text-sm text-muted-foreground"
+                  retirer.isError
+                    ? "rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                    : "rounded-md border border-emerald-600/40 bg-emerald-600/10 px-3 py-2 text-sm"
                 }
               >
                 {retraitMsg}

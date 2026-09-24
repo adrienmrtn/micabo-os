@@ -369,6 +369,8 @@ export const en = {
         "Remove this slideshow? It leaves the pool and will no longer be assigned. Scheduled posts using it are redone right away with another slideshow. Posts already published are left alone.",
       retirerOk:
         "Slideshow removed from the pool. {{retires}} scheduled post(s) taken back, {{refaits}} redone by the engine.",
+      retirerOkSansPost:
+        "Slideshow removed from the pool. No scheduled post was using it, nothing else to redo.",
       retirerSansContenu: "No slideshow found for this post.",
       envoyer: "Send to creator",
       videTitre: "Today's queue is empty",

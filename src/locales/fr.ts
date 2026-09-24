@@ -369,6 +369,8 @@ export const fr = {
         "Retirer ce slideshow ? Il sort du pool et ne sera plus assigné. Les posts prévus qui le portent sont refaits tout de suite avec un autre slideshow. Les posts déjà publiés ne bougent pas.",
       retirerOk:
         "Slideshow retiré du pool. {{retires}} post(s) prévu(s) repris, {{refaits}} refait(s) par le moteur.",
+      retirerOkSansPost:
+        "Slideshow retiré du pool. Aucun post prévu ne l'utilisait, rien d'autre à refaire.",
       retirerSansContenu: "Slideshow introuvable pour ce post.",
       envoyer: "Envoyer au créateur",
       videTitre: "File du jour vide",
