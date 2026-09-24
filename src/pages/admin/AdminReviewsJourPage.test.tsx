@@ -9,6 +9,7 @@ import { AdminReviewsJourPage } from "./AdminReviewsJourPage";
 const itemA: ItemFileReviewJour = {
   postId: "post-a",
   passageId: "pas-a",
+  contenuId: "contenu-a",
   posterId: "user-a",
   posterNom: "Ada Lovelace",
   handle: "ada_notes",
@@ -22,6 +23,7 @@ const itemA: ItemFileReviewJour = {
 const itemB: ItemFileReviewJour = {
   postId: "post-b",
   passageId: "pas-b",
+  contenuId: "contenu-b",
   posterId: "user-b",
   posterNom: "Marie Curie",
   handle: "marie_revise",
@@ -50,6 +52,10 @@ vi.mock("@/features/moteur/api", () => ({
   }),
   ameliorerReview: vi.fn(async (texte: string) => `EN: ${texte}`),
   ecrireReglage: vi.fn(async () => undefined),
+  retirerSlideshow: vi.fn(async (contenuId: string) => {
+    file = file.filter((x) => x.contenuId !== contenuId);
+    return { retires: 2, refaits: 2, publiesIntacts: 1 };
+  }),
 }));
 
 function renderPage() {
@@ -115,5 +121,27 @@ describe("AdminReviewsJourPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Révisions examen")).toBeInTheDocument();
     });
+  });
+  it("retire le slideshow courant et passe au suivant", async () => {
+    const confirmer = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage();
+    await screen.findByText("Flashcards cellules");
+
+    fireEvent.click(screen.getByRole("button", { name: /Remove this slideshow/i }));
+
+    await waitFor(() => expect(screen.getByText("Révisions examen")).toBeTruthy());
+    expect(screen.queryByText("Flashcards cellules")).toBeNull();
+    confirmer.mockRestore();
+  });
+
+  it("ne retire rien si l'admin annule la confirmation", async () => {
+    const confirmer = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderPage();
+    await screen.findByText("Flashcards cellules");
+
+    fireEvent.click(screen.getByRole("button", { name: /Remove this slideshow/i }));
+
+    await waitFor(() => expect(screen.getByText("Flashcards cellules")).toBeTruthy());
+    confirmer.mockRestore();
   });
 });

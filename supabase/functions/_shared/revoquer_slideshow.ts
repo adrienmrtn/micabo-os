@@ -6,6 +6,10 @@ export const RAISON_RECHARGE_CREATEUR =
 export const RAISON_REVOQ_ADMIN =
   "Révoqué à la main : incohérent / non intégrable pour Sophia";
 
+/** Motif posé quand un admin retire un slideshow depuis la QA du jour. */
+export const RAISON_RETRAIT_QA =
+  "Retiré depuis la QA du jour : slideshow inutilisable, sorti du pool";
+
 /**
  * Un recharge créateur ne sort pas le slideshow du pool : un autre compte
  * peut encore le recevoir. Seul un admin (« Changer de slideshow ») le

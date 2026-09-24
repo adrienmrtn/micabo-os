@@ -23,6 +23,7 @@ import {
   lireRemarquesReviewJour,
   listerFileReviewsJour,
   passerFileJour,
+  retirerSlideshow,
 } from "@/features/moteur/api";
 import { TikTokEmbed } from "@/features/reviews/TikTokEmbed";
 import { VideoRemarqueChamp } from "@/features/reviews/VideoRemarqueChamp";
@@ -112,6 +113,27 @@ export function AdminReviewsJourPage() {
     onSuccess: (out) => setTexte(out),
   });
 
+  // Retirer le slideshow : il sort du pool et ses passages non publiés sont
+  // refaits tout de suite, chez tous les créateurs qui l'avaient au planning.
+  const [retraitMsg, setRetraitMsg] = React.useState<string | null>(null);
+  const retirer = useMutation({
+    mutationFn: () => {
+      if (!courant?.contenuId) throw new Error(t("reviewsJour.retirerSansContenu"));
+      return retirerSlideshow(courant.contenuId);
+    },
+    onSuccess: (r) => {
+      setRetraitMsg(
+        t("reviewsJour.retirerOk", { retires: r.retires, refaits: r.refaits }),
+      );
+      setTexte("");
+      setEmployees([]);
+      rafraichir();
+      void queryClient.invalidateQueries({ queryKey: ["slideshows"] });
+      void queryClient.invalidateQueries({ queryKey: ["posts-calendrier-admin"] });
+    },
+    onError: (e) => setRetraitMsg((e as Error).message),
+  });
+
   const sauverRemarques = useMutation({
     mutationFn: (liste: RemarqueGenerique[]) => ecrireReglage(CLE_REMARQUES, liste),
     onSuccess: () => {
@@ -133,7 +155,7 @@ export function AdminReviewsJourPage() {
       ),
     [remarquesQ.data, employees],
   );
-  const occupé = envoyer.isPending || passer.isPending;
+  const occupé = envoyer.isPending || passer.isPending || retirer.isPending;
   const dateLabel = new Date(`${jour}T12:00:00`).toLocaleDateString(i18n.language, {
     weekday: "long",
     day: "numeric",
@@ -404,6 +426,15 @@ export function AdminReviewsJourPage() {
             {passer.isError && (
               <p className="text-sm text-destructive">{(passer.error as Error).message}</p>
             )}
+            {retraitMsg && (
+              <p
+                className={
+                  retirer.isError ? "text-sm text-destructive" : "text-sm text-muted-foreground"
+                }
+              >
+                {retraitMsg}
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
@@ -416,6 +447,18 @@ export function AdminReviewsJourPage() {
               <Button variant="ghost" disabled={occupé} onClick={() => passer.mutate()}>
                 <SkipForward className="size-4" />
                 {t("reviewsJour.passer")}
+              </Button>
+              <Button
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                disabled={occupé || !courant.contenuId}
+                onClick={() => {
+                  if (!window.confirm(t("reviewsJour.retirerConfirm"))) return;
+                  retirer.mutate();
+                }}
+              >
+                <Trash2 className="size-4" />
+                {retirer.isPending ? t("common.loading") : t("reviewsJour.retirer")}
               </Button>
               <Button
                 className="ml-auto"

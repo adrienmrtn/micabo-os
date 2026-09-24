@@ -364,6 +364,12 @@ export const en = {
       ameliorerAide:
         "Formats, completes, fixes spelling, and translates to English. It will not add criticisms you did not write. Then you send.",
       passer: "Skip",
+      retirer: "Remove this slideshow",
+      retirerConfirm:
+        "Remove this slideshow? It leaves the pool and will no longer be assigned. Scheduled posts using it are redone right away with another slideshow. Posts already published are left alone.",
+      retirerOk:
+        "Slideshow removed from the pool. {{retires}} scheduled post(s) taken back, {{refaits}} redone by the engine.",
+      retirerSansContenu: "No slideshow found for this post.",
       envoyer: "Send to creator",
       videTitre: "Today's queue is empty",
       videAide: "No slideshow published today to review — or everything is already sent / skipped.",
@@ -1389,6 +1395,12 @@ export const en = {
       masquerOriginal: "Hide original visuals",
       visuels: "Visuals",
       historique: "Passages / stats",
+      historiqueTier: "Cycles / tiers",
+      historiqueTierVide: "No cycle change recorded yet.",
+      cibleHistorique: "target {{avant}} → {{apres}}",
+      motif_placement: "placement",
+      motif_requalification: "requalification",
+      motif_ajustement: "adjustment",
       pasDePassage: "Not assigned to a creator yet.",
       statsLigne: "{{vues}} views · {{likes}} likes · {{coms}} comments",
       bilanPassages:
@@ -1907,6 +1919,11 @@ export const en = {
       aucunPostJour: "No posts planned that day for this creator.",
       historique: "Publications",
       historiqueDesc: "History of published posts / pasted links.",
+      historiqueQualif: "Account grades",
+      historiqueQualifDesc:
+        "Every grade change, most recent first. Recomputed at the end of the drain, or set by hand.",
+      historiqueQualifVide: "No grade change recorded yet.",
+      qualifManuelle: "set by hand",
       historiqueVide: "No publications yet.",
     },
     adminPost: {

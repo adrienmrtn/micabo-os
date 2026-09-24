@@ -691,10 +691,13 @@ Le reste du chemin :
   l'erreur tombe APRÈS le `vite build`, au moment d'empaqueter le lambda.
 
   Donc : un rouge sur un preview ne dit rien du code de la PR, et **ne bloque
-  pas le merge** — le déploiement production qui suit passe. Pour avoir des
-  previews verts, ajouter `VERCEL_SUPPORT_LARGE_FUNCTIONS=1` à
-  l'environnement **Preview** du projet Vercel (Settings → Environment
-  Variables), en plus de Production.
+  pas le merge** — le déploiement production qui suit passe.
+
+  **Réglé le 24/09/2026** : `VERCEL_SUPPORT_LARGE_FUNCTIONS=1` est désormais
+  posée sur l'environnement **Preview** aussi (variable `plain`, ce n'est pas
+  un secret), en plus de Production. Les previews doivent repartir verts au
+  prochain déploiement. Si un preview retombe en `LAMBDA_SIZE_EXCEEDED`,
+  vérifier d'abord que la variable est toujours là avant de suspecter le code.
 
   Pister `requirements.txt` au passage : les bornes sont ouvertes
   (`opencv-python-headless>=4.9`). 303 Mo mesurés contre ~261 Mo attendus avec

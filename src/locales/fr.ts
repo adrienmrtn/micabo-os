@@ -364,6 +364,12 @@ export const fr = {
       ameliorerAide:
         "Met en forme, complète, corrige les fautes, et traduit en anglais. N'ajoute pas de reproches que tu n'as pas écrits. Tu envoies ensuite.",
       passer: "Passer",
+      retirer: "Retirer ce slideshow",
+      retirerConfirm:
+        "Retirer ce slideshow ? Il sort du pool et ne sera plus assigné. Les posts prévus qui le portent sont refaits tout de suite avec un autre slideshow. Les posts déjà publiés ne bougent pas.",
+      retirerOk:
+        "Slideshow retiré du pool. {{retires}} post(s) prévu(s) repris, {{refaits}} refait(s) par le moteur.",
+      retirerSansContenu: "Slideshow introuvable pour ce post.",
       envoyer: "Envoyer au créateur",
       videTitre: "File du jour vide",
       videAide: "Aucun slideshow publié aujourd'hui à reviewer — ou tout est déjà envoyé / passé.",
@@ -1394,6 +1400,12 @@ export const fr = {
       masquerOriginal: "Masquer les visuels d'origine",
       visuels: "Visuels",
       historique: "Passages / stats",
+      historiqueTier: "Cycles / tiers",
+      historiqueTierVide: "Aucun changement de cycle enregistré.",
+      cibleHistorique: "cible {{avant}} → {{apres}}",
+      motif_placement: "placement",
+      motif_requalification: "requalification",
+      motif_ajustement: "ajustement",
       pasDePassage: "Pas encore assigné à un créateur.",
       statsLigne: "{{vues}} vues · {{likes}} likes · {{coms}} coms",
       bilanPassages:
@@ -1908,6 +1920,11 @@ export const fr = {
       aucunPostJour: "Aucun post prévu ce jour-là pour ce créateur.",
       historique: "Publications",
       historiqueDesc: "Historique des posts publiés / liens collés.",
+      historiqueQualif: "Cases du compte",
+      historiqueQualifDesc:
+        "Chaque changement de case, du plus récent au plus ancien. Recalculé en fin de drain, ou posé à la main.",
+      historiqueQualifVide: "Aucun changement de case enregistré.",
+      qualifManuelle: "posée à la main",
       historiqueVide: "Aucune publication pour l’instant.",
     },
     adminPost: {

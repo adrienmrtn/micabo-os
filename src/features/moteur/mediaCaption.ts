@@ -10,6 +10,17 @@ export function estLabelSysteme(lab: { slug?: string | null } | null | undefined
   return (lab?.slug ?? "") === SLUG_HOOK;
 }
 
+/**
+ * Label sorti de la circulation (`labels.retire_le`, 0273) : il ne se propose
+ * plus et le trigger `compte_labels_pas_retire` ne le laisse pas atterrir sur
+ * un compte. Les contenus et médias qui le portent le gardent.
+ */
+export function estLabelRetire(
+  lab: { retire_le?: string | null } | null | undefined,
+): boolean {
+  return Boolean(lab?.retire_le);
+}
+
 export function estLabelHook(lab: { slug?: string | null }): boolean {
   return (lab.slug ?? "") === SLUG_HOOK;
 }

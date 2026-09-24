@@ -62,12 +62,14 @@ import {
 } from "./applications";
 import { comptePrincipal, premierCompteDemande } from "./comptesPoster";
 import {
+  estLabelRetire,
   estLabelSysteme,
   idsLabelsAssignables,
   normaliserCaptionManuelle,
   SLUG_HOOK,
 } from "./mediaCaption";
 import { fusionnerTexteSlide } from "./deckSlides";
+import { RAISON_RETRAIT_QA } from "./revoquerSlideshow";
 import { verifierLienPublication } from "./lienPublication";
 import type { CompteResumePoster } from "./types";
 import {
@@ -778,6 +780,8 @@ export async function mesReviewsNonVues(): Promise<Review[]> {
 export interface ItemFileReviewJour {
   postId: string;
   passageId: string;
+  /** Le slideshow derrière ce passage — ce qu'on retire depuis la QA. */
+  contenuId: string | null;
   posterId: string;
   posterNom: string;
   handle: string | null;
@@ -794,7 +798,7 @@ export async function listerFileReviewsJour(jour: string): Promise<ItemFileRevie
   const { data, error } = await supabase
     .from("passages")
     .select(
-      "id, post_id, publie_at, publie_url, langue, contenus(titre, source_url), comptes(poster_id, handle_tiktok, persona_nom, profiles(prenom, nom)), posts(est_test)",
+      "id, post_id, contenu_id, publie_at, publie_url, langue, contenus(titre, source_url), comptes(poster_id, handle_tiktok, persona_nom, profiles(prenom, nom)), posts(est_test)",
     )
     .eq("statut", "publie")
     .not("publie_url", "is", null)
@@ -807,6 +811,7 @@ export async function listerFileReviewsJour(jour: string): Promise<ItemFileRevie
     const r = row as unknown as {
       id: string;
       post_id: string | null;
+      contenu_id: string | null;
       publie_at: string | null;
       publie_url: string | null;
       langue: string | null;
@@ -849,6 +854,7 @@ export async function listerFileReviewsJour(jour: string): Promise<ItemFileRevie
     candidats.push({
       postId: r.post_id,
       passageId: r.id,
+      contenuId: r.contenu_id,
       posterId: comptes.poster_id,
       posterNom: perso || comptes.persona_nom || (comptes.handle_tiktok ? `@${comptes.handle_tiktok}` : "—"),
       handle: comptes.handle_tiktok,
@@ -2245,6 +2251,61 @@ export async function lireCompteCreateur(compteId: string): Promise<CompteCreate
     poster_email: profiles?.email ?? null,
     stats: (stats as StatsCompte | null) ?? null,
   };
+}
+
+export interface EntreeTierHistorique {
+  id: string;
+  tier_avant: string | null;
+  tier_apres: string | null;
+  passages_cible_avant: number | null;
+  passages_cible_apres: number | null;
+  motif: string;
+  fait_le: string;
+}
+
+/** Journal des cycles d'un slideshow : B → B, A → S, avec la date. */
+export async function listerHistoriqueTier(
+  contenuId: string,
+): Promise<EntreeTierHistorique[]> {
+  const { data, error } = await supabase
+    .from("contenu_tier_historique")
+    .select(
+      "id, tier_avant, tier_apres, passages_cible_avant, passages_cible_apres, motif, fait_le",
+    )
+    .eq("contenu_id", contenuId)
+    .order("fait_le", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as EntreeTierHistorique[];
+}
+
+export interface EntreeQualificationHistorique {
+  id: string;
+  qualification_avant: Qualification | null;
+  qualification_apres: Qualification;
+  manuelle: boolean;
+  fait_le: string;
+}
+
+/** Journal des cases d'un compte : BIEN → STAR, avec la date. */
+export async function listerHistoriqueQualification(
+  compteId: string,
+): Promise<EntreeQualificationHistorique[]> {
+  const { data, error } = await supabase
+    .from("compte_qualification_historique")
+    .select("id, qualification_avant, qualification_apres, manuelle, fait_le")
+    .eq("compte_id", compteId)
+    .order("fait_le", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((e) => ({
+    id: e.id as string,
+    qualification_avant:
+      e.qualification_avant == null
+        ? null
+        : normaliserQualification(e.qualification_avant),
+    qualification_apres: normaliserQualification(e.qualification_apres),
+    manuelle: Boolean(e.manuelle),
+    fait_le: e.fait_le as string,
+  }));
 }
 
 /** Supprime un post et ses slides (cascade). Action admin, depuis le calendrier. */
@@ -4931,6 +4992,67 @@ export const revoquerPost = (postId: string) =>
 /** Alias créateur : même Edge, contrôles ownership + quota côté serveur. */
 export const rechargerPostCreateur = revoquerPost;
 
+export interface RetraitSlideshow {
+  /** Passages non publiés retirés (tous comptes, toutes dates à venir). */
+  retires: number;
+  /** Posts effectivement refaits par le moteur derrière. */
+  refaits: number;
+  /** Passages déjà publiés : jamais touchés, ils gardent leurs stats. */
+  publiesIntacts: number;
+}
+
+/**
+ * Retire un slideshow de la circulation depuis la QA du jour.
+ *
+ * Deux effets, et pas un de plus :
+ *
+ * 1. le slideshow passe en `rejete`, donc l'assignation ne le pioche plus
+ *    (`assignation_contenu.ts` ne lit que les `valide`) ;
+ * 2. chaque passage **non publié** qui le porte est révoqué par
+ *    `revoquer-post`, qui supprime le passage et le post puis relance
+ *    l'assignation pour ce créateur et ce jour. Le remplacement est donc
+ *    immédiat, et c'est le moteur qui choisit le nouveau slideshow, avec
+ *    toutes ses règles (labels, tiers, recul de 30 jours).
+ *
+ * Les passages **déjà publiés** ne sont jamais touchés : ils sont en ligne,
+ * ils portent des vues, et ils ont compté dans le cycle du slideshow. On ne
+ * réécrit pas un historique fermé.
+ *
+ * L'appel est idempotent : rejouer sur un slideshow déjà retiré ne fait rien.
+ */
+export async function retirerSlideshow(contenuId: string): Promise<RetraitSlideshow> {
+  const { data: passages, error } = await supabase
+    .from("passages")
+    .select("id, post_id, statut")
+    .eq("contenu_id", contenuId);
+  if (error) throw error;
+
+  const aRefaire = (passages ?? []).filter((p) => p.statut !== "publie");
+  const publiesIntacts = (passages ?? []).length - aRefaire.length;
+
+  // Le rejet d'abord : si une révocation échoue en route, le slideshow est
+  // déjà hors du pool et le moteur ne peut plus le redistribuer.
+  const { error: errRejet } = await supabase
+    .from("contenus")
+    .update({ statut: "rejete", pertinence_raison: RAISON_RETRAIT_QA })
+    .eq("id", contenuId);
+  if (errRejet) throw errRejet;
+
+  let refaits = 0;
+  for (const p of aRefaire) {
+    if (p.post_id) {
+      const r = await revoquerPost(p.post_id as string);
+      if (r.newPostId) refaits += 1;
+    } else {
+      // Passage orphelin (post jamais matérialisé) : rien à révoquer.
+      const { error: errDel } = await supabase.from("passages").delete().eq("id", p.id);
+      if (errDel) throw errDel;
+    }
+  }
+
+  return { retires: aRefaire.length, refaits, publiesIntacts };
+}
+
 /**
  * Dernier post done d'un compte pour un jour (hors `exclureId`).
  * Sert de filet si la recharge Edge a timeout après avoir créé le nouveau post.
@@ -5088,13 +5210,20 @@ function slugify(nom: string): string {
 }
 
 
-/** Labels thématiques (hors marques système `ugc-ai-video` / `hook`). */
+/**
+ * Labels thématiques (hors marques système `ugc-ai-video` / `hook`, et hors
+ * labels retirés).
+ *
+ * Un label retiré (`retire_le`, 0273) ne se propose plus : le trigger en base
+ * refuserait de le poser sur un compte, et une case qu'on coche sans effet est
+ * pire qu'une case absente.
+ */
 export async function listerLabels(applicationId?: string | null): Promise<Label[]> {
   let q = supabase.from("labels").select("*").order("nom");
   if (applicationId) q = q.eq("application_id", applicationId);
   const { data, error } = await q;
   if (error) throw error;
-  return ((data ?? []) as Label[]).filter((l) => !estLabelSysteme(l));
+  return ((data ?? []) as Label[]).filter((l) => !estLabelSysteme(l) && !estLabelRetire(l));
 }
 
 /** Labels affichés en bibliothèque (Hook compris — c'est une étagère, pas une niche). */
