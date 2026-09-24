@@ -399,6 +399,8 @@ export interface Label {
   prompt_creation?: string | null;
   /** Exemples de textes déjà rédigés (feed few-shot). */
   exemples_feed?: string[];
+  /** Label sorti de la circulation : plus jamais posé sur un compte (0273). */
+  retire_le?: string | null;
 }
 
 /** Slide language-agnostique d'un contenu (visuel partagé). */

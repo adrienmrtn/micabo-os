@@ -62,6 +62,7 @@ import {
 } from "./applications";
 import { comptePrincipal, premierCompteDemande } from "./comptesPoster";
 import {
+  estLabelRetire,
   estLabelSysteme,
   idsLabelsAssignables,
   normaliserCaptionManuelle,
@@ -5143,13 +5144,20 @@ function slugify(nom: string): string {
 }
 
 
-/** Labels thématiques (hors marques système `ugc-ai-video` / `hook`). */
+/**
+ * Labels thématiques (hors marques système `ugc-ai-video` / `hook`, et hors
+ * labels retirés).
+ *
+ * Un label retiré (`retire_le`, 0273) ne se propose plus : le trigger en base
+ * refuserait de le poser sur un compte, et une case qu'on coche sans effet est
+ * pire qu'une case absente.
+ */
 export async function listerLabels(applicationId?: string | null): Promise<Label[]> {
   let q = supabase.from("labels").select("*").order("nom");
   if (applicationId) q = q.eq("application_id", applicationId);
   const { data, error } = await q;
   if (error) throw error;
-  return ((data ?? []) as Label[]).filter((l) => !estLabelSysteme(l));
+  return ((data ?? []) as Label[]).filter((l) => !estLabelSysteme(l) && !estLabelRetire(l));
 }
 
 /** Labels affichés en bibliothèque (Hook compris — c'est une étagère, pas une niche). */
