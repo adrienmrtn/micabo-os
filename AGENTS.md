@@ -1119,3 +1119,19 @@ Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
  (37 095 octets, permutation d'identifiants minifiés) : laissé hors périmètre,
  comme les quatre bundles du 16/09 — à reprendre au prochain déploiement qui
  le concerne vraiment.
+
+- **Déploiement du 25/09/2026, second passage** (part réservée aux C). Sept
+ chargeurs sur `73abd70` : `assignation-contenu` (v28), `assignation` (v29),
+ `minuit-vnext` (v30), `revoquer-post` (v28), `rattrapage-elo` (v20),
+ `bruler-texte-test` (v22) et `import-contenu` (v34). Test de vie `401` passé
+ sur les sept.
+
+ Quatre portent le correctif (+98/+99 octets). Les trois autres ressortent à
+ **taille constante** : ils tirent `tierlist.ts` sans lire `PART_TIRAGE_C`,
+ esbuild élague la constante et permute ses identifiants minifiés. Ils sont
+ repris ici plutôt que laissés en dérive — la dette que le 16/09 avait créée sur
+ quatre bundles et que le 19/09 a fini par payer.
+
+ **Trois alias `createClient` ont été renommés** : `assignation` `fe`→`he`,
+ `assignation-contenu` `ue`→`ce`, `revoquer-post` `pe`→`de`. Les quatre autres
+ sont inchangés (`Ie`, `Y`, `Y`, `Le`). Relus dans les bundles, jamais supposés.
