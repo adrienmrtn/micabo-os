@@ -20,6 +20,7 @@ import {
   chargerPersonaUgc,
 } from "./ugc_face_swap.ts";
 import {
+  estCycleComplet,
   estDoublonContenuJour,
   estErreurQuotaPostsJour,
   estPanneRpc,
@@ -467,6 +468,14 @@ export async function assignerCompteJour(
         // aujourd'hui pendant qu'on fabriquait le deck. `contenusSession` le
         // porte déjà, la tentative suivante en piochera un autre.
         log(`Doublon du jour évité (course) — ${choisi.contenuId.slice(0, 8)} déjà posé`);
+        continue;
+      }
+      if (estCycleComplet(e)) {
+        // Course perdue sur le CYCLE : un autre worker a rempli la cible de ce
+        // slideshow pendant qu'on fabriquait le deck (0274). `contenusSession`
+        // le porte déjà, la tentative suivante en piochera un autre — le
+        // créateur ne perd pas son post.
+        log(`Cycle déjà plein (course) — ${choisi.contenuId.slice(0, 8)}, on repioche`);
         continue;
       }
       if (estErreurQuotaPostsJour(e)) {

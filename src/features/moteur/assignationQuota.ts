@@ -1,4 +1,5 @@
 export {
+  estCycleComplet,
   estErreurQuotaPostsJour,
   idsPostsHorsQuota,
   manquantsJusquaQuota,
