@@ -9,15 +9,19 @@
  *  - une bibliothèque de 166 slideshows dont le moteur n'en voyait que 36,
  *    parce que le tirage exige `statut = 'valide'` — 95 dormaient en file de
  *    validation avec un tier et un cycle ouvert, invisibles ;
- *  - parmi ceux-là, `prioriserTiersHauts` verrouille tous les C tant qu'un seul
- *    B+ doit encore un passage. Le tirage se faisait donc sur 7 slideshows,
- *    et l'on voyait « toujours les 4 ou 5 mêmes ».
+ *  - parmi ceux-là, `prioriserTiersHauts` verrouillait tous les C tant qu'un
+ *    seul B+ devait encore un passage. Le tirage se faisait donc sur 7
+ *    slideshows, et l'on voyait « toujours les 4 ou 5 mêmes ». Depuis le
+ *    25/09/2026 ce n'est plus un verrou mais une part (`PART_TIRAGE_C`) : les C
+ *    dus sont tirables, ils prennent 30 % des créneaux.
  *
  * Aucun de ces deux étages n'était visible nulle part. D'où l'entonnoir.
  *
  * Module PUR : il ne lit rien, on lui passe des comptages. Le moteur et l'écran
  * appliquent ainsi exactement les mêmes règles.
  */
+
+import { PART_TIRAGE_C } from "./tierlist.ts";
 
 export interface ComptagesPool {
   /** Tous les slideshows de la bibliothèque, quel que soit leur statut. */
@@ -32,7 +36,7 @@ export interface ComptagesPool {
   cyclesOuverts: number;
   /** Cycles ouverts à qui il reste au moins un passage dû, en tier B ou mieux. */
   dusBPlus: number;
-  /** Idem en tier C — verrouillés tant qu'il reste du B+. */
+  /** Idem en tier C — tirables aussi, sur la part qui leur est réservée. */
   dusC: number;
   /** Total des passages encore dus, tous tiers confondus. */
   passagesDus: number;
@@ -50,19 +54,19 @@ export const AUTONOMIE_TENDUE_JOURS = 3;
 /**
  * Slideshows que le tirage peut réellement sortir maintenant.
  *
- * `prioriserTiersHauts` ne descend sur les C que si le pool n'a plus rien en B
- * ou mieux. Tant qu'un seul B+ doit un passage, tous les C sont hors jeu — et
- * un C ne peut donc jamais remonter de tier, puisqu'il faut être posté pour
- * être mesuré.
+ * Depuis le 25/09/2026, les C dus en font partie : `prioriserTiersHauts` leur
+ * réserve `PART_TIRAGE_C` des créneaux au lieu de les verrouiller derrière les
+ * B+. Avant, tant qu'un seul B+ devait un passage, tous les C étaient hors jeu
+ * — et un C ne pouvait donc jamais remonter de tier, puisqu'il faut être posté
+ * pour être mesuré.
  */
 export function tirablesMaintenant(c: ComptagesPool): number {
-  return c.dusBPlus > 0 ? c.dusBPlus : c.dusC;
+  return c.dusBPlus + c.dusC;
 }
 
-/** C mis sur la touche par la priorité aux tiers hauts (0 si le pool est en C seul). */
-export function verrouillesParPriorite(c: ComptagesPool): number {
-  return c.dusBPlus > 0 ? c.dusC : 0;
-}
+// `verrouillesParPriorite` a été SUPPRIMÉE le 25/09/2026 : elle comptait les C
+// mis sur la touche, et il n'y en a plus. Un accesseur qui rend toujours 0 ferait
+// croire à un étage de l'entonnoir qui n'existe pas — l'écran affiche `dusC`.
 
 /**
  * Slideshows validés que le tirage ne voit pas : cycle plein (à x/x, en attente
@@ -110,7 +114,6 @@ export function concentration(passagesParContenu: number[], n = 5): number {
  */
 export function goulotPool(c: ComptagesPool): string {
   const tirables = tirablesMaintenant(c);
-  const verrouilles = verrouillesParPriorite(c);
   const geles = horsJeu(c);
 
   if (c.valides === 0) {
@@ -128,11 +131,12 @@ export function goulotPool(c: ComptagesPool): string {
       `validé(s) : c'est la validation qui tient le pool, pas la bibliothèque.`
     );
   }
-  if (verrouilles > tirables) {
+  if (c.dusC > c.dusBPlus) {
     return (
-      `${verrouilles} slideshow(s) en C sont verrouillés tant qu'un B+ doit un ` +
-      `passage — le tirage se fait sur ${tirables}. C'est voulu, mais ça ` +
-      `concentre les posts et un C ne peut pas remonter sans être posté.`
+      `${c.dusC} slideshow(s) en C dus contre ${c.dusBPlus} en B+ : ` +
+      `${Math.round(PART_TIRAGE_C * 100)} % des tirages leur sont réservés, ` +
+      `donc ils se font mesurer. Le pool est porté par du C — alimente en haut ` +
+      `de gamme si les vues comptent plus que la fraîcheur.`
     );
   }
   if (geles > tirables) {

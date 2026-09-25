@@ -4,6 +4,7 @@ import {
   passagesPourTier,
   TIERS,
   prioriserTiersHauts,
+  PART_TIRAGE_C,
   requalifier,
   tierDepuisEloLegacy,
   tierImport,
@@ -141,27 +142,58 @@ describe("tierDepuisEloLegacy", () => {
 
 describe("prioriserTiersHauts", () => {
   const pool = (...tiers: Array<string | null>) => tiers.map((tier, i) => ({ id: `c${i}`, tier }));
+  /** Tirage forcé sur les B+ / sur la part réservée aux C. */
+  const versHauts = () => 0.99;
+  const versC = () => 0;
 
-  it("écarte les C tant qu'il reste du B ou mieux", () => {
-    const retenus = prioriserTiersHauts(pool("C", "B", "C", "S"));
+  it("sert les B+ hors de la part réservée aux C", () => {
+    const retenus = prioriserTiersHauts(pool("C", "B", "C", "S"), versHauts);
     expect(retenus.map((c) => c.tier)).toEqual(["B", "S"]);
   });
 
-  it("laisse sortir les C quand le pool n'a plus que ça", () => {
-    const retenus = prioriserTiersHauts(pool("C", "C"));
-    expect(retenus).toHaveLength(2);
+  it("sert les C dans leur part, même avec du B+ à servir", () => {
+    const retenus = prioriserTiersHauts(pool("C", "B", "C", "S"), versC);
+    expect(retenus.map((c) => c.tier)).toEqual(["C", "C"]);
   });
 
-  it("traite un slideshow sans tier comme un C", () => {
-    expect(prioriserTiersHauts(pool(null, "A")).map((c) => c.tier)).toEqual(["A"]);
-    expect(prioriserTiersHauts(pool(null, "C")).map((c) => c.tier)).toEqual([null, "C"]);
+  it("laisse sortir les C quand le pool n'a plus que ça", () => {
+    expect(prioriserTiersHauts(pool("C", "C"), versHauts)).toHaveLength(2);
+  });
+
+  /**
+   * Un C immobilisé ne pouvait jamais remonter : il faut être posté pour être
+   * mesuré. C'est le défaut que la part réservée ferme — sur 100 tirages d'un
+   * pool réel (24 B+, 57 C), les C doivent sortir.
+   */
+  it("donne aux C une chance de sortir sur un pool réel", () => {
+    const reel = pool(...Array(24).fill("B"), ...Array(57).fill("C"));
+    let sorties = 0;
+    for (let i = 0; i < 100; i++) {
+      if (prioriserTiersHauts(reel, () => i / 100).some((c) => c.tier === "C")) sorties++;
+    }
+    expect(sorties).toBe(Math.round(PART_TIRAGE_C * 100));
+  });
+
+  it("garde la part sous 1 : les B+ ne peuvent pas être évincés", () => {
+    expect(PART_TIRAGE_C).toBeGreaterThan(0);
+    expect(PART_TIRAGE_C).toBeLessThan(0.5);
+  });
+
+  it("n'assimile pas un slideshow sans tier à un C", () => {
+    // Pas de tier = pas de qualification : il n'entre pas dans la part réservée
+    // et ne sort que si le pool n'a plus rien en B+.
+    expect(prioriserTiersHauts(pool(null, "A"), versC).map((c) => c.tier)).toEqual(["A"]);
+    expect(prioriserTiersHauts(pool(null, "C"), versHauts).map((c) => c.tier)).toEqual([
+      null,
+      "C",
+    ]);
   });
 
   it("ne touche pas un pool déjà tout en B+", () => {
-    expect(prioriserTiersHauts(pool("B", "A", "S", "S+"))).toHaveLength(4);
+    expect(prioriserTiersHauts(pool("B", "A", "S", "S+"), versC)).toHaveLength(4);
   });
 
   it("rend une liste vide telle quelle", () => {
-    expect(prioriserTiersHauts([])).toEqual([]);
+    expect(prioriserTiersHauts([], versC)).toEqual([]);
   });
 });
