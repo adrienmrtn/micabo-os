@@ -317,15 +317,48 @@ export function jourRepostBonus(publieAt: string | null, aujourdhui: string): st
 export const TIER_TIRAGE_PRIORITAIRE: Tier = "B";
 
 /**
- * Un C ne sort que si le pool n'a plus rien en B ou mieux.
+ * Part des tirages réservée aux C quand il y en a de dus (25/09/2026).
  *
- * Le tier ne pondère pas le tirage (il fixe le nombre de passages dus), mais
- * on ne veut pas voir partir un C tant qu'il reste du B+ à servir : renvoie le
- * sous-ensemble B+ s'il n'est pas vide, la liste entière sinon. À l'intérieur
- * du groupe retenu, le tirage reste uniforme.
+ * Avant, la priorité aux tiers hauts était un VERROU : un C ne sortait pas tant
+ * qu'un seul B+ devait un passage. C'était une trappe sans fond, et c'est une
+ * erreur de conception, pas un réglage trop serré — il faut être posté pour être
+ * mesuré, et il faut être mesuré pour être requalifié. Un C ne pouvait donc
+ * JAMAIS remonter. Le 25/09, 57 des 81 slideshows dus étaient en C : le moteur
+ * tirait 59 posts par jour dans un vivier de 24, d'où « toujours les mêmes ».
+ *
+ * 0,3 n'est pas pris au jugé. Au 25/09 : 39 passages dus en B+, 59 posts par
+ * jour. À 30 % réservés aux C, il reste 0,7 × 59 ≈ 41 créneaux pour les tiers
+ * hauts — toujours au-dessus des 39 dus, donc **les B+ ne perdent rien** et
+ * ~18 C sont mesurés chaque jour. La part est le seul chiffre à revoir si le
+ * rapport entre les deux bascule.
  */
-export function prioriserTiersHauts<T extends { tier: string | null }>(candidats: T[]): T[] {
+export const PART_TIRAGE_C = 0.3;
+
+/**
+ * Le tier ne pondère pas le tirage (il fixe le nombre de passages dus) ; cette
+ * fonction restreint l'ensemble dans lequel `tirerAuHasard` va piocher, et le
+ * tirage reste uniforme à l'intérieur du groupe retenu.
+ *
+ * Trois cas :
+ *  - plus rien en B+ → tout le pool, C compris ;
+ *  - plus aucun C dû → les B+ ;
+ *  - les deux → `PART_TIRAGE_C` fois sur dix les C, sinon les B+.
+ *
+ * Un slideshow SANS tier n'est pas un C : il ne rejoint pas la part réservée et
+ * ne sort que par le repli « plus rien en B+ », comme avant. Son cycle n'a pas
+ * de sens jusqu'à sa première qualification.
+ *
+ * `alea` est injectable pour que le test puisse verrouiller les trois branches
+ * sans dépendre du hasard.
+ */
+export function prioriserTiersHauts<T extends { tier: string | null }>(
+  candidats: T[],
+  alea: () => number = Math.random,
+): T[] {
   const plancher = indexTier(TIER_TIRAGE_PRIORITAIRE);
   const hauts = candidats.filter((c) => estTier(c.tier) && indexTier(c.tier) >= plancher);
-  return hauts.length > 0 ? hauts : candidats;
+  if (hauts.length === 0) return candidats;
+  const bas = candidats.filter((c) => estTier(c.tier) && indexTier(c.tier) < plancher);
+  if (bas.length === 0) return hauts;
+  return alea() < PART_TIRAGE_C ? bas : hauts;
 }

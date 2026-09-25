@@ -990,7 +990,9 @@ async function choisirContenu(
   );
 
   const dus = pool.filter((c) => (restants.get(c.id) ?? 0) > 0);
-  // Un C n'est tiré que si le pool n'a plus de B+ à servir.
+  // Les B+ passent d'abord, mais une part des tirages (`PART_TIRAGE_C`) est
+  // réservée aux C : sans elle, un C ne pouvait jamais être mesuré, donc jamais
+  // remonter.
   const pick = tirerAuHasard(prioriserTiersHauts(dus));
   if (pick) return versCandidat(pick, restants.get(pick.id) ?? 0, false);
 

@@ -206,6 +206,44 @@ au pire, plafond PostgREST 1 000). À environ 3,7× le volume actuel, le décomp
 de cycle se mettrait à tronquer **en silence** et redeviendrait une cause de
 surplus. À fermer avant que le volume n'arrive.
 
+## Le palier C était une trappe sans fond (25/09/2026)
+
+`prioriserTiersHauts` **verrouillait** les C : un C ne sortait pas tant qu'un
+seul slideshow en B ou mieux devait un passage. Ce n'était pas un réglage trop
+serré, c'était un circuit sans sortie — il faut être posté pour être mesuré, et
+mesuré pour être requalifié. Un C ne pouvait donc **jamais** remonter, et le
+dépôt l'écrivait déjà en toutes lettres depuis le 17/09 sans en tirer la
+conséquence.
+
+Mesuré le 25/09, après le correctif de 0274 : **24 slideshows en B+ dus pour 39
+passages**, contre **57 C dus pour 57 passages**, face à **59 posts par jour sur
+29 comptes actifs**. Le moteur tirait donc 59 posts par nuit dans un vivier de
+24 — c'est ça, « je vois toujours les mêmes posts », signalé par Adrien après
+deux ou trois jours. Ce n'est pas un défaut du tirage : c'est de l'arithmétique.
+
+Le verrou devient une **part réservée**, `PART_TIRAGE_C = 0,3` dans
+`tierlist.ts`. Trois cas : plus rien en B+ → tout le pool ; plus aucun C dû →
+les B+ ; les deux → trois tirages sur dix vont aux C. Le tirage reste uniforme
+à l'intérieur du groupe retenu, et `alea` est injectable pour que le test
+verrouille les trois branches sans dépendre du hasard.
+
+**0,3 se démontre, il n'est pas pris au jugé** : 70 % de 59 ≈ 41 créneaux
+restent aux tiers hauts, au-dessus des 39 passages qu'ils doivent. **Les B+ ne
+perdent donc rien**, et ~18 C sont mesurés chaque jour — les 57 sont jugés en
+trois jours. C'est le seul chiffre à revoir si le rapport entre les deux
+bascule ; le test le borne sous 0,5 pour qu'on ne puisse pas évincer les B+.
+
+**Un slideshow sans tier n'est pas un C** et n'entre pas dans la part réservée :
+son cycle n'a pas de sens avant sa première qualification. Il ne sort que par le
+repli « plus rien en B+ », comme avant.
+
+Effet direct sur le pool tirable : **24 → 81 slideshows**.
+
+`verrouillesParPriorite` est **supprimée** de `pool_global.ts` — elle comptait
+les C mis sur la touche, il n'y en a plus. Un accesseur qui rendrait toujours 0
+ferait croire à un étage de l'entonnoir qui n'existe pas ; `tirablesMaintenant`
+additionne désormais `dusBPlus + dusC`, et la carte du Moteur affiche `dusC`.
+
 ## Clôture d'un cycle (0257, 16/09/2026)
 
 Un cycle se clôt sur des passages **réglés**, pas sur des passages publiés, et

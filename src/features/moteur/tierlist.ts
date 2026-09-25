@@ -2,6 +2,7 @@ export {
   bilanCycle,
   VUES_SOURCE_MIN_B_PLUS,
   prioriserTiersHauts,
+  PART_TIRAGE_C,
   TIER_TIRAGE_PRIORITAIRE,
   ajouterJoursParis,
   jourRepostBonus,

@@ -7,7 +7,6 @@ import {
   joursAutonomie,
   tirablesMaintenant,
   verdictPoolGlobal,
-  verrouillesParPriorite,
   type ComptagesPool,
 } from "../../../supabase/functions/_shared/pool_global";
 
@@ -25,16 +24,18 @@ const LE_16_SEPTEMBRE: ComptagesPool = {
 };
 
 describe("tirablesMaintenant", () => {
-  it("ne compte que les B+ tant qu'il en reste", () => {
-    // Le cœur du « toujours les 4 ou 5 mêmes » : 5 C existent et ne sortent pas.
-    expect(tirablesMaintenant(LE_16_SEPTEMBRE)).toBe(7);
-    expect(verrouillesParPriorite(LE_16_SEPTEMBRE)).toBe(5);
+  /**
+   * Jusqu'au 25/09/2026, les 5 C du 16/09 étaient hors jeu et le tirage se
+   * faisait sur 7 slideshows : c'est le « toujours les 4 ou 5 mêmes ». Depuis,
+   * `PART_TIRAGE_C` leur réserve une part des créneaux, donc ils comptent.
+   */
+  it("compte les C dus avec les B+", () => {
+    expect(tirablesMaintenant(LE_16_SEPTEMBRE)).toBe(12);
   });
 
-  it("laisse sortir les C dès que le B+ est épuisé", () => {
+  it("compte les C seuls quand le B+ est épuisé", () => {
     const c = { ...LE_16_SEPTEMBRE, dusBPlus: 0 };
     expect(tirablesMaintenant(c)).toBe(5);
-    expect(verrouillesParPriorite(c)).toBe(0);
   });
 
   it("rend 0 quand plus rien n'est dû", () => {
@@ -101,10 +102,12 @@ describe("goulotPool", () => {
     expect(goulotPool(LE_16_SEPTEMBRE)).toMatch(/file de validation/);
   });
 
-  it("désigne le verrou des C quand la validation est à jour", () => {
-    // Pool validé large, mais 30 C bloqués derrière 3 B+.
+  it("désigne le pool porté par du C quand la validation est à jour", () => {
+    // Pool validé large, 30 C dus contre 3 B+ : ils sortent désormais, sur la
+    // part qui leur est réservée. Ce n'est plus un verrou, c'est un mélange de
+    // tiers à signaler.
     const c = { ...LE_16_SEPTEMBRE, brouillons: 2, valides: 60, dusBPlus: 3, dusC: 30 };
-    expect(goulotPool(c)).toMatch(/verrouillés/);
+    expect(goulotPool(c)).toMatch(/30 % des tirages/);
   });
 
   it("signale le pool à sec avant tout le reste", () => {
