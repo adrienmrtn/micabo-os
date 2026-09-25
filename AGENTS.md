@@ -1066,3 +1066,18 @@ Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
  (`Ve=7,Fe=2` → `Ve=7;var Fe=2`). Le redéployer coûte moins cher que de laisser
  une dérive dépôt/prod à expliquer au prochain rebuild — c'est la dette que le
  16/09 avait laissée sur quatre bundles.
+
+- **Déploiement du 25/09/2026** (le cycle arbitré par la transaction, 0274).
+ Quatre chargeurs sur `a8b8dbc` : `assignation-contenu` (v27), `assignation`
+ (v28), `minuit-vnext` (v29) et `revoquer-post` (v27) — les quatre qui tirent
+ `assignation_quota.ts`, donc le nouveau `estCycleComplet`. +290 octets par
+ bundle. **Les quatre alias `createClient` sont inchangés** (`fe`, `ue`, `Ie`,
+ `pe`), relus dans les bundles et non supposés. Test de vie `401` passé sur les
+ quatre.
+
+ `rattrapage-elo` pointait sur le même SHA (`5eb7487`) et n'a **pas** été
+ touché : son bundle ressort octet pour octet identique, il n'embarque pas
+ `assignation_quota.ts`. `bruler-texte-test` ressort à **taille constante**
+ (37 095 octets, permutation d'identifiants minifiés) : laissé hors périmètre,
+ comme les quatre bundles du 16/09 — à reprendre au prochain déploiement qui
+ le concerne vraiment.
