@@ -127,6 +127,85 @@ Deux choses n'ont **pas** été faites, volontairement :
 Les 46 doublons déjà en ligne ne sont pas rattrapables et n'ont pas été
 touchés.
 
+## Le cycle n'était pas tenu : perte de mise à jour (0274, 25/09/2026)
+
+`passages_cible` disait combien de passages un cycle doit produire, **et rien ne
+le faisait respecter**. Signalé par « j'ai l'impression de toujours voir les
+mêmes posts » — l'impression était juste, la cause n'était pas celle qu'on
+croyait.
+
+`choisirContenu` **lit** les restants (`assignation_contenu.ts:974`), **décide**
+(`:983`), puis n'**écrit** qu'après avoir fabriqué le deck (`:450`) — traduction,
+placement, hashtags : **6 à 24 secondes** mesurées sur les traces. Entre les
+deux, aucun verrou sur `contenus` : le `for update` de 0265 porte sur `comptes`.
+`LARGEUR_ASSIGNATION = 6` fait tourner six créateurs dans cette fenêtre, et les
+logs Edge montrent **deux chaînes d'invocation en parallèle**, donc jusqu'à
+**douze workers** qui lisent le même « il reste 1 passage » et en créent chacun
+un. Perte de mise à jour de manuel.
+
+Mesuré sur les 98 cycles ouverts au 24/09 : **22 passages en surplus sur 169**
+(13 %), sur 15 slideshows ; **22 sur 22** créés à moins de 10 s du passage
+précédent du même cycle, écart médian **2,1 s**, minimum **4 ms**, tous dans la
+rafale 22:00–22:01 UTC. Le défaut rejouait chaque nuit : 3 le 21/09, 9 le 22,
+4 le 23, 5 le 24.
+
+**`contenusSession` ne pouvait pas l'attraper** : c'est un `const` local à un
+compte et à une invocation. **L'index non plus** :
+`passages_compte_contenu_jour_uidx` porte `compte_id` et la collision est ENTRE
+comptes — il n'a jamais eu l'occasion de se déclencher. « Au plus N par cycle »
+n'est pas un unique, et un `EXCLUDE` échouerait à la création sur les surplus
+historiques : même leçon que la fenêtre des 30 jours du 19/09.
+
+**Le correctif est dans la transaction**, comme 0265 : `perform 1 from
+public.contenus … for update` après le verrou `comptes` (ordre fixe pour toutes
+les transactions, donc pas de nouveau 40P01), puis recomptage du cycle et
+`raise exception … errcode = 'P0002'` / `cycle_complet` si la cible est
+atteinte. Le comptage **reproduit `restantsParContenu` à l'identique** — hors
+reposts bonus, hors posts test, depuis `tier_maj_at` ; deux compteurs qui
+divergent finissent par se contredire. Aucun bloc `exception` dans la fonction,
+règle de 0265. Les reposts bonus sont exemptés : ils sont hors cycle par
+construction.
+
+Côté TS, `estCycleComplet` (`assignation_quota.ts`, sur le modèle de
+`estDoublonContenuJour`) et une branche dans le `catch` : on journalise, on
+repioche. **Le créateur ne perd pas son post**, c'est un autre slideshow qui le
+remplit.
+
+**La migration peut précéder le redéploiement des chargeurs** : un appelant qui
+ne connaît pas encore `P0002` tombe dans le `log` + `continue` générique du
+`catch` et repioche quand même. Le seul manque est un compteur `echecsDeck`
+incrémenté à tort et un journal moins clair.
+
+**Quatre pistes écartées sur données**, à ne pas rouvrir sans preuve neuve : la
+requalification qui rouvrirait un cycle (**0 cas** — les passages naissent à
+00:00, les requalifications tombent à 00:02–00:18, donc « retarder la
+requalification » coûterait un jour par cycle pour zéro surplus corrigé) ; le
+repêchage en D (**0 occurrence**) ; les exclusions du comptage (`est_test` vrai
+nulle part, `post_id` null nulle part) ; les chemins hors tirage — orphelins,
+`revoquer-post`, reprises manuelles des 18/19/24/09 — **0 surplus**, bilan net
+nul ou négatif à chaque fois.
+
+**Piège de mesure à connaître** : comparer les passages d'un jour passé à
+`passages_cible` d'aujourd'hui produit des faux positifs, parce que la cible
+bouge à chaque requalification. Un « S cible 4 avec 6 passages » du 19/09 était
+un S+ cible 8 ce jour-là, et il avait livré exactement 8. Toujours comparer à la
+cible **qui avait cours**, via `contenu_tier_historique` (0272).
+
+**Deux crons tombaient à la même seconde.** `minuit-vnext` (`0 22 * * *`) et
+`minuit-vnext-journee` (`*/15 * * * *`) se déclenchaient tous deux à 22:00:00 —
+vérifié dans `cron.job_run_details` : 22:00:00.071 et 22:00:00.078. C'est ce qui
+donnait les deux chaînes concurrentes, et le moteur faisait probablement deux
+fois le travail chaque nuit. `minuit-vnext-journee` est passé à
+**`5,20,35,50 * * * *`** le 25/09 : même cadence au quart d'heure, jamais sur la
+minute 0 (donc jamais en collision avec les filets 01:00 / 04:00 ni avec
+`rattrapage-elo-midi`). Fait par un `cron.schedule` sur ce seul nom, jobid 44
+conservé, comme le 11/09.
+
+**Faiblesse latente non traitée** : `lireParLots` ne pagine pas (455 lignes lues
+au pire, plafond PostgREST 1 000). À environ 3,7× le volume actuel, le décompte
+de cycle se mettrait à tronquer **en silence** et redeviendrait une cause de
+surplus. À fermer avant que le volume n'arrive.
+
 ## Clôture d'un cycle (0257, 16/09/2026)
 
 Un cycle se clôt sur des passages **réglés**, pas sur des passages publiés, et

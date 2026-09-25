@@ -60,6 +60,27 @@ export function estDoublonContenuJour(err: unknown): boolean {
 }
 
 /**
+ * Cycle déjà rempli, tranché par la transaction (0274).
+ *
+ * Même famille que le doublon du jour, une marche au-dessus : `choisirContenu`
+ * lit les passages restants d'un cycle, puis fabrique son deck pendant 6 à 24
+ * secondes avant d'écrire. Six créateurs sont traités en parallèle, sur deux
+ * chaînes d'invocation : tous lisent le même « il reste 1 » et en créent
+ * chacun un. Le compteur applicatif reste un chemin rapide ; la garantie est
+ * le verrou pris dans `creer_publication_atomique`.
+ *
+ * Mesuré au 24/09/2026 : 22 passages en surplus sur 169 de cycle, tous créés
+ * à moins de 10 secondes du précédent.
+ */
+export function estCycleComplet(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const o = err as { code?: unknown; message?: unknown; details?: unknown };
+  if (String(o.code ?? "") !== "P0002") return false;
+  const txt = `${String(o.message ?? "")} ${String(o.details ?? "")}`;
+  return /cycle_complet/i.test(txt);
+}
+
+/**
  * Panne d'appel RPC, par opposition à un échec métier.
  *
  * PostgREST préfixe ses propres codes par `PGRST` : fonction absente du cache

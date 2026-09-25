@@ -6,7 +6,10 @@ import {
   verdictPool,
   type EtatPoolCompte,
 } from "../../../supabase/functions/_shared/quota_pool";
-import { estDoublonContenuJour } from "../../../supabase/functions/_shared/assignation_quota";
+import {
+  estCycleComplet,
+  estDoublonContenuJour,
+} from "../../../supabase/functions/_shared/assignation_quota";
 
 const base: EtatPoolCompte = {
   labelsTxt: "Étude",
@@ -97,5 +100,27 @@ describe("estDoublonContenuJour", () => {
     expect(estDoublonContenuJour({ code: "23503", message: "fk" })).toBe(false);
     expect(estDoublonContenuJour(null)).toBe(false);
     expect(estDoublonContenuJour("passages_compte_contenu_jour_uidx")).toBe(false);
+  });
+});
+
+describe("estCycleComplet", () => {
+  it("reconnaît le cycle rempli tranché par la transaction (0274)", () => {
+    expect(
+      estCycleComplet({
+        code: "P0002",
+        message: "cycle_complet : contenu=90dbf522-20c8-478b-b1da-fb3ad7570eb5 1/1",
+        details: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("ignore un autre P0002 : repiocher ne le corrigerait pas", () => {
+    expect(estCycleComplet({ code: "P0002", message: "no_data_found" })).toBe(false);
+  });
+
+  it("ignore le quota du jour, qui arrête le compte au lieu de repiocher", () => {
+    expect(estCycleComplet({ code: "P0001", message: "quota_posts_jour" })).toBe(false);
+    expect(estCycleComplet(null)).toBe(false);
+    expect(estCycleComplet("cycle_complet")).toBe(false);
   });
 });
