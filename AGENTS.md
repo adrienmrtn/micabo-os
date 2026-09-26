@@ -237,7 +237,27 @@ bascule ; le test le borne sous 0,5 pour qu'on ne puisse pas évincer les B+.
 son cycle n'a pas de sens avant sa première qualification. Il ne sort que par le
 repli « plus rien en B+ », comme avant.
 
-Effet direct sur le pool tirable : **24 → 81 slideshows**.
+**Correction du 26/09/2026 — le chiffre « pool tirable 24 → 81 » était faux.**
+81 était le nombre de slideshows qui DEVAIENT un passage. Devoir un passage
+n'est pas être tirable : le tirage croise aussi les labels du compte et le
+recul de 30 jours. Mesuré au moment de la rafale du 26/09, le pool réellement
+tirable était de **39 slideshows** — 1 en B+, 38 en C. Les 47 manquants ne
+portent que `cold-study`, le label retiré le 24/09 que plus aucun compte ne
+porte : ils sont **définitivement intirables** et gonflent tous les comptages
+de « passages dus » sans jamais pouvoir sortir.
+
+**Compter les dus n'est donc jamais une mesure du pool.** Le seul comptage
+honnête croise les trois filtres — cycle dû, label partagé avec un compte
+actif, pas vu par ce compte depuis 30 jours. `pool_global.ts` ne le fait pas :
+`dusBPlus` et `dusC` ignorent labels et recul, donc `tirablesMaintenant`
+surestime, et le surestimait déjà avant ce correctif.
+
+Ce que la part réservée aux C a réellement acheté, mesuré le 26/09 : un seul
+slideshow B+ était disponible, pour 16 comptes. Sous le verrou, ces 16 comptes
+auraient tous été servis avec LE MÊME slideshow dans la même nuit — très
+exactement « toujours les mêmes ». La part a réparti les 59 posts sur 53
+slideshows au lieu de 38, et la concentration du top 5 est tombée de 33,9 % à
+16,9 %. Le gain est là, pas dans un équilibre 70/30 qui n'a jamais eu lieu.
 
 `verrouillesParPriorite` est **supprimée** de `pool_global.ts` — elle comptait
 les C mis sur la touche, il n'y en a plus. Un accesseur qui rendrait toujours 0
