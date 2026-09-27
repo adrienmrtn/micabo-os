@@ -7,6 +7,7 @@ import {
   RECUL_MEME_COMPTE_JOURS,
   ajouterJoursParis,
   estTier,
+  melanger,
   prioriserTiersHauts,
   type Tier,
 } from "./tierlist.ts";
@@ -998,23 +999,33 @@ async function choisirContenu(
 
   // Remplissage : pas assez de passages dus → on repêche un slideshow en D
   // (ou jamais placé) et on lui ouvre un cycle d'un passage.
-  const repechables = pool.filter(
-    (c) => !estTier(c.tier) || c.tier === "D" || Number(c.passages_cible ?? 0) === 0,
+  //
+  // L'ouverture passe par `repecher_contenu` (0275) et NON par un `update`
+  // direct. Un `update` nu réécrit `tier_maj_at`, or c'est de là que part le
+  // comptage de cycle de 0274 : six workers sur le même slideshow en D le
+  // remettaient chacun à `now()` et voyaient tous « 0 fait sur 1 ». Le
+  // garde-fou ne pouvait pas se déclencher, et sept créateurs sortaient le même
+  // slideshow le même jour.
+  //
+  // La fonction rend `false` quand un autre worker a déjà ouvert ce cycle :
+  // on passe au suivant plutôt que de lui reprendre son slot. On parcourt donc
+  // les repêchables dans un ordre aléatoire jusqu'à en ouvrir un pour de bon.
+  const repechables = melanger(
+    pool.filter(
+      (c) => !estTier(c.tier) || c.tier === "D" || Number(c.passages_cible ?? 0) === 0,
+    ),
   );
-  const repeche = tirerAuHasard(repechables);
-  if (!repeche) return null;
 
-  const { error } = await supabase
-    .from("contenus")
-    .update({
-      tier: estTier(repeche.tier) ? repeche.tier : "D",
-      passages_cible: 1,
-      tier_maj_at: new Date().toISOString(),
-    })
-    .eq("id", repeche.id);
-  if (error) throw error;
+  for (const repeche of repechables) {
+    const { data, error } = await supabase.rpc("repecher_contenu", {
+      p_contenu_id: repeche.id,
+      p_tier: estTier(repeche.tier) ? repeche.tier : "D",
+    });
+    if (error) throw error;
+    if (data === true) return versCandidat(repeche, 1, true);
+  }
 
-  return versCandidat(repeche, 1, true);
+  return null;
 }
 
 /** Assigne tous les comptes actifs pour un jour. */

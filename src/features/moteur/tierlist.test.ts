@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   passagesPourTier,
   TIERS,
+  melanger,
   prioriserTiersHauts,
   PART_TIRAGE_C,
   requalifier,
@@ -195,5 +196,47 @@ describe("prioriserTiersHauts", () => {
 
   it("rend une liste vide telle quelle", () => {
     expect(prioriserTiersHauts([], versC)).toEqual([]);
+  });
+});
+
+/**
+ * Le repêchage (0275) parcourt les candidats jusqu'à en ouvrir un pour de bon.
+ * Un ordre stable ferait converger tous les workers sur le même slideshow en D
+ * — c'est exactement le défaut du 27/09, où quatre slideshows en D ont pris
+ * 7, 5, 5 et 3 passages pour une cible de 1.
+ */
+describe("melanger", () => {
+  it("ne mute pas le tableau d'origine", () => {
+    const source = ["a", "b", "c", "d"];
+    const copie = [...source];
+    melanger(source, () => 0);
+    expect(source).toEqual(copie);
+  });
+
+  it("garde exactement les mêmes éléments", () => {
+    const source = ["a", "b", "c", "d", "e"];
+    const melange = melanger(source, () => 0.5);
+    expect([...melange].sort()).toEqual([...source].sort());
+    expect(melange).toHaveLength(source.length);
+  });
+
+  it("produit une permutation déterministe pour un alea donné", () => {
+    // alea = 0 : chaque tour échange l'élément courant avec l'index 0.
+    // i=2 → ["c","b","a"], puis i=1 → ["b","c","a"].
+    expect(melanger(["a", "b", "c"], () => 0)).toEqual(["b", "c", "a"]);
+  });
+
+  it("laisse un tableau vide ou à un élément tel quel", () => {
+    expect(melanger([], () => 0)).toEqual([]);
+    expect(melanger(["seul"], () => 0)).toEqual(["seul"]);
+  });
+
+  it("ne renvoie pas toujours le même premier élément", () => {
+    // Le point qui compte : sans mélange, tous les workers repêchent le même.
+    const source = ["a", "b", "c", "d", "e", "f", "g", "h"];
+    const premiers = new Set(
+      Array.from({ length: 50 }, (_, i) => melanger(source, () => (i % 10) / 10)[0]),
+    );
+    expect(premiers.size).toBeGreaterThan(1);
   });
 });
