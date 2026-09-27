@@ -313,6 +313,32 @@ export function jourRepostBonus(publieAt: string | null, aujourdhui: string): st
   return prevu > aujourdhui ? prevu : ajouterJoursParis(aujourdhui, 1);
 }
 
+/**
+ * Fisher-Yates sur une COPIE — l'appelant passe souvent un tableau filtré
+ * depuis le pool, et le muter fausserait les tirages suivants du même appel.
+ *
+ * Sert au repêchage (0275), qui doit essayer plusieurs candidats jusqu'à en
+ * ouvrir un pour de bon : tirer au hasard puis retirer l'élément pris serait
+ * quadratique et réintroduirait la mutation. L'uniformité compte ici autant que
+ * pour `tirerAuHasard` — un ordre stable ferait converger tous les workers sur
+ * le même slideshow en D, ce qui est le défaut qu'on ferme.
+ *
+ * Il vit dans ce module PUR, et pas à côté de son appelant, pour la raison du
+ * 17/09 : `assignation_contenu.ts` tire `supabase.ts` et son specifier `jsr:`,
+ * que Vite ne résout pas, donc le test ne pourrait pas le lire.
+ *
+ * `alea` est injectable pour que le test vérifie une permutation exacte plutôt
+ * qu'une propriété statistique.
+ */
+export function melanger<T>(candidats: T[], alea: () => number = Math.random): T[] {
+  const copie = [...candidats];
+  for (let i = copie.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(alea() * (i + 1));
+    [copie[i], copie[j]] = [copie[j], copie[i]];
+  }
+  return copie;
+}
+
 /** Plancher du tirage prioritaire : B et au-dessus. */
 export const TIER_TIRAGE_PRIORITAIRE: Tier = "B";
 

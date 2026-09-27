@@ -264,6 +264,60 @@ les C mis sur la touche, il n'y en a plus. Un accesseur qui rendrait toujours 0
 ferait croire à un étage de l'entonnoir qui n'existe pas ; `tirablesMaintenant`
 additionne désormais `dusBPlus + dusC`, et la carte du Moteur affiche `dusC`.
 
+## Le repêchage rouvrait le cycle qu'il venait d'ouvrir (0275, 27/09/2026)
+
+0274 ferme la perte de mise à jour du tirage ordinaire, et son comptage part de
+`contenus.tier_maj_at`. **Le repêchage, lui, déplace `tier_maj_at`.**
+
+`choisirContenu` finissait par un `update contenus set passages_cible = 1,
+tier_maj_at = now()` **nu** — hors transaction, sans verrou, sans condition. Six
+workers qui repêchent le même slideshow en D écrivent donc six fois
+`tier_maj_at = now()`, et chacun voit ensuite « 0 fait sur 1 ». Ce n'est pas une
+course perdue : c'est une porte que 0274 ne couvrait pas. Il ferme la lecture
+concurrente, pas la remise à zéro du compteur.
+
+Mesuré sur la rafale du 27/09 : quatre slideshows en D ont pris **7, 5, 5 et 3
+passages** pour une `passages_cible` de 1 — **20 des 59 passages du jour**. Sur
+`c8b9a2d2` : six passages en **31 secondes** (22:01:17 → 22:01:48) et huit
+écritures de tier pendant la rafale. Conséquence visible : **sept créateurs ont
+publié le même slideshow le même jour**, et la variété est retombée de 55
+slideshows distincts (26/09) à 37, top 5 de 15,3 % à 37,3 % — au niveau d'avant
+le correctif des C.
+
+**Le contrôle de la nuit avait annoncé « zéro surplus », et il avait raison
+selon sa propre définition** : il comparait à un `tier_maj_at` que le repêchage
+venait de déplacer. Une mesure qui part du compteur que le défaut réécrit ne
+peut pas voir le défaut. Pour ce chemin, compter les passages du JOUR par
+slideshow est le seul angle qui le révèle.
+
+Le dépôt avait écarté cette piste le 24/09 — « le repêchage en D : **0
+occurrence** ». C'était vrai ce jour-là, parce que le pool était assez fourni
+pour ne jamais tomber dans le repêchage. Il est devenu assez maigre pour y
+tomber chaque nuit. **Une piste écartée sur données se rouvre quand les données
+changent** : la conclusion portait sur un régime, pas sur le code.
+
+**Le correctif est dans la transaction**, comme 0265 et 0274 :
+`repecher_contenu(contenu, tier)` prend le `for update` sur `contenus` (même
+ordre d'acquisition, donc pas de 40P01), recompte le cycle à l'identique de
+`restantsParContenu`, et n'ouvre que s'il n'y a pas déjà un cycle ouvert.
+
+Elle rend **true seulement si elle a réellement ouvert le cycle**. Le second
+worker voit le cycle du premier, rend false, et l'appelant passe au candidat
+suivant. Rendre true lui ferait reprendre un slot que le premier n'a pas encore
+consommé — exactement le doublon qu'on ferme. Un cycle « ouvert et inutilisé »
+ne peut appartenir qu'à un worker concurrent : s'il était disponible, le tirage
+ordinaire l'aurait pris avant d'arriver au repêchage. Décliner est sans perte.
+
+Elle **ne lève pas**, elle rend un booléen : un repêchage décliné est un cas
+normal du tirage, pas une panne. Aucun bloc `exception`, règle de 0265.
+
+Côté TS, `choisirContenu` parcourt les repêchables **mélangés** jusqu'à en
+ouvrir un. `melanger` (Fisher-Yates sur une copie, `alea` injectable) vit dans
+`tierlist.ts` et non à côté de son appelant, pour la raison du 17/09 :
+`assignation_contenu.ts` tire `supabase.ts` et son specifier `jsr:`, que Vite ne
+résout pas, donc le test ne pourrait pas le lire. Un ordre stable ferait
+converger tous les workers sur le même slideshow en D — c'est le défaut même.
+
 ## Clôture d'un cycle (0257, 16/09/2026)
 
 Un cycle se clôt sur des passages **réglés**, pas sur des passages publiés, et
@@ -1155,3 +1209,12 @@ Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
  **Trois alias `createClient` ont été renommés** : `assignation` `fe`→`he`,
  `assignation-contenu` `ue`→`ce`, `revoquer-post` `pe`→`de`. Les quatre autres
  sont inchangés (`Ie`, `Y`, `Y`, `Le`). Relus dans les bundles, jamais supposés.
+
+- **Déploiement du 27/09/2026** (repêchage atomique, 0275). Quatre chargeurs sur
+ `3180474` : `assignation-contenu` (v29), `assignation` (v30), `minuit-vnext`
+ (v31) et `revoquer-post` (v29). +108 octets par bundle. Les huit autres
+ ressortent identiques. Test de vie `401` passé sur les quatre.
+
+ **Les quatre alias `createClient` ont TOUS été renommés** — `he`→`fe`,
+ `ce`→`ue`, `Ie`→`Ce`, `de`→`pe`. Troisième rebuild d'affilée où ils bougent :
+ les relire dans le bundle, jamais les recopier du déploiement précédent.

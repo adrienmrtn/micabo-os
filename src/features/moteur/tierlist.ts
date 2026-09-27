@@ -1,6 +1,7 @@
 export {
   bilanCycle,
   VUES_SOURCE_MIN_B_PLUS,
+  melanger,
   prioriserTiersHauts,
   PART_TIRAGE_C,
   TIER_TIRAGE_PRIORITAIRE,
