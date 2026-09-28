@@ -378,6 +378,59 @@ le défaut réécrit ne peut pas voir le défaut. Le contrôle du 27/09 annonça
 déplacer. Pour ce chemin, le seul angle qui révèle quoi que ce soit est de
 compter **les passages du JOUR par slideshow**.
 
+## Le retrait d'un label attirait le repli vers lui (0277, 28/09/2026)
+
+Un compte créé le 28/09 (`leon.lernen977`) est né **sans label**, donc sans
+aucun post — l'assignation croise les labels du compte avec ceux du contenu, et
+un compte sans label n'intersecte rien. Aucune erreur nulle part.
+
+La chaîne complète, et chaque maillon est du code qui « marche » :
+
+1. la file admin `file_labels_comptes` était vide ;
+2. `popLabelFile` tombe alors sur son repli, `labelMoinsUtiliseParLangue`, qui
+   prend le label **le moins utilisé** ;
+3. un label retiré a **zéro compte**, donc le repli élisait `cold_study`
+   **précisément parce qu'il était retiré** — 0 compte contre 27 pour
+   `classic_study` ;
+4. l'insert partait dans le trigger de 0273, qui le **jette en silence**.
+
+**Le mécanisme de retrait attirait donc le repli vers le label retiré**, soit
+l'inverse exact de sa raison d'être. C'est la conséquence non vue du choix
+assumé de 0273 — « le trigger ignore la ligne, il ne lève pas » : **ignorer en
+silence rend un défaut invisible, pas inoffensif**. Le compte naît, l'appelant
+reçoit un `ok`, et le créateur attend des posts qui ne viendront jamais.
+
+Le correctif est au **point de passage unique** : `idsLabelsAssignables`
+(`_shared/labels_systeme.ts`, module pur) écarte un label retiré en plus d'un
+label système, et les quatre requêtes `labels` de `manage-users` sélectionnent
+`retire_le`. Les trois chemins (`filtrerIdsAssignables`, le pool du repli, la
+liste par ids) passent par là. 5 tests, dont celui qui verrouille le point qui
+compte : **mieux vaut rendre une liste vide** — donc un `409 NO_LABELS` visible —
+**qu'un label que le trigger jettera sans rien dire**.
+
+Un appelant qui oublierait `retire_le` dans son `select` retrouve le
+comportement d'avant 0277 : c'est documenté dans la fonction et testé, pas
+silencieux.
+
+**0277 supprime aussi la ligne `cold-study`.** Tant qu'elle existe, elle reste un
+piège pour tout chemin qui oublierait le filtre. Les FK sont en **CASCADE** :
+la suppression a emporté 58 `contenu_labels`, 287 `media_labels` et 1
+`compte_reference_labels`, et les 58 slideshows y perdaient leur **seul** label.
+Ils étaient déjà intirables, mais on perdait le moyen de les retrouver — d'où
+`cold_study_sauvegarde` (1 label, 58 contenus, 287 médias, 1 source), leçon de
+0262 : avant une bascule irréversible, ranger l'état d'avant.
+
+Il ne reste que deux labels : `classic-study` et `hook` (système, non
+assignable). Plus aucun label retiré en base.
+
+**Piège de diagnostic à connaître.** J'ai d'abord cru régler ça en réamorçant la
+file : `items` a été réécrit avec des **chaînes** alors que
+`normaliserFileLabelsValeur` attend des objets `{label_id, ugc}`. L'entrée était
+donc illisible, silencieusement ignorée, et l'`updated_at` du réglage n'a jamais
+bougé — c'est ce détail qui a mis sur la piste. Une file jamais consommée dont
+l'horodatage ne bouge pas veut dire « personne ne l'a lue », pas « personne n'est
+passé ».
+
 ## Clôture d'un cycle (0257, 16/09/2026)
 
 Un cycle se clôt sur des passages **réglés**, pas sur des passages publiés, et
@@ -1286,3 +1339,9 @@ Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
 
  **Les quatre alias `createClient` sont inchangés** (`fe`, `ue`, `Ce`, `pe`) —
  première fois en quatre rebuilds. Relus dans les bundles quand même.
+
+- **Déploiement du 28/09/2026, second passage** (label retiré non assignable,
+ 0277). Un seul chargeur : `manage-users` (v16) sur `9cb11b3`. +88 octets, alias
+ `ne` inchangé. Les onze autres bundles ressortent identiques — seul
+ `manage-users` lit `idsLabelsAssignables` ; les autres passent par
+ `extraireLabelsAssignables`, qui n'a pas changé. Test de vie `401` passé.
