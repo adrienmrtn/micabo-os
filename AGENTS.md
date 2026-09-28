@@ -318,6 +318,66 @@ ouvrir un. `melanger` (Fisher-Yates sur une copie, `alea` injectable) vit dans
 résout pas, donc le test ne pourrait pas le lire. Un ordre stable ferait
 converger tous les workers sur le même slideshow en D — c'est le défaut même.
 
+## 0275 n'avait pas suffi : le repêchage rouvrait son propre cycle en chaîne (0276, 28/09/2026)
+
+0275 a mis l'ouverture du cycle sous verrou et refusait de rouvrir un cycle
+« ouvert et non consommé ». **L'erreur était dans la condition, pas dans le
+verrou.**
+
+Dès que le premier worker a inséré SON passage, le cycle est plein
+(`faits >= cible`) — et 0275 autorisait alors la réouverture. Chaque worker
+rouvrait donc à son tour, et le compteur repartait de zéro à chaque fois. 0275 a
+fermé la fenêtre de course et laissé la porte principale grande ouverte.
+
+Mesuré sur la rafale du 28/09, **avec 0275 déployé** : cinq slideshows en D ont
+pris **34 des 52 passages** (8, 7, 7, 6, 6), huit réécritures de tier chacun. La
+variété est tombée à **22 slideshows distincts** et le top 5 à **65,4 %** —
+pire que la veille (39 / 34,5 %) et très loin du 26/09 (50 / 15,1 %).
+
+**La bonne règle est celle que le dépôt applique partout ailleurs : un slideshow
+doit être JUGÉ avant de revenir.** Un cycle plein dont le passage n'est pas
+encore mesuré n'est pas un cycle à rouvrir, c'est un cycle en attente de
+verdict. Traduit au plus étroit et au plus vérifiable : **au plus un passage de
+repêchage par slideshow et par jour**.
+
+Les deux gardes sont nécessaires et ne se remplacent pas :
+
+1. **déjà un passage pour ce jour** → plafonne à 1/jour. C'est la porte
+   principale, celle que 0275 laissait ouverte.
+2. **cycle ouvert et non consommé** (0275) → couvre la fenêtre entre la
+   réouverture d'un worker et son insertion, pendant laquelle la garde 1 ne voit
+   encore aucun passage.
+
+Vérifié en prod sur les deux branches : un slideshow déjà servi le 28 rend
+`false` sans toucher `tier_maj_at` ; sur un jour neuf, le premier appel rend
+`true` et le **second appel immédiat rend `false`** — c'est la garde 2 qui
+parle, et c'est exactement le cas que 0275 seul ne couvrait qu'à moitié.
+
+`p_jour` est le jour de publication prévu, **pas `now()`** : c'est la clé que
+porte `passages.date_publication_prevue`. Compter sur `created_at` ferait dériver
+le plafond dès qu'une rafale traverse minuit UTC — et la rafale part à 22:00 UTC,
+donc elle le traverse tous les jours du point de vue de Paris.
+
+**La migration peut précéder le redéploiement**, et cette fois ce n'est pas un
+`catch` générique qui l'assure mais le **paramètre par défaut** : un chargeur
+encore sur 0275 appelle à deux arguments, tombe sur la nouvelle fonction avec
+`p_jour = null`, saute la garde 1 et retrouve le comportement de 0275. Pas de
+fenêtre d'échec. L'ancienne signature à deux arguments est supprimée pour ne pas
+laisser deux surcharges que PostgREST résoudrait par nom de paramètre sans rien
+signaler.
+
+**Conséquence assumée** : sur un pool maigre, le repêchage ne fournit plus qu'un
+passage par slideshow repêchable et par nuit, donc des créateurs finiront sous
+quota. C'est l'arbitrage du 19/09, déjà écrit ici — « un post de moins vaut mieux
+qu'un doublon » — et **huit créateurs sur le même slideshow le même jour EST un
+doublon vu de l'audience**.
+
+**Leçon de méthode, à ne pas réapprendre** : une mesure qui part du compteur que
+le défaut réécrit ne peut pas voir le défaut. Le contrôle du 27/09 annonçait
+« zéro surplus » en comparant à un `tier_maj_at` que le repêchage venait de
+déplacer. Pour ce chemin, le seul angle qui révèle quoi que ce soit est de
+compter **les passages du JOUR par slideshow**.
+
 ## Clôture d'un cycle (0257, 16/09/2026)
 
 Un cycle se clôt sur des passages **réglés**, pas sur des passages publiés, et
@@ -1218,3 +1278,11 @@ Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
  **Les quatre alias `createClient` ont TOUS été renommés** — `he`→`fe`,
  `ce`→`ue`, `Ie`→`Ce`, `de`→`pe`. Troisième rebuild d'affilée où ils bougent :
  les relire dans le bundle, jamais les recopier du déploiement précédent.
+
+- **Déploiement du 28/09/2026** (repêchage plafonné à un par jour, 0276). Quatre
+ chargeurs sur `1164cd5` : `assignation-contenu` (v30), `assignation` (v31),
+ `minuit-vnext` (v32) et `revoquer-post` (v30). **+9 octets** par bundle, les
+ huit autres identiques. Test de vie `401` passé sur les quatre.
+
+ **Les quatre alias `createClient` sont inchangés** (`fe`, `ue`, `Ce`, `pe`) —
+ première fois en quatre rebuilds. Relus dans les bundles quand même.
