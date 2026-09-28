@@ -1278,3 +1278,11 @@ Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
  **Les quatre alias `createClient` ont TOUS été renommés** — `he`→`fe`,
  `ce`→`ue`, `Ie`→`Ce`, `de`→`pe`. Troisième rebuild d'affilée où ils bougent :
  les relire dans le bundle, jamais les recopier du déploiement précédent.
+
+- **Déploiement du 28/09/2026** (repêchage plafonné à un par jour, 0276). Quatre
+ chargeurs sur `1164cd5` : `assignation-contenu` (v30), `assignation` (v31),
+ `minuit-vnext` (v32) et `revoquer-post` (v30). **+9 octets** par bundle, les
+ huit autres identiques. Test de vie `401` passé sur les quatre.
+
+ **Les quatre alias `createClient` sont inchangés** (`fe`, `ue`, `Ce`, `pe`) —
+ première fois en quatre rebuilds. Relus dans les bundles quand même.
