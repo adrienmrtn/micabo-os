@@ -582,7 +582,7 @@ function normaliserFileLabelItemList(raw: unknown): FileLabelItem[] {
 async function idsLabelsNonAssignables(supabase: Supabase): Promise<Set<string>> {
   const { data } = await supabase
     .from("labels")
-    .select("id, slug")
+    .select("id, slug, retire_le")
     .in("slug", ["hook", "ugc-ai-video"]);
   return new Set(
     (data ?? [])
@@ -634,7 +634,7 @@ async function filtrerIdsAssignables(
 ): Promise<string[]> {
   const uniques = [...new Set(labelIds.filter(Boolean))];
   if (uniques.length === 0) return [];
-  const { data } = await supabase.from("labels").select("id, slug").in("id", uniques);
+  const { data } = await supabase.from("labels").select("id, slug, retire_le").in("id", uniques);
   return idsLabelsAssignables(data ?? []);
 }
 
@@ -844,7 +844,7 @@ async function labelMoinsUtiliseParLangue(
   if (opts.ugcOnly) {
     pool = await labelIdsAvecContenusUgc(supabase, opts.applicationId);
   } else {
-    let q = supabase.from("labels").select("id, slug");
+    let q = supabase.from("labels").select("id, slug, retire_le");
     if (opts.applicationId) q = q.eq("application_id", opts.applicationId);
     const { data: tous } = await q;
     pool = idsLabelsAssignables(tous ?? []);
@@ -892,7 +892,7 @@ async function labelIdsAvecContenusUgc(
   const { data } = await q;
   const ids = [...new Set((data ?? []).map((r) => r.label_id as string).filter(Boolean))];
   if (ids.length === 0) return [];
-  const { data: labs } = await supabase.from("labels").select("id, slug").in("id", ids);
+  const { data: labs } = await supabase.from("labels").select("id, slug, retire_le").in("id", ids);
   return idsLabelsAssignables(labs ?? []);
 }
 
