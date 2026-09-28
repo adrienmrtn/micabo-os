@@ -1007,9 +1007,22 @@ async function choisirContenu(
   // garde-fou ne pouvait pas se déclencher, et sept créateurs sortaient le même
   // slideshow le même jour.
   //
-  // La fonction rend `false` quand un autre worker a déjà ouvert ce cycle :
-  // on passe au suivant plutôt que de lui reprendre son slot. On parcourt donc
-  // les repêchables dans un ordre aléatoire jusqu'à en ouvrir un pour de bon.
+  // `repecher_contenu` rend `false` dans deux cas, et l'appelant passe au
+  // candidat suivant dans les deux : le slideshow a DÉJÀ été repêché pour ce
+  // jour (0276), ou un autre worker vient d'ouvrir son cycle sans l'avoir
+  // encore consommé (0275).
+  //
+  // 0275 seul ne suffisait pas : dès que le premier worker avait inséré son
+  // passage, le cycle était plein, donc rouvrable, donc rouvert par le worker
+  // suivant — en chaîne. La rafale du 28/09 a mis 34 de ses 52 passages sur
+  // cinq slideshows en D. `p_jour` plafonne à un repêchage par slideshow et par
+  // jour, ce qui est la vraie règle : un slideshow doit être jugé avant de
+  // revenir.
+  //
+  // Conséquence assumée : sur un pool maigre, certains comptes finiront sous
+  // quota. C'est l'arbitrage du 19/09 — un post de moins vaut mieux qu'un
+  // doublon, et huit créateurs sur le même slideshow le même jour EST un
+  // doublon vu de l'audience.
   const repechables = melanger(
     pool.filter(
       (c) => !estTier(c.tier) || c.tier === "D" || Number(c.passages_cible ?? 0) === 0,
@@ -1020,6 +1033,7 @@ async function choisirContenu(
     const { data, error } = await supabase.rpc("repecher_contenu", {
       p_contenu_id: repeche.id,
       p_tier: estTier(repeche.tier) ? repeche.tier : "D",
+      p_jour: jour,
     });
     if (error) throw error;
     if (data === true) return versCandidat(repeche, 1, true);
