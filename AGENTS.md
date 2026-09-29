@@ -1538,7 +1538,7 @@ Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
  `401` passé sur les quatre.
 
 - **Déploiement du 29/09/2026, troisième passage** (média effacé regarni, 0280).
- Quatre chargeurs sur `<SHA>` : `assignation-contenu` (v33), `assignation`
+ Quatre chargeurs sur `7f95e38` : `assignation-contenu` (v33), `assignation`
  (v34), `minuit-vnext` (v35) et `revoquer-post` (v33) — les quatre qui tirent
  `visuels_assignation.ts`. **+412 octets** par bundle, les huit autres
  identiques. **Les quatre alias `createClient` ont TOUS été renommés** —
