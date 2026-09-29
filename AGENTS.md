@@ -1490,7 +1490,7 @@ Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
  sentinelles présentes, test de vie `401` passé sur les six.
 
 - **Déploiement du 29/09/2026, second passage** (invariant deck/structure, 0279).
- Quatre chargeurs sur `<SHA>` : `assignation-contenu` (v32), `assignation`
+ Quatre chargeurs sur `a750fdb` : `assignation-contenu` (v32), `assignation`
  (v33), `minuit-vnext` (v34) et `revoquer-post` (v32) — les quatre qui tirent
  `assignation_contenu.ts`. **+303 octets** par bundle, les huit autres
  identiques. **Les quatre alias `createClient` sont inchangés** (`ue`, `fe`,
