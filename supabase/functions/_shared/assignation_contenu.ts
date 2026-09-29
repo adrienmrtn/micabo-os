@@ -15,6 +15,7 @@ import { LOT_IDS, lireParLots } from "./lots.ts";
 import { mapPool } from "./parallel.ts";
 import { serviceClient, messageErreur } from "./supabase.ts";
 import { extraireLabelsAssignables } from "./labels_systeme.ts";
+import { positionsOrphelines } from "./deck_structure.ts";
 import { messagePool, type EtatPoolCompte } from "./quota_pool.ts";
 import {
   appliquerFaceSwapUgcPost,
@@ -679,6 +680,25 @@ async function creerPublicationAtomique(
   const structure = (contenu.structure_slides ?? []) as SlideStructure[];
   // Positions parfois number / parfois string selon JSONB → clé normalisée.
   const parPos = new Map(structure.map((s) => [Number(s.position), s]));
+
+  // Deck et structure sont deux listes qui doivent rester en face l'une de
+  // l'autre. Quand le deck porte une position qu'aucune image ne porte, le
+  // `??  null` plus bas écrit une slide SANS VISUEL et le post part troué —
+  // c'est ce qui est arrivé à 11 créateurs sur `b1bc3cb3` (voir
+  // `_shared/deck_structure.ts`). On refuse la livraison : l'appelant tombe
+  // dans son `catch` générique, journalise et repioche un autre slideshow.
+  //
+  // Même arbitrage que le 19/09 — « un post de moins vaut mieux qu'un
+  // doublon » : un post de moins vaut mieux qu'un post cassé, et surtout ça
+  // rend visible un défaut qui, sinon, part en ligne sans un mot.
+  const orphelines = positionsOrphelines(args.slides, structure);
+  if (orphelines.length > 0) {
+    throw new Error(
+      `Deck desaligne sur contenu=${args.contenuId} : ` +
+        `${args.slides.length} textes pour ${structure.length} images, ` +
+        `positions sans visuel ${orphelines.join(",")}`,
+    );
+  }
 
   const { parPos: mediaResolus, logs: visuelsLogs } = await resoudreVisuelsAssignation(
     supabase,
