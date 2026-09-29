@@ -268,12 +268,33 @@ export async function resoudreVisuelsAssignation(
     texteParPos.set(pos, String(sl.texte_overlay ?? "").trim());
   }
 
+  // Un `media_id` de la structure peut désigner une ligne EFFACÉE de
+  // `media_library` : la référence reste, la cible a disparu. Sans cette
+  // lecture, la boucle ci-dessous prend l'identifiant pour argent comptant,
+  // court-circuite le garnissage, et le `left join` de
+  // `creer_publication_atomique` écrit NULL — la slide part sans image.
+  // Constaté le 29/09/2026 sur 3 slideshows, dont un assigné le soir même.
+  //
+  // Ce n'est PAS la pré-vérification d'existence que 0265 a retirée : celle-là
+  // gardait une écriture et ouvrait une fenêtre où une FK violée passait. Ici
+  // on est dans le résolveur, dont le métier est justement de choisir un média,
+  // et il lit déjà la biblio du label. Si la ligne disparaît entre cette
+  // lecture et l'écriture, le `left join` écrit NULL comme aujourd'hui : on ne
+  // perd aucune garantie, on en gagne une.
+  const idsStructure = [...new Set(structure.map((s) => s.media_id).filter(Boolean))] as string[];
+  const existants = new Set<string>();
+  for (const lot of decouperEnLots(idsStructure, LOT_IN)) {
+    const { data, error } = await supabase.from("media_library").select("id").in("id", lot);
+    if (error) throw error;
+    for (const m of data ?? []) existants.add(m.id as string);
+  }
+
   const exclus = new Set<string>();
   const parPos = new Map<number, string | null>();
   const logs: ResolutionVisuelLigne[] = [];
 
   for (const s of structure.slice().sort((a, b) => a.position - b.position)) {
-    if (s.media_id) {
+    if (s.media_id && existants.has(s.media_id)) {
       exclus.add(s.media_id);
       parPos.set(s.position, s.media_id);
       logs.push({
@@ -285,6 +306,11 @@ export async function resoudreVisuelsAssignation(
         motif: s.position === 1 ? "hook / image stockée" : "image stockée (pinned ou import)",
       });
       continue;
+    }
+    if (s.media_id) {
+      console.log(
+        `[assignation] contenu=${contenuId} slide=#${s.position} media ${s.media_id} effacé — garnissage`,
+      );
     }
     const source = s.position === 1 ? hooks : pool;
     const tirage = tirerMediaParCritere(
@@ -300,7 +326,7 @@ export async function resoudreVisuelsAssignation(
       pinned: false,
       critere: s.critere ?? null,
       fallback: tirage.fallback,
-      motif: tirage.motif,
+      motif: s.media_id ? `média effacé remplacé — ${tirage.motif}` : tirage.motif,
     });
     if (tirage.fallback) {
       console.log(
