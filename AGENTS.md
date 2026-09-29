@@ -911,6 +911,82 @@ pas ce qui est publié.
 
 Après reprise : **0 forme fautive** sur les trois surfaces, 102 decks corrects.
 
+## Un slideshow est deux listes, et rien ne les tenait ensemble (0279, 29/09/2026)
+
+Des créateurs recevaient des posts avec une slide **sans image** et une slide
+**en double**. On a d'abord cru à deux défauts, et à un CTA micabo qui ajoutait
+une slide. **Les deux étaient faux** : `placerSophiaSurDeck` RÉÉCRIT
+`deck[deck.length - 1].texte_overlay` (`import_contenu.ts:1454`), il n'ajoute
+rien. Un seul défaut produit les trois symptômes.
+
+`contenus.structure_slides` porte les **images**, `contenu_langues.slides` porte
+les **textes**. Elles doivent avoir la même longueur et le même ordre, et **rien
+ne le vérifiait** — ni à l'écriture, ni à la livraison.
+
+Sur `b1bc3cb3` : le TikTok d'origine avait 6 images, toutes en base
+(`propre/1` à `propre/6`). `structure_slides` n'en listait plus que **5**, et ses
+positions 4 et 5 pointaient `propre/5` et `propre/6` — **la 4ᵉ image avait été
+retirée et les suivantes renumérotées**. Le deck avait gardé ses 6 entrées. Donc
+les textes ne suivaient plus les images à partir de la suppression, le dernier
+sortait deux fois, et le 6ᵉ n'avait aucune image. **11 créateurs** servis avec ce
+trou.
+
+**La source est l'éditeur de `/admin/file`.** Sa sauvegarde réécrit la structure
+(suppression + renumérotation), puis pousse les textes **position par position**
+via `majTexteSlideDeck`, qui ne sait qu'ÉCRASER une position : elle ne raccourcit
+jamais le tableau, et **elle ne touche que le deck SOURCE**. Les decks traduits
+gardaient l'ancien alignement — d'où des créateurs de langues différentes tous
+troués au même endroit.
+
+`_shared/deck_structure.ts` (module pur, réexporté en `deckStructure.ts`,
+9 tests) tient l'invariant des deux côtés :
+
+- **à l'écriture** — `realignerDeck(slides, ordreAncien)` remappe TOUS les decks
+  de langue sur la nouvelle structure. On **remappe, on ne vide pas** : un texte
+  traduit est du crédit déjà payé et il n'a pas changé de sens parce que sa
+  voisine est partie. Le vidage reste réservé aux bascules où la SOURCE change de
+  sens. Une position absente rend une entrée vide — décaler d'un cran pour
+  combler un trou reproduirait exactement le défaut qu'on ferme.
+- **à la livraison** — `positionsOrphelines` refuse de matérialiser un post dont
+  le deck porte une position qu'aucune image ne porte. L'appelant tombe dans son
+  `catch` générique et repioche. Même arbitrage que le 19/09 : un post de moins
+  vaut mieux qu'un post cassé, et surtout ça rend visible un défaut qui partait
+  en ligne sans un mot.
+
+**Le garde-fou ne réintroduit PAS la pré-vérification d'existence des médias**
+que 0265 a retirée : il ne lit rien de plus, il compare deux listes déjà en
+mémoire, donc aucune fenêtre entre lecture et écriture. Un média effacé de
+`media_library` reste géré par le `left join` de `creer_publication_atomique`.
+
+### La reprise ne pouvait pas être uniforme (0279)
+
+3 slideshows sur 175 validés, 13 decks. **Une troncature en aveugle en aurait
+détruit trois.** Sur `0b9ce977`, `placerSophiaSurDeck` avait écrit le CTA DANS la
+9ᵉ entrée en fr et en tr (et décalé l'outro en es) : couper à 8 faisait perdre le
+placement micabo à deux langues. La règle appliquée est donc vérifiable ligne par
+ligne :
+
+- **tronquer** si la queue au-delà de la structure est un DOUBLON de l'entrée
+  précédente et ne porte PAS le CTA — signature du défaut, les positions 1..N
+  sont justes par construction (l'admin les a validées) → 10 decks ;
+- **vider** sinon, `assurerDeckPourLangue` refait le deck depuis la source
+  corrigée avec le prompt courant → 3 decks.
+
+Repris aussi : 1 passage encore `assigne` qui partait le soir même avec son trou
+(l'entrée en trop retirée, le créateur garde son post) et un vieux du 12/09. Les
+**10 posts publiés** des 27 et 28/09 gardent leur slide vide — on ne réécrit pas
+ce qui est en ligne. Sauvegarde `decks_desalignes_sauvegarde` avant toute
+écriture (leçon de 0262).
+
+**Autre cause, à ne pas confondre** : 3 slideshows dont `structure_slides`
+référence un `media_id` **effacé de `media_library`**. Les deux listes sont de
+même longueur, c'est la cible qui a disparu. Le garde-fou ci-dessus ne les
+attrape pas, volontairement (voir 0265). Non traités par 0279.
+
+**Leçon de méthode** : la première explication — « le CTA ajoute une slide » —
+tenait debout et collait aux symptômes, sans qu'aucune ligne de code ne la
+soutienne. Lire le code qui écrit, pas seulement les données qu'il laisse.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
@@ -1412,3 +1488,11 @@ Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
  **Les six alias `createClient` sont inchangés** (`ue`, `fe`, `Ce`, `pe`, `Y`,
  `Le`), relus dans les bundles et non recopiés du déploiement précédent. Douze
  sentinelles présentes, test de vie `401` passé sur les six.
+
+- **Déploiement du 29/09/2026, second passage** (invariant deck/structure, 0279).
+ Quatre chargeurs sur `<SHA>` : `assignation-contenu` (v32), `assignation`
+ (v33), `minuit-vnext` (v34) et `revoquer-post` (v32) — les quatre qui tirent
+ `assignation_contenu.ts`. **+303 octets** par bundle, les huit autres
+ identiques. **Les quatre alias `createClient` sont inchangés** (`ue`, `fe`,
+ `Ce`, `pe`), relus dans les bundles. Huit sentinelles présentes, test de vie
+ `401` passé sur les quatre.

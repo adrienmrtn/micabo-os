@@ -32,6 +32,7 @@ import {
   definirPlacementManuel,
   ecrireNoteFile,
   ecrireStructureSlides,
+  realignerDecksSurStructure,
   listerBlocsPng,
   listerFormats,
   majChampsContenu,
@@ -247,13 +248,27 @@ function Editeur({
       })),
     );
 
-    // 3 — Textes du deck source, position par position.
+    // 3 — Réaligner les decks AVANT d'y écrire.
+    //
+    // `majTexteSlideDeck` ne sait qu'écraser une position : elle ne raccourcit
+    // jamais le tableau et ne touche que le deck source. Sans ce réalignement,
+    // supprimer une slide laissait N-1 images pour N textes — le dernier texte
+    // en double, la dernière slide sans visuel — et les decks traduits gardaient
+    // l'ANCIEN alignement. Voir `_shared/deck_structure.ts`.
+    const ordreAncien = travail.map((s) => s.position);
+    const aBouge = ordreAncien.some((pos, i) => pos !== i + 1);
+    if (aBouge) await realignerDecksSurStructure(d.id, ordreAncien);
+
+    // 4 — Textes du deck source, position par position.
     if (deckSource) {
-      const avant = new Map(
-        ((deckSource.slides ?? []) as Array<{ position: number; texte_overlay: string | null }>).map(
-          (s) => [s.position, s.texte_overlay ?? ""],
-        ),
-      );
+      // Après un réalignement, l'état d'avant ne dit plus ce qu'il y a à la
+      // position i+1 : le comparer ferait sauter des écritures nécessaires.
+      const avant = aBouge
+        ? new Map<number, string>()
+        : new Map(
+            ((deckSource.slides ?? []) as Array<{ position: number; texte_overlay: string | null }>)
+              .map((s) => [s.position, s.texte_overlay ?? ""]),
+          );
       for (const [i, s] of travail.entries()) {
         if (avant.get(s.position) === s.texte) continue;
         await majTexteSlideDeck(deckSource.id, i + 1, s.texte);
@@ -263,7 +278,7 @@ function Editeur({
       }
     }
 
-    // 4 — Champs plats + format + labels + note.
+    // 5 — Champs plats + format + labels + note.
     await majChampsContenu(d.id, {
       titre,
       musique_titre: musiqueTitre.trim() || null,
@@ -277,7 +292,7 @@ function Editeur({
     await setLabelsContenu(d.id, labelIds);
     if ((d.file_note ?? "") !== note) await ecrireNoteFile(d.id, note);
 
-    // 5 — Placement micabo. Après l'écriture des textes et la renumérotation :
+    // 6 — Placement micabo. Après l'écriture des textes et la renumérotation :
     // la position cochée est celle du deck FINAL.
     const ctaFinal =
       ctaSlide == null

@@ -13,6 +13,7 @@ import {
 } from "@/features/moteur/relevesStats";
 import type { ContenuStat, PassageStat } from "@/features/moteur/statsFormats";
 import { estTier, tierImport } from "@/features/moteur/tierlist";
+import { realignerDeck, type SlideDeck } from "@/features/moteur/deckStructure";
 import type { BlocPng, Format } from "@/features/moteur/types";
 
 // ---------------------------------------------------------------------------
@@ -280,6 +281,56 @@ export async function ecrireStructureSlides(
     .update({ structure_slides: slides })
     .eq("id", contenuId);
   if (error) throw error;
+}
+
+/**
+ * Remet TOUS les decks de langue en face de la structure après une suppression
+ * ou un réordonnancement de slides.
+ *
+ * `ordreAncien[i]` est l'ancienne position de la slide qui occupe désormais la
+ * position `i + 1`.
+ *
+ * Sans ça, l'éditeur laissait les deux listes diverger. `majTexteSlideDeck` ne
+ * sait qu'ÉCRASER une position : elle ne raccourcit jamais le tableau, et elle
+ * ne touche que le deck SOURCE. Supprimer la 4ᵉ slide d'un slideshow de 6
+ * donnait donc 5 images pour 6 textes, le dernier texte en double, la 6ᵉ slide
+ * sans visuel — et les decks traduits gardaient en plus l'ANCIEN alignement,
+ * d'où 11 créateurs de langues différentes servis avec le même trou le 29/09.
+ *
+ * On remappe au lieu de vider : un texte traduit est du crédit déjà payé, et il
+ * n'a pas changé de sens parce que sa voisine est partie. Le vidage reste
+ * réservé aux bascules où la SOURCE change de sens (`definirPlacementManuel`).
+ */
+export async function realignerDecksSurStructure(
+  contenuId: string,
+  ordreAncien: number[],
+): Promise<number> {
+  const { data: decks, error: errD } = await supabase
+    .from("contenu_langues")
+    .select("id, slides")
+    .eq("contenu_id", contenuId);
+  if (errD) throw errD;
+
+  let touches = 0;
+  for (const deck of decks ?? []) {
+    const slides = (deck.slides ?? []) as SlideDeck[];
+    if (slides.length === 0) continue; // Deck jamais traduit : rien à réaligner.
+    const realigne = realignerDeck(slides, ordreAncien);
+    if (JSON.stringify(realigne) === JSON.stringify(slides)) continue;
+    const { error } = await supabase
+      .from("contenu_langues")
+      .update({ slides: realigne })
+      .eq("id", deck.id);
+    if (error) throw error;
+    touches += 1;
+  }
+
+  // Les rendus brûlés sont rangés par (contenu, position) : à partir de la
+  // suppression, ils portent tous le texte d'une autre slide.
+  if (touches > 0) {
+    await supabase.from("burn_rendus").delete().eq("contenu_id", contenuId);
+  }
+  return touches;
 }
 
 /** Musique, titre, hashtags : les champs plats d'un slideshow. */
