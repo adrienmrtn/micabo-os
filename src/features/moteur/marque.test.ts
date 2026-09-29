@@ -189,3 +189,45 @@ describe("retirerMentionConcurrent", () => {
     expect(nettoyerTexteDeck("Utilise Micabo\nj'utilise l'app Hustly focus", "fr")).not.toMatch(/hustly/i);
   });
 });
+
+describe("normaliserMarque — allemand : le nom devant la catégorie (0278)", () => {
+  it("remet l'ordre sans toucher à l'article, quelle que soit sa déclinaison", () => {
+    expect(normaliserMarque("Die App micabo erstellt dir Karteikarten", "de")).toBe(
+      "Die micabo-App erstellt dir Karteikarten",
+    );
+    // Datif : « der » doit rester « der ». Remplacer l'article casserait la
+    // phrase, dont ce module ne lit pas le régime.
+    expect(normaliserMarque("Mit der App micabo kannst du lernen", "de")).toBe(
+      "Mit der micabo-App kannst du lernen",
+    );
+  });
+
+  it("traite aussi Anwendung et l'appli française restée dans le texte", () => {
+    expect(normaliserMarque("die Anwendung micabo hilft", "de")).toBe("die micabo-App hilft");
+    expect(normaliserMarque("die appli micabo hilft", "de")).toBe("die micabo-App hilft");
+  });
+
+  it("pose le trait d'union quand l'ordre est déjà bon", () => {
+    expect(normaliserMarque("Die micabo App ist perfekt", "de")).toBe(
+      "Die micabo-App ist perfekt",
+    );
+  });
+
+  it("est idempotente — c'est ce qui permet de la passer sur le stock", () => {
+    const une = normaliserMarque("Die App micabo erstellt", "de");
+    expect(normaliserMarque(une, "de")).toBe(une);
+    expect(normaliserMarque("Die micabo-App erstellt", "de")).toBe("Die micabo-App erstellt");
+  });
+
+  it("ne fusionne jamais deux lignes d'une slide", () => {
+    // `[ \t]+` et non `\s+` : corriger la marque en collant deux lignes
+    // casserait la mise en page de la slide, qui est le produit.
+    expect(normaliserMarque("nutze die\nmicabo\nApp", "de")).toBe("nutze die\nmicabo\nApp");
+    expect(normaliserMarque("nutze die App\nmicabo", "de")).toBe("nutze die App\nmicabo");
+  });
+
+  it("laisse les autres langues intactes — la forme composée est allemande", () => {
+    expect(normaliserMarque("l'appli micabo aide", "fr")).toBe("l'appli micabo aide");
+    expect(normaliserMarque("the micabo app helps", "en")).toBe("the micabo app helps");
+  });
+});
