@@ -7,7 +7,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "a750fdb88443c3eba83669f8f19131072296d85d";
+const SHA = "7f95e380fa46cb41289a063541de8ee214a36916";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/minuit-vnext.bundle.js`;
 
@@ -19,4 +19,4 @@ const src = await res.text();
 if (!src.includes("Deno.serve") || !src.includes("date_publication_prevue")) {
   throw new Error("minuit-vnext bundle illisible ou tronqué");
 }
-new Function("Ce", src)(createClient);
+new Function("Ie", src)(createClient);

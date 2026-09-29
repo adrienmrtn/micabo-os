@@ -7,7 +7,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "a750fdb88443c3eba83669f8f19131072296d85d";
+const SHA = "7f95e380fa46cb41289a063541de8ee214a36916";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/revoquer-post.bundle.js`;
 
@@ -21,4 +21,4 @@ if (!src.includes("Deno.serve") || !src.includes("post_slides")) {
 }
 // esbuild renomme l'alias d'un rebuild à l'autre : relire le
 // `import{createClient as …}` du bundle avant de l'effacer, et reporter le nom ici.
-new Function("pe", src)(createClient);
+new Function("de", src)(createClient);

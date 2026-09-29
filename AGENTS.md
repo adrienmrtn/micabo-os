@@ -987,6 +987,46 @@ attrape pas, volontairement (voir 0265). Non traités par 0279.
 tenait debout et collait aux symptômes, sans qu'aucune ligne de code ne la
 soutienne. Lire le code qui écrit, pas seulement les données qu'il laisse.
 
+## Un média effacé désarmait le garnissage au lieu de le déclencher (0280, 29/09/2026)
+
+Deuxième cause des slides sans image, à ne pas confondre avec 0279 : ici les
+deux listes ont la même longueur, c'est la **cible qui a disparu**.
+`structure_slides` porte un `media_id` dont la ligne `media_library` n'existe
+plus.
+
+`resoudreVisuelsAssignation` sait pourtant garnir une slide vide depuis la
+bibliothèque du label — **740 images** disponibles sur `classic-study`. Mais son
+test était `if (s.media_id)` : il faisait confiance à l'identifiant **sans
+vérifier la ligne**. Une référence pendue passait donc pour « image stockée
+(pinned ou import) », court-circuitait le garnissage, et le `left join` de
+`creer_publication_atomique` écrivait NULL.
+
+**Le mécanisme de secours existait et était désarmé par le cas même qu'il aurait
+dû couvrir.** C'est la même forme que 0277 — le retrait d'un label attirait le
+repli vers lui — et que 0278 — le garde bénissait ce qu'il laissait passer : une
+condition qui ne pose pas de question sur ce qu'elle valide.
+
+Les ids de la structure sont désormais relus en une requête, et un id absent
+tombe dans le garnissage avec un motif distinct (« média effacé remplacé — … »)
+pour que ça se voie dans `passages.visuels_resolution`.
+
+**Ce n'est pas la pré-vérification d'existence retirée par 0265.** Celle-là
+gardait une ÉCRITURE et ouvrait une fenêtre où une FK violée passait. Ici on est
+dans le résolveur, dont le métier est de choisir un média et qui lit déjà la
+biblio du label. Si la ligne disparaît entre la lecture et l'écriture, le
+`left join` écrit NULL comme avant : aucune garantie perdue, une gagnée.
+
+Reprise : les 3 `structure_slides` concernées ont leur `media_id` pendu
+**retiré** (`media_id = null` dit la vérité — cette slide est à garnir ; le
+laisser reste un piège pour tout chemin qui lirait la structure sans passer par
+le résolveur, et l'éditeur affichait une slide « pourvue » qui ne l'était pas).
+Et les 3 slides trouées des 2 passages NON PUBLIÉS sont remplies par un tirage
+dans la biblio du label — hook en position 1, pool sinon, jamais un média déjà
+présent dans le post : le repli de `tirerMediaParCritere`, à la main. On remplit
+plutôt que de supprimer le passage : le créateur garde son post, et le passage
+du 12/09 appartient à un cycle qu'on ne rouvre pas. Sauvegarde
+`media_efface_sauvegarde`.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
@@ -1495,4 +1535,14 @@ Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
  `assignation_contenu.ts`. **+303 octets** par bundle, les huit autres
  identiques. **Les quatre alias `createClient` sont inchangés** (`ue`, `fe`,
  `Ce`, `pe`), relus dans les bundles. Huit sentinelles présentes, test de vie
+ `401` passé sur les quatre.
+
+- **Déploiement du 29/09/2026, troisième passage** (média effacé regarni, 0280).
+ Quatre chargeurs sur `7f95e38` : `assignation-contenu` (v33), `assignation`
+ (v34), `minuit-vnext` (v35) et `revoquer-post` (v33) — les quatre qui tirent
+ `visuels_assignation.ts`. **+412 octets** par bundle, les huit autres
+ identiques. **Les quatre alias `createClient` ont TOUS été renommés** —
+ `ue`→`ce`, `fe`→`he`, `Ce`→`Ie`, `pe`→`de` — au lendemain d'un rebuild où ils
+ n'avaient pas bougé : les relire dans le bundle à chaque fois, jamais les
+ recopier du déploiement précédent. Huit sentinelles présentes, test de vie
  `401` passé sur les quatre.
