@@ -48,7 +48,44 @@ function dejaQualifie(texte: string, langue: string): boolean {
   if (langue === "tr") return /uygulama/i.test(texte);
   if (langue === "es") return /\b(app|aplicaci[oó]n)\b/i.test(texte);
   if (langue === "en") return /\bapps?\b/i.test(texte);
+  // `Anwendung` manquait : « die Anwendung micabo » passait donc pour NON
+  // qualifié et repartait dans le `replace` final, qui produit « die Anwendung
+  // die micabo-App ». Le corpus n'en porte aucun cas, mais rien ne l'empêchait.
+  if (langue === "de") return /\b(App(likation)?|Anwendung|appli)\b/i.test(texte);
   return /\bapp(li|lication)?s?\b/i.test(texte);
+}
+
+/**
+ * Allemand : remettre le nom DEVANT le mot de catégorie (0278).
+ *
+ * `dejaQualifie` empêche de doubler la catégorie — et bénit du même coup toute
+ * forme déjà présente, quelle qu'elle soit. « die App micabo » contient bien un
+ * « App », donc la fonction sortait au `return bas` de la casse sans jamais
+ * regarder l'ORDRE. Le garde n'était pas trop large, il ne posait simplement
+ * aucune question sur ce qu'il laissait passer.
+ *
+ * L'allemand est la seule langue où ça se voit, parce que sa forme est un
+ * COMPOSÉ — `micabo-App`, nom d'abord — là où le français, l'espagnol et le turc
+ * mettent la catégorie devant (« l'appli micabo »). Un modèle qui traduit
+ * « l'appli micabo » mot à mot rend « die App micabo », qui est correct en
+ * français et faux en allemand. Au 29/09 : 77 decks sur 150 dans cette forme,
+ * 22 autres en « micabo App » sans trait d'union, 4 corrects.
+ *
+ * On ne touche PAS à l'article : « die App micabo » → « die micabo-App »,
+ * « der App micabo » → « der micabo-App ». Remplacer l'article casserait la
+ * déclinaison, que la phrase environnante impose et que ce module ne lit pas.
+ *
+ * Les deux passes ne se remordent pas : la première rend « micabo-App », avec un
+ * trait d'union, que la seconde (espace obligatoire) ne peut plus voir. Et
+ * `[ \t]+` plutôt que `\s+` : aucun saut de ligne ne sépare jamais la catégorie
+ * du nom dans le corpus, et en tolérer un ferait fusionner deux lignes d'une
+ * slide — on corrigerait la marque en cassant la mise en page.
+ */
+function normaliserOrdreDe(texte: string, langue: string): string {
+  if (langue !== "de") return texte;
+  return texte
+    .replace(/\b(?:App(?:likation)?|Anwendung|appli(?:cation)?)[ \t]+micabo\b/gi, "micabo-App")
+    .replace(/\bmicabo[ \t]+(?:App(?:likation)?|Anwendung)\b/gi, "micabo-App");
 }
 
 /**
@@ -62,7 +99,7 @@ export function normaliserMarque(texte: string, langue: string): string {
   if (!texte || !/[Mm][Ii][Cc][Aa][Bb][Oo]/.test(texte)) return texte;
 
   // La casse d'abord : elle s'applique même quand la catégorie est déjà là.
-  const bas = texte.replace(MARQUE, "micabo");
+  const bas = normaliserOrdreDe(texte.replace(MARQUE, "micabo"), langue);
   if (dejaQualifie(bas, langue)) return bas;
 
   if (langue === "tr") {

@@ -857,6 +857,60 @@ perdu — et rien pour les slideshows qui seront rejetés d'ici là.
 l'OS et de la plateforme : ne jamais les réécrire en cherchant la marque
 produit. Les posts déjà **publiés** ne sont jamais touchés non plus.
 
+## La forme allemande de la marque était à l'envers (0278, 29/09/2026)
+
+45 slides sur 92 disaient « die App micabo » au lieu de `die micabo-App`. Repris
+en base au 29/09 : sur les 150 lignes `contenu_langues` en allemand, **77 en
+ordre inverse**, 22 de plus en « micabo App » sans trait d'union, **4 correctes**.
+
+**L'allemand est la seule langue où ça se voit, et ce n'est pas un hasard** : sa
+forme est un COMPOSÉ — le nom D'ABORD — là où le français, l'espagnol et le turc
+mettent la catégorie devant (« l'appli micabo », « micabo uygulaması »). Un
+modèle qui traduit « l'appli micabo » mot à mot rend « die App micabo » : correct
+en français, faux en allemand. Trois formes fausses cohabitaient, dont
+« die appli micabo » — le mot FRANÇAIS resté dans la traduction.
+
+**Le garde de 0267 bénissait ce qu'il laissait passer.** `dejaQualifie` existe
+pour ne pas doubler le mot de catégorie ; « die App micabo » en contient un, donc
+`normaliserMarque` sortait à la casse sans jamais regarder l'ORDRE. Le garde
+n'était pas trop large : il ne posait aucune question sur ce qu'il validait.
+C'est la même famille que 0268 — une règle qui ne s'applique que sur un chemin
+ne protège que ce chemin.
+
+Second défaut de la même ligne : `Anwendung` ne comptait pas comme mot de
+catégorie, donc « die Anwendung micabo » passait pour NON qualifié et repartait
+dans le remplacement final, qui produit « die Anwendung die micabo-App ». Zéro
+cas en base, rien ne l'empêchait.
+
+- **On ne touche pas à l'article.** « die App micabo » → « die micabo-App »,
+  « der App micabo » → « der micabo-App ». La déclinaison est imposée par la
+  phrase, que ce code ne lit pas ; la réécrire casserait le cas grammatical.
+  Vérifié après reprise : nominatif, accusatif et datif intacts.
+- **`[ \t]` et non `\s`.** Vérifié en base : aucun saut de ligne ne sépare jamais
+  la catégorie du nom. En tolérer un ferait fusionner deux lignes d'une slide —
+  on corrigerait la marque en cassant la mise en page, qui est le produit.
+- **Pas de sentinelle `chr(1)` ici.** Les deux passes ne se remordent pas : la
+  première rend `micabo-App`, avec un trait d'union, que la seconde (espace
+  obligatoire) ne peut plus voir. La leçon de 0262 tient, elle est réglée par la
+  forme de la sortie plutôt que par une sentinelle.
+
+`normaliserOrdreDe` vit dans `_shared/marque.ts` (module pur, 6 tests dont
+l'idempotence et le non-collage de lignes) et son miroir SQL
+`micabo_ordre_de` / `micabo_ordre_de_slides` dans 0278, comme
+`micabo_avec_article` en 0267 : le SQL reprend le stock, le TS tient la
+production courante, les deux doivent rester d'accord. Les neuf mêmes cas ont été
+joués des deux côtés avant d'écrire quoi que ce soit.
+
+**0278 réécrit au lieu de vider**, comme 0267 : remettre un composé à l'endroit ne
+change pas le sens, donc payer une retraduction complète n'achèterait rien.
+Sauvegarde `avant_micabo_app_de_2026_09_29` d'abord (98 decks, 18 passages, 18
+`post_slides`) — la réécriture fusionne trois formes en une, donc l'inverse ne
+pourrait être qu'une reconstruction. Les passages et `post_slides` **publiés ne
+sont pas touchés** : 53 slides en ligne gardent la forme fautive, on ne réécrit
+pas ce qui est publié.
+
+Après reprise : **0 forme fautive** sur les trois surfaces, 102 decks corrects.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
@@ -1345,3 +1399,16 @@ Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
  `ne` inchangé. Les onze autres bundles ressortent identiques — seul
  `manage-users` lit `idsLabelsAssignables` ; les autres passent par
  `extraireLabelsAssignables`, qui n'a pas changé. Test de vie `401` passé.
+
+- **Déploiement du 29/09/2026** (forme allemande de la marque, 0278). Six
+ chargeurs sur `<SHA>` : `assignation-contenu` (v31), `assignation` (v32),
+ `minuit-vnext` (v33), `revoquer-post` (v31), `bruler-texte-test` (v23) et
+ `import-contenu` (v35). Cinq portent le correctif (**+263 octets** chacun) ;
+ `import-contenu` ressort à **taille constante** — il tire `marque.ts` sans lire
+ `normaliserOrdreDe`, esbuild élague et permute ses identifiants minifiés. Il est
+ repris ici plutôt que laissé en dérive, comme le 25/09. Les six autres bundles
+ sont identiques.
+
+ **Les six alias `createClient` sont inchangés** (`ue`, `fe`, `Ce`, `pe`, `Y`,
+ `Le`), relus dans les bundles et non recopiés du déploiement précédent. Douze
+ sentinelles présentes, test de vie `401` passé sur les six.
