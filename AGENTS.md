@@ -1401,7 +1401,7 @@ Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
  `extraireLabelsAssignables`, qui n'a pas changé. Test de vie `401` passé.
 
 - **Déploiement du 29/09/2026** (forme allemande de la marque, 0278). Six
- chargeurs sur `<SHA>` : `assignation-contenu` (v31), `assignation` (v32),
+ chargeurs sur `65cf486` : `assignation-contenu` (v31), `assignation` (v32),
  `minuit-vnext` (v33), `revoquer-post` (v31), `bruler-texte-test` (v23) et
  `import-contenu` (v35). Cinq portent le correctif (**+263 octets** chacun) ;
  `import-contenu` ressort à **taille constante** — il tire `marque.ts` sans lire
