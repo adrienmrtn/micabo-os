@@ -1027,6 +1027,76 @@ plutôt que de supprimer le passage : le créateur garde son post, et le passage
 du 12/09 appartient à un cycle qu'on ne rouvre pas. Sauvegarde
 `media_efface_sauvegarde`.
 
+## Le relevé payait jusqu'à soixante fois chaque post (0281, 01/10/2026)
+
+Le 28/09 à 22:16 UTC, Apify a commencé à répondre `402
+not-enough-usage-to-run-paid-actor` : crédit du cycle épuisé. Plus aucun
+relevé, donc plus aucun cycle clos, plus aucune requalification, et le pool
+tirable est tombé à zéro le 01/10 (assignation à 46/52, repêchages seuls).
+**Le drain s'est pourtant déclaré « terminé, erreurs : [] » trois nuits de
+suite.** C'est le brief du matin (`docs/brief/`) qui l'a vu, par
+l'horodatage des relevés.
+
+Le crédit n'était pas épuisé par malchance. Une journée normale, le 28/09 :
+**74 scrapes de profil, ~2 450 résultats Apify, 1 349 passages re-mesurés
+pour ~50 nouveaux posts.** Trois causes, toutes dans le relevé :
+
+1. **Tout était re-mesuré, tout le temps.** Un passage publié depuis 30 jours
+   était re-scrapé dès que son relevé avait 6 h : deux fois par jour pendant
+   un mois, jusqu'à ~60 mesures par post. Le moteur n'en lit qu'une
+   (`MESURE_JOURS`, J+2) et le plateau tombe vers J+4–J+6. Et la profondeur de
+   scrape suivait le NOMBRE de dus (2 × n), pas leur ÂGE : 40 posts lus par
+   compte et par passe, même pour des dus tous récents.
+2. **Le verrou du drain n'était pas atomique.** Lire `elo_dernier_run`, tester
+   `busy`, écrire. Entre la fin d'un lot (busy=false) et le kick du suivant,
+   le cron minute lisait le même curseur : **23 scrapes en double sur 74**,
+   jusqu'à trois sur le même compte à 10 ms d'écart. Une fois dédoublée, la
+   chaîne le restait jusqu'à la fin de la file.
+3. **Un post introuvable était payé à vie.** Chaque passe relançait un
+   `scrapePost` (un lancement Apify par post) : 70 le 28/09, dont 22 « pas de
+   match » retentés deux fois par jour pendant 30 jours.
+
+Le lien du créateur n'y était pour rien : 0 post publié sans lien en
+septembre, et 1 349 rapprochements par URL contre 61 replis le 28/09.
+
+**Les règles vivent dans `_shared/releve_file.ts`** (module pur, réexporté par
+`src/features/moteur/releveFile.ts`, 16 tests) :
+
+- relevé à **20 h** d'intervalle (`RAFRAICHIR_APRES_MS`), coincé entre les
+  13 h qui séparent minuit de 13:00 (la passe de midi ne re-mesure plus ce que
+  minuit vient de mesurer) et 24 h moins un drain ;
+- **figé après 7 jours** (`RELEVE_FIGE_APRES_JOURS`), au-dessus de
+  `PASSAGE_PERIME_JOURS` et de `MESURE_JOURS` — un test le verrouille ;
+- profondeur de scrape = nos posts publiés depuis le **plus vieux dû**, +25 %
+  et +2 (`profondeurScrape`) ; un compte sans dû n'est pas scrapé, et son
+  scrape « metrics seules » n'a lieu qu'une fois par 20 h ;
+- `scrapePost` de repli seulement dans la fenêtre de 7 jours, et abandon
+  après **3 échecs** (`passages.stats_echecs`, `stats_tentative_at`).
+
+**Le verrou se prend en base** (`prendre_verrou_drain_elo`, 0281) : un UPDATE
+compare-and-set sur la ligne `reglages`, qui refuse aussi un kick dont le
+curseur a déjà été dépassé. Testé sur PostgreSQL 16 : 20 appels simultanés,
+un seul gagnant. Même famille que `repecher_contenu` (0275).
+
+**Deux défauts de plus, trouvés en chemin :**
+
+- les erreurs de scrape étaient rangées compte par compte et **jamais remontées
+  au drain** — d'où le « erreurs : [] ». Elles le sont ; un 402 arrête la file
+  (`apifyEpuise`) au lieu de faire défiler 27 comptes en erreur ;
+- la requalification « au relevé » (0257) prenait les slideshows **visés** par
+  la passe, pas ceux **mesurés**. Apify en 402, elle jugeait des cycles sur
+  des vues figées : **10 B→C le 30/09 sans une vue nouvelle.** Elle ne touche
+  plus que les passages réellement relevés, et la requalification et la
+  qualification de fin de drain sont sautées quand Apify est épuisé.
+
+Estimation sur les logs du 28/09 : de ~2 450 à **~900–1 100 résultats par
+jour** (÷2,5), sans perdre une mesure dont le moteur se sert. La passe de 13:00
+ne prend plus que les posts du matin.
+
+**Visibilité** : chaque départ de passe écrit la consommation du cycle
+(`GET /v2/users/me/limits`) dans `reglages.apify_usage` ; le brief du matin la
+lit (Q9) et alerte à 70 % / 90 %.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers

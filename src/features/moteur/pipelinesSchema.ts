@@ -135,7 +135,7 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
       kind: "logic",
       api: "pg_cron rattrapage-elo-drain → POST rattrapage-elo {}",
       detail:
-        "Reprend elo_dernier_run tant que done≠true (heartbeat busy + lock 140s)",
+        "Reprend elo_dernier_run tant que done≠true (verrou atomique prendre_verrou_drain_elo, 0281 ; worker mort repris après 4 min)",
       onFail: "Alert Admin Minuit si stale >30 min",
     },
     {
@@ -145,7 +145,8 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
       kind: "api",
       api: "Apify scrapeStats(handle) — sans download images",
       env: "APIFY_TOKEN (ou équivalent)",
-      detail: "Match passage.publie_url → id vidéo · 1 compte / invoke Edge",
+      detail:
+        "Match passage.publie_url → id vidéo · 1 compte / invoke Edge · relevé à 20 h d'intervalle, figé à J+7, profondeur selon l'âge du plus vieux dû (0281)",
       onFail: "② scrapePost(url) puis ③ cohérence ±36h",
     },
     {
@@ -154,6 +155,7 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
       label: "Fallback scrapePost(publie_url)",
       kind: "fallback",
       api: "Apify scrapePost",
+      detail: "Seulement dans la fenêtre de relevé (7 j) ; abandon après 3 échecs (stats_echecs, 0281)",
       onFail: "③ cohérence temporelle",
     },
     {

@@ -190,6 +190,7 @@ Le statut de la page est le pire niveau trouvé.
 | Contrôle | Source | 🟠 | 🔴 |
 |---|---|---|---|
 | Relevé des vues | Q9 `releves_24h` | dernier relevé > 18 h | 0 relevé en 24 h avec des posts publiés |
+| Crédit Apify | Q9 `apify_usage` (écart avec la mémoire = consommation par jour) | ≥ 70 % du cycle, ou rythme qui épuise avant la fin du cycle | ≥ 90 %, ou erreur de lecture |
 | Runway du pool | Q4 `runway_jours` | < 3 jours | < 1 jour |
 | Dus intirables | Q4 `dus_intirables` | > 0 (les nommer : label retiré ou absent) | — |
 | Même slideshow, même jour | Q2 | sur ≥ 3 comptes, ou top 5 > 25 % | sur ≥ 5 comptes, ou top 5 > 40 % |
@@ -310,7 +311,8 @@ Le bloc JSON du toggle « Mémoire », relu au passage suivant :
     "pool": { "tirables": 0, "dus_intirables": 50, "repechables": 20, "runway_jours": 0 },
     "rc": { "active_trials": 18, "active_subscriptions": 11, "mrr": 45 },
     "upwork": { "annonces_ouvertes": 12, "contrats_actifs": 30 },
-    "file_validation": 7
+    "file_validation": 7,
+    "apify_usage_usd": 12.4
   },
   "alertes": [
     { "cle": "releve_arrete", "niveau": "rouge", "depuis": "2026-10-01", "texte": "…" }

@@ -483,6 +483,19 @@ select 'releves_24h' as controle,
   (select 'dernier relevé : ' || coalesce(to_char(max(stats_maj_at) at time zone 'Europe/Paris', 'DD/MM HH24:MI'), 'jamais')
    from public.passages)::text as detail
 union all
+-- Consommation Apify du cycle de facturation, écrite par rattrapage-elo à
+-- chaque départ de passe (0281). Le 28/09, le crédit s'est épuisé sans que
+-- rien dans l'OS ne le montre.
+select 'apify_usage',
+  (select coalesce(round(100.0 * (valeur->>'usage_usd')::numeric
+            / nullif((valeur->>'limite_usd')::numeric, 0))::text || ' %', 'inconnu')
+   from public.reglages where cle = 'apify_usage'),
+  (select coalesce(valeur->>'usage_usd', '?') || ' $ / ' || coalesce(valeur->>'limite_usd', '?')
+          || ' $ · cycle jusqu''au ' || coalesce(left(valeur->>'cycle_fin', 10), '?')
+          || coalesce(' · erreur : ' || (valeur->>'erreur'), '')
+          || ' · lu le ' || left(valeur->>'at', 16)
+   from public.reglages where cle = 'apify_usage')
+union all
 select 'cron_echecs_24h',
   (select count(*) from cron.job_run_details d cross join p
    where d.start_time >= p.t_fin - interval '24 hours' and d.start_time < p.t_fin

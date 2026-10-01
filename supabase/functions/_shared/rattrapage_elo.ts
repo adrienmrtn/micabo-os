@@ -17,6 +17,14 @@
  */
 import { scrapePost, scrapeStats, type ScrapedPost } from "./apify.ts";
 import {
+  estApifyEpuise,
+  metricsAScraper,
+  passageARelever,
+  POSTS_RELEVES,
+  profondeurScrape,
+  repliAutorise,
+} from "./releve_file.ts";
+import {
   abandonnerRepostsEnRetard,
   planifierRepostsBonus,
   requalifierContenus,
@@ -30,30 +38,8 @@ import { qualifierComptes, type QualificationResultat } from "./qualification_co
 
 export { RATTRAPAGE_JOURS_DEFAUT } from "./tierlist.ts";
 
-/**
- * Profil TikTok scrapé, par compte.
- *
- * Plancher, pas valeur fixe : un créateur qui poste aussi pour lui pousse nos
- * posts hors des N premiers, et le match par URL échoue. On dimensionne donc
- * sur le nombre de passages à retrouver (`postsAScraper`), plafonné pour rester
- * sous le timeout Edge de 150 s par compte.
- */
-const POSTS_RELEVES = 12;
-const POSTS_RELEVES_MAX = 40;
-
-/**
- * Un post scrapé plus tôt que ça n'est pas encore indexé par TikTok : le
- * scrape rend « pas de match », ou pire, des vues quasi nulles qui faussent la
- * moyenne du cycle. Le 13/09/2026, deux posts publiés à 22:03 et 22:07 ont été
- * scrapés à 22:07 — jamais mesurés.
- */
-const DELAI_MIN_RELEVE_MS = 45 * 60_000;
-
-/**
- * Un relevé n'est refait que s'il a vieilli. En dessous, une deuxième passe
- * dans la même journée ne rescraperait que du déjà-vu.
- */
-const RAFRAICHIR_APRES_MS = 6 * 3600_000;
+// Les règles du relevé — quels passages, quelle profondeur de scrape, quand
+// abandonner — vivent dans `releve_file.ts`, module pur testé côté front.
 
 /**
  * Profondeur maximale de la file « ce qui manque ». Au-delà, un passage n'a
@@ -124,6 +110,8 @@ export interface RattrapageResultat {
     fallbackCoherence: number;
     sansMatch: number;
     erreurs: Array<{ compteId: string; handle?: string | null; erreur: string }>;
+    /** Passages réellement mesurés par ce run (et pas seulement visés). */
+    relevesIds?: string[];
   };
   requalif: RequalificationResultat;
   repostsBonus: { planifies: number; details: Array<{ passageId: string; jour: string; vues: number }> };
@@ -200,17 +188,6 @@ function tokensTexte(s: string): Set<string> {
   );
 }
 
-/**
- * Profondeur de scrape du profil pour retrouver `n` passages.
- *
- * Le double, plancher `POSTS_RELEVES`, plafond `POSTS_RELEVES_MAX` : il faut
- * de la marge pour les posts personnels du créateur, sans faire exploser le
- * temps Apify (et le coût) sur un compte qui n'a qu'un post à relever.
- */
-export function postsAScraper(n: number): number {
-  return Math.min(POSTS_RELEVES_MAX, Math.max(POSTS_RELEVES, n * 2));
-}
-
 /** Similarité Jaccard simple sur tokens ≥3 car. */
 function similariteTexte(a: string, b: string): number {
   const A = tokensTexte(a);
@@ -248,6 +225,10 @@ type PassageFenetre = {
   slides: unknown;
   /** Dernier relevé réussi — null = jamais mesuré (prioritaire). */
   stats_maj_at?: string | null;
+  /** Relevés consécutifs sans correspondance (0281). */
+  stats_echecs?: number | null;
+  /** Dernière tentative de relevé, réussie ou non (0281). */
+  stats_tentative_at?: string | null;
 };
 
 /**
@@ -260,10 +241,13 @@ type PassageFenetre = {
  * 16 étaient à `vues = null` ET `stats_maj_at = null` ; ceux du 07 et du 08
  * étaient perdus pour de bon.
  *
- * Désormais le critère est l'état du passage :
- *   - jamais relevé (`stats_maj_at is null`) → prioritaire ;
- *   - relevé il y a plus de `RAFRAICHIR_APRES_MS` → rafraîchi ;
- *   - publié il y a moins de `DELAI_MIN_RELEVE_MS` → laissé mûrir.
+ * Désormais le critère est l'état du passage (`passageARelever`,
+ * `releve_file.ts`) : jamais mesuré d'abord, puis mesuré il y a plus de 20 h
+ * et publié depuis moins de `RELEVE_FIGE_APRES_JOURS` ; au-delà, le chiffre
+ * est figé. Un passage introuvable `RELEVE_ECHECS_MAX` fois n'est plus payé.
+ *
+ * Rend aussi TOUS les passages publiés de la fenêtre (`publies`) : la
+ * profondeur de scrape d'un profil se calcule sur eux, pas sur les seuls dus.
  *
  * Les plus vieux manquants passent devant : ce sont eux qui bloquent une
  * requalification de cycle.
@@ -272,14 +256,14 @@ async function chargerPassagesARelever(
   supabase: Supabase,
   compteId: string | null,
   opts: { profondeurJours?: number } = {},
-): Promise<PassageFenetre[]> {
+): Promise<{ dus: PassageFenetre[]; publies: PassageFenetre[] }> {
   const profondeur = Math.max(1, opts.profondeurJours ?? RATTRAPAGE_PROFONDEUR_JOURS);
   const depuis = ajouterJoursParis(aujourdhuiParis(), -profondeur);
 
   let q = supabase
     .from("passages")
     .select(
-      "id, contenu_id, compte_id, langue, publie_url, publie_at, date_publication_prevue, vues, likes, commentaires, partages, slides, stats_maj_at",
+      "id, contenu_id, compte_id, langue, publie_url, publie_at, date_publication_prevue, vues, likes, commentaires, partages, slides, stats_maj_at, stats_echecs, stats_tentative_at",
     )
     .eq("statut", "publie")
     .not("publie_url", "is", null)
@@ -290,24 +274,18 @@ async function chargerPassagesARelever(
   const { data, error } = await q;
   if (error) throw error;
 
+  const publies = (data ?? []) as PassageFenetre[];
   const maintenant = Date.now();
-  const candidats = ((data ?? []) as PassageFenetre[]).filter((p) => {
-    const publie = p.publie_at ? Date.parse(p.publie_at) : NaN;
-    // Publié à l'instant : TikTok ne l'a pas encore indexé.
-    if (Number.isFinite(publie) && maintenant - publie < DELAI_MIN_RELEVE_MS) return false;
-    if (!p.stats_maj_at) return true;
-    const releve = Date.parse(p.stats_maj_at);
-    if (!Number.isFinite(releve)) return true;
-    return maintenant - releve >= RAFRAICHIR_APRES_MS;
-  });
+  const dus = publies.filter((p) => passageARelever(p, maintenant));
 
   // Jamais relevé d'abord, puis du plus ancien au plus récent.
-  return candidats.sort((a, b) => {
+  dus.sort((a, b) => {
     const aJamais = a.stats_maj_at ? 1 : 0;
     const bJamais = b.stats_maj_at ? 1 : 0;
     if (aJamais !== bJamais) return aJamais - bJamais;
     return (a.date_publication_prevue ?? "").localeCompare(b.date_publication_prevue ?? "");
   });
+  return { dus, publies };
 }
 
 async function ecrireStats(
@@ -325,8 +303,30 @@ async function ecrireStats(
       commentaires: stats.commentaires,
       partages: stats.partages,
       stats_maj_at: new Date().toISOString(),
+      stats_echecs: 0,
+      stats_tentative_at: new Date().toISOString(),
     })
     .eq("id", passageId);
+}
+
+/**
+ * Relevé sans correspondance : on le compte, pour cesser de payer au bout de
+ * `RELEVE_ECHECS_MAX` (post supprimé, lien faux). Le 28/09, 22 passages
+ * introuvables étaient retentés à chaque passe, chacun avec un `scrapePost`.
+ */
+async function noterEchecReleve(
+  supabase: Supabase,
+  passage: PassageFenetre,
+  dryRun: boolean,
+): Promise<void> {
+  if (dryRun) return;
+  await supabase
+    .from("passages")
+    .update({
+      stats_echecs: (passage.stats_echecs ?? 0) + 1,
+      stats_tentative_at: new Date().toISOString(),
+    })
+    .eq("id", passage.id);
 }
 
 /**
@@ -337,6 +337,7 @@ async function ecrireStats(
 async function releverStatsFenetre(
   supabase: Supabase,
   passages: PassageFenetre[],
+  publies: PassageFenetre[],
   dryRun: boolean,
   handles: Map<string, string | null>,
   journal: Journal,
@@ -348,6 +349,7 @@ async function releverStatsFenetre(
     fallbackCoherence: 0,
     sansMatch: 0,
     erreurs: [],
+    relevesIds: [],
   };
 
   const parCompte = new Map<string, PassageFenetre[]>();
@@ -386,9 +388,12 @@ async function releverStatsFenetre(
     let relevesCompte = 0;
     let sansMatchCompte = 0;
     try {
-      // Le profil doit contenir nos posts : si le créateur en a 9 à retrouver
-      // et poste aussi pour lui, 12 ne suffisent pas. On prend de la marge.
-      const aScraper = postsAScraper(liste.length);
+      // Le profil doit remonter jusqu'au plus vieux passage dû : on compte nos
+      // posts publiés depuis, avec une marge pour les posts personnels.
+      const aScraper = profondeurScrape(
+        publies.filter((p) => p.compte_id === compte.id),
+        liste,
+      );
       journal.push(
         "info",
         `@${handle} — scrape profil (${liste.length} passage(s), ${aScraper} posts lus)`,
@@ -417,7 +422,9 @@ async function releverStatsFenetre(
         let match = parId.get(idDuLien(complet)) ?? null;
         let via: "url" | "fallbackUrl" | "coherence" | null = match ? "url" : null;
 
-        if (!match) {
+        // Repli payant (un lancement Apify par post) : seulement dans la fenêtre
+        // de relevé ; plus vieux, le post ne se rattrape que par le profil.
+        if (!match && repliAutorise(passage)) {
           try {
             const seuls = await scrapePost(passage.publie_url);
             if (seuls[0]?.stats) {
@@ -459,6 +466,7 @@ async function releverStatsFenetre(
         if (!match) {
           sansMatchCompte += 1;
           out.sansMatch += 1;
+          await noterEchecReleve(supabase, passage, dryRun);
           journal.push(
             "warn",
             `@${handle} — pas de match stats`,
@@ -473,6 +481,7 @@ async function releverStatsFenetre(
         passage.commentaires = match.stats.commentaires;
         passage.partages = match.stats.partages;
         out.releves += 1;
+        out.relevesIds?.push(passage.id);
         relevesCompte += 1;
         if (via === "fallbackUrl") out.fallbackUrl += 1;
         if (via === "coherence") out.fallbackCoherence += 1;
@@ -834,7 +843,7 @@ export async function rattrapageElo(
       (opts.compteId ? ` · compte ${opts.compteId.slice(0, 8)}` : " · tous comptes"),
   );
 
-  const enFile = await chargerPassagesARelever(supabase, opts.compteId ?? null);
+  const { dus: enFile, publies } = await chargerPassagesARelever(supabase, opts.compteId ?? null);
   const passages = enFile.slice(0, PASSAGES_PAR_PASSE);
   const jamais = passages.filter((p) => !p.stats_maj_at).length;
   journal.push(
@@ -846,14 +855,26 @@ export async function rattrapageElo(
         : ""),
   );
 
-  // Compte isolé sans passage dans la fenêtre : scraper quand même pour les metrics.
+  // Compte isolé sans passage dû : le total du profil (compte_metrics) reste
+  // utile au snapshot quotidien, mais une fois par 20 h, pas à chaque passe.
   if (opts.compteId && passages.length === 0) {
     const { data: c } = await supabase
       .from("comptes")
       .select("id, handle_tiktok")
       .eq("id", opts.compteId)
       .maybeSingle();
-    if (c?.handle_tiktok && !dryRun) {
+    const { data: derniereMetrique } = await supabase
+      .from("compte_metrics")
+      .select("collecte_at")
+      .eq("compte_id", opts.compteId)
+      .order("collecte_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const metricsDues = metricsAScraper((derniereMetrique?.collecte_at as string | null) ?? null);
+    if (c?.handle_tiktok && !dryRun && !metricsDues) {
+      journal.push("info", `@${c.handle_tiktok} — rien à relever, metrics profil déjà fraîches`);
+    }
+    if (c?.handle_tiktok && !dryRun && metricsDues) {
       try {
         const enLigne = await scrapeStats(c.handle_tiktok as string, POSTS_RELEVES);
         const somme = (f: (s: ScrapedPost["stats"]) => number) =>
@@ -922,7 +943,7 @@ export async function rattrapageElo(
     }
   }
 
-  const stats = await releverStatsFenetre(supabase, passages, dryRun, handles, journal);
+  const stats = await releverStatsFenetre(supabase, passages, publies, dryRun, handles, journal);
 
   // Carton (> 50 000 vues) → le même post repart sur le même compte à J+7.
   const repostsBonus = await planifierRepostsBonus(
@@ -962,7 +983,12 @@ export async function rattrapageElo(
       snapshot = await snapshotVuesGlobales(supabase, journal);
     }
   } else {
-    const touches = [...new Set(passages.map((p) => p.contenu_id))];
+    // Seulement les slideshows dont un passage vient VRAIMENT d'être mesuré.
+    // Prendre tous les passages visés faisait juger des cycles sur des vues
+    // figées dès que le scrape échouait : le 30/09, Apify en 402 sur les 27
+    // comptes, 10 slideshows sont descendus de B en C sans une vue nouvelle.
+    const mesures = new Set(stats.relevesIds ?? []);
+    const touches = [...new Set(passages.filter((p) => mesures.has(p.id)).map((p) => p.contenu_id))];
     if (touches.length > 0) {
       requalif = await requalifierContenus(supabase, { dryRun, contenuIds: touches });
       journalRequalif(journal, requalif);
@@ -1108,6 +1134,8 @@ export async function rattrapageEloDrainLot(
   snapshot?: Awaited<ReturnType<typeof snapshotVuesGlobales>>;
   requalif?: RequalificationResultat;
   qualif?: QualificationResultat;
+  /** Apify a répondu 402 (crédit épuisé) : inutile de continuer la file. */
+  apifyEpuise: boolean;
 }> {
   const offset = Math.max(0, Math.floor(opts.offset ?? 0));
   const tous = await listerComptesRattrapageElo(supabase);
@@ -1116,11 +1144,17 @@ export async function rattrapageEloDrainLot(
 
   for (const c of lot) {
     try {
-      await rattrapageElo(supabase, {
+      const r = await rattrapageElo(supabase, {
         compteId: c.id,
         jours: opts.jours,
         dryRun: opts.dryRun,
       });
+      // Les erreurs de scrape sont attrapées compte par compte et rangées dans
+      // le résultat : sans cette remontée, le drain du 30/09 s'est déclaré
+      // « terminé, erreurs : [] » alors que les 27 comptes rendaient Apify 402.
+      for (const e of r.stats?.erreurs ?? []) {
+        erreurs.push({ compteId: e.compteId, handle: e.handle ?? c.handle_tiktok, erreur: e.erreur });
+      }
     } catch (e) {
       erreurs.push({
         compteId: c.id,
@@ -1148,7 +1182,10 @@ export async function rattrapageEloDrainLot(
   // requalifier les cycles terminés (et solder les reposts bonus en retard).
   let requalif: RequalificationResultat | undefined;
   let qualif: QualificationResultat | undefined;
-  if (restants === 0 && !opts.dryRun) {
+  const apifyEpuise = erreurs.some((e) => estApifyEpuise(e.erreur));
+  // Fin de file sans vues nouvelles (Apify à court de crédit) : requalifier ou
+  // qualifier maintenant jugerait cycles et créateurs sur des chiffres figés.
+  if (restants === 0 && !opts.dryRun && !apifyEpuise) {
     try {
       requalif = await requalifierContenus(supabase);
       console.log(
@@ -1184,6 +1221,7 @@ export async function rattrapageEloDrainLot(
     snapshot,
     requalif,
     qualif,
+    apifyEpuise,
   };
 }
 
@@ -1251,4 +1289,4 @@ export function kickRattrapageElo(
   }
 }
 
-export { DRAIN_BATCH_ELO, DRAIN_MAX_CHAIN_ELO };
+export { DRAIN_BATCH_ELO, DRAIN_BUSY_STALE_MS, DRAIN_MAX_CHAIN_ELO };
