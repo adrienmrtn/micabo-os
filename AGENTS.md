@@ -1382,6 +1382,117 @@ slide a été lue avant d'être vidée. Si l'import doit un jour écarter ce bru
 à la source, c'est un critère de contenu (proportion de lignes d'un ou deux
 caractères, alphabet différent de la langue du deck), pas de longueur.
 
+## Placement micabo : seconde moitié, une mention par deck (0289/0290, 01/10/2026)
+
+Le doc « Placement micabo : réflexion et propositions » (01/10) a mesuré ce que
+faisait le placement : **47 % des placements récitaient une fonction** de l'appli
+(« génère tes fiches », « au bon moment », « crée ton plan de révision »), **10
+sur 24 cassaient le deck** (numéro faux, item de classement perdu, outro
+écrasée, « faits fous » devenus pub), et **22 % des decks citaient micabo deux
+fois** (38 % en turc). Décisions d'Adrien : seconde moitié du deck, PeECH
+concurrent, les slides allemandes reprises, le stock déjà placé **n'est pas
+replacé** (seuls les prochains decks), et un contrôle LLM chaque matin.
+
+**Les doubles mentions ne venaient presque jamais du placement.** Elles venaient
+d'un concurrent remplacé par micabo (0287), d'une appli tierce que la traduction
+avait remplacée, ou d'un CTA écrit à la main sans cocher la case — puis
+`placerSophiaSurDeck` ajoutait son propre micabo ailleurs. D'où, dans
+`assurerDeckPourLangue` : **les concurrents passent avant le placement**, et
+**une slide qui cite déjà micabo est marquée comme placement** au lieu d'en
+recevoir un second (`slideCitantMicabo`, `marquerPlacement`). Le prompt des
+concurrents et `appliquerVerdicts` ne laissent plus qu'**une slide nommer
+micabo** : les autres recommandations deviennent sans marque. La traduction
+reçoit `ctaManuel` dès que la source cite micabo, quelle qu'en soit la raison.
+
+**Réponse à la question d'Adrien** (« quand il y a déjà un placement manuel,
+juste traduction ? ») : oui si la slide est cochée dans l'éditeur
+(`placement_manuel`) — c'était déjà le cas. Non si micabo est seulement écrit
+dans le texte : le moteur en ajoutait un second. C'est fermé par la détection
+ci-dessus.
+
+**Seconde moitié du deck** (`positionsPermises`, `_shared/placement.ts`, pur,
+7 tests) : la moitié haute du deck **plus** les 3 dernières, jamais la
+couverture. On ouvre, on ne resserre jamais : sur 4 slides, la moitié seule
+n'en laisserait que 2.
+
+**Le placement contournait les règles de la marque.** `placerSophiaSurDeck`
+écrivait la variante du modèle sans `nettoyerTexteDeck` : 11 decks, 2 passages
+et 2 `post_slides` non publiés étaient revenus à « die App micabo » après la
+reprise de 0278. Corrigé dans le moteur, stock repris par 0289 avec
+`micabo_ordre_de_slides` (sauvegarde `avant_placement_0289_2026_10_01` dans
+`micabo_marque_sauvegarde`). Même famille que 0268.
+
+**Le prompt v2** est posé sous `placement_micabo_v2`, clé que le moteur **ne
+lit pas** : la bascule de `placement_micabo` attend le verdict d'Adrien sur
+l'essai à blanc. Le suffixe du code, lui, est déjà en production : gabarit des
+voisines, « ne recopie jamais une autre slide », forme de marque par langue
+(`FORME_MARQUE`), et la meilleure variante choisie sur « un élève l'aurait-il
+écrite » plutôt que sur la seule conformité.
+
+### L'essai à blanc (`essai-placement`, 0290)
+
+Une fonction qui fabrique le deck comme la production (traduction comprise),
+puis fait tourner sur ce même deck l'ancien moteur (`avant.ts`, figé) et le
+nouveau, **sans rien écrire**. 30 paires : les 20 slideshows dont le texte
+d'origine existe encore sans placement (tous de source anglaise), 20 en
+français et 10 en anglais. Résultats rangés dans `essai_placement_0289`, avec la
+clé A/B du jugement à l'aveugle (RLS active, aucune policy) — `net._http_response`
+est purgé en quelques heures. Les deux versions sont dans l'onglet « Essai à
+blanc » du doc, à juger par Adrien.
+
+| Compteur (30 paires) | Ancien | Nouveau |
+| --- | --- | --- |
+| fiche produit (génère, au bon moment, plan auto…) | 13 | 3 |
+| deux mentions de micabo dans le deck | 14 | 0 |
+| promet une lecture audio | 1 | 9 |
+| plus long que la plus longue voisine + 20 % | 3 | 8 |
+| sur la dernière slide | 9 | 5 |
+
+**Leçon de méthode : un exemple dans un prompt se recopie.** Au premier passage,
+« mon prof m'a demandé ce que j'utilisais », donné comme exemple de preuve,
+ressortait mot pour mot dans **9 placements sur 22** — même avec « ne recopie
+jamais les exemples » ajouté. Le seul remède a été de retirer l'exemple et de
+décrire la forme sans phrase citable.
+
+**Ouvert, à trancher par Adrien : PeECH devient « micabo » avec sa promesse
+audio.** PeECH est une appli de lecture audio ; la remplacer par micabo (règle
+de 0287) fait dire « transforme tes notes en audio avec l'appli micabo » dans
+9 essais sur 30. Si micabo ne lit pas les notes à voix haute, ces slides
+doivent devenir sans marque, et le placement aller ailleurs.
+
+### Le contrôle de 08:49
+
+`docs/brief/PLACEMENT.md` + **Q13** (`placements_a_controler`). Chaque matin, la
+routine « Contrôle placement micabo » (`trig_01EPvFVm9SVHfVU9NvrXSWRT`, liée à la
+session qui a fait ce travail) relit la slide micabo de chaque post non publié
+de J-2 à J, la juge contre sept règles (une mention, gabarit, marque, longueur,
+fiche produit, une idée, promesse de la couverture), corrige au plus 25 posts
+par `corriger_texte_post` et écrit la page « AAAA-MM-JJ · Contrôle placements ».
+Une routine à session neuve ne marche pas ici : elle naîtrait sans Supabase,
+sans Notion et sans dépôt (le paramètre `connectors` est refusé pour cette
+organisation).
+
+### Déploiement du 01/10/2026
+
+Cinq chargeurs sur `3898647` : `assignation-contenu` (v35), `assignation`
+(v36), `minuit-vnext` (v39), `revoquer-post` (v35) et `bruler-texte-test`
+(v25), plus `essai-placement` (v2, nouveau, alias `z`). **Les cinq alias
+`createClient` ont été renommés** : `pe`→`ge`, `_e`→`ye`, `De`→`Le`, `me`→`he`,
+`Y`→`W`. Test de vie `401` passé sur les six. `bruler-assignes`,
+`import-contenu` et `renettoyer-contenu` ressortent à taille constante
+(permutation) : leurs bundles du dépôt sont gardés.
+
+**`new RegExp` au niveau d'un module partagé fait « changer » tous les
+bundles.** Le premier `MOTIF_MICABO` était construit par `new RegExp(...)` : esbuild
+ne l'élaguait pas, même annoté `/* @__PURE__ */`, et il entrait dans trois bundles
+qui ne s'en servent pas. Un littéral `/…/iu` s'élague. Même leçon que
+`apify_usage.ts` (0281).
+
+La branche `claude/wizardly-allen-c3xioi` a été repartie de `main` (son ancien
+sommet `6a4de96` était le contenu déjà fusionné de #95, arbre identique) : les
+chargeurs des déploiements précédents pointent sur des SHA que GitHub sert
+toujours.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
