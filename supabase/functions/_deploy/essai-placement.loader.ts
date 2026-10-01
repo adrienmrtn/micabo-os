@@ -7,7 +7,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "baa5add848a43375f1f2326d9ae45ba363ce29ae";
+const SHA = "3898647a0682e3c616efdc0c23c6f0b96f6e71f4";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/essai-placement.bundle.js`;
 
