@@ -115,3 +115,13 @@ update public.prompts
          E'(Wilgo, Quizlet, Anki, Notion ou ChatGPT présentés pour réviser) : c''est la place que le compte d''origine réservait à sa pub. micabo la prend, dans la même forme. Un classement où l''outil n''est qu''un élément noté ne compte pas. Une appli audio non plus : micabo ne fait pas ce qu''elle fait.'),
        updated_at = now()
  where cle = 'placement_micabo_v2';
+
+-- Troisième passage de l'essai : le prompt inventait des matières et des notes
+-- absentes du deck (« mes fiches de droit… j'ai eu 15 à l'exam »). On le
+-- borne à ce que le deck porte déjà.
+update public.prompts
+   set contenu = replace(contenu,
+         E'Aucun témoin inventé (prof, parent, ami qui demande ce que tu utilises), aucune statistique inventée sur micabo. Un résultat chiffré seulement si le deck en porte déjà un.',
+         E'Aucun témoin inventé (prof, parent, ami qui demande ce que tu utilises), aucune statistique inventée sur micabo. N''invente ni matière, ni note, ni examen : n''en cite que s''ils sont déjà écrits dans le deck.'),
+       updated_at = now()
+ where cle = 'placement_micabo_v2';
