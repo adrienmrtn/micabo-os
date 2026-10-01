@@ -108,9 +108,16 @@ méthode WILGO », « Wilgo'dan test çöz ». La liste des concurrents est la t
 d'Adrien (01/10) : **un classement ou un comparatif reste, une recommandation
 se remplace.**
 
+Depuis 0287 (01/10), le moteur applique la même règle à l'assignation
+(`sansConcurrents`, `assurerDeckPourLangue`) et le stock a été repris : cette
+passe est un **filet**. Elle ne devrait plus voir que des classements déjà
+jugés (`deja_laisse`), des posts créés avant le déploiement, ou un appel du
+moteur qui a échoué — ce dernier cas se dit dans la page.
+
 Entrée : **Q11** — les posts non publiés de J-2 à J qui citent un concurrent,
-une ligne par slide ou légende, avec le post entier dans `post`. Pour chaque
-ligne, lire le post en entier, puis trancher.
+une ligne par slide ou légende, avec le post entier dans `post`. Une ligne
+`deja_laisse` se compte et ne se rejuge pas. Pour chaque autre ligne, lire le
+post en entier, puis trancher.
 
 **Laisser** — le concurrent est un élément d'une liste, noté, testé ou
 critiqué, pas une consigne à suivre :
@@ -119,7 +126,8 @@ critiqué, pas une consigne à suivre :
 - une méthode notée et jugée (« Flashcards/Anki 6/10 … Zeitverschwendung »).
 
 **Remplacer** — le concurrent est recommandé, prescrit ou présenté comme ce que
-font ceux qui réussissent :
+font ceux qui réussissent, ou c'est le GAGNANT d'un classement (« Wilgo IA 9/10 »
+devant ChatGPT et Gemini : c'est son placement, il devient micabo) :
 - un impératif ou un conseil : « Benutz die WILGO App », « Haz quizzes con WILGO
   cada día », « Wilgo'dan test çöz », « o yüzden Anki'yi fulle » ;
 - une méthode qui porte son nom : « ceux qui ont la mention TB utilisent la
@@ -141,8 +149,9 @@ font ceux qui réussissent :
 - `micabo` toujours en minuscules, même dans une ligne en capitales ; jamais
   « site » ni « plateforme » ; aucun tiret long ;
 - tout le reste **mot pour mot**, retours à la ligne compris : la mise en page
-  est le produit (0278). Une slide qui ne cite aucun concurrent ne se touche
-  pas ;
+  est le produit (0278). Les promesses restent aussi (« gratuite », « vérifiée
+  par des profs ») : décision d'Adrien du 01/10. Une slide qui ne cite aucun
+  concurrent ne se touche pas ;
 - si la slide nomme déjà micabo, ne pas en mettre un deuxième dans la même
   slide : retirer le fragment du concurrent à la place ;
 - en cas de doute entre classement et recommandation : laisser, et l'écrire

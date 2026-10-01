@@ -605,6 +605,8 @@ order by pa.publie_at, m.compte, m.slide nulls last;
 -- décide une fois, on corrige chacun. `deck_porte_encore` : le deck de la
 -- langue a toujours ce texte, donc la correction le nettoiera aussi et les
 -- prochains posts naîtront propres.
+-- Depuis 0287, le moteur fait le même travail à l'assignation : cette passe
+-- est un filet. `deja_laisse` = classement déjà jugé, on ne le rejuge pas.
 -- Après la passe, cette requête relancée ne doit plus rendre que les lignes
 -- laissées exprès (classements).
 with p as (select date '{{JOUR}}' as j),
@@ -627,6 +629,14 @@ select m.passage_id, m.compte, m.langue, m.date_prevue, m.champ, m.slide, m.cite
     where cl.contenu_id = m.contenu_id and cl.langue = m.langue and m.champ = 'hashtags'
       and cl.hashtags = m.texte
   ) as deck_porte_encore,
+  -- Déjà jugée « classement » sur ce texte (0287 ou le moteur) : à laisser,
+  -- sans la rejuger.
+  exists (
+    select 1 from public.contenu_langues cl, jsonb_array_elements(cl.slides) e
+    where cl.contenu_id = m.contenu_id and cl.langue = m.langue and m.champ = 'slide'
+      and jsonb_typeof(cl.slides) = 'array'
+      and (e->>'position')::int = m.slide and e->>'concurrent_laisse' = m.texte
+  ) as deja_laisse,
   left(m.contenu_id::text, 8) as contenu
 from m
 order by m.contenu_id, m.langue, m.champ, m.slide nulls last, m.compte;
