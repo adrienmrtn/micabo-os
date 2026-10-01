@@ -30,6 +30,7 @@ export async function lireUsageApify(): Promise<
     const res = await fetch(`https://api.apify.com/v2/users/me/limits?token=${token}`);
     if (!res.ok) return { erreur: `Apify ${res.status}` };
     // deno-lint-ignore no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const d = ((await res.json()) as any)?.data ?? {};
     const nombre = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
     return {
