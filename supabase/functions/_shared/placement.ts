@@ -124,7 +124,8 @@ export function casseLeDeck(
 /**
  * Choisit la variante à écrire : la meilleure selon le modèle si elle tient,
  * sinon la suivante qui tient, numéro remis dans tous les cas. Si aucune ne
- * tient, la meilleure, numéro remis : le contrôle de 08:49 la verra.
+ * tient (`tient: false`), l'appelant redemande au modèle ; au dernier essai il
+ * garde la meilleure, numéro remis, et le contrôle de 08:49 la verra.
  */
 export function choisirVariante(
   original: string,
@@ -132,13 +133,17 @@ export function choisirVariante(
   meilleure: number,
   deck: Array<{ position: number; texte_overlay?: string | null }>,
   position: number,
-): { texte: string; index: number } {
+): { texte: string; index: number; tient: boolean } {
   const ordre = [meilleure, ...variantes.map((_, i) => i).filter((i) => i !== meilleure)];
   for (const i of ordre) {
     const v = variantes[i];
     if (!v) continue;
     const alignee = alignerPrefixe(original, v);
-    if (!casseLeDeck(original, alignee, deck, position)) return { texte: alignee, index: i };
+    if (!casseLeDeck(original, alignee, deck, position)) return { texte: alignee, index: i, tient: true };
   }
-  return { texte: alignerPrefixe(original, variantes[meilleure] ?? variantes[0] ?? ""), index: meilleure };
+  return {
+    texte: alignerPrefixe(original, variantes[meilleure] ?? variantes[0] ?? ""),
+    index: meilleure,
+    tient: false,
+  };
 }

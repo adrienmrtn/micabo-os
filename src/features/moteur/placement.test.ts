@@ -130,6 +130,18 @@ describe("casseLeDeck et choisirVariante", () => {
       deck,
       3,
     );
-    expect(r).toEqual({ texte: "3. what did I miss?\nthe micabo app asks me", index: 1 });
+    expect(r).toEqual({ texte: "3. what did I miss?\nthe micabo app asks me", index: 1, tient: true });
+  });
+
+  it("dit quand aucune variante ne tient, pour que l'appelant redemande", () => {
+    const r = choisirVariante(
+      "3. turn your notes into\nquestions",
+      ["4. keep a \"mistake diary\"\nmicabo", "keep a \"mistake diary\"\nthe micabo app"],
+      0,
+      deck,
+      3,
+    );
+    expect(r.tient).toBe(false);
+    expect(r.texte.startsWith("3. keep a")).toBe(true);
   });
 });

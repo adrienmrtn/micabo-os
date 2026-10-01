@@ -783,6 +783,9 @@ Réponds UNIQUEMENT en JSON, sans bloc de code ni commentaire :
         input.slides.map((s) => ({ position: s.position, texte_overlay: s.text })),
         positionFinale,
       );
+      // Aucune variante ne tient (toutes recopient le titre d'une voisine, par
+      // exemple) : on redemande, le dernier essai garde la meilleure.
+      if (!choix.tient && essai < 3) continue;
       const retenues = [...variants];
       retenues[choix.index] = choix.texte;
 
