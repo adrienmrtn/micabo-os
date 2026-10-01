@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, EmptyState } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase/client";
 import {
-  aujourdhui,
+  aujourdhuiParis,
   demarrerWarmup,
   majMonHandle,
   mesComptes,
@@ -33,6 +33,7 @@ import { drapeauLangue } from "@/features/moteur/langues";
 import { WarmupBadge } from "@/features/moteur/WarmupBadge";
 import { statutWarmup } from "@/features/moteur/warmup";
 import { useAuth } from "@/features/auth/AuthContext";
+import { moisDuJour, postsDuJour } from "@/features/moteur/calendrierPoster";
 import { cn } from "@/lib/utils";
 
 interface PostCalendrier {
@@ -83,8 +84,16 @@ function grilleDuMois(annee: number, mois: number) {
 
 
 
-function CartePost({ post, creneau }: { post: PostCalendrier; creneau?: number }) {
-  const { t } = useTranslation();
+function CartePost({
+  post,
+  creneau,
+  enRetard,
+}: {
+  post: PostCalendrier;
+  creneau?: number;
+  enRetard?: boolean;
+}) {
+  const { t, i18n } = useTranslation();
   const publie = Boolean(post.publie_at);
 
   return (
@@ -98,6 +107,16 @@ function CartePost({ post, creneau }: { post: PostCalendrier; creneau?: number }
             {publie && <CheckCircle2 className="size-5 shrink-0 text-success" />}
           </div>
           <div className="flex flex-wrap gap-1.5">
+            {enRetard && post.date_publication_prevue && (
+              <Badge variant="destructive">
+                {t("calendrier.enRetard", {
+                  date: new Date(`${post.date_publication_prevue}T12:00:00`).toLocaleDateString(
+                    i18n.language,
+                    { day: "numeric", month: "short" },
+                  ),
+                })}
+              </Badge>
+            )}
             {creneau && <Badge variant="outline">{t("calendrier.creneau", { n: creneau })}</Badge>}
             <Badge variant="secondary">{t(`type.${post.type}`)}</Badge>
             {post.handle_tiktok && <Badge variant="outline">@{post.handle_tiktok}</Badge>}
@@ -288,12 +307,9 @@ export function PosterCalendrierPage() {
     },
   });
 
-  const jour = aujourdhui();
-  const maintenant = new Date();
-  const [mois, setMois] = React.useState(() => ({
-    annee: maintenant.getFullYear(),
-    mois: maintenant.getMonth(),
-  }));
+  // Le jour du moteur (Paris), pas celui du téléphone : voir calendrierPoster.ts.
+  const jour = aujourdhuiParis();
+  const [mois, setMois] = React.useState(() => moisDuJour(jour));
 
   // Un jour peut porter plusieurs posts : la case affiche donc une liste.
   const parJour = React.useMemo(() => {
@@ -311,7 +327,7 @@ export function PosterCalendrierPage() {
     return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   }
 
-  const duJour = parJour.get(jour) ?? [];
+  const { duJour, enRetard } = postsDuJour(posts ?? [], jour, compte?.id);
   const titreJour = t("calendrier.aujourdhui");
   const cases = grilleDuMois(mois.annee, mois.mois);
   const nomDuMois = new Date(mois.annee, mois.mois, 1).toLocaleDateString(i18n.language, {
@@ -413,13 +429,16 @@ export function PosterCalendrierPage() {
 
       <section className="space-y-4">
         <h2 className="text-lg font-semibold tracking-tight">{titreJour}</h2>
-        {duJour.length === 0 ? (
+        {duJour.length === 0 && enRetard.length === 0 ? (
           <EmptyState
             icon={<CalendarCheck className="size-5" />}
             title={t("calendrier.rien")}
           />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
+            {enRetard.map((post) => (
+              <CartePost key={post.id} post={post} enRetard />
+            ))}
             {duJour.map((post, index) => (
               <CartePost key={post.id} post={post} creneau={index + 1} />
             ))}
@@ -442,9 +461,7 @@ export function PosterCalendrierPage() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() =>
-                setMois({ annee: maintenant.getFullYear(), mois: maintenant.getMonth() })
-              }
+              onClick={() => setMois(moisDuJour(jour))}
             >
               {t("calendrier.revenirAujourdhui")}
             </Button>

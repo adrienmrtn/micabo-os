@@ -1130,6 +1130,120 @@ dépendait déjà du nombre de passages dus (12 à 40) ; il suit maintenant leur
 total. Le recalculer depuis `passages` (nos posts, à âge égal) est le bon
 correctif ; c'est un point « À traiter » du brief, pas une urgence.
 
+## Une seule mesure par post, à J+2, par son lien (0283 → 0285, 01/10/2026)
+
+0281 avait divisé la consommation Apify par ~2,5, et ce n'était pas assez.
+Mesuré sur le rattrapage du 01/10 : **1,60 $ pour 26 scrapes de profil et
+570 posts lus, soit ~2,8 $ pour 1 000 résultats.** En régime, deux passes par
+jour remontaient 7 jours de posts sur 26 comptes, soit 2,3 à 2,9 $/jour : la
+limite de 70 $ serait tombée vers le 08–09/10, avant la fin du cycle.
+
+Le coût ne venait plus du NOMBRE de mesures, mais de leur **profondeur**. Pour
+re-mesurer un post vieux de six jours, le scrape de profil lit les vingt qui
+l'ont suivi. Or le moteur ne lit qu'un chiffre, celui de J+2
+(`MESURE_JOURS`), sur lequel le cycle est jugé.
+
+Décision d'Adrien : **une mesure, à J+2, et c'est tout.**
+
+- un post est relevé quand il a `MESURE_JOURS` jours, puis **plus jamais**
+  (`mesureFaite` : relevé pris à J+2 ou après). Un post relevé trop tôt avant
+  le 01/10 est refait une fois, à J+2 ;
+- **par son lien** : tous les posts dus d'un compte partent dans **un** appel
+  Apify (`postURLs`, `apify_releve.ts`), sans téléchargement. On paie le post,
+  pas les vingt qui l'entourent. Rapprochement par l'identifiant du lien
+  résolu, à défaut par le lien que renvoie l'actor (`apparierParLien`) ;
+- **sans lien valide** (`lienTiktok` : champ vide, hashtags collés à la
+  place), et seulement là, le profil est lu jusqu'au post et le post est
+  retrouvé par cohérence (±36 h + texte). Plus de 7 jours sans lien : abandonné ;
+- l'espacement de 20 h ne joue qu'après un ÉCHEC (`stats_tentative_at` sans
+  `stats_maj_at` au même instant). Sans cette nuance, un post relevé trop tôt
+  à 12:30 attendait le lendemain 13:00 pour sa mesure de J+2 ;
+- plus de `scrapePost`, plus de scrape « metrics seules », plus de
+  `compte_metrics` écrit par le relevé.
+
+`apify_releve.ts` est un module à part, pour la même raison qu'`apify_usage.ts`
+(0281) : `apify.ts` est tiré par six autres bundles, qui « changeaient » au
+moindre ajout. Seuls `rattrapage-elo` et `minuit-vnext` bougent.
+
+**La courbe du Pilotage ne lit plus les profils** (0285). `vues_globales_jour`
+sommait le dernier scrape de chaque profil, un « total » qui dépendait du
+nombre de posts lus. Sans scrape de profil, il se serait figé sans un mot.
+`snapshot_vues_globales(p_jour, p_jours)` le calcule désormais sur nos
+passages, hors posts test :
+- `vues_delta(J)` = vues relevées des posts publiés le jour Paris J ;
+- `vues_totales` = leur cumul.
+
+Un post n'étant mesuré qu'à J+2, la fonction recalcule les quatre derniers
+jours à chaque passe. L'historique est recalculé de la même façon, avec la
+sauvegarde `vues_globales_jour_sauvegarde`. Au 01/10 : 10,37 M de vues sur nos
+posts depuis le 07/09.
+
+Le bouton « Rafraîchir » des Analytics est **supprimé**. Il appelait la fonction
+`metriques`, qui scrape 30 posts par profil pour tous les comptes : environ 800
+résultats, ~2 $ par clic. La fonction reste déployée, mais plus rien ne
+l'appelle — ni cron, ni écran.
+
+### Verdicts du jour (0283)
+
+116 cycles pleins attendaient leur verdict : leurs passages des 28–30/09
+n'avaient été relevés que le 01/10. Décision d'Adrien : juger le jour même.
+`requalifier()` a été répliqué sur la moyenne des vues relevées, quel que soit
+leur âge :
+- **38 jugés** ;
+- **33 descentes reportées** : tier gardé, cycle rouvert ;
+- **5 cycles rouverts** : aucun post publié, créneau passé ;
+- 39 non touchés : un passage du jour n'était pas encore publié.
+
+Le report des descentes est délibéré. Une vue de moins de deux jours vaut
+~45 à 70 % de sa valeur à J+2 : une montée sur vues jeunes reste vraie, une
+descente est probablement fausse. C'est la classe d'erreur que 0282 venait de
+corriger. Sauvegarde dans `verdicts_du_jour_sauvegarde`.
+
+Résultat : 84 slideshows tirables (71 en B ou mieux) et 110 passages dus pour
+52 posts par jour, soit **2,1 jours** de runway (0,2 avant).
+
+### Les slideshows cold-study sortent du pool (0284)
+
+Les 50 slideshows encore `valide` qui ne portaient que `cold-study` (supprimé
+par 0277) passent en **`rejete`**, pas en suppression. Les FK `passages`,
+`reposts_bonus` et `contenu_tier_historique` sont en CASCADE : supprimer ces
+contenus aurait effacé 146 passages publiés, avec leurs vues, que la
+qualification des créateurs lit encore. La source `studylapses` (niche
+cold_study) est désactivée. Sauvegarde dans `cold_study_retrait_sauvegarde`.
+Les « dus intirables » tombent à 0.
+
+**Déploiement du 01/10/2026, après OK d'Adrien.** Migrations 0283 → 0285
+appliquées. Deux chargeurs sur `8d8b504` : `rattrapage-elo` (v22) et
+`minuit-vnext` (v37).
+
+- **Les deux alias `createClient` ont été renommés** : `he`→`be` et `Ue`→`De`,
+  relus dans les bundles.
+- Les dix autres bundles ressortent identiques à l'octet.
+- Test de vie `401` passé sur les deux (par `pg_net`).
+- Relevé à blanc sur `irem.is684` : un lien, un appel Apify, 54 700 vues
+  rapprochées par le lien en 7 s, aucune écriture.
+
+## Le calendrier du créateur suit le jour de Paris (01/10/2026)
+
+Signalé par Rana : le calendrier « vide » chez Ramazan (@asya.ders680) et Isil
+(@baran.notlar863), qui publiaient. La base était saine, et le calendrier du
+manager complet. La page du créateur prenait « aujourd'hui » et le mois affiché
+à l'heure du TÉLÉPHONE (`aujourdhui()`, `new Date()`), alors que le moteur date
+les posts au jour de Paris. Conséquences :
+- en Turquie (une heure d'avance), entre minuit et 1 h, « Aujourd'hui » était
+  vide ;
+- le 30/09 au soir, la grille s'ouvrait déjà sur un mois d'octobre sans aucun
+  post. Ramazan l'a ouverte à 00:31 heure turque ;
+- et un post publié en retard — Isil publie souvent la veille pour le
+  lendemain — ne s'affichait plus nulle part dès le lendemain.
+
+`calendrierPoster.ts` (pur, testé) : la page prend `aujourdhuiParis()`, ouvre
+la grille sur le mois de Paris, et « Aujourd'hui » montre aussi les posts non
+publiés des deux jours précédents, marqués « en retard ». Le calendrier admin
+et manager n'est pas touché. Limite latente repérée au passage :
+`postsCalendrierAdmin` plafonne à 800 lignes, et perd déjà ce qui précède le
+11/09.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers

@@ -5149,11 +5149,6 @@ export const genererPersona = (compteId: string, appliquer = false) =>
     { compteId, appliquer },
   );
 
-export const lancerMetriques = (compteId?: string) =>
-  invoke<{ resultats: Array<{ compteId: string; releves: number }> }>("metriques", {
-    compteId: compteId ?? null,
-  });
-
 /** Répare les liens musique périmés (re-scrape des sons pour un lien stable). */
 export const reparerMusique = () =>
   invoke<{ ok: boolean; examines: number; corriges: number; echecs: number }>(
