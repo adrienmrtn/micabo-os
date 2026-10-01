@@ -1097,6 +1097,39 @@ ne prend plus que les posts du matin.
 (`GET /v2/users/me/limits`) dans `reglages.apify_usage` ; le brief du matin la
 lit (Q9) et alerte à 70 % / 90 %.
 
+### Rattrapage du 01/10 et verdicts rejugés (0282)
+
+Crédit Apify remis par Adrien, drain relancé à 10:27 UTC : 26 comptes en
+**une seule chaîne** (aucun doublon), 340 passages relevés, 8 introuvables,
+0 erreur, en 13 minutes. Fin de file : 7 requalifications sur données
+fraîches, 8 cases de créateurs corrigées (dont 5 remontées après une
+rétrogradation du 30/09 sur vues figées), 8 reposts bonus que la panne avait
+masqués (> 50 000 vues), programmés du 03 au 06/10.
+
+**Les verdicts rendus pendant la panne ont été rejugés** (0282). 70 verdicts
+entre le 28/09 22:16 et le 01/10 10:27 UTC ; chacun recalculé sur le même
+cycle, au même instant, avec les vues rattrapées (`bilanCycle` + `requalifier`
+répliqués en SQL et recoupés cas par cas avec les fonctions TS). **21
+différaient, tous encore en vigueur** : dix B→C et deux C→D à tort, cinq
+slideshows en D à 1 100 – 2 700 vues (leur place était B), trois A qui
+devaient passer S (31 000 à 52 000 vues), un C qui devait passer B. Corrigés
+sur le tier et la cible, **pas sur `tier_maj_at`** : le cycle en cours n'est pas
+rouvert, le trigger de 0272 journalise un `ajustement`. Sauvegarde
+`verdicts_figes_sauvegarde` (RLS active, aucune policy).
+
+« En vigueur » veut dire : aucune VRAIE requalification depuis. Un repêchage
+D→D à un passage ne compte pas — un slideshow descendu en D à tort puis
+repêché est toujours prisonnier du verdict faux, et c'est lui qu'il fallait
+sortir.
+
+**Effet de bord connu, non corrigé** : `vues_globales_jour` (Pilotage) somme,
+par compte, les vues des N derniers posts du dernier scrape de profil. N
+dépendait déjà du nombre de passages dus (12 à 40) ; il suit maintenant leur
+âge (~20 en régime), donc le « total » a perdu la moitié de son échelle le
+01/10 (delta −4 M) sans qu'aucune audience ne bouge. Ce n'a jamais été un
+total. Le recalculer depuis `passages` (nos posts, à âge égal) est le bon
+correctif ; c'est un point « À traiter » du brief, pas une urgence.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
