@@ -12,9 +12,17 @@ import {
   mimeDepuisBase64,
   ocrFrame,
   scoreRelevance,
+  corrigerMentionsConcurrents,
   genererHashtags,
   translateSlideshow,
 } from "./gemini.ts";
+import {
+  appliquerVerdicts,
+  type Concurrent,
+  CONCURRENTS_DEFAUT,
+  retirerHashtagsConcurrents,
+  slidesAJuger,
+} from "./concurrents.ts";
 import {
   uniformiserFormatsContenu,
   type RapportFormatVisuel,
@@ -122,6 +130,8 @@ export interface SlideLangue {
   position: number;
   texte_overlay: string | null;
   position_sophia: boolean;
+  /** Texte jugé « classement » par `sansConcurrents` : on ne le rejuge pas (0287). */
+  concurrent_laisse?: string | null;
 }
 
 
@@ -1358,7 +1368,7 @@ export async function assurerDeckPourLangue(
     deck.some((s) => s.texte_overlay) &&
     hashtags.length > 0 &&
     (placementManuel || deck.some((s) => s.position_sophia));
-  if (pret) return { slides: deck, hashtags };
+  if (pret) return await sansConcurrents(supabase, cl.id, deck, hashtags, langue);
 
   const langueSource = contenu.langue_source ?? "fr";
 
@@ -1466,10 +1476,80 @@ export async function assurerDeckPourLangue(
     .select("slides, hashtags")
     .eq("id", cl.id)
     .single();
-  return {
-    slides: (frais?.slides ?? deck) as SlideLangue[],
-    hashtags: ((frais as { hashtags?: string | null } | null)?.hashtags ?? hashtags ?? "").trim(),
-  };
+  return await sansConcurrents(
+    supabase,
+    cl.id,
+    (frais?.slides ?? deck) as SlideLangue[],
+    ((frais as { hashtags?: string | null } | null)?.hashtags ?? hashtags ?? "").trim(),
+    langue,
+  );
+}
+
+let concurrentsLus: { a: number; liste: Concurrent[] } | null = null;
+
+/** La table `concurrents` (0286), relue toutes les 10 minutes ; le repli de 0286 si elle est illisible. */
+async function chargerConcurrents(supabase: Supabase): Promise<Concurrent[]> {
+  if (concurrentsLus && Date.now() - concurrentsLus.a < 10 * 60_000) return concurrentsLus.liste;
+  const { data, error } = await supabase.from("concurrents").select("nom, motif").eq("actif", true);
+  if (error) console.warn(`[concurrents] table illisible, liste de repli : ${error.message}`);
+  const liste = error || !data ? CONCURRENTS_DEFAUT : (data as Concurrent[]);
+  concurrentsLus = { a: Date.now(), liste };
+  return liste;
+}
+
+/**
+ * Dernier passage avant qu'un deck parte chez un créateur (0287) : plus aucune
+ * slide ne recommande un concurrent.
+ *
+ * Le placement micabo ne réécrit qu'UNE slide ; les autres gardaient la
+ * publicité du compte d'origine (« Benutz die WILGO App »), 56 % des decks de
+ * `jeanne.wilgo` en langue d'origine au 01/10. Un classement ou un comparatif
+ * reste ; une recommandation devient micabo. Le modèle tranche, `concurrents.ts`
+ * contrôle : une réécriture qui cite encore un concurrent, ou qui a réécrit
+ * autre chose que le nom, n'est pas écrite. Le résultat est rangé dans
+ * `contenu_langues` : payé une fois par deck, et un « classement » est mémorisé
+ * sur sa slide pour ne pas être rejugé à chaque passage.
+ *
+ * Tourne sur TOUS les chemins — deck déjà prêt, langue d'origine, traduit —
+ * parce qu'une règle qui ne vit que sur un chemin ne protège que ce chemin
+ * (0268). Sans mention, il ne coûte qu'une regex. Un appel raté laisse le deck
+ * tel quel : le brief du matin le rattrape.
+ */
+async function sansConcurrents(
+  supabase: Supabase,
+  contenuLangueId: string,
+  deck: SlideLangue[],
+  hashtags: string,
+  langue: string,
+): Promise<{ slides: SlideLangue[]; hashtags: string }> {
+  const concurrents = await chargerConcurrents(supabase);
+  const aJuger = slidesAJuger(deck, concurrents);
+  const tags = retirerHashtagsConcurrents(hashtags, concurrents);
+  let slides = deck;
+  if (aJuger.length > 0) {
+    const verdicts = await corrigerMentionsConcurrents({
+      langue,
+      slides: deck.map((s) => ({ position: s.position, texte: s.texte_overlay ?? "" })),
+      aJuger,
+    });
+    if (verdicts) {
+      const r = appliquerVerdicts(deck, aJuger, verdicts, concurrents, (t) => nettoyerTexteDeck(t, langue));
+      slides = r.slides;
+      console.log(
+        `[concurrents] deck=${contenuLangueId} ${langue} remplacées=${r.remplacees.join(",") || "-"} ` +
+          `laissées=${r.laissees.join(",") || "-"} refusées=${r.refusees.join(",") || "-"}`,
+      );
+    } else {
+      console.warn(`[concurrents] deck=${contenuLangueId} ${langue} : jugement impossible, deck inchangé`);
+    }
+  }
+  if (slides !== deck || tags !== hashtags) {
+    await supabase
+      .from("contenu_langues")
+      .update({ slides, hashtags: tags || null })
+      .eq("id", contenuLangueId);
+  }
+  return { slides, hashtags: tags };
 }
 
 // deno-lint-ignore no-explicit-any

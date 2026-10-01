@@ -7,7 +7,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "7f95e380fa46cb41289a063541de8ee214a36916";
+const SHA = "772589b1d9a3b5e1e17e10f572a1511d2b44ab0f";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/assignation-contenu.bundle.js`;
 
@@ -21,4 +21,4 @@ if (!src.includes("Deno.serve") || !src.includes("date_publication_prevue")) {
 }
 // esbuild renomme l'alias d'un rebuild à l'autre : relire le
 // `import{createClient as …}` du bundle avant de l'effacer, et reporter le nom ici.
-new Function("ce", src)(createClient);
+new Function("pe", src)(createClient);

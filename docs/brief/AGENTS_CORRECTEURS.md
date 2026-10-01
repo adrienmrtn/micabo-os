@@ -79,6 +79,8 @@ garde-fous, chiffres et identifiants du jour.
 | `jalon_*`, `essai_*` | dossier de décision (stats OS + jalon Upwork), brouillon de message au HM | décider, payer sur upwork.com, « envoie » |
 | `msg_*` | lecture du fil, brouillon de réponse dans la langue du destinataire | « envoie » ou correction |
 | `parrainage_*` | résumé et recommandation | décider dans `/admin/parrainages` |
+| `concurrents_*` | stock du pool (Q9) : tableau classement / recommandation par deck, migration de reprise avec sauvegarde, via la même règle que la passe du matin | trancher, OK d'application |
+| `enchaines_<handle>` | Q12 sur 7 j, brouillon de message au HM du compte | « envoie » |
 
 ## Veilleur — la procédure
 

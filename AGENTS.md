@@ -1244,6 +1244,128 @@ et manager n'est pas touché. Limite latente repérée au passage :
 `postsCalendrierAdmin` plafonne à 800 lignes, et perd déjà ce qui précède le
 11/09.
 
+## Les posts faisaient la publicité des concurrents (0286, 01/10/2026)
+
+Wilgo dans **43 posts sur 14 jours, dont 30 publiés** : « Benutz die WILGO App…
+dein Cheatcode für gute Noten », « ceux qui ont la mention TB utilisent la
+méthode WILGO », « Wilgo'dan test çöz », et même un reste de fiche App Store
+derrière le CTA micabo. La cause est à la source : des slideshows importés de
+comptes concurrents (`jeanne.wilgo`). Au 01/10, **76 decks validés sur 35
+slideshows** citent un concurrent, dont 56 Wilgo.
+
+Rien ne l'attrapait, et c'était voulu à moitié : `retirerMentionConcurrent`
+(0269) ne coupe que Hustly, parce qu'une coupe aveugle sur « Anki » détruirait
+des comparatifs légitimes. **Décision d'Adrien : un classement ou un comparatif
+reste, une recommandation se remplace.** Trancher entre les deux est un travail
+de lecture, pas une regex — c'est donc le brief du matin, un modèle, qui le
+fait, chaque matin, sur les posts du jour pas encore publiés
+(`docs/brief/PLAYBOOK.md`, étape 2 bis).
+
+- `concurrents` : la liste, éditable en base. Motifs POSIX **en mots entiers**
+  (`\m … \M`) : « Ranking » contient « anki », c'est le faux positif vu au
+  premier repérage. ChatGPT, Gemini et Perplexity n'y sont pas (IA
+  généralistes), ni « notion » (un mot français).
+- `mentions_concurrents(debut, fin)` : lecture seule, une ligne par slide ou
+  légende qui cite un concurrent actif. Elle lit `texte_overlay` élément par
+  élément : dans `slides::text`, le JSON écrit le saut de ligne `\n` et
+  « \nWILGO » n'est plus un mot entier.
+- `corriger_texte_post` / `corriger_hashtags_post` : **les seules écritures que
+  le brief s'autorise**. Post non publié uniquement — la fonction lève sinon,
+  on ne réécrit jamais ce qui est en ligne. Elles corrigent le post, le passage
+  et, s'il porte encore le même texte à cette position, le deck de la langue
+  (les prochains posts naissent propres), jettent le rendu incrusté de la
+  slide, et journalisent avant/après dans `concurrents_corrections`. Pas de
+  bloc `exception` (règle de 0265). Réservées au `service_role`.
+
+Le brief lit aussi les posts **publiés** la veille qui citent encore un
+concurrent (Q10, contrôle) et le stock du pool (Q9 `decks_pool_concurrents`,
+qui doit baisser). Ce qui lui échappe : les posts publiés avant son passage de
+07:52, ~2,4 % des posts.
+
+**Les posts enchaînés (Q12)** sont dans le même passage : deux posts du même
+compte à moins de 5 minutes. L'heure est celle de TikTok quand le lien porte
+l'id de la vidéo (les 32 bits de tête de l'id sont l'horodatage Unix de la
+création), sinon `publie_at`, l'heure du clic « publié » dans l'OS. Sur les 18
+posts du 25/09 au 01/10 qui ont les deux, écart médian **0,9 min**, 90 % sous
+2,1 min : l'heure de l'OS est un bon indicateur. Mais 323 liens sur 341 sont
+des liens courts (`vm.tiktok.com`) sans id, et un créateur qui coche deux
+posts d'un coup sortirait à tort. Le relevé de J+2 résout déjà chaque lien par
+Apify ; y ranger l'heure de création TikTok rendrait la mesure exacte.
+
+Migration appliquée le 01/10, aucun chargeur redéployé : le moteur n'a pas
+changé.
+
+## Plus aucune slide ne cite un concurrent par erreur de placement (0287, 01/10/2026)
+
+0286 ne faisait que repérer et corriger chaque matin ce qui partait. Adrien :
+« je veux que les slides (sauf classements) ne citent pas des concurrents ».
+Le chiffre qui a décidé, sur les decks de `jeanne.wilgo` : **27 decks en
+langue d'origine sur 48 (56 %)** citaient encore un concurrent, contre **27
+traduits sur 105 (26 %)**. La traduction en retire la plupart, son prompt
+interdit les produits tiers ; le chemin source n'a aucun traducteur (0268) et
+le placement micabo ne réécrit qu'UNE slide.
+
+**La règle**, écrite pour le modèle (`corrigerMentionsConcurrents`) comme pour
+le brief :
+- recommandation, consigne, témoignage isolé, méthode à son nom, reste de
+  fiche App Store → le nom du concurrent devient la forme de marque de la
+  langue, **le reste mot pour mot, promesses comprises** (« gratuite »,
+  « vérifiée par des profs » restent : décision d'Adrien) ;
+- classement où le concurrent est le **gagnant** (« Wilgo IA 9/10 » devant
+  ChatGPT et Gemini) → c'est son placement, il devient micabo. Le placement
+  allemand de `5cc2bb38` le faisait déjà de lui-même ;
+- classement ou comparatif où il n'est qu'un élément noté et où micabo gagne
+  (« j'ai utilisé quizlet », « Anki 6/10, perte de temps ») → laissé.
+
+**Le stock** : 99 slides relues une par une, deck entier sous les yeux, en
+cinq langues — **73 remplacées, 26 laissées**, 9 slides de posts non publiés et
+2 légendes `#Wilgo`. Chaque décision et son motif sont dans
+`concurrents_reprise_0287`, la sauvegarde (166 lignes) dans
+`concurrents_reprise_sauvegarde`, le journal dans `concurrents_corrections`.
+Les publiés ne sont pas touchés. Restent 25 slides qui citent un concurrent :
+toutes des classements, marqués `concurrent_laisse` sur la slide.
+
+Deux cas laissés exprès, à trancher dans la file : `9dc90d30` et `fabbb97c`
+(en brouillon) sont faits de **captures de fiches App Store** de concurrents.
+Réécrire le texte n'enlèverait pas l'image ; ils sont à refuser, pas à
+réécrire. Et « study smarter » est une expression anglaise courante : le motif
+StudySmarter passe en un mot.
+
+**Le moteur** : `sansConcurrents` (`import_contenu.ts`) tourne à la sortie de
+`assurerDeckPourLangue`, sur TOUS les chemins — deck déjà prêt, langue
+d'origine, traduit — parce qu'une règle qui ne vit que sur un chemin ne protège
+que ce chemin (0268). Sans mention, il ne coûte qu'une regex sur la liste de
+la table `concurrents` (relue toutes les 10 minutes, repli sur la liste de 0286
+si elle est illisible). Avec mention, un appel modèle court qui ne reçoit à
+réécrire que les slides qui citent, mais lit le deck entier. `concurrents.ts`
+(pur, 11 tests) contrôle la sortie : une réécriture qui cite encore un
+concurrent, contient un tiret long, ou a gonflé (plus d'une ligne ou de moitié
+de plus) n'est pas écrite. Le résultat est rangé dans `contenu_langues` : payé
+une fois par deck. Un « classement » est mémorisé sur sa slide
+(`concurrent_laisse` = le texte jugé) et rejugé seulement si le texte change.
+Un appel raté laisse le deck tel quel : le brief du matin (0286, Q11) est le
+filet.
+
+**Piège de l'outil, à connaître avant la prochaine reprise** : le MCP Supabase
+demande une **confirmation humaine** avant toute instruction destructive
+(`delete`, `drop`). Sans interface pour la donner, l'appel attend son délai de
+60 s et la transaction est annulée, sans un mot sur la cause. Quatre essais
+sont tombés là-dessus (un `delete from burn_rendus` vide, des `drop table` de
+tables temporaires) avant qu'un chronométrage étape par étape ne montre que
+chaque instruction prenait quelques millisecondes. Une reprise passe par des
+tables permanentes et sans `delete` ni `drop` ; une suppression vraiment
+nécessaire se fait à part, et se dit.
+
+**Déploiement du 01/10/2026, après la demande d'Adrien** (« fais la correction
+mtn »). Cinq chargeurs sur `772589b` : `assignation-contenu` (v34),
+`assignation` (v35), `revoquer-post` (v34), `bruler-texte-test` (v24) et
+`minuit-vnext` (v38) — les cinq qui tirent `assurerDeckPourLangue`, environ
++6 Ko chacun. **Trois alias `createClient` ont été renommés** : `ce`→`pe`,
+`he`→`_e`, `de`→`me` ; `De` et `Y` inchangés, relus dans les bundles.
+`bruler-assignes`, `import-contenu` et `renettoyer-contenu` ressortent à taille
+constante (permutation d'identifiants) : leurs bundles du dépôt, déjà en prod,
+sont gardés tels quels. Les quatre autres sont identiques à l'octet.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
