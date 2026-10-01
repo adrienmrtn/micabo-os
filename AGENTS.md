@@ -1356,6 +1356,16 @@ chaque instruction prenait quelques millisecondes. Une reprise passe par des
 tables permanentes et sans `delete` ni `drop` ; une suppression vraiment
 nécessaire se fait à part, et se dit.
 
+**Déploiement du 01/10/2026, après la demande d'Adrien** (« fais la correction
+mtn »). Cinq chargeurs sur `772589b` : `assignation-contenu` (v34),
+`assignation` (v35), `revoquer-post` (v34), `bruler-texte-test` (v24) et
+`minuit-vnext` (v38) — les cinq qui tirent `assurerDeckPourLangue`, environ
++6 Ko chacun. **Trois alias `createClient` ont été renommés** : `ce`→`pe`,
+`he`→`_e`, `de`→`me` ; `De` et `Y` inchangés, relus dans les bundles.
+`bruler-assignes`, `import-contenu` et `renettoyer-contenu` ressortent à taille
+constante (permutation d'identifiants) : leurs bundles du dépôt, déjà en prod,
+sont gardés tels quels. Les quatre autres sont identiques à l'octet.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
