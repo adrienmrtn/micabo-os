@@ -409,10 +409,10 @@ UNE SEULE slide du slideshow peut nommer micabo. ${
       ? `Une autre slide le cite déjà : AUCUNE slide à remplacer ne le nomme. Le
 nom du concurrent et le mot qui le porte deviennent une formulation sans marque,
 dans la langue du texte (« une appli », « une appli de quiz », « une méthode »).`
-      : `Si plusieurs slides sont à remplacer, seule la plus loin dans le slideshow
-devient micabo ; dans les autres, le nom du concurrent et le mot qui le porte
-deviennent une formulation sans marque, dans la langue du texte (« une appli »,
-« une appli de quiz », « une méthode »).`
+      : `La slide à remplacer la plus loin dans le slideshow devient micabo (s'il n'y
+en a qu'une, c'est elle). Dans les autres, le nom du concurrent et le mot qui le
+porte deviennent une formulation sans marque, dans la langue du texte (« une
+appli », « une appli de quiz », « une méthode »).`
   }
 
 Le slideshow entier :

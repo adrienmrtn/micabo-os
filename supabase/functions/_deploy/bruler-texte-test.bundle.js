@@ -57,10 +57,10 @@ long (\u2014, \u2013), jamais \xAB micabo.app \xBB, ni \xAB site \xBB, ni \xAB p
 
 UNE SEULE slide du slideshow peut nommer micabo. ${e.micaboDejaCite?`Une autre slide le cite d\xE9j\xE0 : AUCUNE slide \xE0 remplacer ne le nomme. Le
 nom du concurrent et le mot qui le porte deviennent une formulation sans marque,
-dans la langue du texte (\xAB une appli \xBB, \xAB une appli de quiz \xBB, \xAB une m\xE9thode \xBB).`:`Si plusieurs slides sont \xE0 remplacer, seule la plus loin dans le slideshow
-devient micabo ; dans les autres, le nom du concurrent et le mot qui le porte
-deviennent une formulation sans marque, dans la langue du texte (\xAB une appli \xBB,
-\xAB une appli de quiz \xBB, \xAB une m\xE9thode \xBB).`}
+dans la langue du texte (\xAB une appli \xBB, \xAB une appli de quiz \xBB, \xAB une m\xE9thode \xBB).`:`La slide \xE0 remplacer la plus loin dans le slideshow devient micabo (s'il n'y
+en a qu'une, c'est elle). Dans les autres, le nom du concurrent et le mot qui le
+porte deviennent une formulation sans marque, dans la langue du texte (\xAB une
+appli \xBB, \xAB une appli de quiz \xBB, \xAB une m\xE9thode \xBB).`}
 
 Le slideshow entier :
 ${n}

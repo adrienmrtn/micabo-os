@@ -95,6 +95,7 @@ values ('placement_micabo_v2', $prompt$PLACEMENT DE MICABO DANS UN SLIDESHOW
 0. CE QUE TU PRODUIS
 Une slide du slideshow, réécrite pour que micabo en fasse partie. Le spectateur ne doit pas se dire « une pub » : il doit se dire « c'est quoi ça ? ». La slide micabo est le meilleur élément de la liste, écrit par la même personne que les autres.
 Les exemples ci-dessous sont en français. Tu écris dans la langue du deck, avec les mots qu'y emploie un élève (la fiche, die Karteikarte, los apuntes, özet).
+Les exemples entre guillemets montrent une forme : ne les recopie jamais mot pour mot.
 
 1. MICABO : CE QU'UN ÉLÈVE EN FAIT
 micabo est une application mobile de révision. Un élève :
