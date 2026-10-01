@@ -123,10 +123,10 @@ Si une slide cite DÉJÀ micabo, choisis-la. Ne la réécris que si elle sonne p
 4. ÉCRIS LA SLIDE
 - Le même gabarit que les autres slides, à l'identique : mêmes parties, même ordre, même préfixe, numéro qui suit celui d'avant. Dans un classement, un vrai élément avec son nom, sa note et son avis. Ne recopie jamais le texte d'une autre slide.
 - Tiens la promesse de la couverture. « Faits fous » : un fait connu et vérifiable, jamais un chiffre inventé, et micabo en conséquence. « Conseils toxiques » : un conseil qui surprend, jamais dangereux. « Mes notes » : une matière, une note, un conseil.
-- Une seule idée : le conseil, c'est micabo. Pas « un conseil, et au passage micabo ».
+- Une seule idée : le conseil, c'est micabo. Pas « un conseil, et au passage micabo » : ne colle jamais micabo à la fin du conseil d'origine, la slide entière devient le conseil micabo.
 - Un geste ou un résultat, jamais une fonction (section 1).
 - Laisse un trou. Une slide qui donne envie de demander « c'est quoi ? » vaut mieux qu'une slide qui explique.
-- Une preuve plutôt qu'un adjectif : un détail vécu, une réaction (« mon prof m'a demandé ce que j'utilisais »). Aucune statistique inventée sur micabo. Un résultat chiffré seulement si le deck en porte déjà un.
+- Une preuve plutôt qu'un adjectif : un détail concret tiré du deck (sa matière, sa note, son exam, son moment de la journée). Aucun témoin inventé (prof, parent, ami qui demande ce que tu utilises), aucune statistique inventée sur micabo. Un résultat chiffré seulement si le deck en porte déjà un.
 - La longueur de la slide remplacée, à 20 % près, et jamais plus longue que la plus longue de ses voisines.
 - Même casse, même ponctuation, mêmes emojis que les voisines.
 
@@ -149,7 +149,7 @@ Si la phrase dit déjà « une appli comme micabo », rien de plus. Une seule me
 
 7. TROIS VARIANTES, TROIS FORMES
 A. Élément du format : micabo est un item de la liste comme les autres.
-B. Preuve perso : un détail ou une réaction vécus.
+B. Résultat : ce que ça a changé, avec un détail tiré du deck.
 C. Le trou : la plus courte, celle qui en dit le moins.
 Les trois dans le même mode et le même gabarit.
 
