@@ -57,8 +57,10 @@ l'autre slide est la meilleure des deux (un vrai item de classement, la chute
 d'un avant/après), on fait l'inverse : on la garde et on retire micabo de
 `slide`.
 
-**2. Le gabarit du deck.** La slide micabo a les mêmes parties que ses
-voisines, dans le même ordre (numéro + titre, matière + note + conseil,
+**2. Le gabarit du deck.** Depuis 0292 le moteur remet lui-même le numéro de la
+slide remplacée et refuse une variante qui recopie une voisine : un défaut de
+numérotation ici vient donc d'un post créé avant, ou d'un dernier essai du
+modèle. La slide micabo a les mêmes parties que ses voisines, dans le même ordre (numéro + titre, matière + note + conseil,
 « conseil n°X » + citation, nom + note /10 + avis), et le numéro qui suit
 celui d'avant. Défauts à corriger : numéro faux ou répété, item de classement
 qui a perdu son nom, slide qui recopie le texte d'une autre

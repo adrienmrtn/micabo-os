@@ -1525,6 +1525,48 @@ micabo. Une fausse promesse sur le produit, juste avant le téléchargement.
   note absente du deck (« partiel d'histoire », « B+ in Biology ») malgré
   l'interdiction ajoutée : le contrôle de 08:49 le traite comme un défaut.
 
+## Bascule du placement sur la v2, numérotation tenue par le code (0292, 01/10/2026)
+
+**Verdict d'Adrien** : « globalement A est un peu mieux que B, mais l'idée globale
+est surtout de voir sur un post entier : pas de bafouillement (si classement,
+les chiffres du classement restent), pas d'emmêlement, clarté, sens ». A et B
+étaient tirés au hasard par deck (A = nouveau sur 17 lignes) : démasqués, ses 9
+choix donnent **4 au nouveau, 3 à l'ancien, 2 égalités**. Avec les compteurs du
+passage final (fiche produit 16 → 1, double mention 13 → 0), `placement_micabo`
+reçoit la v2 ; l'ancien est rangé sous `placement_micabo_v1_2026_10_01` — le
+retour se fait en le recopiant. Seuls les prochains decks sont placés avec.
+
+**Son critère, appliqué aux 30 posts entiers, a trouvé ce que les compteurs ne
+voyaient pas** : la numérotation cassée. Ancien 7 fois sur 30 (outro écrasée par
+un « conseil n°4 » après le n°5, « 5. » à la place du « 4. » remplacé), nouveau 5
+(« 2, 4, 4 », un « 5. » ajouté à un deck sans numéros, le titre de la slide
+suivante recopié). Un prompt ne tient pas ça — le suffixe disait déjà « reprendre
+EXACTEMENT le préfixe ». C'est donc le code qui le tient :
+
+- **`choisirVariante`** (`_shared/placement.ts`, pur, 13 tests) : `alignerPrefixe`
+  remet le numéro de la slide remplacée mot pour mot (« 3. », « conseil n°3 »,
+  « Tip #4 », seul sur sa ligne s'il l'était) et retire un numéro ajouté à un
+  deck qui n'en a pas ; `casseLeDeck` écarte une variante qui recopie le titre
+  d'une autre slide (comparé sans son numéro) ou qui perd la note d'un
+  classement (`6/10`). La meilleure qui tient est écrite.
+- **Aucune ne tient → on redemande** (`integrateSophia`, boucle de 4 essais). Sur
+  l'essai, le cas « toutes recopient la slide suivante » est revenu propre au
+  second appel. Au dernier essai on garde la meilleure, numéro remis, et le
+  contrôle de 08:49 la verra.
+
+Vérifié sur les 5 decks fautifs après déploiement : les 5 propres.
+
+**L'essai à blanc n'a plus de témoin** : son bras « avant » lit
+`placement_micabo`, qui EST la v2 depuis 0292. Pour rejouer une comparaison, faire
+lire `placement_micabo_v1_2026_10_01` au bras ancien.
+
+**Déploiement** : cinq chargeurs sur `13d3bd7` — `assignation-contenu` (v38),
+`assignation` (v39), `minuit-vnext` (v42), `revoquer-post` (v38),
+`bruler-texte-test` (v28) — et `essai-placement` (v5). Alias relus : `he`, `Se`,
+`Fe`, `we`, `te`, `re` (le 01/10 au soir, 0291 les avait tous renommés une
+première fois : `ge`→`he`, `ye`→`Se`, `Le`→`Fe`, `he`→`we`, `W`→`te`). Test de vie
+`401` sur les six.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
