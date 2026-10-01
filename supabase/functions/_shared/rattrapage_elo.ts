@@ -1,7 +1,8 @@
 /**
  * Rattrapage sur une fenêtre courte (défaut 4 jours Paris).
  *
- * 1) Relève stats TikTok des passages publiés (publie_url) — vues/likes…
+ * 1) Relève les stats TikTok de chaque passage publié UNE fois, à J+2 : par son
+ *    lien (un appel Apify par compte), par le profil seulement sans lien.
  * 2) Reposts bonus : tout passage > 50 000 vues est replanifié à J+7 sur le
  *    même compte.
  * 3) En fin de file : requalification tierlist des slideshows dont le cycle est
@@ -15,14 +16,15 @@
  *
  * Renvoie aussi `logs` (trace) + `brief` (résumé UI).
  */
-import { scrapePost, scrapeStats, type ScrapedPost } from "./apify.ts";
+import { scrapeStats, type ScrapedPost } from "./apify.ts";
+import { releverPostsParLien } from "./apify_releve.ts";
 import {
+  apparierParLien,
   estApifyEpuise,
-  metricsAScraper,
+  idPostTiktok,
+  lienTiktok,
   passageARelever,
-  POSTS_RELEVES,
   profondeurScrape,
-  repliAutorise,
 } from "./releve_file.ts";
 import {
   abandonnerRepostsEnRetard,
@@ -52,10 +54,9 @@ const RATTRAPAGE_PROFONDEUR_JOURS = 30;
  * Passages relevés par compte et par passe.
  *
  * La file « ce qui manque » peut être longue au premier passage après un
- * incident : chaque passage sans match coûte un `scrapePost` Apify, et
- * l'invocation Edge meurt à 150 s. On en prend une tranche, les plus vieux
- * d'abord ; le reste part à la passe suivante (13:00 ou minuit) — il ne se
- * perd plus, c'est tout l'intérêt de la file.
+ * incident, et l'invocation Edge meurt à 150 s. On en prend une tranche, les
+ * plus vieux d'abord ; le reste part à la passe suivante (13:00 ou minuit) —
+ * il ne se perd plus, c'est tout l'intérêt de la file.
  */
 const PASSAGES_PAR_PASSE = 25;
 /** Fenêtre (±h) pour matcher le « dernier post » profil vs date attendue. */
@@ -156,10 +157,6 @@ function compteEnProcessus(c: {
 }
 
 
-function idDuLien(url: string): string {
-  return url.match(/\/(?:photo|video)\/(\d+)/)?.[1] ?? url;
-}
-
 async function resoudreLien(url: string): Promise<string> {
   if (!/\/\/(?:vm|vt)\.tiktok\.com/i.test(url)) return url;
   try {
@@ -234,23 +231,17 @@ type PassageFenetre = {
 /**
  * Les passages à relever : CE QUI MANQUE, pas une tranche de calendrier.
  *
- * L'ancienne version sélectionnait `date_publication_prevue IN (4 derniers
- * jours Paris)`. Un passage raté pendant ces quatre jours — scrape tombé,
- * post publié en retard, post poussé hors du profil scrapé — n'était JAMAIS
- * repris : la fenêtre avait avancé. Le 14/09/2026, sur 152 passages publiés,
- * 16 étaient à `vues = null` ET `stats_maj_at = null` ; ceux du 07 et du 08
- * étaient perdus pour de bon.
+ * Le critère est l'état du passage (`passageARelever`, `releve_file.ts`) : un
+ * post publié depuis `MESURE_JOURS` qui n'a pas encore sa mesure de J+2. Une
+ * fois mesuré à J+2, il ne l'est plus jamais. Un passage introuvable
+ * `RELEVE_ECHECS_MAX` fois n'est plus payé.
  *
- * Désormais le critère est l'état du passage (`passageARelever`,
- * `releve_file.ts`) : jamais mesuré d'abord, puis mesuré il y a plus de 20 h
- * et publié depuis moins de `RELEVE_FIGE_APRES_JOURS` ; au-delà, le chiffre
- * est figé. Un passage introuvable `RELEVE_ECHECS_MAX` fois n'est plus payé.
+ * Les passages SANS lien sont inclus : ce sont les seuls qu'on cherche sur le
+ * profil. Rend aussi tous les passages publiés de la fenêtre (`publies`) : la
+ * profondeur de ce scrape de profil se calcule sur eux.
  *
- * Rend aussi TOUS les passages publiés de la fenêtre (`publies`) : la
- * profondeur de scrape d'un profil se calcule sur eux, pas sur les seuls dus.
- *
- * Les plus vieux manquants passent devant : ce sont eux qui bloquent une
- * requalification de cycle.
+ * Les plus vieux passent devant : ce sont eux qui bloquent une requalification
+ * de cycle.
  */
 async function chargerPassagesARelever(
   supabase: Supabase,
@@ -266,7 +257,6 @@ async function chargerPassagesARelever(
       "id, contenu_id, compte_id, langue, publie_url, publie_at, date_publication_prevue, vues, likes, commentaires, partages, slides, stats_maj_at, stats_echecs, stats_tentative_at",
     )
     .eq("statut", "publie")
-    .not("publie_url", "is", null)
     .gte("date_publication_prevue", depuis);
 
   if (compteId) q = q.eq("compte_id", compteId);
@@ -278,13 +268,7 @@ async function chargerPassagesARelever(
   const maintenant = Date.now();
   const dus = publies.filter((p) => passageARelever(p, maintenant));
 
-  // Jamais relevé d'abord, puis du plus ancien au plus récent.
-  dus.sort((a, b) => {
-    const aJamais = a.stats_maj_at ? 1 : 0;
-    const bJamais = b.stats_maj_at ? 1 : 0;
-    if (aJamais !== bJamais) return aJamais - bJamais;
-    return (a.date_publication_prevue ?? "").localeCompare(b.date_publication_prevue ?? "");
-  });
+  dus.sort((a, b) => (a.date_publication_prevue ?? "").localeCompare(b.date_publication_prevue ?? ""));
   return { dus, publies };
 }
 
@@ -330,9 +314,16 @@ async function noterEchecReleve(
 }
 
 /**
- * Relève les stats pour les passages de la fenêtre.
- * Ordre : match URL dans scrape profil → scrapePost(url) → dernier post
- * profil cohérent (date ±36h + texte).
+ * Relève les stats des passages dus, compte par compte.
+ *
+ *   - avec lien : tous les posts du compte dans UN appel Apify (`postURLs`),
+ *     rapprochés par l'identifiant du post (`apparierParLien`) ;
+ *   - sans lien : le profil est lu jusqu'au plus vieux d'entre eux, et le post
+ *     retrouvé par cohérence (date ±36 h + texte des slides).
+ *
+ * Un passage non retrouvé compte un échec ; il est retenté après 20 h, et
+ * abandonné au bout de `RELEVE_ECHECS_MAX`. Une erreur d'appel (Apify en 402,
+ * réseau) n'est pas un échec du passage : elle remonte au drain.
  */
 async function releverStatsFenetre(
   supabase: Supabase,
@@ -361,7 +352,7 @@ async function releverStatsFenetre(
 
   const compteIds = [...parCompte.keys()];
   if (compteIds.length === 0) {
-    journal.push("warn", "Aucun passage publié avec publie_url dans la fenêtre");
+    journal.push("info", "Aucun passage à J+2 à relever");
     return out;
   }
 
@@ -385,62 +376,41 @@ async function releverStatsFenetre(
   for (const compte of comptes ?? []) {
     const handle = compte.handle_tiktok as string;
     const liste = parCompte.get(compte.id) ?? [];
+    const avecLien = liste.filter((p) => lienTiktok(p.publie_url));
+    const sansLien = liste.filter((p) => !lienTiktok(p.publie_url));
+    const trouves = new Map<string, { stats: ScrapedPost["stats"]; via: "url" | "coherence" }>();
     let relevesCompte = 0;
     let sansMatchCompte = 0;
     try {
-      // Le profil doit remonter jusqu'au plus vieux passage dû : on compte nos
-      // posts publiés depuis, avec une marge pour les posts personnels.
-      const aScraper = profondeurScrape(
-        publies.filter((p) => p.compte_id === compte.id),
-        liste,
-      );
-      journal.push(
-        "info",
-        `@${handle} — scrape profil (${liste.length} passage(s), ${aScraper} posts lus)`,
-      );
-      const enLigne = await scrapeStats(handle, aScraper);
-      const parId = new Map(enLigne.map((p) => [idDuLien(p.webVideoUrl), p]));
-      journal.push("info", `@${handle} — ${enLigne.length} post(s) TikTok scrapés`);
-
-      // Total profil → compte_metrics (alimente le snapshot Pilotage j0−j1).
-      if (!dryRun && enLigne.length > 0) {
-        const somme = (f: (s: ScrapedPost["stats"]) => number) =>
-          enLigne.reduce((n, p) => n + (f(p.stats) || 0), 0);
-        await supabase.from("compte_metrics").insert({
-          compte_id: compte.id,
-          vues: somme((s) => s.vues),
-          likes: somme((s) => s.likes),
-          commentaires: somme((s) => s.commentaires),
-          partages: somme((s) => s.partages),
-          nb_posts: enLigne.length,
-        });
+      if (avecLien.length > 0) {
+        const demandes = await Promise.all(
+          avecLien.map(async (passage) => {
+            const brut = passage.publie_url!.trim();
+            const complet = await resoudreLien(brut);
+            const idPost = idPostTiktok(complet) ?? idPostTiktok(brut);
+            // Le lien résolu sans ses paramètres de partage ; à défaut, le lien collé.
+            const url = idPost ? complet.split("?")[0]! : brut;
+            return { passage, idPost, url };
+          }),
+        );
+        journal.push("info", `@${handle} — ${demandes.length} lien(s), un appel Apify`);
+        const resultats = await releverPostsParLien(demandes.map((d) => d.url));
+        for (const [passageId, r] of apparierParLien(demandes, resultats)) {
+          trouves.set(passageId, { stats: r.stats, via: "url" });
+        }
       }
 
-      for (const passage of liste) {
-        if (!passage.publie_url) continue;
-        const complet = await resoudreLien(passage.publie_url);
-        let match = parId.get(idDuLien(complet)) ?? null;
-        let via: "url" | "fallbackUrl" | "coherence" | null = match ? "url" : null;
-
-        // Repli payant (un lancement Apify par post) : seulement dans la fenêtre
-        // de relevé ; plus vieux, le post ne se rattrape que par le profil.
-        if (!match && repliAutorise(passage)) {
-          try {
-            const seuls = await scrapePost(passage.publie_url);
-            if (seuls[0]?.stats) {
-              match = seuls[0];
-              via = "fallbackUrl";
-            }
-          } catch (e) {
-            journal.push(
-              "warn",
-              `@${handle} — scrapePost échoué`,
-              e instanceof Error ? e.message : String(e),
-            );
-          }
-        }
-
-        if (!match) {
+      if (sansLien.length > 0) {
+        const aScraper = profondeurScrape(
+          publies.filter((p) => p.compte_id === compte.id),
+          sansLien,
+        );
+        journal.push(
+          "info",
+          `@${handle} — ${sansLien.length} post(s) sans lien, scrape profil (${aScraper} posts lus)`,
+        );
+        const enLigne = await scrapeStats(handle, aScraper);
+        for (const passage of sansLien) {
           const ancreMs = passage.publie_at
             ? Date.parse(passage.publie_at)
             : passage.date_publication_prevue
@@ -457,38 +427,38 @@ async function releverStatsFenetre(
             if (attendu.trim() && sim < 0.15) continue;
             if (!best || score > best.score) best = { post, score };
           }
-          if (best) {
-            match = best.post;
-            via = "coherence";
-          }
+          if (best) trouves.set(passage.id, { stats: best.post.stats, via: "coherence" });
         }
+      }
 
-        if (!match) {
+      for (const passage of liste) {
+        const trouve = trouves.get(passage.id);
+        if (!trouve) {
           sansMatchCompte += 1;
           out.sansMatch += 1;
           await noterEchecReleve(supabase, passage, dryRun);
           journal.push(
             "warn",
             `@${handle} — pas de match stats`,
-            `${passage.date_publication_prevue ?? "?"} · ${passage.id.slice(0, 8)}`,
+            `${passage.date_publication_prevue ?? "?"} · ${passage.id.slice(0, 8)}` +
+              (lienTiktok(passage.publie_url) ? "" : " · sans lien"),
           );
           continue;
         }
 
-        await ecrireStats(supabase, passage.id, match.stats, dryRun);
-        passage.vues = match.stats.vues;
-        passage.likes = match.stats.likes;
-        passage.commentaires = match.stats.commentaires;
-        passage.partages = match.stats.partages;
+        await ecrireStats(supabase, passage.id, trouve.stats, dryRun);
+        passage.vues = trouve.stats.vues;
+        passage.likes = trouve.stats.likes;
+        passage.commentaires = trouve.stats.commentaires;
+        passage.partages = trouve.stats.partages;
         out.releves += 1;
         out.relevesIds?.push(passage.id);
         relevesCompte += 1;
-        if (via === "fallbackUrl") out.fallbackUrl += 1;
-        if (via === "coherence") out.fallbackCoherence += 1;
+        if (trouve.via === "coherence") out.fallbackCoherence += 1;
         journal.push(
           "ok",
-          `@${handle} · ${passage.date_publication_prevue ?? "?"} → ${match.stats.vues} vues`,
-          via === "url" ? "match URL" : via === "fallbackUrl" ? "fallback scrapePost" : "fallback cohérence",
+          `@${handle} · ${passage.date_publication_prevue ?? "?"} → ${trouve.stats.vues} vues`,
+          trouve.via === "url" ? "par lien" : "profil, cohérence",
         );
       }
 
@@ -583,206 +553,56 @@ function requalifVide(): RequalificationResultat {
   };
 }
 
-/**
- * Figé le total des vues (dernier compte_metrics par compte actif) pour le
- * jour Paris courant. vues_delta = total − total du dernier snapshot antérieur
- * (pas seulement la veille calendaire : un jour manqué ne casse plus la courbe).
- */
-function veilleParisDe(jour: string): string {
-  const d = new Date(`${jour}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - 1);
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(d);
-}
+type SnapshotVues = { jour: string; vues_totales: number; vues_delta: number | null; nb_comptes: number };
 
+/**
+ * Courbe des vues du Pilotage (`vues_globales_jour`), calculée en base par
+ * `snapshot_vues_globales` (0285) depuis NOS passages : pour chaque jour Paris,
+ * les vues relevées des posts publiés ce jour-là (`vues_delta`) et leur cumul
+ * (`vues_totales`).
+ *
+ * Avant le 01/10, elle sommait le dernier scrape de profil de chaque compte
+ * (`compte_metrics`) : un total qui dépendait du nombre de posts lus, et qui a
+ * perdu la moitié de son échelle quand 0281 a réduit ce nombre (delta −4 M sans
+ * qu'aucune audience ne bouge). Le relevé ne lit plus les profils : il ne reste
+ * que nos posts, mesurés à J+2. Un post publié aujourd'hui n'entre donc dans
+ * la courbe que deux jours plus tard : la fonction recalcule les quatre
+ * derniers jours à chaque passe.
+ */
 export async function snapshotVuesGlobales(
   supabase: Supabase,
   journal?: Journal,
   jourForce?: string,
-): Promise<{ jour: string; vues_totales: number; vues_delta: number | null; nb_comptes: number }> {
+): Promise<SnapshotVues> {
   const jour = jourForce ?? aujourdhuiParis();
-
-  // Auto-répare la veille si absente (sinon Δ reste null et Pilotage paraît vide).
-  if (!jourForce) {
-    const veille = veilleParisDe(jour);
-    const { data: veilleRow } = await supabase
-      .from("vues_globales_jour")
-      .select("jour")
-      .eq("jour", veille)
-      .maybeSingle();
-    if (!veilleRow) {
-      try {
-        journal?.push("info", `Veille ${veille} absente — backfill depuis compte_metrics`);
-        await backfillSnapshotVuesJour(supabase, veille, journal);
-      } catch (e) {
-        journal?.push(
-          "warn",
-          `Backfill veille ${veille} échoué`,
-          e instanceof Error ? e.message : String(e),
-        );
-      }
-    }
-  }
-
-  const { data: comptes, error } = await supabase
-    .from("comptes")
-    .select("id")
-    .eq("is_active", true);
+  const { data, error } = await supabase.rpc("snapshot_vues_globales", { p_jour: jour, p_jours: 4 });
   if (error) throw error;
-
-  let vuesTotales = 0;
-  let nb = 0;
-  for (const c of comptes ?? []) {
-    const { data: m } = await supabase
-      .from("compte_metrics")
-      .select("vues")
-      .eq("compte_id", c.id)
-      .order("collecte_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (m?.vues != null) {
-      vuesTotales += Number(m.vues);
-      nb += 1;
-    }
-  }
-
-  // Dernier snapshot strictement avant ce jour (tolère un trou calendaire).
-  const { data: prev } = await supabase
-    .from("vues_globales_jour")
-    .select("vues_totales, jour")
-    .lt("jour", jour)
-    .order("jour", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const vuesDelta = prev?.vues_totales != null
-    ? vuesTotales - Number(prev.vues_totales)
-    : null;
-
-  const { error: errUp } = await supabase.from("vues_globales_jour").upsert(
-    {
-      jour,
-      vues_totales: vuesTotales,
-      vues_delta: vuesDelta,
-      nb_comptes: nb,
-    },
-    { onConflict: "jour" },
-  );
-  if (errUp) throw errUp;
-
+  const lignes = (data ?? []) as SnapshotVues[];
+  const ligne = lignes.find((l) => l.jour === jour) ?? { jour, vues_totales: 0, vues_delta: null, nb_comptes: 0 };
   journal?.push(
     "ok",
     `Snapshot vues ${jour}`,
-    `total ${vuesTotales} · Δ ${vuesDelta ?? "n/a"}` +
-      (prev?.jour ? ` (vs ${prev.jour})` : " (premier)") +
-      ` · ${nb} compte(s)`,
+    `total ${ligne.vues_totales} · Δ ${ligne.vues_delta ?? "n/a"} · ${ligne.nb_comptes} compte(s)` +
+      ` · ${lignes.length} jour(s) recalculé(s)`,
   );
-
-  return { jour, vues_totales: vuesTotales, vues_delta: vuesDelta, nb_comptes: nb };
+  return ligne;
 }
 
-/**
- * Reconstruit un snapshot pour un jour Paris passé à partir des
- * `compte_metrics` connus à la fin de ce jour (Europe/Paris).
- * Sert de patch quand un run minuit / ELO a sauté un jour.
- */
+/** Recalcule un jour Paris passé de la courbe (même calcul, un seul jour). */
 export async function backfillSnapshotVuesJour(
   supabase: Supabase,
   jour: string,
   journal?: Journal,
-): Promise<{ jour: string; vues_totales: number; vues_delta: number | null; nb_comptes: number }> {
-  const borne = parisDebutJourSuivantIso(jour);
-
-  const { data: comptes, error } = await supabase
-    .from("comptes")
-    .select("id")
-    .eq("is_active", true);
+): Promise<SnapshotVues> {
+  const { data, error } = await supabase.rpc("snapshot_vues_globales", { p_jour: jour, p_jours: 1 });
   if (error) throw error;
-
-  let vuesTotales = 0;
-  let nb = 0;
-  for (const c of comptes ?? []) {
-    const { data: m } = await supabase
-      .from("compte_metrics")
-      .select("vues")
-      .eq("compte_id", c.id)
-      .lt("collecte_at", borne)
-      .order("collecte_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (m?.vues != null) {
-      vuesTotales += Number(m.vues);
-      nb += 1;
-    }
-  }
-
-  const { data: prev } = await supabase
-    .from("vues_globales_jour")
-    .select("vues_totales, jour")
-    .lt("jour", jour)
-    .order("jour", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const vuesDelta = prev?.vues_totales != null
-    ? vuesTotales - Number(prev.vues_totales)
-    : null;
-
-  const { error: errUp } = await supabase.from("vues_globales_jour").upsert(
-    {
-      jour,
-      vues_totales: vuesTotales,
-      vues_delta: vuesDelta,
-      nb_comptes: nb,
-    },
-    { onConflict: "jour" },
-  );
-  if (errUp) throw errUp;
-
+  const ligne = ((data ?? []) as SnapshotVues[])[0] ?? { jour, vues_totales: 0, vues_delta: null, nb_comptes: 0 };
   journal?.push(
     "ok",
     `Backfill snapshot ${jour}`,
-    `total ${vuesTotales} · Δ ${vuesDelta ?? "n/a"} · ${nb} compte(s)`,
+    `total ${ligne.vues_totales} · Δ ${ligne.vues_delta ?? "n/a"} · ${ligne.nb_comptes} compte(s)`,
   );
-
-  // Recalcule le Δ du snapshot suivant s'il existe (ex. après patch d'hier).
-  const { data: suivant } = await supabase
-    .from("vues_globales_jour")
-    .select("jour, vues_totales")
-    .gt("jour", jour)
-    .order("jour", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (suivant) {
-    const deltaSuiv = Number(suivant.vues_totales) - vuesTotales;
-    await supabase
-      .from("vues_globales_jour")
-      .update({ vues_delta: deltaSuiv })
-      .eq("jour", suivant.jour);
-    journal?.push("ok", `Δ recalculé ${suivant.jour}`, String(deltaSuiv));
-  }
-
-  return { jour, vues_totales: vuesTotales, vues_delta: vuesDelta, nb_comptes: nb };
-}
-
-/** Instant UTC exclusif = début du jour calendaire Paris suivant. */
-function parisDebutJourSuivantIso(jourParis: string): string {
-  const d = new Date(`${jourParis}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
-  const next = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(d);
-  const probe = new Date(`${next}T12:00:00Z`);
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Europe/Paris",
-    timeZoneName: "shortOffset",
-    hour12: false,
-  });
-  const parts = fmt.formatToParts(probe);
-  const tz = parts.find((p) => p.type === "timeZoneName")?.value ?? "GMT+2";
-  const m = /GMT([+-]\d{1,2})(?::?(\d{2}))?/.exec(tz);
-  const oh = m ? Number(m[1]) : 2;
-  const om = m?.[2] ? Number(m[2]) : 0;
-  const sign = oh >= 0 ? "+" : "-";
-  const offset = `${sign}${String(Math.abs(oh)).padStart(2, "0")}:${String(om).padStart(2, "0")}`;
-  return new Date(`${next}T00:00:00${offset}`).toISOString();
+  return ligne;
 }
 
 export async function rattrapageElo(
@@ -845,57 +665,21 @@ export async function rattrapageElo(
 
   const { dus: enFile, publies } = await chargerPassagesARelever(supabase, opts.compteId ?? null);
   const passages = enFile.slice(0, PASSAGES_PAR_PASSE);
-  const jamais = passages.filter((p) => !p.stats_maj_at).length;
+  const sansLien = passages.filter((p) => !lienTiktok(p.publie_url)).length;
   journal.push(
     "info",
-    `${passages.length} passage(s) à relever`,
-    `${jamais} jamais mesuré(s) · ${passages.length - jamais} à rafraîchir` +
+    `${passages.length} passage(s) à J+2 à relever`,
+    `${passages.length - sansLien} par lien · ${sansLien} sans lien` +
       (enFile.length > passages.length
         ? ` · ${enFile.length - passages.length} reporté(s) à la passe suivante`
         : ""),
   );
 
-  // Compte isolé sans passage dû : le total du profil (compte_metrics) reste
-  // utile au snapshot quotidien, mais une fois par 20 h, pas à chaque passe.
+  // Compte isolé sans passage dû : rien à scraper. Le total du profil
+  // (`compte_metrics`) n'est plus relevé : plus rien ne le lit depuis que la
+  // courbe du Pilotage se calcule sur nos passages (0285).
   if (opts.compteId && passages.length === 0) {
-    const { data: c } = await supabase
-      .from("comptes")
-      .select("id, handle_tiktok")
-      .eq("id", opts.compteId)
-      .maybeSingle();
-    const { data: derniereMetrique } = await supabase
-      .from("compte_metrics")
-      .select("collecte_at")
-      .eq("compte_id", opts.compteId)
-      .order("collecte_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const metricsDues = metricsAScraper((derniereMetrique?.collecte_at as string | null) ?? null);
-    if (c?.handle_tiktok && !dryRun && !metricsDues) {
-      journal.push("info", `@${c.handle_tiktok} — rien à relever, metrics profil déjà fraîches`);
-    }
-    if (c?.handle_tiktok && !dryRun && metricsDues) {
-      try {
-        const enLigne = await scrapeStats(c.handle_tiktok as string, POSTS_RELEVES);
-        const somme = (f: (s: ScrapedPost["stats"]) => number) =>
-          enLigne.reduce((n, p) => n + (f(p.stats) || 0), 0);
-        await supabase.from("compte_metrics").insert({
-          compte_id: c.id,
-          vues: somme((s) => s.vues),
-          likes: somme((s) => s.likes),
-          commentaires: somme((s) => s.commentaires),
-          partages: somme((s) => s.partages),
-          nb_posts: enLigne.length,
-        });
-        journal.push("ok", `@${c.handle_tiktok} — metrics profil (${enLigne.length} posts)`);
-      } catch (e) {
-        journal.push(
-          "error",
-          `@${c.handle_tiktok} — scrape metrics`,
-          e instanceof Error ? e.message : String(e),
-        );
-      }
-    }
+    journal.push("info", "Rien à relever — aucun post n'a atteint J+2 sans mesure");
   }
 
   // Warmup : rien à relever pour ce compte isolé.
@@ -1019,7 +803,8 @@ export async function rattrapageElo(
 
 /**
  * Comptes / lot Edge.
- * 1 seul : scrape Apify + éventuels scrapePost doivent tenir sous idle 150s.
+ * 1 seul : l'appel Apify du compte (et le scrape profil des posts sans lien)
+ * doit tenir sous idle 150s.
  * Le cron `rattrapage-elo-drain` (* * * * *) reprend si la chaîne meurt.
  */
 const DRAIN_BATCH_ELO = 1;
