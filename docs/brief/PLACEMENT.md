@@ -96,7 +96,8 @@ haute : c'est une fausse promesse, pas un défaut de style.
 **8. La promesse de la couverture.** « Faits fous » : la slide reste un fait
 vrai et vérifiable. « Conseils toxiques du prof » : un conseil qui surprend.
 Pas de témoin inventé (« mon prof m'a demandé ce que j'utilisais »), pas de
-statistique inventée sur micabo.
+statistique inventée sur micabo, ni matière, note ou examen absents du deck
+(« mes fiches de droit », « B+ in Biology » dans un deck qui n'en parle pas).
 
 Ce qui **n'est pas** un défaut : un classement ou un comparatif où micabo gagne
 (« ça vaut pas l'appli micabo »), une parenthèse courte, un deck en placement

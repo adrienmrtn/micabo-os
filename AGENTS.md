@@ -1519,6 +1519,11 @@ micabo. Une fausse promesse sur le produit, juste avant le téléchargement.
 - **Le prompt v2** le dit (« micabo ne lit pas les notes à voix haute »), et la
   slide d'une appli audio n'est plus une place pour micabo. Le contrôle de
   08:49 en fait une règle de priorité haute.
+- **Troisième passage de l'essai** (celui qu'Adrien juge) : fiche produit
+  16 → 1, deux mentions 13 → 0, audio 0 → 0, plus long que les voisines 4 → 8,
+  dernière slide 11 → 4. Le prompt invente encore parfois une matière ou une
+  note absente du deck (« partiel d'histoire », « B+ in Biology ») malgré
+  l'interdiction ajoutée : le contrôle de 08:49 le traite comme un défaut.
 
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
