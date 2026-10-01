@@ -1366,6 +1366,22 @@ mtn »). Cinq chargeurs sur `772589b` : `assignation-contenu` (v34),
 constante (permutation d'identifiants) : leurs bundles du dépôt, déjà en prod,
 sont gardés tels quels. Les quatre autres sont identiques à l'octet.
 
+## Des slides portaient l'OCR brut d'une capture d'écran (0288, 01/10/2026)
+
+Vu en relisant 0287 : sur `8e88d77c`, le texte des slides 6 à 8 était l'OCR
+intégral de l'image — fiche de figures de style tronquée, agenda Google avec
+un clavier entier (163 lignes), notes de maths en russe (188 lignes) — et la
+traduction allemande l'avait recopié. Vidés sur décision d'Adrien : la slide
+part avec son image, sans texte superposé. Sauvegarde dans
+`textes_bruit_sauvegarde`.
+
+**Un seuil de longueur ne suffit pas à trier** : « plus de 40 lignes ou 900
+caractères » a ramassé 4 slides sur 123 slideshows, dont une vraie
+(`e7422935`, « 5 techniques infaillibles », un texte long et légitime). Chaque
+slide a été lue avant d'être vidée. Si l'import doit un jour écarter ce bruit
+à la source, c'est un critère de contenu (proportion de lignes d'un ou deux
+caractères, alphabet différent de la langue du deck), pas de longueur.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
