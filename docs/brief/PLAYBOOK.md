@@ -175,6 +175,16 @@ Gabarit plus bas. Règles d'écriture :
 - Court. Une section sans rien à signaler tient en une ligne (« rien à
   signaler »).
 
+### 6 bis. Les agents proposés
+
+Pour chaque point « À traiter », suivre `docs/brief/AGENTS_CORRECTEURS.md` :
+préambule + prompt du jour (chiffres, identifiants, dates du brief), case
+`- [ ] ▶ Lancer l'agent · \`agent:<clé>\`` et toggle, ou « À faire toi-même »
+quand aucun agent ne peut le prendre (argent, administration Slack). Un point
+reporté d'un jour à l'autre garde sa clé ; son prompt est réécrit avec les
+chiffres du jour. Le brief ne lance jamais rien lui-même : c'est le veilleur
+qui lance, et seulement ce qui est coché.
+
 ### 7. Écrire
 
 `notion-create-pages` avec `parent.page_id = 3ec241308d668080bef8ef8784ecc8d8`,
@@ -245,6 +255,9 @@ Indentation par tabulations dans les callouts et toggles.
 - <au plus 4 lignes : ce qui a bougé, ce qui s'est réglé, ce qui empire>
 ## À traiter
 - [ ] <action concrète, avec le chiffre qui la justifie> · `<cle>`
+## Agents proposés
+<pour chaque point qu'un agent peut prendre : case ▶ + toggle avec le prompt,
+ format exact dans AGENTS_CORRECTEURS.md ; sinon « À faire toi-même : … »>
 ## Par langue
 <table header-row="true" header-column="true">
 	<tr><td></td><td>🇹🇷 TR</td><td>🇩🇪 DE</td><td>🇫🇷 FR</td><td>🇪🇸 ES</td><td>Autres</td><td>Total</td></tr>
