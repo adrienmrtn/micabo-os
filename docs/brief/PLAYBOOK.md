@@ -179,11 +179,15 @@ Gabarit plus bas. Règles d'écriture :
 
 Pour chaque point « À traiter », suivre `docs/brief/AGENTS_CORRECTEURS.md` :
 préambule + prompt du jour (chiffres, identifiants, dates du brief), case
-`- [ ] ▶ Lancer l'agent · \`agent:<clé>\`` et toggle, ou « À faire toi-même »
+`- [ ] Lancer l'agent · \`agent:<clé>\`` et toggle, ou « À faire toi-même »
 quand aucun agent ne peut le prendre (argent, administration Slack). Un point
 reporté d'un jour à l'autre garde sa clé ; son prompt est réécrit avec les
 chiffres du jour. Le brief ne lance jamais rien lui-même : c'est le veilleur
 qui lance, et seulement ce qui est coché.
+
+Jamais de ▶ en tête de ligne : Notion le lit comme un dépliant et la clé
+`agent:` sort de la case. Après écriture, relire la page et vérifier que chaque
+case porte sa clé dans son propre texte.
 
 ### 7. Écrire
 
@@ -256,7 +260,7 @@ Indentation par tabulations dans les callouts et toggles.
 ## À traiter
 - [ ] <action concrète, avec le chiffre qui la justifie> · `<cle>`
 ## Agents proposés
-<pour chaque point qu'un agent peut prendre : case ▶ + toggle avec le prompt,
+<pour chaque point qu'un agent peut prendre : case « Lancer l'agent » + toggle avec le prompt,
  format exact dans AGENTS_CORRECTEURS.md ; sinon « À faire toi-même : … »>
 ## Par langue
 <table header-row="true" header-column="true">

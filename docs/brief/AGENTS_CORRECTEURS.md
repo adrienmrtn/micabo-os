@@ -2,13 +2,13 @@
 
 Le brief du matin ne fait pas que lister « À traiter » : pour chaque point
 qu'un agent peut prendre, il écrit dans la page le prompt prêt à partir et une
-case **▶ Lancer l'agent**. Rien ne part sans que tu coches.
+case **Lancer l'agent**. Rien ne part sans que tu coches.
 
 ```
-07:52  Brief          écrit la page du jour, avec les prompts et les cases ▶
-  ↓    toi            tu coches ▶ sur ce que tu veux lancer
+07:52  Brief          écrit la page du jour, avec les prompts et les cases
+  ↓    toi            tu coches ce que tu veux lancer
 10:20 / 15:20
-       Veilleur       lit la page ; pour chaque ▶ cochée, crée une session
+       Veilleur       lit la page ; pour chaque case cochée, crée une session
                       Claude dédiée (dépôt + connecteurs), écrit son lien et son
                       état dans la page ; relaie tes ✅ OK aux agents qui attendent
   ↓    agent          lit, prépare (PR, SQL, brouillon de message), te montre,
@@ -17,7 +17,7 @@ case **▶ Lancer l'agent**. Rien ne part sans que tu coches.
 
 Trois garanties :
 
-1. **Rien sans ta case.** Le veilleur ne lance que ce qui est coché ▶, et ne
+1. **Rien sans ta case.** Le veilleur ne lance que ce qui est coché, et ne
    relaie que ce qui est coché ✅. Un agent ne fait aucune action à effet
    (migration, écriture en base, déploiement, merge, message, paiement) sans
    ton OK explicite, et le préambule le lui impose.
@@ -46,7 +46,7 @@ chaque point qu'un agent peut prendre :
 
 ```
 ### <clé> — <titre court>
-- [ ] ▶ Lancer l'agent · `agent:<clé>`
+- [ ] Lancer l'agent · `agent:<clé>`
 <details>
 <summary>Ce que fait l'agent · ce qui reste à toi</summary>
 	<une phrase chacun>
@@ -58,7 +58,14 @@ chaque point qu'un agent peut prendre :
 ```
 
 Un point qu'aucun agent ne peut prendre (désactiver un membre Slack, payer un
-jalon) s'écrit « À faire toi-même : <où, comment> », sans case ▶.
+jalon) s'écrit « À faire toi-même : <où, comment> », sans case.
+
+**Jamais de ▶ en tête d'une ligne** : Notion le lit comme un dépliant, et la
+case se retrouve vide avec la clé enfermée dans un toggle (vu le 01/10). La clé
+`agent:<clé>` doit rester dans le texte même de la case. Les consignes des deux
+routines (brief et veilleur), écrites avant ce constat, parlent encore de
+« case ▶ » ou de « ▶ Lancer l'agent » : elles désignent cette case-là,
+`- [ ] Lancer l'agent · \`agent:<clé>\``, sans ▶. Ce document fait foi.
 
 Les prompts du jour se construisent à partir des modèles ci-dessous : mêmes
 garde-fous, chiffres et identifiants du jour.
@@ -85,7 +92,7 @@ suite, le dire dans n'importe quelle session suffit. À chaque passage :
 1. `notion-fetch` sur la page du jour (`AAAA-MM-JJ · Brief micabo`, sous
    « Updates matinaux », `3ec241308d668080bef8ef8784ecc8d8`). Pas de page :
    rien à faire.
-2. Pour chaque ligne cochée `- [x] ▶ Lancer l'agent · \`agent:<clé>\`` :
+2. Pour chaque ligne cochée `- [x] Lancer l'agent · \`agent:<clé>\`` :
    - prendre le prompt du toggle de la même clé ;
    - `create_session` avec `source_url = https://github.com/adrienmrtn/micabo-os`,
      `title = Agent micabo · <clé> · <AAAA-MM-JJ>`, `tags = ["micabo-agent"]`,
@@ -104,7 +111,7 @@ suite, le dire dans n'importe quelle session suffit. À chaque passage :
    — puis remplacer la ligne par `- [x] ✅ OK relayé le JJ/MM à HH:MM ·
    \`ok:<clé>\``.
 5. Rien d'autre. Le veilleur n'écrit qu'aux lignes `agent:`, `ok:` et `État :`
-   de la page, et ne lance jamais une session sans case ▶ cochée.
+   de la page, et ne lance jamais une session sans case cochée.
 
-Une case ▶ cochée sur la page d'un jour passé n'est plus lue : le brief du
+Une case cochée sur la page d'un jour passé n'est plus lue : le brief du
 lendemain reporte le point avec son âge, et la case est à recocher.

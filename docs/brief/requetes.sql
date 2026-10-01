@@ -131,7 +131,10 @@ from rang group by d order by d desc;
 -- 0274/0276 ; une ligne ici est une régression.
 --   repechages_jour_multi : slideshow repêché (cycle D à 1 passage) servi
 --                           plus d'une fois le même jour (garde de 0276) ;
---   tier_reecrit_multi    : tier_maj_at réécrit >= 2 fois sur t_debut..t_fin ;
+--   tier_reecrit_multi    : tier_maj_at réécrit plus que le cycle normal d'une
+--                           nuit — une requalification puis un repêchage, soit
+--                           2 écritures — donc >= 3, ou >= 2 repêchages (0275 en
+--                           faisait 8) ;
 --   meme_compte_30j       : même slideshow sur le même compte à < 30 jours
 --                           (RECUL_MEME_COMPTE_JOURS), hors repost bonus ;
 --   surplus_cycle         : cycle courant avec plus de passages que sa cible
@@ -141,10 +144,13 @@ with p as (
     ((date '{{JOUR}}')::timestamp + time '08:00') at time zone 'Europe/Paris' as t_fin
 ),
 hist as (
+  -- Un `ajustement` (correction manuelle, ex. 0282) ne touche pas tier_maj_at :
+  -- ce n'est pas une réécriture du compteur, il n'entre pas dans le contrôle.
   select h.contenu_id, count(*) as ecritures,
     count(*) filter (where h.tier_apres = 'D' and h.passages_cible_apres = 1) as repechages
   from public.contenu_tier_historique h cross join p
   where h.fait_le >= p.t_fin - interval '24 hours' and h.fait_le < p.t_fin
+    and h.motif <> 'ajustement'
   group by h.contenu_id
 ),
 pa_j as (
@@ -187,7 +193,7 @@ from repeches_multi
 union all
 select 'tier_reecrit_multi', count(*),
   json_agg(json_build_object('contenu', left(contenu_id::text, 8), 'ecritures', ecritures))
-from hist where ecritures >= 2
+from hist where ecritures >= 3 or repechages >= 2
 union all
 select 'repechages_24h', coalesce(sum(repechages), 0), null from hist
 union all
