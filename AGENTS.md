@@ -1178,9 +1178,10 @@ jours à chaque passe. L'historique est recalculé de la même façon, avec la
 sauvegarde `vues_globales_jour_sauvegarde`. Au 01/10 : 10,37 M de vues sur nos
 posts depuis le 07/09.
 
-La fonction `metriques` (bouton des Analytics) scrape encore 30 posts par
-profil pour tous les comptes : environ 800 résultats, ~2 $ par clic. Elle
-n'est plus lue par rien d'automatique.
+Le bouton « Rafraîchir » des Analytics est **supprimé**. Il appelait la fonction
+`metriques`, qui scrape 30 posts par profil pour tous les comptes : environ 800
+résultats, ~2 $ par clic. La fonction reste déployée, mais plus rien ne
+l'appelle — ni cron, ni écran.
 
 ### Verdicts du jour (0283)
 
@@ -1211,13 +1212,37 @@ qualification des créateurs lit encore. La source `studylapses` (niche
 cold_study) est désactivée. Sauvegarde dans `cold_study_retrait_sauvegarde`.
 Les « dus intirables » tombent à 0.
 
-**Déploiement : en attente du OK d'Adrien.** Les migrations 0283 → 0285 sont
-appliquées et les bundles sont dans le dépôt (`8d8b504`, alias `be` pour
-`rattrapage-elo`, `De` pour `minuit-vnext`). Les chargeurs n'ont pas été
-repointés. Tant qu'ils restent sur `a78e993`, la prod tourne sur le relevé de
-0281, et la passe de fin de drain réécrit le jour courant de
-`vues_globales_jour` avec l'ancien calcul. La première passe du nouveau code
-recalcule les quatre derniers jours.
+**Déploiement du 01/10/2026, après OK d'Adrien.** Migrations 0283 → 0285
+appliquées. Deux chargeurs sur `8d8b504` : `rattrapage-elo` (v22) et
+`minuit-vnext` (v37).
+
+- **Les deux alias `createClient` ont été renommés** : `he`→`be` et `Ue`→`De`,
+  relus dans les bundles.
+- Les dix autres bundles ressortent identiques à l'octet.
+- Test de vie `401` passé sur les deux (par `pg_net`).
+- Relevé à blanc sur `irem.is684` : un lien, un appel Apify, 54 700 vues
+  rapprochées par le lien en 7 s, aucune écriture.
+
+## Le calendrier du créateur suit le jour de Paris (01/10/2026)
+
+Signalé par Rana : le calendrier « vide » chez Ramazan (@asya.ders680) et Isil
+(@baran.notlar863), qui publiaient. La base était saine, et le calendrier du
+manager complet. La page du créateur prenait « aujourd'hui » et le mois affiché
+à l'heure du TÉLÉPHONE (`aujourdhui()`, `new Date()`), alors que le moteur date
+les posts au jour de Paris. Conséquences :
+- en Turquie (une heure d'avance), entre minuit et 1 h, « Aujourd'hui » était
+  vide ;
+- le 30/09 au soir, la grille s'ouvrait déjà sur un mois d'octobre sans aucun
+  post. Ramazan l'a ouverte à 00:31 heure turque ;
+- et un post publié en retard — Isil publie souvent la veille pour le
+  lendemain — ne s'affichait plus nulle part dès le lendemain.
+
+`calendrierPoster.ts` (pur, testé) : la page prend `aujourdhuiParis()`, ouvre
+la grille sur le mois de Paris, et « Aujourd'hui » montre aussi les posts non
+publiés des deux jours précédents, marqués « en retard ». Le calendrier admin
+et manager n'est pas touché. Limite latente repérée au passage :
+`postsCalendrierAdmin` plafonne à 800 lignes, et perd déjà ce qui précède le
+11/09.
 
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 

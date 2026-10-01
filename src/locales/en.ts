@@ -2049,6 +2049,7 @@ export const en = {
       passe: "Past",
       rien: "Nothing planned today.",
       creneau: "Slot {{n}}",
+      enRetard: "Late · {{date}}",
       voirPost: "View the post",
       moisPrecedent: "Previous month",
       moisSuivant: "Next month",
