@@ -534,6 +534,27 @@ select 'publies_sans_mesure_j2',
   (select coalesce(count(*), 0) || ' abandonné(s) après 3 échecs' from public.passages pa
    where pa.statut = 'publie' and pa.stats_echecs >= 3 and pa.publie_at > now() - interval '30 days')
 union all
+-- Le stock de decks VALIDÉS qui citent encore un concurrent (0286) : chaque
+-- correction de la passe du matin nettoie le deck de sa langue, donc ce
+-- compteur doit décroître. 76 decks sur 35 slideshows le 01/10, Wilgo 56.
+select 'decks_pool_concurrents',
+  (select count(distinct (cl.contenu_id, cl.langue)) || ' decks · ' || count(distinct cl.contenu_id) || ' slideshows'
+   from public.contenu_langues cl
+   join public.contenus ct on ct.id = cl.contenu_id and ct.statut = 'valide'
+   join public.concurrents k on k.actif
+   where cl.hashtags ~* k.motif
+      or (jsonb_typeof(cl.slides) = 'array' and exists (
+           select 1 from jsonb_array_elements(cl.slides) e where e->>'texte_overlay' ~* k.motif))),
+  (select string_agg(nom || ' ' || n, ' · ' order by n desc, nom) from (
+     select k.nom, count(distinct (cl.contenu_id, cl.langue)) as n
+     from public.contenu_langues cl
+     join public.contenus ct on ct.id = cl.contenu_id and ct.statut = 'valide'
+     join public.concurrents k on k.actif
+     where cl.hashtags ~* k.motif
+        or (jsonb_typeof(cl.slides) = 'array' and exists (
+             select 1 from jsonb_array_elements(cl.slides) e where e->>'texte_overlay' ~* k.motif))
+     group by k.nom) x)
+union all
 select 'file_validation',
   (select count(*) from public.contenus where statut = 'brouillon' and import_statut = 'done')::text,
   (select 'plus ancien : ' || min(created_at)::date from public.contenus where statut = 'brouillon' and import_statut = 'done')
@@ -544,3 +565,118 @@ union all
 select 'vues_globales_3j',
   (select string_agg(jour::text || ':' || vues_delta, ' ' order by jour desc)
    from (select * from public.vues_globales_jour order by jour desc limit 3) v), 'delta 0 répété = collecte profil figée';
+
+
+-- ===== Q10 concurrents_publies =====
+-- Contrôle : les posts PUBLIÉS dans la fenêtre de 24 h qui citent encore un
+-- concurrent (table `concurrents`, 0286). Rien n'y est corrigeable — on ne
+-- réécrit jamais ce qui est en ligne. Ce qui doit sortir ici : les classements
+-- et comparatifs laissés exprès par la passe du matin (`concurrents_laisses` de
+-- la mémoire), et les posts publiés AVANT la passe (~2,4 % des posts sont
+-- publiés avant 08:00 le jour même). Toute autre ligne est un trou à nommer.
+-- Le 01/10 : Wilgo dans 30 posts publiés sur 14 jours, à cause de la source
+-- jeanne.wilgo (AGENTS.md, 0286).
+with p as (
+  select date '{{JOUR}}' as j,
+    ((date '{{JOUR}}')::timestamp + time '08:00') at time zone 'Europe/Paris' as t_fin
+)
+select m.compte, m.langue,
+  to_char(pa.publie_at at time zone 'Europe/Paris', 'DD/MM HH24:MI') as publie_a,
+  m.cites, m.champ, m.slide,
+  left(m.texte, 300) as texte,
+  m.micabo_dans_post,
+  exists (select 1 from public.concurrents_corrections cc where cc.passage_id = m.passage_id) as corrige_le_matin,
+  left(m.passage_id::text, 8) as passage,
+  left(m.contenu_id::text, 8) as contenu
+from p, public.mentions_concurrents((select j from p) - 3, (select j from p)) m
+join public.passages pa on pa.id = m.passage_id
+where m.publie
+  and pa.publie_at >= p.t_fin - interval '24 hours' and pa.publie_at < p.t_fin
+order by pa.publie_at, m.compte, m.slide nulls last;
+
+
+-- ===== Q11 concurrents_a_corriger =====
+-- L'ENTRÉE DE LA PASSE LLM (PLAYBOOK.md, étape 2 bis). Les posts NON publiés de
+-- J-2 à J (le calendrier du créateur propose encore deux jours de retard) qui
+-- citent un concurrent. Une ligne par slide ou légende ; `post` donne toutes
+-- les slides du post, parce qu'un classement se lit sur le post entier et pas
+-- sur la slide. `meme_texte` = combien de passages non publiés portent
+-- exactement ce texte au même endroit (même slideshow, même langue) : on
+-- décide une fois, on corrige chacun. `deck_porte_encore` : le deck de la
+-- langue a toujours ce texte, donc la correction le nettoiera aussi et les
+-- prochains posts naîtront propres.
+-- Après la passe, cette requête relancée ne doit plus rendre que les lignes
+-- laissées exprès (classements).
+with p as (select date '{{JOUR}}' as j),
+m as (
+  select * from p, public.mentions_concurrents((select j from p) - 2, (select j from p))
+  where not publie
+)
+select m.passage_id, m.compte, m.langue, m.date_prevue, m.champ, m.slide, m.cites,
+  m.texte, m.micabo_dans_post,
+  (select jsonb_agg(jsonb_build_object('p', s.position, 't', s.texte_overlay) order by s.position)
+   from public.post_slides s where s.post_id = m.post_id) as post,
+  count(*) over (partition by m.contenu_id, m.langue, m.champ, m.slide, m.texte) as meme_texte,
+  exists (
+    select 1 from public.contenu_langues cl, jsonb_array_elements(cl.slides) e
+    where cl.contenu_id = m.contenu_id and cl.langue = m.langue and m.champ = 'slide'
+      and jsonb_typeof(cl.slides) = 'array'
+      and (e->>'position')::int = m.slide and e->>'texte_overlay' = m.texte
+  ) or exists (
+    select 1 from public.contenu_langues cl
+    where cl.contenu_id = m.contenu_id and cl.langue = m.langue and m.champ = 'hashtags'
+      and cl.hashtags = m.texte
+  ) as deck_porte_encore,
+  left(m.contenu_id::text, 8) as contenu
+from m
+order by m.contenu_id, m.langue, m.champ, m.slide nulls last, m.compte;
+
+
+-- ===== Q12 posts_enchaines =====
+-- Les créateurs qui publient leurs posts à la suite : moins de 5 minutes entre
+-- deux posts du même compte. Deux slideshows lâchés coup sur coup se
+-- disputent la même fenêtre de distribution.
+-- Heure : celle de TikTok quand le lien porte l'id de la vidéo (les 32 bits de
+-- tête de l'id = l'horodatage Unix de la création), sinon `publie_at`, l'heure
+-- déclarée dans l'OS. Les deux concordent : sur les 18 posts du 25/09 au 01/10
+-- dont le lien porte l'id, écart médian 0,9 min, 90 % sous 2,1 min. Mais la
+-- plupart des liens sont des liens courts (vm.tiktok.com) sans id : un
+-- créateur qui poste à 2 h d'écart et coche les deux d'un coup dans l'OS
+-- sortirait ici à tort. `heure_tiktok` dit combien d'écarts sont exacts.
+-- `enchaines_24h` : fenêtre du brief ; `enchaines_7j` : l'habitude.
+with p as (
+  select ((date '{{JOUR}}')::timestamp + time '08:00') at time zone 'Europe/Paris' as t_fin
+),
+pub as (
+  select pa.compte_id, co.handle_tiktok as compte, co.langue,
+    coalesce(
+      to_timestamp(floor(substring(pa.publie_url from '/(?:video|photo)/(\d{15,20})')::numeric / 4294967296)),
+      pa.publie_at) as t,
+    substring(pa.publie_url from '/(?:video|photo)/(\d{15,20})') is not null as exact
+  from public.passages pa
+  join public.comptes co on co.id = pa.compte_id
+  left join public.posts po on po.id = pa.post_id
+  cross join p
+  where pa.statut = 'publie' and pa.publie_at is not null
+    and pa.publie_at >= p.t_fin - interval '8 days' and pa.publie_at < p.t_fin
+    and not coalesce(po.est_test, false)
+),
+ec as (
+  select pub.*,
+    t - lag(t) over (partition by compte_id order by t) as ecart,
+    exact and lag(exact) over (partition by compte_id order by t) as ecart_exact
+  from pub
+)
+select ec.compte, ec.langue,
+  count(*) filter (where ec.t >= p.t_fin - interval '24 hours' and ec.ecart < interval '5 minutes') as enchaines_24h,
+  count(*) filter (where ec.t >= p.t_fin - interval '7 days' and ec.ecart < interval '5 minutes') as enchaines_7j,
+  count(*) filter (where ec.t >= p.t_fin - interval '7 days') as publies_7j,
+  string_agg(to_char(ec.t at time zone 'Europe/Paris', 'DD/MM HH24:MI') || ' (+' ||
+             round(extract(epoch from ec.ecart) / 60, 1) || ' min' ||
+             case when ec.ecart_exact then ', heure TikTok' else '' end || ')', ' · ' order by ec.t)
+    filter (where ec.t >= p.t_fin - interval '7 days' and ec.ecart < interval '5 minutes') as detail,
+  count(*) filter (where ec.t >= p.t_fin - interval '7 days' and ec.ecart < interval '5 minutes' and ec.ecart_exact) as heure_tiktok
+from ec cross join p
+group by ec.compte, ec.langue
+having count(*) filter (where ec.t >= p.t_fin - interval '7 days' and ec.ecart < interval '5 minutes') > 0
+order by enchaines_24h desc, enchaines_7j desc, ec.compte;

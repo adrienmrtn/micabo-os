@@ -13,12 +13,15 @@ Destination : page Notion **« Updates matinaux »**
 
 ## Règles non négociables
 
-1. **Lecture seule partout, sauf la page du jour.** La seule écriture permise
-   est la création (ou la réécriture) de la page du jour sous « Updates
-   matinaux ». Jamais :
+1. **Lecture seule partout, sauf la page du jour et la passe concurrents.**
+   Deux écritures permises, et deux seulement : la création (ou la réécriture)
+   de la page du jour sous « Updates matinaux », et les appels à
+   `corriger_texte_post` / `corriger_hashtags_post` de l'étape 2 bis, sur des
+   posts NON publiés (les fonctions le vérifient et lèvent sinon). Jamais :
    - Supabase : pas d'`apply_migration`, pas d'`insert/update/delete`, pas de
      `kick_edge_micabo`, pas de déploiement. `execute_sql` sert uniquement aux
-     requêtes de `requetes.sql` et à la requête de logs ci-dessous.
+     requêtes de `requetes.sql`, à la requête de logs ci-dessous et aux deux
+     fonctions de correction.
    - Slack : aucun message, aucune réaction, aucun canvas.
    - Upwork : aucun outil d'écriture (`send_message`, `manage_milestones`,
      `end_contract`, `update_contract`, `confirm_preview`, offres…).
@@ -66,7 +69,7 @@ matin raté ne casse pas les comparaisons, il s'écrit « depuis le 29/09 ».
 
 ### 2. Supabase
 
-Pour chaque requête de `requetes.sql`, dans l'ordre Q1 → Q9 :
+Pour chaque requête de `requetes.sql`, dans l'ordre Q1 → Q12 :
 
 ```bash
 python3 docs/brief/requete.py Q3 "$jour"
@@ -95,6 +98,96 @@ order by timestamp desc limit 20
 Le 30/09, la cause était `Apify 402 not-enough-usage-to-run-paid-actor` (crédit
 du cycle de facturation épuisé) alors que `reglages.elo_dernier_run` affichait
 « drain terminé, erreurs : [] ». Citer l'erreur exacte, pas une paraphrase.
+
+### 2 bis. La passe concurrents (la seule écriture en base)
+
+Des slideshows importés de comptes concurrents (la source `jeanne.wilgo`) font
+la publicité de leur appli : « Benutz die WILGO App… dein Cheatcode », « la
+méthode WILGO », « Wilgo'dan test çöz ». La liste des concurrents est la table
+`concurrents` (0286) ; ChatGPT, Gemini et Perplexity n'en sont pas. Décision
+d'Adrien (01/10) : **un classement ou un comparatif reste, une recommandation
+se remplace.**
+
+Entrée : **Q11** — les posts non publiés de J-2 à J qui citent un concurrent,
+une ligne par slide ou légende, avec le post entier dans `post`. Pour chaque
+ligne, lire le post en entier, puis trancher.
+
+**Laisser** — le concurrent est un élément d'une liste, noté, testé ou
+critiqué, pas une consigne à suivre :
+- un top ou un comparatif d'applis, une slide par appli (« j'ai utilisé
+  quizlet », « j'ai utilisé turbo ai », « j'ai utilisé knowunity », puis micabo) ;
+- une méthode notée et jugée (« Flashcards/Anki 6/10 … Zeitverschwendung »).
+
+**Remplacer** — le concurrent est recommandé, prescrit ou présenté comme ce que
+font ceux qui réussissent :
+- un impératif ou un conseil : « Benutz die WILGO App », « Haz quizzes con WILGO
+  cada día », « Wilgo'dan test çöz », « o yüzden Anki'yi fulle » ;
+- une méthode qui porte son nom : « ceux qui ont la mention TB utilisent la
+  méthode WILGO », « nutzen die WILGO-Methode » ;
+- un reste de fiche produit derrière le CTA (« Ma préférée c'est micabo : wilgo -
+  revision IA… ») : le reste se retire ;
+- un hashtag du concurrent (`#Wilgo`) : il se retire de la légende, sans rien
+  mettre à la place.
+
+**Comment remplacer** — le moins possible :
+- seul le nom du concurrent (avec l'article ou le mot « méthode », « App »,
+  « app » qui le porte) devient la forme de marque de la langue : « l'appli
+  micabo » (fr), « the micabo app » (en), « la app micabo » (es),
+  « die micabo-App » (de, nom D'ABORD, article de la phrase conservé : « der
+  micabo-App » reste au datif), « micabo uygulaması » (tr) ;
+- en turc, le suffixe de cas migre sur `uygulaması` : Wilgo'dan → micabo
+  uygulamasından, Wilgo'da → micabo uygulamasında, Wilgo'yu / Anki'yi → micabo
+  uygulamasını, Wilgo'ya → micabo uygulamasına (AGENTS.md, 0267) ;
+- `micabo` toujours en minuscules, même dans une ligne en capitales ; jamais
+  « site » ni « plateforme » ; aucun tiret long ;
+- tout le reste **mot pour mot**, retours à la ligne compris : la mise en page
+  est le produit (0278). Une slide qui ne cite aucun concurrent ne se touche
+  pas ;
+- si la slide nomme déjà micabo, ne pas en mettre un deuxième dans la même
+  slide : retirer le fragment du concurrent à la place ;
+- en cas de doute entre classement et recommandation : laisser, et l'écrire
+  dans la page comme « à trancher ».
+
+**Écrire** — un appel par passage, texte entre `$t$` pour ne rien échapper
+(apostrophes turques et françaises) :
+
+```sql
+select public.corriger_texte_post('<passage_id>', <slide>, $t$<texte corrigé>$t$, 'brief <jour> : <concurrent> recommandé');
+select public.corriger_hashtags_post('<passage_id>', $t$<légende sans le hashtag>$t$, 'brief <jour> : hashtag <concurrent>');
+```
+
+- `meme_texte` > 1 : le même texte est sur plusieurs passages ; décider une
+  fois, appeler pour chacun.
+- La fonction corrige le post, le passage et — s'il porte encore le même texte
+  à cette position — le deck de la langue (`deck_corrige`), pour que les
+  prochains posts de ce slideshow naissent propres. Elle jette le rendu
+  incrusté de la slide et journalise avant/après dans
+  `concurrents_corrections`.
+- Une erreur (« post déjà publié » : le créateur a publié entre-temps) se note
+  et ne se retente pas. Aucune autre écriture, sous aucune forme.
+- Ensuite, relancer Q11 : il ne doit plus rester que les lignes laissées
+  exprès. Leurs ids courts vont dans `concurrents_laisses` de la mémoire, pour
+  ne pas les rejuger demain.
+
+**Contrôle de la veille — Q10.** Les posts publiés dans la fenêtre de 24 h qui
+citent encore un concurrent. Attendus : les classements laissés exprès et les
+posts publiés avant la passe (~2,4 % des posts sont publiés avant 08:00 le jour
+même). Tout le reste est un trou à nommer, avec son texte.
+
+**Le stock — Q9 `decks_pool_concurrents`.** Les decks validés qui citent encore
+un concurrent : 76 decks sur 35 slideshows le 01/10, dont Wilgo 56. Chaque
+correction nettoie le deck de sa langue, donc le compteur doit baisser ; s'il
+monte, une nouvelle source concurrente est entrée par l'import.
+
+### 2 ter. Les posts enchaînés — Q12
+
+Les comptes qui publient deux posts à moins de 5 minutes d'écart.
+`enchaines_24h` pour la fenêtre du brief, `enchaines_7j` pour l'habitude
+(`ela.sinav959` : 7 jours sur 7 au 01/10). L'heure est celle de TikTok quand le
+lien porte l'id de la vidéo (`heure_tiktok`), sinon l'heure déclarée dans l'OS
+au clic « publié » — fiable à ~1 minute sur les posts où les deux existent,
+mais un créateur qui coche deux posts d'un coup sortirait ici à tort : le dire
+quand `heure_tiktok` = 0.
 
 ### 3. RevenueCat
 
@@ -215,6 +308,10 @@ Le statut de la page est le pire niveau trouvé.
 | Créateur qui ne publie plus | Q6 `publies_2j` | — | 0 publié sur ≥ 2 prévus |
 | Créateur en baisse | Q6 `tendance_pct` (médianes) | < 60 % | < 35 % |
 | Qualification | Q6 `qualif_changee_48h` | passage en INACTIF ou MAUVAISES_VUES | — |
+| Concurrent publié | Q10 | toute ligne qui n'est ni un classement laissé exprès, ni un post publié avant la passe | — |
+| Passe concurrents | 2 bis | une correction en erreur autre que « déjà publié » | — |
+| Stock concurrents | Q9 `decks_pool_concurrents` | en hausse depuis le dernier brief | — |
+| Posts enchaînés | Q12 | un compte à ≥ 3 `enchaines_7j` (habitude) | — |
 | Essai | Q8 `fin_essai_48h` | fin dans 48 h (décision à prendre) | — |
 | Parrainage | Q8 | en attente > 3 jours | — |
 | Message sans réponse | Slack, Upwork | à toi depuis > 24 h | à toi depuis > 72 h |
@@ -245,6 +342,13 @@ Le statut de la page est le pire niveau trouvé.
   des données incomplètes (passages périmés) : le dire à côté.
 - **ES n'a pas de HM** dans l'OS (manager vide sur les 3 comptes) : ce n'est
   pas un trou de données.
+- **Un concurrent se cherche en mot entier.** « Ranking » contient « anki » :
+  les motifs de `concurrents` portent `\m … \M`. Ne jamais chercher un nom de
+  concurrent dans `slides::text` : le JSON y écrit le saut de ligne `\n`, et
+  « \nWILGO » colle un `n` devant le nom, qui n'est plus un mot entier. Lire
+  `texte_overlay` élément par élément, comme Q9 et `mentions_concurrents`.
+- **La passe concurrents ne voit que ce qui n'est pas encore publié.** Un post
+  publié avant 07:52 lui échappe ; Q10 le montre le lendemain.
 
 ## Gabarit de la page
 
@@ -281,11 +385,16 @@ Indentation par tabulations dans les callouts et toggles.
 ### Sur-exploitation et boucles
 ### Pool et runway
 ### Percées
+### Concurrents
+<passe du matin : corrigés (avant → après, une ligne chacun), laissés (pourquoi),
+ en erreur ; Q10 publiés hier ; Q9 stock du pool et son écart>
 ### File de validation
 ## Créateurs
 ### Qui publie, qui ne publie plus
 ### En baisse / en hausse
 ### Essais, warmup, surveillance
+### Posts enchaînés
+<Q12 : comptes à < 5 min en 24 h, habitudes sur 7 j, part d'heures TikTok>
 ## HM et recrutement
 ### Par HM
 ### Upwork : annonces et candidatures
@@ -329,12 +438,14 @@ Le bloc JSON du toggle « Mémoire », relu au passage suivant :
     "rc": { "active_trials": 18, "active_subscriptions": 11, "mrr": 45 },
     "upwork": { "annonces_ouvertes": 12, "contrats_actifs": 30 },
     "file_validation": 7,
-    "apify_usage_usd": 12.4
+    "apify_usage_usd": 12.4,
+    "concurrents": { "corriges": 13, "laisses": 2, "erreurs": 0, "publies_24h": 6, "decks_pool": 76 }
   },
   "alertes": [
     { "cle": "releve_arrete", "niveau": "rouge", "depuis": "2026-10-01", "texte": "…" }
   ],
   "percees_annoncees": ["31b902d6"],
+  "concurrents_laisses": ["f130a56d"],
   "a_traiter": [
     { "cle": "releve_arrete", "texte": "…", "depuis": "2026-10-01" }
   ]
@@ -344,6 +455,9 @@ Le bloc JSON du toggle « Mémoire », relu au passage suivant :
 - `alertes[].cle` est **stable** d'un jour à l'autre (`releve_arrete`,
   `runway_bas`, `sous_quota`, `essai_<handle>`, `jalon_<contrat>`,
   `msg_<salle>`…) : c'est elle qui permet d'écrire « 3ᵉ jour d'affilée ».
+- `concurrents_laisses` : ids courts des passages que la passe concurrents a
+  laissés exprès (classements). Ils ressortent dans Q11 tant qu'ils ne sont pas
+  publiés ; on ne les rejuge pas, on les compte.
 - `percees_annoncees` : ids courts (8 caractères) des passages déjà signalés en
   percée. On ne les redit que s'ils franchissent un palier (50 k, 100 k,
   500 k…).

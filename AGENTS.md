@@ -1244,6 +1244,57 @@ et manager n'est pas touché. Limite latente repérée au passage :
 `postsCalendrierAdmin` plafonne à 800 lignes, et perd déjà ce qui précède le
 11/09.
 
+## Les posts faisaient la publicité des concurrents (0286, 01/10/2026)
+
+Wilgo dans **43 posts sur 14 jours, dont 30 publiés** : « Benutz die WILGO App…
+dein Cheatcode für gute Noten », « ceux qui ont la mention TB utilisent la
+méthode WILGO », « Wilgo'dan test çöz », et même un reste de fiche App Store
+derrière le CTA micabo. La cause est à la source : des slideshows importés de
+comptes concurrents (`jeanne.wilgo`). Au 01/10, **76 decks validés sur 35
+slideshows** citent un concurrent, dont 56 Wilgo.
+
+Rien ne l'attrapait, et c'était voulu à moitié : `retirerMentionConcurrent`
+(0269) ne coupe que Hustly, parce qu'une coupe aveugle sur « Anki » détruirait
+des comparatifs légitimes. **Décision d'Adrien : un classement ou un comparatif
+reste, une recommandation se remplace.** Trancher entre les deux est un travail
+de lecture, pas une regex — c'est donc le brief du matin, un modèle, qui le
+fait, chaque matin, sur les posts du jour pas encore publiés
+(`docs/brief/PLAYBOOK.md`, étape 2 bis).
+
+- `concurrents` : la liste, éditable en base. Motifs POSIX **en mots entiers**
+  (`\m … \M`) : « Ranking » contient « anki », c'est le faux positif vu au
+  premier repérage. ChatGPT, Gemini et Perplexity n'y sont pas (IA
+  généralistes), ni « notion » (un mot français).
+- `mentions_concurrents(debut, fin)` : lecture seule, une ligne par slide ou
+  légende qui cite un concurrent actif. Elle lit `texte_overlay` élément par
+  élément : dans `slides::text`, le JSON écrit le saut de ligne `\n` et
+  « \nWILGO » n'est plus un mot entier.
+- `corriger_texte_post` / `corriger_hashtags_post` : **les seules écritures que
+  le brief s'autorise**. Post non publié uniquement — la fonction lève sinon,
+  on ne réécrit jamais ce qui est en ligne. Elles corrigent le post, le passage
+  et, s'il porte encore le même texte à cette position, le deck de la langue
+  (les prochains posts naissent propres), jettent le rendu incrusté de la
+  slide, et journalisent avant/après dans `concurrents_corrections`. Pas de
+  bloc `exception` (règle de 0265). Réservées au `service_role`.
+
+Le brief lit aussi les posts **publiés** la veille qui citent encore un
+concurrent (Q10, contrôle) et le stock du pool (Q9 `decks_pool_concurrents`,
+qui doit baisser). Ce qui lui échappe : les posts publiés avant son passage de
+07:52, ~2,4 % des posts.
+
+**Les posts enchaînés (Q12)** sont dans le même passage : deux posts du même
+compte à moins de 5 minutes. L'heure est celle de TikTok quand le lien porte
+l'id de la vidéo (les 32 bits de tête de l'id sont l'horodatage Unix de la
+création), sinon `publie_at`, l'heure du clic « publié » dans l'OS. Sur les 18
+posts du 25/09 au 01/10 qui ont les deux, écart médian **0,9 min**, 90 % sous
+2,1 min : l'heure de l'OS est un bon indicateur. Mais 323 liens sur 341 sont
+des liens courts (`vm.tiktok.com`) sans id, et un créateur qui coche deux
+posts d'un coup sortirait à tort. Le relevé de J+2 résout déjà chaque lien par
+Apify ; y ranger l'heure de création TikTok rendrait la mesure exacte.
+
+Migration appliquée le 01/10, aucun chargeur redéployé : le moteur n'a pas
+changé.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
