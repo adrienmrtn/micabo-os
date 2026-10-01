@@ -19,7 +19,14 @@
  * à l'aveugle avant de basculer `placement_micabo`.
  */
 
-import { appliquerVerdicts, type Concurrent, CONCURRENTS_DEFAUT, slidesAJuger } from "../_shared/concurrents.ts";
+import {
+  appliquerVerdicts,
+  type Concurrent,
+  CONCURRENTS_DEFAUT,
+  nomsSansMarque,
+  slidesAJuger,
+  versMicaboDepuis,
+} from "../_shared/concurrents.ts";
 import { corrigerMentionsConcurrents, integrateSophia, translateSlideshow } from "../_shared/gemini.ts";
 import { nettoyerTexteDeck } from "../_shared/marque.ts";
 import { citeMicabo, slideCitantMicabo } from "../_shared/placement.ts";
@@ -79,8 +86,13 @@ Deno.serve(async (request) => {
       deck = source.map((s) => ({ position: s.position, texte_overlay: nettoyerTexteDeck(parPos.get(s.position) ?? "", langue) }));
     }
 
-    const { data: liste } = await supabase.from("concurrents").select("nom, motif").eq("actif", true);
-    const concurrents = (liste as Concurrent[] | null) ?? CONCURRENTS_DEFAUT;
+    const [{ data: liste }, sm] = await Promise.all([
+      supabase.from("concurrents").select("nom, motif").eq("actif", true),
+      supabase.from("concurrents_sans_marque").select("nom"),
+    ]);
+    const concurrents: Concurrent[] = liste
+      ? versMicaboDepuis(liste as Concurrent[], sm.error ? null : (sm.data as Array<{ nom: string }>))
+      : CONCURRENTS_DEFAUT;
     const ancien = (await chargerPrompt(supabase, "placement_micabo")) ?? "";
     const nouveau = (await chargerPrompt(supabase, "placement_micabo_v2")) ?? "";
     const pourModele = (d: Slide[]) => d.map((s) => ({ position: s.position, text: s.texte_overlay ?? "" }));
@@ -118,6 +130,7 @@ Deno.serve(async (request) => {
             slides: d.map((s) => ({ position: s.position, texte: s.texte_overlay ?? "" })),
             aJuger,
             micaboDejaCite: d.some((s) => !jugees.has(s.position) && citeMicabo(s.texte_overlay)),
+            sansMarque: nomsSansMarque(concurrents).filter((n) => aJuger.some((s) => s.cites.includes(n))),
           });
           if (verdicts) {
             const r = appliquerVerdicts(d, aJuger, verdicts, concurrents, (t) => nettoyerTexteDeck(t, langue));

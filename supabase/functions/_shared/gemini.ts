@@ -371,6 +371,11 @@ export async function corrigerMentionsConcurrents(input: {
    * remplacement ne doit le nommer à nouveau (0289).
    */
   micaboDejaCite?: boolean;
+  /**
+   * Concurrents qui font ce que micabo ne fait pas (PeECH : lecture audio) :
+   * leur slide devient sans marque, jamais micabo (0291).
+   */
+  sansMarque?: string[];
 }): Promise<Array<{ position: number; decision: "laisser" | "remplacer"; texte: string | null }> | null> {
   if (input.aJuger.length === 0) return [];
   const code = input.langue;
@@ -413,6 +418,16 @@ dans la langue du texte (« une appli », « une appli de quiz », « une métho
 en a qu'une, c'est elle). Dans les autres, le nom du concurrent et le mot qui le
 porte deviennent une formulation sans marque, dans la langue du texte (« une
 appli », « une appli de quiz », « une méthode »).`
+  }${
+    input.sansMarque && input.sansMarque.length > 0
+      ? `
+
+${input.sansMarque.join(", ")} : ces applis font ce que micabo ne fait pas (micabo ne
+lit pas les notes à voix haute, n'a ni audio ni podcast). Une slide qui les
+recommande ne devient JAMAIS micabo et ne compte pas dans la règle ci-dessus :
+leur nom et le mot qui le porte deviennent une formulation sans marque, dans la
+langue du texte (« une appli audio », « une appli »).`
+      : ""
   }
 
 Le slideshow entier :

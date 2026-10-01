@@ -5,9 +5,11 @@ import {
   appliquerVerdicts,
   CONCURRENTS_DEFAUT,
   concurrentsCites,
+  nomsSansMarque,
   reecritureAcceptable,
   retirerHashtagsConcurrents,
   slidesAJuger,
+  versMicaboDepuis,
 } from "./concurrents";
 
 const C = CONCURRENTS_DEFAUT;
@@ -111,6 +113,30 @@ describe("appliquerVerdicts", () => {
       { position: 3, decision: "remplacer", texte: "l'appli micabo" },
     ], C);
     expect(sansMarque).toMatchObject({ remplacees: [2, 3], refusees: [] });
+  });
+
+  it("ne fait jamais devenir micabo un concurrent qui fait ce que micabo ne fait pas (0291)", () => {
+    const audio = [
+      { position: 2, texte_overlay: "change tes notes en audio avec PeECH" },
+      { position: 4, texte_overlay: "dernière slide" },
+    ];
+    const aJ = slidesAJuger(audio, C);
+    expect(
+      appliquerVerdicts(audio, aJ, [{ position: 2, decision: "remplacer", texte: "change tes notes en audio avec l'appli micabo" }], C)
+        .refusees,
+    ).toEqual([2]);
+    expect(
+      appliquerVerdicts(audio, aJ, [{ position: 2, decision: "remplacer", texte: "change tes notes en audio avec une appli" }], C)
+        .remplacees,
+    ).toEqual([2]);
+    expect(nomsSansMarque(C)).toEqual(["PeECH"]);
+  });
+
+  it("lit la liste sans marque en base, et garde le repli si la table est illisible", () => {
+    const base = [{ nom: "Wilgo", motif: "\\mwilgo\\M" }, { nom: "PeECH", motif: "\\mpeech\\M" }];
+    expect(nomsSansMarque(versMicaboDepuis(base, [{ nom: "Wilgo" }]))).toEqual(["Wilgo"]);
+    expect(nomsSansMarque(versMicaboDepuis(base, []))).toEqual([]);
+    expect(nomsSansMarque(versMicaboDepuis(base, null))).toEqual(["PeECH"]);
   });
 
   it("refuse micabo quand une autre slide le cite déjà", () => {

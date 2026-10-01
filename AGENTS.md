@@ -1454,19 +1454,17 @@ ressortait mot pour mot dans **9 placements sur 22** — même avec « ne recopi
 jamais les exemples » ajouté. Le seul remède a été de retirer l'exemple et de
 décrire la forme sans phrase citable.
 
-**Ouvert, à trancher par Adrien : PeECH devient « micabo » avec sa promesse
-audio.** PeECH est une appli de lecture audio ; la remplacer par micabo (règle
-de 0287) fait dire « transforme tes notes en audio avec l'appli micabo » dans
-9 essais sur 30. Si micabo ne lit pas les notes à voix haute, ces slides
-doivent devenir sans marque, et le placement aller ailleurs.
+**PeECH devenait « micabo » avec sa promesse audio** : 9 essais sur 30 disaient
+« transforme tes notes en audio avec l'appli micabo ». Tranché par Adrien :
+micabo ne fait pas d'audio, PeECH devient sans marque (0291, ci-dessous).
 
 ### Le contrôle de 08:49
 
 `docs/brief/PLACEMENT.md` + **Q13** (`placements_a_controler`). Chaque matin, la
 routine « Contrôle placement micabo » (`trig_01EPvFVm9SVHfVU9NvrXSWRT`, liée à la
 session qui a fait ce travail) relit la slide micabo de chaque post non publié
-de J-2 à J, la juge contre sept règles (une mention, gabarit, marque, longueur,
-fiche produit, une idée, promesse de la couverture), corrige au plus 25 posts
+de J-2 à J, la juge contre huit règles (une mention, gabarit, marque, longueur,
+fiche produit, une idée, pas d'audio, promesse de la couverture), corrige au plus 25 posts
 par `corriger_texte_post` et écrit la page « AAAA-MM-JJ · Contrôle placements ».
 Une routine à session neuve ne marche pas ici : elle naîtrait sans Supabase,
 sans Notion et sans dépôt (le paramètre `connectors` est refusé pour cette
@@ -1492,6 +1490,35 @@ La branche `claude/wizardly-allen-c3xioi` a été repartie de `main` (son ancien
 sommet `6a4de96` était le contenu déjà fusionné de #95, arbre identique) : les
 chargeurs des déploiements précédents pointent sur des SHA que GitHub sert
 toujours.
+
+## micabo ne fait pas d'audio : PeECH sans marque (0291, 01/10/2026)
+
+Décision d'Adrien après l'essai à blanc : « micabo ne fait pas d'audio, PeECH
+sans marque ». PeECH lit les notes à voix haute ; la règle de 0287 (une
+recommandation de concurrent devient micabo) lui faisait prêter cette fonction à
+micabo. Une fausse promesse sur le produit, juste avant le téléchargement.
+
+- **`concurrents_sans_marque`** : les concurrents dont une slide ne devient
+  jamais micabo, mais une formulation sans marque (« une appli audio »).
+  `versMicaboDepuis` la lit, `appliquerVerdicts` refuse une réécriture qui y
+  met micabo, et le prompt des concurrents reçoit la liste (`sansMarque`). Si
+  la table est illisible, le repli de `CONCURRENTS_DEFAUT` garde PeECH sans
+  marque.
+- **Une table à part, pas une colonne.** `alter table concurrents add column`
+  a fait attendre l'outil MCP sa confirmation humaine jusqu'au délai de 60 s,
+  deux fois, sans rien appliquer : même piège que les `delete`/`drop` de 0287,
+  étendu aux ajouts de colonne. Une création de table passe.
+- **Le stock** : 17 slides prêtaient l'audio à micabo. 12 decks turcs, où la
+  traduction avait remplacé PeECH par micabo (« notlarımı micabo uygulaması ile
+  sese çeviriyorum »), et `78e85e05` en cinq langues : un placement **manuel**
+  qui listait « mode audio » parmi les fonctions de micabo. Réécrits au plus
+  court, chaque décision dans `audio_0291`, sauvegarde
+  `avant_sans_audio_2026_10_01`, deux posts non publiés corrigés par
+  `corriger_texte_post`. Les turcs avaient aussi un placement ailleurs : la
+  réécriture ferme du même coup leur double mention.
+- **Le prompt v2** le dit (« micabo ne lit pas les notes à voix haute »), et la
+  slide d'une appli audio n'est plus une place pour micabo. Le contrôle de
+  08:49 en fait une règle de priorité haute.
 
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 

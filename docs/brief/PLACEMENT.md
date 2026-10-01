@@ -37,7 +37,8 @@ corrigeables à 08:49.
    (`slide`, `texte`), le post entier (`post`), et des drapeaux mécaniques
    (`mentions`, `trop_long`, `formule`, `tiret`, `copie_autre_slide`). Les
    drapeaux sont des indices : on lit le post entier avant de trancher.
-3. Pour chaque post, juger la slide micabo contre les règles ci-dessous.
+3. Pour chaque post, juger la slide micabo contre les règles ci-dessous, et
+   chercher dans le post entier une slide qui prête l'audio à micabo (règle 7).
 4. Corriger ce qui doit l'être (section « Corriger »), un appel par passage.
 5. Relancer Q13 : les posts corrigés doivent avoir `mentions` = 1, plus de
    `formule` ni de `tiret` sur ce qu'on a réécrit.
@@ -86,7 +87,13 @@ jour »).
 et j'utilise l'appli micabo ») : la slide devient le conseil micabo, ou micabo
 part sur une autre slide du gabarit — jamais les deux idées dans la même.
 
-**7. La promesse de la couverture.** « Faits fous » : la slide reste un fait
+**7. Une fonction que micabo n'a pas.** micabo ne lit pas les notes à voix
+haute : jamais d'audio, de podcast ni de lecture vocale (« transforme tes notes
+en audio avec l'appli micabo »). Une slide qui le dit est réécrite sans marque
+(« une appli audio »), et micabo reste sur sa slide de placement. Priorité
+haute : c'est une fausse promesse, pas un défaut de style.
+
+**8. La promesse de la couverture.** « Faits fous » : la slide reste un fait
 vrai et vérifiable. « Conseils toxiques du prof » : un conseil qui surprend.
 Pas de témoin inventé (« mon prof m'a demandé ce que j'utilisais »), pas de
 statistique inventée sur micabo.
@@ -94,7 +101,7 @@ statistique inventée sur micabo.
 Ce qui **n'est pas** un défaut : un classement ou un comparatif où micabo gagne
 (« ça vaut pas l'appli micabo »), une parenthèse courte, un deck en placement
 manuel (Adrien l'a écrit à la main), une promesse issue d'un concurrent
-remplacé (« gratuite », décision d'Adrien du 01/10).
+remplacé (« gratuite », décision d'Adrien du 01/10) — sauf l'audio (règle 7).
 
 ## Corriger
 

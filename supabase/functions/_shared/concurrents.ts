@@ -27,6 +27,13 @@ export interface Concurrent {
   nom: string;
   /** Motif POSIX insensible à la casse, mots entiers (`\m … \M`). */
   motif: string;
+  /**
+   * `false` : le concurrent fait ce que micabo ne fait pas (PeECH lit les notes
+   * à voix haute), donc une slide qui le recommande ne devient JAMAIS micabo,
+   * elle devient sans marque. En base : `concurrents_sans_marque` (0291).
+   * Absent = `true`.
+   */
+  versMicabo?: boolean;
 }
 
 /**
@@ -49,7 +56,7 @@ export const CONCURRENTS_DEFAUT: Concurrent[] = [
   { nom: "StudyFetch", motif: "\\mstudy\\s?fetch\\M" },
   { nom: "Revisely", motif: "\\mrevisely\\M" },
   { nom: "Mindgrasp", motif: "\\mmindgrasp\\M" },
-  { nom: "PeECH", motif: "\\mpeech\\M" },
+  { nom: "PeECH", motif: "\\mpeech\\M", versMicabo: false },
 ];
 
 const DEBUT_MOT = "(?<![\\p{L}\\p{N}_])";
@@ -117,6 +124,27 @@ export interface VerdictConcurrent {
 }
 
 /**
+ * Pose `versMicabo` sur la liste lue en base, depuis `concurrents_sans_marque`
+ * (0291). Table illisible (`null`) : le repli de `CONCURRENTS_DEFAUT` fait foi
+ * pour les noms qu'il connaît, pour que PeECH ne redevienne pas micabo sur une
+ * lecture ratée.
+ */
+export function versMicaboDepuis(liste: Concurrent[], sansMarque: Array<{ nom: string }> | null): Concurrent[] {
+  const defaut = new Map(CONCURRENTS_DEFAUT.map((c) => [c.nom, c.versMicabo !== false]));
+  const noms = sansMarque ? new Set(sansMarque.map((r) => r.nom)) : null;
+  return liste.map((c) => ({
+    nom: c.nom,
+    motif: c.motif,
+    versMicabo: noms ? !noms.has(c.nom) : (defaut.get(c.nom) ?? true),
+  }));
+}
+
+/** Les concurrents qui ne deviennent jamais micabo (`concurrents_sans_marque`, 0291). */
+export function nomsSansMarque(concurrents: Concurrent[]): string[] {
+  return concurrents.filter((c) => c.versMicabo === false).map((c) => c.nom);
+}
+
+/**
  * Applique les verdicts du modèle à un deck. Ne touche qu'aux positions
  * soumises ; une réécriture refusée laisse la slide telle quelle (le brief du
  * matin la verra). `finir` repasse les règles mécaniques de la marque sur le
@@ -128,6 +156,11 @@ export interface VerdictConcurrent {
  * ceux-là sans marque, ce garde ne joue que s'il ne l'a pas suivie. Avant lui,
  * deux Wilgo d'un même deck devenaient deux micabo, et le placement en ajoutait
  * un troisième.
+ *
+ * **Un concurrent `versMicabo = false` ne devient jamais micabo (0291).** PeECH
+ * lit les notes à voix haute, micabo non : « transforme tes notes en audio avec
+ * l'appli micabo » est une fausse promesse. Une réécriture qui y met micabo est
+ * refusée ; elle doit être sans marque.
  */
 export function appliquerVerdicts<S extends SlideConcurrents>(
   deck: S[],
@@ -139,13 +172,18 @@ export function appliquerVerdicts<S extends SlideConcurrents>(
   const soumises = new Set(aJuger.map((s) => s.position));
   const parPos = new Map(verdicts.filter((v) => soumises.has(v.position)).map((v) => [v.position, v]));
   const avant = new Map(deck.map((s) => [s.position, s.texte_overlay]));
+  const interdits = new Set(nomsSansMarque(concurrents));
+  const citesParPos = new Map(aJuger.map((s) => [s.position, s.cites]));
   // Les réécritures recevables, avant l'arbitrage de micabo.
   const recues = new Map<number, string>();
   for (const v of parPos.values()) {
     const original = avant.get(v.position);
     if (v.decision !== "remplacer" || !original) continue;
     const texte = v.texte == null ? null : finir(v.texte);
-    if (texte != null && reecritureAcceptable(original, texte, concurrents)) recues.set(v.position, texte);
+    if (texte == null || !reecritureAcceptable(original, texte, concurrents)) continue;
+    const sansMarqueExige = (citesParPos.get(v.position) ?? []).some((n) => interdits.has(n));
+    if (sansMarqueExige && citeMicabo(texte) && !citeMicabo(original)) continue;
+    recues.set(v.position, texte);
   }
   const dejaMicabo = deck.some((s) => !soumises.has(s.position) && citeMicabo(s.texte_overlay));
   const nommantMicabo = [...recues].filter(([, t]) => citeMicabo(t)).map(([p]) => p);

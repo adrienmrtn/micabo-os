@@ -20,7 +20,9 @@ import {
   appliquerVerdicts,
   type Concurrent,
   CONCURRENTS_DEFAUT,
+  nomsSansMarque,
   retirerHashtagsConcurrents,
+  versMicaboDepuis,
   slidesAJuger,
 } from "./concurrents.ts";
 import {
@@ -1522,9 +1524,14 @@ let concurrentsLus: { a: number; liste: Concurrent[] } | null = null;
 /** La table `concurrents` (0286), relue toutes les 10 minutes ; le repli de 0286 si elle est illisible. */
 async function chargerConcurrents(supabase: Supabase): Promise<Concurrent[]> {
   if (concurrentsLus && Date.now() - concurrentsLus.a < 10 * 60_000) return concurrentsLus.liste;
-  const { data, error } = await supabase.from("concurrents").select("nom, motif").eq("actif", true);
+  const [{ data, error }, sm] = await Promise.all([
+    supabase.from("concurrents").select("nom, motif").eq("actif", true),
+    supabase.from("concurrents_sans_marque").select("nom"),
+  ]);
   if (error) console.warn(`[concurrents] table illisible, liste de repli : ${error.message}`);
-  const liste = error || !data ? CONCURRENTS_DEFAUT : (data as Concurrent[]);
+  const liste = error || !data
+    ? CONCURRENTS_DEFAUT
+    : versMicaboDepuis(data as Concurrent[], sm.error ? null : (sm.data as Array<{ nom: string }>));
   concurrentsLus = { a: Date.now(), liste };
   return liste;
 }
@@ -1567,6 +1574,7 @@ async function sansConcurrents(
       // Une mention par deck (0289) : un deck déjà placé garde son placement,
       // et le concurrent devient une formulation sans marque.
       micaboDejaCite: deck.some((s) => !jugees.has(s.position) && citeMicabo(s.texte_overlay)),
+      sansMarque: nomsSansMarque(concurrents).filter((n) => aJuger.some((s) => s.cites.includes(n))),
     });
     if (verdicts) {
       const r = appliquerVerdicts(deck, aJuger, verdicts, concurrents, (t) => nettoyerTexteDeck(t, langue));
