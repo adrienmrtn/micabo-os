@@ -8,7 +8,7 @@ import { upscaleViaSeedVr } from "./fal_seedvr_upscale.ts";
 import { falHebergerOctets } from "./fal_queue.ts";
 import { serviceClient } from "./supabase.ts";
 import { retirerContentCredentials } from "./c2pa.ts";
-import { positionsPermises } from "./placement.ts";
+import { choisirVariante, positionsPermises } from "./placement.ts";
 
 /**
  * Modèles texte via Fal OpenRouter (`google/<id>`), par ordre de repli.
@@ -771,7 +771,22 @@ Réponds UNIQUEMENT en JSON, sans bloc de code ni commentaire :
       const best = Number(parsed.best);
       const bestIndex = Number.isInteger(best) && best >= 0 && best < variants.length ? best : 0;
 
-      return { chosenPosition: positionFinale, mode: String(parsed.mode ?? ""), variants, bestIndex };
+      // La numérotation et la structure du deck ne se discutent pas (0292) :
+      // le numéro de la slide remplacée est remis mot pour mot, et une variante
+      // qui recopie le titre d'une autre slide ou perd la note d'un classement
+      // laisse la place à la suivante.
+      const original = input.slides.find((s) => s.position === positionFinale)?.text ?? "";
+      const choix = choisirVariante(
+        original,
+        variants,
+        bestIndex,
+        input.slides.map((s) => ({ position: s.position, texte_overlay: s.text })),
+        positionFinale,
+      );
+      const retenues = [...variants];
+      retenues[choix.index] = choix.texte;
+
+      return { chosenPosition: positionFinale, mode: String(parsed.mode ?? ""), variants: retenues, bestIndex: choix.index };
     } catch {
       // appel en échec ou réponse illisible : on retente après l'attente
     }

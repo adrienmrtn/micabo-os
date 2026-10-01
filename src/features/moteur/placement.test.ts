@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { citeMicabo, marquerPlacement, positionsPermises, slideCitantMicabo } from "./placement";
+import {
+  alignerPrefixe,
+  casseLeDeck,
+  choisirVariante,
+  citeMicabo,
+  marquerPlacement,
+  positionsPermises,
+  slideCitantMicabo,
+} from "./placement";
 
 const deck = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
 
@@ -71,5 +79,57 @@ describe("marquerPlacement", () => {
       3,
     );
     expect(r.map((s) => s.position_sophia)).toEqual([false, false, true]);
+  });
+});
+
+describe("alignerPrefixe", () => {
+  it("remet le numéro de la slide remplacée", () => {
+    expect(alignerPrefixe("3. répétition espacée\ntexte", "4. ce que tu oublies\nl'appli micabo")).toBe(
+      "3. ce que tu oublies\nl'appli micabo",
+    );
+    expect(alignerPrefixe("3. Concept Sprints", "4. Know What To Study")).toBe("3. Know What To Study");
+    expect(alignerPrefixe("conseil n°3\n\"relis pas\"", "conseil n°4\nl'appli micabo")).toBe(
+      "conseil n°3\nl'appli micabo",
+    );
+  });
+
+  it("garde une variante déjà juste, et rend un numéro oublié", () => {
+    expect(alignerPrefixe("Tip #4\nStop", "Tip #4\nI use the micabo app")).toBe("Tip #4\nI use the micabo app");
+    expect(alignerPrefixe("conseil n°3\n\"relis pas\"", "relis pas, teste-toi sur l'appli micabo")).toBe(
+      "conseil n°3\nrelis pas, teste-toi sur l'appli micabo",
+    );
+  });
+
+  it("retire un numéro ajouté à un deck qui n'en a pas", () => {
+    expect(alignerPrefixe("envie de rendre l'étude plus fun ?", "5. envie de rendre l'étude plus fun ?")).toBe(
+      "envie de rendre l'étude plus fun ?",
+    );
+    expect(alignerPrefixe("Rewrite important notes", "8. You know what you need")).toBe("You know what you need");
+    expect(alignerPrefixe("la nuit blanche", "la nuit blanche à l'envers")).toBe("la nuit blanche à l'envers");
+  });
+});
+
+describe("casseLeDeck et choisirVariante", () => {
+  const deck = [
+    { position: 1, texte_overlay: "7 rare study tips" },
+    { position: 3, texte_overlay: "3. turn your notes into\nquestions" },
+    { position: 4, texte_overlay: "4. keep a \"mistake diary\"\ni put my failed questions there" },
+  ];
+
+  it("refuse la recopie du titre d'une autre slide et la note de classement perdue", () => {
+    expect(casseLeDeck("3. turn your notes", "4. keep a \"mistake diary\"\nwith the micabo app", deck, 3)).toBe(true);
+    expect(casseLeDeck("Médecine\n6/10\nLe burn-out", "Médecine\nl'appli micabo", [], 5)).toBe(true);
+    expect(casseLeDeck("Médecine\n6/10\nLe burn-out", "Médecine\n6/10\nl'appli micabo", [], 5)).toBe(false);
+  });
+
+  it("prend la meilleure qui tient, numéro remis", () => {
+    const r = choisirVariante(
+      "3. turn your notes into\nquestions",
+      ["4. keep a \"mistake diary\"\nmicabo", "4. what did I miss?\nthe micabo app asks me"],
+      0,
+      deck,
+      3,
+    );
+    expect(r).toEqual({ texte: "3. what did I miss?\nthe micabo app asks me", index: 1 });
   });
 });
