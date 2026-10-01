@@ -79,6 +79,7 @@ import {
 } from "./import_progres.ts";
 import { lireParLots } from "./lots.ts";
 import { nettoyerTexteDeck } from "./marque.ts";
+import { citeMicabo, marquerPlacement, slideCitantMicabo } from "./placement.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
 
 export type Supabase = ReturnType<typeof serviceClient>;
@@ -1294,9 +1295,13 @@ async function placerSophiaSurDeck(
   if (placement) {
     const idx = deck.findIndex((s) => s.position === placement.chosenPosition);
     if (idx >= 0) {
+      // La sortie du modèle passe par les mêmes règles mécaniques que les
+      // autres chemins (casse, tiret long, ordre allemand) : sans ça, 10 decks
+      // allemands portaient encore « die App micabo » au 01/10, tous des
+      // placements écrits après la reprise de 0278.
       deck[idx] = {
         ...deck[idx],
-        texte_overlay: placement.variants[placement.bestIndex],
+        texte_overlay: nettoyerTexteDeck(placement.variants[placement.bestIndex], langue),
         position_sophia: true,
       };
       await supabase.from("contenu_langues").update({ slides: deck }).eq("id", contenuLangueId);
@@ -1416,9 +1421,13 @@ export async function assurerDeckPourLangue(
       variation: false,
       // En placement manuel, le CTA est déjà dans le texte source : il doit
       // survivre à la traduction, sur la même slide, sans que `micabo` soit
-      // traduit. On le dit au traducteur.
-      ctaManuel: placementManuel
-        ? { slide: deckSource.find((s) => s.position_sophia)?.position ?? null }
+      // traduit. On le dit au traducteur. Même chose quand la source cite déjà
+      // micabo pour une autre raison (placement automatique de la langue
+      // source, concurrent remplacé) : ce micabo-là EST le placement (0289).
+      ctaManuel: placementManuel || slideCitantMicabo(deckSource) != null
+        ? {
+          slide: deckSource.find((s) => s.position_sophia)?.position ?? slideCitantMicabo(deckSource),
+        }
         : undefined,
     });
     const parPos = new Map(traductions.slides.map((t) => [t.position, t.translated]));
@@ -1454,6 +1463,29 @@ export async function assurerDeckPourLangue(
     if (hashtags) {
       await supabase.from("contenu_langues").update({ hashtags }).eq("id", cl.id);
     }
+  }
+
+  if (!placementManuel && !deck.some((s) => s.position_sophia)) {
+    // Les concurrents d'abord (0289). Un concurrent recommandé devient micabo :
+    // c'est la place que le compte d'origine réservait à sa propre pub, et une
+    // fois remplacé, il EST le placement. Dans l'ordre inverse, le placement
+    // tombait ailleurs, puis le concurrent devenait un second micabo : 22 % des
+    // decks citaient micabo deux fois au 01/10.
+    const propre = await sansConcurrents(supabase, cl.id, deck, hashtags, langue);
+    deck = propre.slides;
+    hashtags = propre.hashtags;
+  }
+
+  // Une slide qui cite déjà micabo — concurrent remplacé, appli tierce que la
+  // traduction a remplacée, CTA écrit à la main sans cocher la case — est le
+  // placement : on la marque, on n'en ajoute pas un second.
+  const dejaCite = placementManuel || deck.some((s) => s.position_sophia)
+    ? null
+    : slideCitantMicabo(deck);
+  if (dejaCite != null) {
+    deck = marquerPlacement(deck, dejaCite);
+    await supabase.from("contenu_langues").update({ slides: deck }).eq("id", cl.id);
+    console.log(`[placement] deck=${cl.id} ${langue} micabo déjà cité en slide ${dejaCite} : pas de second placement`);
   }
 
   if (!placementManuel && !deck.some((s) => s.position_sophia)) {
@@ -1527,10 +1559,14 @@ async function sansConcurrents(
   const tags = retirerHashtagsConcurrents(hashtags, concurrents);
   let slides = deck;
   if (aJuger.length > 0) {
+    const jugees = new Set(aJuger.map((s) => s.position));
     const verdicts = await corrigerMentionsConcurrents({
       langue,
       slides: deck.map((s) => ({ position: s.position, texte: s.texte_overlay ?? "" })),
       aJuger,
+      // Une mention par deck (0289) : un deck déjà placé garde son placement,
+      // et le concurrent devient une formulation sans marque.
+      micaboDejaCite: deck.some((s) => !jugees.has(s.position) && citeMicabo(s.texte_overlay)),
     });
     if (verdicts) {
       const r = appliquerVerdicts(deck, aJuger, verdicts, concurrents, (t) => nettoyerTexteDeck(t, langue));

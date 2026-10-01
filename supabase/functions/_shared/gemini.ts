@@ -8,6 +8,7 @@ import { upscaleViaSeedVr } from "./fal_seedvr_upscale.ts";
 import { falHebergerOctets } from "./fal_queue.ts";
 import { serviceClient } from "./supabase.ts";
 import { retirerContentCredentials } from "./c2pa.ts";
+import { positionsPermises } from "./placement.ts";
 
 /**
  * Modèles texte via Fal OpenRouter (`google/<id>`), par ordre de repli.
@@ -90,7 +91,7 @@ async function call(model: string, parts: Part[], config?: GenConfig): Promise<P
   return [{ text: output }];
 }
 
-function textOf(parts: Part[]): string {
+export function textOf(parts: Part[]): string {
   return parts
     .map((part) => part.text ?? "")
     .join("")
@@ -109,7 +110,7 @@ function estTransitoireGemini(message: string): boolean {
   );
 }
 
-async function callWithFallback(models: string[], parts: Part[]): Promise<Part[]> {
+export async function callWithFallback(models: string[], parts: Part[]): Promise<Part[]> {
   return (await callWithFallbackModele(models, parts)).parts;
 }
 
@@ -256,7 +257,7 @@ Si la slide ne contient aucun texte incrusté, réponds exactement : (aucun text
  * une bonne fois. Renvoie une traduction par position + hashtags (légende TikTok)
  * dans la langue cible.
  */
-const LANGUES: Record<string, string> = {
+export const LANGUES: Record<string, string> = {
   fr: "français",
   en: "anglais",
   es: "espagnol",
@@ -365,6 +366,11 @@ export async function corrigerMentionsConcurrents(input: {
   langue: string;
   slides: Array<{ position: number; texte: string }>;
   aJuger: Array<{ position: number; cites: string[] }>;
+  /**
+   * Une slide hors `aJuger` cite déjà micabo (placement, CTA manuel) : aucun
+   * remplacement ne doit le nommer à nouveau (0289).
+   */
+  micaboDejaCite?: boolean;
 }): Promise<Array<{ position: number; decision: "laisser" | "remplacer"; texte: string | null }> | null> {
   if (input.aJuger.length === 0) return [];
   const code = input.langue;
@@ -397,6 +403,17 @@ emojis, même numérotation. micabo toujours en minuscules, même dans une ligne
 en capitales. Si la slide contient déjà « micabo », ne le double pas : retire
 le fragment du concurrent. Un reste de fiche produit se retire. Aucun tiret
 long (—, –), jamais « micabo.app », ni « site », ni « plateforme ».
+
+UNE SEULE slide du slideshow peut nommer micabo. ${
+    input.micaboDejaCite
+      ? `Une autre slide le cite déjà : AUCUNE slide à remplacer ne le nomme. Le
+nom du concurrent et le mot qui le porte deviennent une formulation sans marque,
+dans la langue du texte (« une appli », « une appli de quiz », « une méthode »).`
+      : `Si plusieurs slides sont à remplacer, seule la plus loin dans le slideshow
+devient micabo ; dans les autres, le nom du concurrent et le mot qui le porte
+deviennent une formulation sans marque, dans la langue du texte (« une appli »,
+« une appli de quiz », « une méthode »).`
+  }
 
 Le slideshow entier :
 ${deck}
@@ -604,6 +621,14 @@ export interface SophiaPlacement {
   bestIndex: number;
 }
 
+/** La marque avec son mot de catégorie, par langue (le turc a sa règle à part). */
+const FORME_MARQUE: Record<string, string> = {
+  fr: "« l'appli micabo » ou « l'application micabo »",
+  en: "« the micabo app »",
+  es: "« la app micabo »",
+  de: "« die micabo-App », le nom D'ABORD (jamais « die App micabo »), l'article suivant la phrase : « mit der micabo-App »",
+};
+
 /**
  * Placement de Sophia selon le prompt maître de l'admin : détecte le mode
  * grammatical du deck (instructif / confession), choisit la slide à remplacer,
@@ -620,10 +645,11 @@ export async function integrateSophia(input: {
   /** Slug de l'application (sophia, micabo, …). */
   marque?: string;
 }): Promise<SophiaPlacement | null> {
-  // Sophia DOIT tomber dans les 2-3 dernières slides (jamais au début) : on borne
-  // les positions permises aux 3 dernières (hors couverture = slide 1).
+  // Le placement tombe dans la seconde moitié du deck, jamais sur la couverture
+  // (0289) : le verrou « 3 dernières » mettait micabo sur la plus mauvaise note
+  // d'un classement décroissant ou sur l'outro. Les 3 dernières restent permises.
   const positions = input.slides.map((s) => s.position).sort((a, b) => a - b);
-  const autorisees = positions.filter((p) => p >= 2).slice(-3);
+  const autorisees = positionsPermises(positions);
   const autoriseesTxt = autorisees.join(", ");
   const examples = input.corrections
     .slice(0, 40)
@@ -658,12 +684,12 @@ Slides du slideshow (slide 1 = couverture) :
 ${slideList}
 ${examples ? `\nCorrections passées à respecter :\n${examples}\n` : ""}
 --- SORTIE ---
-Ne remplace jamais la slide 1 (couverture). Le placement de ${input.marque === "micabo" ? "micabo" : "Sophia"} doit toujours tomber dans les
-2-3 DERNIÈRES slides, jamais avant : choisis UNE slide parmi ces positions
+Ne remplace jamais la slide 1 (couverture). Le placement de ${input.marque === "micabo" ? "micabo" : "Sophia"} tombe dans la
+SECONDE MOITIÉ du slideshow : choisis UNE slide parmi ces positions
 UNIQUEMENT : ${autoriseesTxt}. Écris 3 variantes qui remplacent son texte.
 Chaque variante DOIT :
 ${input.marque === "micabo"
-    ? `- MENTION DE micabo (toujours en minuscules) selon le TON des slides, sans formule publicitaire. micabo est une APPLICATION MOBILE, et il faut TOUJOURS le préciser : écris « l'appli micabo » ou « l'application micabo », jamais le nom nu — une slide se lit en une seconde et ne dit pas ce qu'est micabo, c'est le mot de catégorie qui fait ce travail. INTERDIT : « micabo.app », « le site micabo », « la plateforme micabo ».${
+    ? `- MENTION DE micabo (toujours en minuscules), une seule fois, selon le TON des slides, sans formule publicitaire. micabo est une APPLICATION MOBILE, et il faut TOUJOURS le préciser avec son mot de catégorie : ${FORME_MARQUE[code] ?? "« l'appli micabo », dans la langue des slides"}. Jamais le nom nu : une slide se lit en une seconde et ne dit pas ce qu'est micabo, c'est le mot de catégorie qui fait ce travail. INTERDIT : « micabo.app », « site », « plateforme ».${
         code === "tr"
           ? `\n- TURC : « micabo uygulaması » (izafet), jamais le nom nu. Le suffixe de cas se pose sur le POSSESSIF, pas sur le nom : micabo uygulamasını, micabo uygulamasına, micabo uygulamasında, micabo uygulamasından, ou « micabo uygulaması ile ». Jamais « micabo'yu » seul, et jamais « micabo uygulaması'yu », qui n'existe pas. INTERDIT : « micabo.app », le mot « site » / « sitesi » sous toutes ses formes, et « indir / App Store » en formule publicitaire.`
           : ""
@@ -686,9 +712,15 @@ ${input.marque === "micabo"
   autres au premier coup d'œil.
 - rester dans le même mode grammatical et le même ton que les slides voisines,
   pour s'enchaîner sans rupture.
+- garder le GABARIT des slides voisines : les mêmes parties, dans le même
+  ordre (titre, note, citation, matière…). Dans un classement, un vrai élément
+  avec son nom et sa note. Ne recopie jamais le texte d'une autre slide.
 
-Puis applique l'autocontrôle et désigne la MEILLEURE des trois (mode, longueur,
-préfixe conservé, zéro tiret, zéro jargon). Indique son index (0, 1 ou 2) dans "best".
+Puis désigne la MEILLEURE des trois. Écarte d'abord celles qui cassent une règle
+(gabarit et numéro, longueur, marque, tiret, formule publicitaire). Parmi les
+autres, garde celle qu'un élève de ce compte aurait vraiment écrite, et qui
+donne le plus envie de demander ce qu'est ${input.marque === "micabo" ? "micabo" : "Sophia"}. La plus correcte n'est
+pas forcément la meilleure. Indique son index (0, 1 ou 2) dans "best".
 
 Rappel : les trois variantes sont en ${langue}.
 

@@ -21,6 +21,8 @@
  * sont POSIX, en mots entiers (`\m … \M`) : « Ranking » contient « anki ».
  */
 
+import { citeMicabo } from "./placement.ts";
+
 export interface Concurrent {
   nom: string;
   /** Motif POSIX insensible à la casse, mots entiers (`\m … \M`). */
@@ -28,8 +30,8 @@ export interface Concurrent {
 }
 
 /**
- * Repli si la table est illisible : la liste semée par 0286, à l'identique (un
- * test le vérifie contre la migration). La table fait foi ; ce repli n'existe
+ * Repli si la table est illisible : la liste semée par 0286 puis 0289 (PeECH), à
+ * l'identique (un test le vérifie contre les migrations). La table fait foi ; ce repli n'existe
  * que pour qu'une lecture ratée ne laisse pas passer Wilgo.
  */
 export const CONCURRENTS_DEFAUT: Concurrent[] = [
@@ -47,6 +49,7 @@ export const CONCURRENTS_DEFAUT: Concurrent[] = [
   { nom: "StudyFetch", motif: "\\mstudy\\s?fetch\\M" },
   { nom: "Revisely", motif: "\\mrevisely\\M" },
   { nom: "Mindgrasp", motif: "\\mmindgrasp\\M" },
+  { nom: "PeECH", motif: "\\mpeech\\M" },
 ];
 
 const DEBUT_MOT = "(?<![\\p{L}\\p{N}_])";
@@ -118,6 +121,13 @@ export interface VerdictConcurrent {
  * soumises ; une réécriture refusée laisse la slide telle quelle (le brief du
  * matin la verra). `finir` repasse les règles mécaniques de la marque sur le
  * texte remplacé (casse, tirets, ordre allemand) — idempotentes.
+ *
+ * **Une seule slide nomme micabo (0289).** Si une slide non soumise le cite
+ * déjà, aucun remplacement ne peut le nommer ; sinon, seul le plus loin dans le
+ * deck le garde. Les autres sont refusés : le modèle a la consigne d'écrire
+ * ceux-là sans marque, ce garde ne joue que s'il ne l'a pas suivie. Avant lui,
+ * deux Wilgo d'un même deck devenaient deux micabo, et le placement en ajoutait
+ * un troisième.
  */
 export function appliquerVerdicts<S extends SlideConcurrents>(
   deck: S[],
@@ -128,6 +138,18 @@ export function appliquerVerdicts<S extends SlideConcurrents>(
 ): { slides: S[]; remplacees: number[]; laissees: number[]; refusees: number[] } {
   const soumises = new Set(aJuger.map((s) => s.position));
   const parPos = new Map(verdicts.filter((v) => soumises.has(v.position)).map((v) => [v.position, v]));
+  const avant = new Map(deck.map((s) => [s.position, s.texte_overlay]));
+  // Les réécritures recevables, avant l'arbitrage de micabo.
+  const recues = new Map<number, string>();
+  for (const v of parPos.values()) {
+    const original = avant.get(v.position);
+    if (v.decision !== "remplacer" || !original) continue;
+    const texte = v.texte == null ? null : finir(v.texte);
+    if (texte != null && reecritureAcceptable(original, texte, concurrents)) recues.set(v.position, texte);
+  }
+  const dejaMicabo = deck.some((s) => !soumises.has(s.position) && citeMicabo(s.texte_overlay));
+  const nommantMicabo = [...recues].filter(([, t]) => citeMicabo(t)).map(([p]) => p);
+  const gardeMicabo = dejaMicabo || nommantMicabo.length === 0 ? null : Math.max(...nommantMicabo);
   const remplacees: number[] = [];
   const laissees: number[] = [];
   const refusees: number[] = [];
@@ -138,8 +160,8 @@ export function appliquerVerdicts<S extends SlideConcurrents>(
       laissees.push(s.position);
       return { ...s, concurrent_laisse: s.texte_overlay };
     }
-    const texte = v.texte == null ? null : finir(v.texte);
-    if (!reecritureAcceptable(s.texte_overlay, texte, concurrents)) {
+    const texte = recues.get(s.position);
+    if (texte == null || (citeMicabo(texte) && s.position !== gardeMicabo)) {
       refusees.push(s.position);
       return s;
     }
