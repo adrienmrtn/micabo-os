@@ -8,7 +8,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "772589b1d9a3b5e1e17e10f572a1511d2b44ab0f";
+const SHA = "baa5add848a43375f1f2326d9ae45ba363ce29ae";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/bruler-texte-test.bundle.js`;
 
@@ -24,4 +24,4 @@ if (!src.includes("Deno.serve") || !src.includes("burn_analyses")) {
 }
 // esbuild renomme l'alias d'un rebuild à l'autre : relire le
 // `import{createClient as …}` du bundle avant de l'effacer, et reporter le nom ici.
-new Function("Y", src)(createClient);
+new Function("W", src)(createClient);
