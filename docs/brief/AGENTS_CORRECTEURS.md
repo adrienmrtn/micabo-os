@@ -7,7 +7,7 @@ case **▶ Lancer l'agent**. Rien ne part sans que tu coches.
 ```
 07:52  Brief          écrit la page du jour, avec les prompts et les cases ▶
   ↓    toi            tu coches ▶ sur ce que tu veux lancer
-09:20 / 12:20 / 15:20 / 18:20
+10:20 / 15:20
        Veilleur       lit la page ; pour chaque ▶ cochée, crée une session
                       Claude dédiée (dépôt + connecteurs), écrit son lien et son
                       état dans la page ; relaie tes ✅ OK aux agents qui attendent
@@ -75,7 +75,12 @@ garde-fous, chiffres et identifiants du jour.
 
 ## Veilleur — la procédure
 
-Le veilleur tourne à 09:20, 12:20, 15:20 et 18:20 (Paris). À chaque passage :
+Le veilleur tourne à 10:20 et 15:20 (Paris), dans sa propre session
+(« Veilleur des agents micabo »), comme le brief dans la sienne (« Brief du
+matin micabo ») : chacune garde un contexte court, donc un passage coûte peu.
+Deux passages par jour parce qu'un passage à vide coûte quand même le
+chargement de la session (~0,7 $ mesuré au démarrage) ; pour lancer tout de
+suite, le dire dans n'importe quelle session suffit. À chaque passage :
 
 1. `notion-fetch` sur la page du jour (`AAAA-MM-JJ · Brief micabo`, sous
    « Updates matinaux », `3ec241308d668080bef8ef8784ecc8d8`). Pas de page :
