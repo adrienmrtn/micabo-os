@@ -1616,3 +1616,17 @@ Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
  n'avaient pas bougé : les relire dans le bundle à chaque fois, jamais les
  recopier du déploiement précédent. Huit sentinelles présentes, test de vie
  `401` passé sur les quatre.
+
+
+- **Déploiement du 01/10/2026** (relevé sobre, 0281). Migration 0281 appliquée
+ (deux colonnes sur `passages`, fonction `prendre_verrou_drain_elo`, réservée au
+ `service_role`) ; aucun cron touché. Deux chargeurs sur `a78e993` :
+ `rattrapage-elo` (v21) et `minuit-vnext` (v36) — les deux seuls qui
+ embarquent `rattrapage_elo.ts`. **Les deux alias `createClient` ont été
+ renommés** : `Y`→`ae` et `Ie`→`Ue`, relus dans les bundles. Les dix autres
+ bundles ressortent identiques à l'octet : la lecture de l'usage Apify vit dans
+ `apify_usage.ts` et non dans `apify.ts`, que tirent six autres bundles — y
+ ajouter une fonction, même élaguée, les faisait tous « changer ».
+ Test de vie `401` passé sur les deux **par `pg_net` depuis la base** : le
+ proxy de l'environnement de travail bloque `supabase.co`, l'appel anonyme
+ part donc de `net.http_post` et se lit dans `net._http_response`.
