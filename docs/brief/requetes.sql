@@ -524,10 +524,15 @@ select 'slides_sans_image_j',
   (select count(*) from public.post_slides s join public.posts po on po.id = s.post_id cross join p
    where po.date_publication_prevue = p.j and s.media_id is null and s.burned_media_id is null)::text, null
 union all
-select 'publies_jamais_releves_2j',
+-- Un post se mesure une fois, à J+2 (0285) : passé 3 jours (J+2 + l'écart
+-- entre deux passes), un post publié sans mesure de J+2 est un relevé raté.
+select 'publies_sans_mesure_j2',
   (select count(*) from public.passages pa
-   where pa.statut = 'publie' and pa.stats_maj_at is null and pa.publie_at < now() - interval '2 days'
-     and pa.publie_at > now() - interval '30 days')::text, null
+   where pa.statut = 'publie' and pa.publie_at < now() - interval '3 days'
+     and pa.publie_at > now() - interval '30 days'
+     and (pa.stats_maj_at is null or pa.stats_maj_at - pa.publie_at < interval '2 days'))::text,
+  (select coalesce(count(*), 0) || ' abandonné(s) après 3 échecs' from public.passages pa
+   where pa.statut = 'publie' and pa.stats_echecs >= 3 and pa.publie_at > now() - interval '30 days')
 union all
 select 'file_validation',
   (select count(*) from public.contenus where statut = 'brouillon' and import_statut = 'done')::text,
