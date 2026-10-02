@@ -23,7 +23,8 @@ import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared
 
 type Verdict = { reste: "aucun" | "partiel" | "complet"; extrait: string };
 
-const PARALLELE = 8;
+/** 8 images décodées en parallèle dépassaient la mémoire de l'Edge (546 WORKER_RESOURCE_LIMIT). */
+const PARALLELE_DEFAUT = 3;
 
 function consigne(reference: string): string {
   return `Cette image vient d'un slideshow TikTok. Le texte que l'auteur avait AJOUTÉ par-dessus la photo (police d'application, souvent centré, avec contour, ombre ou fond coloré) devait être effacé.
@@ -54,7 +55,8 @@ Deno.serve(async (request) => {
   try {
     const corps = await request.json().catch(() => ({}));
     const offset = Math.max(0, Math.floor(Number(corps?.offset ?? 0)) || 0);
-    const limit = Math.min(60, Math.max(1, Math.floor(Number(corps?.limit ?? 30)) || 30));
+    const limit = Math.min(30, Math.max(1, Math.floor(Number(corps?.limit ?? 15)) || 15));
+    const parallele = Math.min(4, Math.max(1, Math.floor(Number(corps?.parallele ?? PARALLELE_DEFAUT)) || PARALLELE_DEFAUT));
 
     const { data: medias, error } = await supabase
       .from("media_library")
@@ -111,7 +113,7 @@ Deno.serve(async (request) => {
         });
       }
     }
-    await Promise.all(Array.from({ length: Math.min(PARALLELE, lot.length) }, () => suivant()));
+    await Promise.all(Array.from({ length: Math.min(parallele, lot.length) }, () => suivant()));
 
     return json({ ok: true, offset, n: lot.length, fin: lot.length < limit, bilan });
   } catch (e) {
