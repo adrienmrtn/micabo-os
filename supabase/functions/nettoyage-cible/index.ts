@@ -16,8 +16,8 @@
  * Ici, un modèle de vision localise séparément ce qu'il faut EFFACER et ce
  * qu'il faut GARDER ; une zone à effacer qui mord sur une zone à garder est
  * rognée du côté qui lui coûte le moins, et abandonnée s'il n'en reste pas
- * assez. LaMa (`effacerTexte`) ne reconstruit que sous le masque : le reste de
- * l'image ne bouge pas d'un pixel.
+ * assez. L'effaceur de Fal (`fal-ai/bria/eraser`) ne reconstruit que sous le
+ * masque : le reste de l'image ne bouge pas.
  *
  * `ecrire: false` (défaut) range le résultat sous `essai/nettoyage-cible/…`,
  * pour le relire avant d'en décider. `ecrire: true` le range au chemin du
@@ -28,7 +28,7 @@
  */
 
 import { callWithFallback, fetchImageAsInline, MODELES_LECTURE_BURN, textOf, TEXT_MODELS } from "../_shared/gemini.ts";
-import { effacerTexte } from "../_shared/inpaint.ts";
+import { effacerSousMasqueFal } from "../_shared/fal_eraser.ts";
 import { masqueSur, zonesNommees } from "../_shared/nettoyage_cible.ts";
 import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
@@ -90,9 +90,13 @@ async function nettoyerUne(
 
   const b64 = image.inline_data?.data ?? "";
   const octetsBruts = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-  const sortie = await effacerTexte(raw, octetsBruts, image.inline_data?.mime_type ?? "image/jpeg", retenues);
-  if (!sortie) throw new Error("aucun moteur d'effacement disponible");
-  const octets = Uint8Array.from(atob(sortie), (c) => c.charCodeAt(0));
+  let octets: Uint8Array;
+  try {
+    octets = await effacerSousMasqueFal(raw, octetsBruts, retenues);
+  } catch (e) {
+    // Les zones lues restent dans le journal : c'est ce qu'on relit pour comprendre.
+    return { ...base, statut: "erreur", erreur: messageErreur(e).slice(0, 1000) };
+  }
   const { mime, ext } = format(octets);
 
   const chemin = ecrire
