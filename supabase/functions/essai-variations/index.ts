@@ -189,8 +189,11 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
   if (ep) throw ep;
   // Florence décrit le BRUT : une légende qui parle de texte, de mots ou
   // d'écriture signale une image où il reste peut-être de quoi lire, dans une
-  // seule langue. On ne la propose pas.
-  const AVEC_TEXTE = /\b(text|texte|written|writing|words?|phrase|says|letters?|caption|title)\b/i;
+  // seule langue. Une appli, un écran ou un logo nommés peuvent montrer un
+  // concurrent (« Hyperfocus app open on the screen » est sorti sur une slide
+  // micabo au troisième essai). On ne les propose pas.
+  const AVEC_TEXTE =
+    /\b(text|texte|written|writing|words?|phrase|says|letters?|caption|title|app|application|logo|brand|screen|écran|french|français|english|anglais)\b/i;
   const candidates = ((poolBrut ?? []) as Image[]).filter((i) =>
     i.contenu_id !== contenuId && !idsParent.includes(i.id) && !AVEC_TEXTE.test(i.caption ?? "")
   );
