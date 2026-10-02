@@ -135,38 +135,33 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
       kind: "logic",
       api: "pg_cron rattrapage-elo-drain → POST rattrapage-elo {}",
       detail:
-        "Reprend elo_dernier_run tant que done≠true (heartbeat busy + lock 140s)",
+        "Reprend elo_dernier_run tant que done≠true (verrou atomique prendre_verrou_drain_elo, 0281 ; worker mort repris après 4 min)",
       onFail: "Alert Admin Minuit si stale >30 min",
     },
     {
       id: "scrape",
       rang: "①",
-      label: "Scrape stats TikTok (profil)",
+      label: "Relevé à J+2 par lien (une mesure par post)",
       kind: "api",
-      api: "Apify scrapeStats(handle) — sans download images",
+      api: "Apify releverPostsParLien(postURLs) — un appel par compte, sans download",
       env: "APIFY_TOKEN (ou équivalent)",
-      detail: "Match passage.publie_url → id vidéo · 1 compte / invoke Edge",
-      onFail: "② scrapePost(url) puis ③ cohérence ±36h",
-    },
-    {
-      id: "fallback_url",
-      rang: "②",
-      label: "Fallback scrapePost(publie_url)",
-      kind: "fallback",
-      api: "Apify scrapePost",
-      onFail: "③ cohérence temporelle",
+      detail:
+        "Chaque post publié est mesuré UNE fois, quand il a 2 jours (MESURE_JOURS), puis plus jamais · lien résolu → id du post · 1 compte / invoke Edge",
+      onFail: "Post introuvable : retenté après 20 h, abandonné après 3 échecs (stats_echecs)",
     },
     {
       id: "fallback_coh",
-      rang: "③",
-      label: "Fallback cohérence (±36h)",
+      rang: "②",
+      label: "Sans lien : profil + cohérence (±36h)",
       kind: "fallback",
-      detail: "Dernier post profil vs date_publication_prevue",
+      api: "Apify scrapeStats(handle)",
+      detail:
+        "Seulement pour un post sans lien valide (hashtags collés, champ vide), de moins de 7 jours · profondeur selon son âge",
       onFail: "Passage sans match (stats non relevées)",
     },
     {
       id: "repost_bonus",
-      rang: "④",
+      rang: "③",
       label: "Repost bonus J+7 (> 50 000 vues)",
       kind: "persist",
       api: "requalification.planifierRepostsBonus",
@@ -175,7 +170,7 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
     },
     {
       id: "elo_compte",
-      rang: "⑤",
+      rang: "④",
       label: "ELO compte — moyenne pondérée ≤10 derniers posts",
       kind: "logic",
       api: "rattrapage_elo.appliquerEloComptes",
@@ -185,7 +180,7 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
     },
     {
       id: "requalif",
-      rang: "⑥",
+      rang: "⑤",
       label: "Requalification tierlist (à chaque relevé)",
       kind: "logic",
       api: "requalification.requalifierContenus",
@@ -194,10 +189,12 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
     },
     {
       id: "snapshot",
-      rang: "⑦",
+      rang: "⑥",
       label: "Snapshot vues_globales_jour",
       kind: "persist",
-      detail: "Δ = total j0 − total j1 (Pilotage)",
+      api: "rpc snapshot_vues_globales (0285)",
+      detail:
+        "Sur nos passages : Δ = vues relevées des posts publiés ce jour-là, total = cumul · recalcule les 4 derniers jours (mesure à J+2)",
     },
   ],
   constants: [
@@ -220,7 +217,7 @@ export const SCHEMA_UPDATE_ELO: PipelineAction = {
     { cle: "perf(1 vue)", valeur: "~2.7 / 100", detail: "ex-plancher 40 — corrigé" },
     { cle: "perf(4 vues)", valeur: "~8 / 100" },
     { cle: "COHERENCE_HEURES", valeur: "36" },
-    { cle: "POSTS_RELEVES", valeur: "30", detail: "Posts scrapés par profil" },
+    { cle: "POSTS_RELEVES", valeur: "12", detail: "Plancher du scrape profil (posts sans lien seulement)" },
   ],
 };
 

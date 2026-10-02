@@ -345,6 +345,85 @@ Réponds uniquement en JSON, sans bloc de code : {"hashtags":"#tag1 #tag2 #tag3"
   }
 }
 
+/** La marque telle qu'elle remplace un concurrent, par langue (cf. `marque.ts`). */
+const MARQUE_REMPLACEMENT: Record<string, string> = {
+  fr: "« l'appli micabo » (« la méthode X » → « l'appli micabo », « avec X » → « avec l'appli micabo »)",
+  en: "« the micabo app »",
+  es: "« la app micabo » (« con X » → « con la app micabo », « el método X » → « la app micabo »)",
+  de: "« die micabo-App », nom D'ABORD, avec l'article que la phrase impose (« mit der micabo-App », « nutzen die micabo-App » pour « die X-Methode »)",
+  tr: "« micabo uygulaması », le suffixe de cas sur « uygulaması » : X'dan → micabo uygulamasından, X'da → micabo uygulamasında, X'yu / X'yi → micabo uygulamasını, X'ya → micabo uygulamasına ; jamais « micabo'yu », jamais « sitesi »",
+};
+
+/**
+ * Les slides qui citent un concurrent : classement à laisser, ou recommandation
+ * à remplacer par micabo (0287). Le modèle ne reçoit que ces slides à réécrire,
+ * mais lit le deck entier : un top 5 d'applis se reconnaît sur le post, pas sur
+ * une slide. Rend `null` si l'appel échoue — l'appelant garde le deck tel quel,
+ * le brief du matin le verra.
+ */
+export async function corrigerMentionsConcurrents(input: {
+  langue: string;
+  slides: Array<{ position: number; texte: string }>;
+  aJuger: Array<{ position: number; cites: string[] }>;
+}): Promise<Array<{ position: number; decision: "laisser" | "remplacer"; texte: string | null }> | null> {
+  if (input.aJuger.length === 0) return [];
+  const code = input.langue;
+  const langue = LANGUES[code] ?? code;
+  const deck = input.slides
+    .map((s) => `Slide ${s.position} : ${JSON.stringify(s.texte)}`)
+    .join("\n");
+  const aJuger = input.aJuger
+    .map((s) => `- slide ${s.position} (cite : ${s.cites.join(", ")})`)
+    .join("\n");
+
+  const prompt = `LANGUE DU TEXTE : ${langue.toUpperCase()}. Ne traduis rien.
+
+micabo est une appli mobile de révision. Ce slideshow TikTok a été importé d'un
+autre compte, parfois celui d'un concurrent : certaines slides font encore sa
+publicité. Pour chaque slide listée plus bas, décide :
+
+- "laisser" : le concurrent est un élément d'un classement, d'un comparatif ou
+  d'un test d'applis ou de méthodes (« j'ai utilisé quizlet », « Anki 6/10 … »),
+  noté ou critiqué, pas une consigne à suivre. Dans le doute : "laisser".
+- "remplacer" : le concurrent est recommandé, prescrit, ou présenté comme ce que
+  font ceux qui réussissent (« utilise X », « la méthode X », « fais des quiz
+  avec X », « j'utilise X » hors comparatif), ou c'est un reste de fiche produit.
+
+Pour "remplacer", écris le texte COMPLET de la slide où seul le nom du
+concurrent, avec le mot qui le porte (« app », « méthode », l'article), devient
+${MARQUE_REMPLACEMENT[code] ?? "« l'appli micabo », traduit dans la langue du texte"}.
+Tout le reste MOT POUR MOT : mêmes retours à la ligne, même ponctuation, mêmes
+emojis, même numérotation. micabo toujours en minuscules, même dans une ligne
+en capitales. Si la slide contient déjà « micabo », ne le double pas : retire
+le fragment du concurrent. Un reste de fiche produit se retire. Aucun tiret
+long (—, –), jamais « micabo.app », ni « site », ni « plateforme ».
+
+Le slideshow entier :
+${deck}
+
+Slides à juger :
+${aJuger}
+
+Réponds uniquement en JSON, sans bloc de code :
+{"slides":[{"position":<n>,"decision":"laisser"|"remplacer","texte":"<texte complet si remplacer, sinon null>"}]}`;
+
+  try {
+    const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }]);
+    const raw = textOf(parts).replace(/^```(?:json)?|```$/g, "").trim();
+    const lignes = JSON.parse(raw).slides;
+    if (!Array.isArray(lignes)) return null;
+    return lignes
+      .map((l: { position?: unknown; decision?: unknown; texte?: unknown }) => ({
+        position: Number(l.position),
+        decision: l.decision === "laisser" ? ("laisser" as const) : ("remplacer" as const),
+        texte: typeof l.texte === "string" ? l.texte : null,
+      }))
+      .filter((l: { position: number }) => Number.isInteger(l.position));
+  } catch {
+    return null;
+  }
+}
+
 export async function translateSlideshow(input: {
   slides: Array<{ position: number; original: string }>;
   sourceTitle: string;

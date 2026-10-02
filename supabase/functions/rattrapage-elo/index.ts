@@ -1,9 +1,9 @@
+import { lireUsageApify } from "../_shared/apify_usage.ts";
 import {
   backfillSnapshotVuesJour,
+  DRAIN_BUSY_STALE_MS,
   DRAIN_MAX_CHAIN_ELO,
   ecrireEloDernierRun,
-  eloDrainBusyStale,
-  eloDrainEstVerrouille,
   kickRattrapageElo,
   lireEloDernierRunReglage,
   rattrapageElo,
@@ -78,32 +78,58 @@ Deno.serve(async (request) => {
         });
       }
 
-      // Un autre worker (kick) est encore vivant → laisse-le finir.
-      if (!restart && eloDrainEstVerrouille(prev) && !eloDrainBusyStale(prev)) {
+      // Prise du verrou EN BASE, en une seule instruction (0281). L'ancien
+      // verrou lisait elo_dernier_run puis l'écrivait : entre la fin d'un lot
+      // (busy=false) et le kick du suivant, le cron minute lisait le même
+      // curseur et traitait le même compte. La chaîne se dédoublait jusqu'à la
+      // fin du drain — 23 scrapes Apify en double le 28/09, sur 74.
+      // Un kick qui arrive après qu'un autre worker a avancé le curseur est
+      // refusé aussi : il traiterait un compte déjà fait.
+      const { data: pris, error: erreurVerrou } = await supabase.rpc("prendre_verrou_drain_elo", {
+        p_offset: restart
+          ? 0
+          : typeof body?.offset === "number"
+            ? Math.max(0, Math.floor(body.offset))
+            : null,
+        p_restart: restart,
+        p_perime_secondes: Math.round(DRAIN_BUSY_STALE_MS / 1000),
+      });
+      if (erreurVerrou) throw erreurVerrou;
+      if (!pris) {
         return json({
           ok: true,
           drain: true,
           busy: true,
           skipped: true,
-          detail: "drain ELO déjà en cours (lock)",
+          detail: "drain ELO déjà en cours, ou curseur déjà avancé (verrou)",
           offset: prev?.offset ?? 0,
           at: prev?.at ?? null,
         });
       }
+      const verrou = pris as EloDernierRun;
+      const offset = Math.max(0, Math.floor(Number(verrou.offset) || 0));
 
-      const offset =
-        typeof body?.offset === "number"
-          ? Math.max(0, Math.floor(body.offset))
-          : restart
-            ? 0
-            : Math.max(0, Math.floor(prev?.offset ?? 0));
+      // Départ d'une passe : relever la consommation Apify du cycle, pour que
+      // le brief du matin la lise (le crédit s'est épuisé le 28/09 sans que
+      // rien ne le montre). lireUsageApify ne lève jamais.
+      if (offset === 0) {
+        const usage = await lireUsageApify();
+        await supabase.from("reglages").upsert(
+          {
+            cle: "apify_usage",
+            valeur: { at: new Date().toISOString(), ...usage },
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "cle" },
+        );
+      }
       const drainGen = Math.max(0, Math.floor(Number(body?.drainGen) || 0));
       const jours = joursBody ?? (typeof prev?.jours === "number" ? prev.jours : 4);
       const source = String(body?.source ?? prev?.source ?? "cron");
 
       // Heartbeat AVANT le scrape — si timeout 150s, le cron minute reprend.
       const heartbeat: EloDernierRun = {
-        ...(prev ?? {}),
+        ...(verrou ?? prev ?? {}),
         at: new Date().toISOString(),
         busy: true,
         drain: true,
@@ -136,7 +162,9 @@ Deno.serve(async (request) => {
         throw error;
       }
 
-      const done = lot.restants === 0;
+      // Apify à court de crédit : chaque compte suivant rendrait le même 402.
+      // On arrête la file ; la passe suivante (13:00 ou minuit) repartira.
+      const done = lot.restants === 0 || lot.apifyEpuise;
       await ecrireEloDernierRun(supabase, {
         at: new Date().toISOString(),
         busy: false,
@@ -153,13 +181,15 @@ Deno.serve(async (request) => {
         jours,
         source,
         kick: Boolean(prev?.kick),
-        detail: done
-          ? "drain terminé"
-          : `ok · next=${lot.nextOffset}/${lot.total}`,
+        detail: lot.apifyEpuise
+          ? `Apify à court de crédit (402) — drain arrêté à ${lot.nextOffset}/${lot.total}`
+          : done
+            ? `drain terminé${lot.erreurs.length ? ` · ${lot.erreurs.length} erreur(s)` : ""}`
+            : `ok · next=${lot.nextOffset}/${lot.total}`,
       });
 
       // Auto-chaîne rapide (filet = cron minute si waitUntil meurt).
-      if (lot.restants > 0 && drainGen < DRAIN_MAX_CHAIN_ELO) {
+      if (!lot.apifyEpuise && lot.restants > 0 && drainGen < DRAIN_MAX_CHAIN_ELO) {
         kickRattrapageElo(request, {
           drain: true,
           drainGen: drainGen + 1,
@@ -181,7 +211,8 @@ Deno.serve(async (request) => {
         comptes: lot.comptes,
         erreurs: lot.erreurs,
         snapshot: lot.snapshot,
-        kick: lot.restants > 0 && drainGen < DRAIN_MAX_CHAIN_ELO,
+        apifyEpuise: lot.apifyEpuise,
+        kick: !lot.apifyEpuise && lot.restants > 0 && drainGen < DRAIN_MAX_CHAIN_ELO,
         done,
       });
     }

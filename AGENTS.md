@@ -1027,6 +1027,361 @@ plutôt que de supprimer le passage : le créateur garde son post, et le passage
 du 12/09 appartient à un cycle qu'on ne rouvre pas. Sauvegarde
 `media_efface_sauvegarde`.
 
+## Le relevé payait jusqu'à soixante fois chaque post (0281, 01/10/2026)
+
+Le 28/09 à 22:16 UTC, Apify a commencé à répondre `402
+not-enough-usage-to-run-paid-actor` : crédit du cycle épuisé. Plus aucun
+relevé, donc plus aucun cycle clos, plus aucune requalification, et le pool
+tirable est tombé à zéro le 01/10 (assignation à 46/52, repêchages seuls).
+**Le drain s'est pourtant déclaré « terminé, erreurs : [] » trois nuits de
+suite.** C'est le brief du matin (`docs/brief/`) qui l'a vu, par
+l'horodatage des relevés.
+
+Le crédit n'était pas épuisé par malchance. Une journée normale, le 28/09 :
+**74 scrapes de profil, ~2 450 résultats Apify, 1 349 passages re-mesurés
+pour ~50 nouveaux posts.** Trois causes, toutes dans le relevé :
+
+1. **Tout était re-mesuré, tout le temps.** Un passage publié depuis 30 jours
+   était re-scrapé dès que son relevé avait 6 h : deux fois par jour pendant
+   un mois, jusqu'à ~60 mesures par post. Le moteur n'en lit qu'une
+   (`MESURE_JOURS`, J+2) et le plateau tombe vers J+4–J+6. Et la profondeur de
+   scrape suivait le NOMBRE de dus (2 × n), pas leur ÂGE : 40 posts lus par
+   compte et par passe, même pour des dus tous récents.
+2. **Le verrou du drain n'était pas atomique.** Lire `elo_dernier_run`, tester
+   `busy`, écrire. Entre la fin d'un lot (busy=false) et le kick du suivant,
+   le cron minute lisait le même curseur : **23 scrapes en double sur 74**,
+   jusqu'à trois sur le même compte à 10 ms d'écart. Une fois dédoublée, la
+   chaîne le restait jusqu'à la fin de la file.
+3. **Un post introuvable était payé à vie.** Chaque passe relançait un
+   `scrapePost` (un lancement Apify par post) : 70 le 28/09, dont 22 « pas de
+   match » retentés deux fois par jour pendant 30 jours.
+
+Le lien du créateur n'y était pour rien : 0 post publié sans lien en
+septembre, et 1 349 rapprochements par URL contre 61 replis le 28/09.
+
+**Les règles vivent dans `_shared/releve_file.ts`** (module pur, réexporté par
+`src/features/moteur/releveFile.ts`, 16 tests) :
+
+- relevé à **20 h** d'intervalle (`RAFRAICHIR_APRES_MS`), coincé entre les
+  13 h qui séparent minuit de 13:00 (la passe de midi ne re-mesure plus ce que
+  minuit vient de mesurer) et 24 h moins un drain ;
+- **figé après 7 jours** (`RELEVE_FIGE_APRES_JOURS`), au-dessus de
+  `PASSAGE_PERIME_JOURS` et de `MESURE_JOURS` — un test le verrouille ;
+- profondeur de scrape = nos posts publiés depuis le **plus vieux dû**, +25 %
+  et +2 (`profondeurScrape`) ; un compte sans dû n'est pas scrapé, et son
+  scrape « metrics seules » n'a lieu qu'une fois par 20 h ;
+- `scrapePost` de repli seulement dans la fenêtre de 7 jours, et abandon
+  après **3 échecs** (`passages.stats_echecs`, `stats_tentative_at`).
+
+**Le verrou se prend en base** (`prendre_verrou_drain_elo`, 0281) : un UPDATE
+compare-and-set sur la ligne `reglages`, qui refuse aussi un kick dont le
+curseur a déjà été dépassé. Testé sur PostgreSQL 16 : 20 appels simultanés,
+un seul gagnant. Même famille que `repecher_contenu` (0275).
+
+**Deux défauts de plus, trouvés en chemin :**
+
+- les erreurs de scrape étaient rangées compte par compte et **jamais remontées
+  au drain** — d'où le « erreurs : [] ». Elles le sont ; un 402 arrête la file
+  (`apifyEpuise`) au lieu de faire défiler 27 comptes en erreur ;
+- la requalification « au relevé » (0257) prenait les slideshows **visés** par
+  la passe, pas ceux **mesurés**. Apify en 402, elle jugeait des cycles sur
+  des vues figées : **10 B→C le 30/09 sans une vue nouvelle.** Elle ne touche
+  plus que les passages réellement relevés, et la requalification et la
+  qualification de fin de drain sont sautées quand Apify est épuisé.
+
+Estimation sur les logs du 28/09 : de ~2 450 à **~900–1 100 résultats par
+jour** (÷2,5), sans perdre une mesure dont le moteur se sert. La passe de 13:00
+ne prend plus que les posts du matin.
+
+**Visibilité** : chaque départ de passe écrit la consommation du cycle
+(`GET /v2/users/me/limits`) dans `reglages.apify_usage` ; le brief du matin la
+lit (Q9) et alerte à 70 % / 90 %.
+
+### Rattrapage du 01/10 et verdicts rejugés (0282)
+
+Crédit Apify remis par Adrien, drain relancé à 10:27 UTC : 26 comptes en
+**une seule chaîne** (aucun doublon), 340 passages relevés, 8 introuvables,
+0 erreur, en 13 minutes. Fin de file : 7 requalifications sur données
+fraîches, 8 cases de créateurs corrigées (dont 5 remontées après une
+rétrogradation du 30/09 sur vues figées), 8 reposts bonus que la panne avait
+masqués (> 50 000 vues), programmés du 03 au 06/10.
+
+**Les verdicts rendus pendant la panne ont été rejugés** (0282). 70 verdicts
+entre le 28/09 22:16 et le 01/10 10:27 UTC ; chacun recalculé sur le même
+cycle, au même instant, avec les vues rattrapées (`bilanCycle` + `requalifier`
+répliqués en SQL et recoupés cas par cas avec les fonctions TS). **21
+différaient, tous encore en vigueur** : dix B→C et deux C→D à tort, cinq
+slideshows en D à 1 100 – 2 700 vues (leur place était B), trois A qui
+devaient passer S (31 000 à 52 000 vues), un C qui devait passer B. Corrigés
+sur le tier et la cible, **pas sur `tier_maj_at`** : le cycle en cours n'est pas
+rouvert, le trigger de 0272 journalise un `ajustement`. Sauvegarde
+`verdicts_figes_sauvegarde` (RLS active, aucune policy).
+
+« En vigueur » veut dire : aucune VRAIE requalification depuis. Un repêchage
+D→D à un passage ne compte pas — un slideshow descendu en D à tort puis
+repêché est toujours prisonnier du verdict faux, et c'est lui qu'il fallait
+sortir.
+
+**Effet de bord connu, non corrigé** : `vues_globales_jour` (Pilotage) somme,
+par compte, les vues des N derniers posts du dernier scrape de profil. N
+dépendait déjà du nombre de passages dus (12 à 40) ; il suit maintenant leur
+âge (~20 en régime), donc le « total » a perdu la moitié de son échelle le
+01/10 (delta −4 M) sans qu'aucune audience ne bouge. Ce n'a jamais été un
+total. Le recalculer depuis `passages` (nos posts, à âge égal) est le bon
+correctif ; c'est un point « À traiter » du brief, pas une urgence.
+
+## Une seule mesure par post, à J+2, par son lien (0283 → 0285, 01/10/2026)
+
+0281 avait divisé la consommation Apify par ~2,5, et ce n'était pas assez.
+Mesuré sur le rattrapage du 01/10 : **1,60 $ pour 26 scrapes de profil et
+570 posts lus, soit ~2,8 $ pour 1 000 résultats.** En régime, deux passes par
+jour remontaient 7 jours de posts sur 26 comptes, soit 2,3 à 2,9 $/jour : la
+limite de 70 $ serait tombée vers le 08–09/10, avant la fin du cycle.
+
+Le coût ne venait plus du NOMBRE de mesures, mais de leur **profondeur**. Pour
+re-mesurer un post vieux de six jours, le scrape de profil lit les vingt qui
+l'ont suivi. Or le moteur ne lit qu'un chiffre, celui de J+2
+(`MESURE_JOURS`), sur lequel le cycle est jugé.
+
+Décision d'Adrien : **une mesure, à J+2, et c'est tout.**
+
+- un post est relevé quand il a `MESURE_JOURS` jours, puis **plus jamais**
+  (`mesureFaite` : relevé pris à J+2 ou après). Un post relevé trop tôt avant
+  le 01/10 est refait une fois, à J+2 ;
+- **par son lien** : tous les posts dus d'un compte partent dans **un** appel
+  Apify (`postURLs`, `apify_releve.ts`), sans téléchargement. On paie le post,
+  pas les vingt qui l'entourent. Rapprochement par l'identifiant du lien
+  résolu, à défaut par le lien que renvoie l'actor (`apparierParLien`) ;
+- **sans lien valide** (`lienTiktok` : champ vide, hashtags collés à la
+  place), et seulement là, le profil est lu jusqu'au post et le post est
+  retrouvé par cohérence (±36 h + texte). Plus de 7 jours sans lien : abandonné ;
+- l'espacement de 20 h ne joue qu'après un ÉCHEC (`stats_tentative_at` sans
+  `stats_maj_at` au même instant). Sans cette nuance, un post relevé trop tôt
+  à 12:30 attendait le lendemain 13:00 pour sa mesure de J+2 ;
+- plus de `scrapePost`, plus de scrape « metrics seules », plus de
+  `compte_metrics` écrit par le relevé.
+
+`apify_releve.ts` est un module à part, pour la même raison qu'`apify_usage.ts`
+(0281) : `apify.ts` est tiré par six autres bundles, qui « changeaient » au
+moindre ajout. Seuls `rattrapage-elo` et `minuit-vnext` bougent.
+
+**La courbe du Pilotage ne lit plus les profils** (0285). `vues_globales_jour`
+sommait le dernier scrape de chaque profil, un « total » qui dépendait du
+nombre de posts lus. Sans scrape de profil, il se serait figé sans un mot.
+`snapshot_vues_globales(p_jour, p_jours)` le calcule désormais sur nos
+passages, hors posts test :
+- `vues_delta(J)` = vues relevées des posts publiés le jour Paris J ;
+- `vues_totales` = leur cumul.
+
+Un post n'étant mesuré qu'à J+2, la fonction recalcule les quatre derniers
+jours à chaque passe. L'historique est recalculé de la même façon, avec la
+sauvegarde `vues_globales_jour_sauvegarde`. Au 01/10 : 10,37 M de vues sur nos
+posts depuis le 07/09.
+
+Le bouton « Rafraîchir » des Analytics est **supprimé**. Il appelait la fonction
+`metriques`, qui scrape 30 posts par profil pour tous les comptes : environ 800
+résultats, ~2 $ par clic. La fonction reste déployée, mais plus rien ne
+l'appelle — ni cron, ni écran.
+
+### Verdicts du jour (0283)
+
+116 cycles pleins attendaient leur verdict : leurs passages des 28–30/09
+n'avaient été relevés que le 01/10. Décision d'Adrien : juger le jour même.
+`requalifier()` a été répliqué sur la moyenne des vues relevées, quel que soit
+leur âge :
+- **38 jugés** ;
+- **33 descentes reportées** : tier gardé, cycle rouvert ;
+- **5 cycles rouverts** : aucun post publié, créneau passé ;
+- 39 non touchés : un passage du jour n'était pas encore publié.
+
+Le report des descentes est délibéré. Une vue de moins de deux jours vaut
+~45 à 70 % de sa valeur à J+2 : une montée sur vues jeunes reste vraie, une
+descente est probablement fausse. C'est la classe d'erreur que 0282 venait de
+corriger. Sauvegarde dans `verdicts_du_jour_sauvegarde`.
+
+Résultat : 84 slideshows tirables (71 en B ou mieux) et 110 passages dus pour
+52 posts par jour, soit **2,1 jours** de runway (0,2 avant).
+
+### Les slideshows cold-study sortent du pool (0284)
+
+Les 50 slideshows encore `valide` qui ne portaient que `cold-study` (supprimé
+par 0277) passent en **`rejete`**, pas en suppression. Les FK `passages`,
+`reposts_bonus` et `contenu_tier_historique` sont en CASCADE : supprimer ces
+contenus aurait effacé 146 passages publiés, avec leurs vues, que la
+qualification des créateurs lit encore. La source `studylapses` (niche
+cold_study) est désactivée. Sauvegarde dans `cold_study_retrait_sauvegarde`.
+Les « dus intirables » tombent à 0.
+
+**Déploiement du 01/10/2026, après OK d'Adrien.** Migrations 0283 → 0285
+appliquées. Deux chargeurs sur `8d8b504` : `rattrapage-elo` (v22) et
+`minuit-vnext` (v37).
+
+- **Les deux alias `createClient` ont été renommés** : `he`→`be` et `Ue`→`De`,
+  relus dans les bundles.
+- Les dix autres bundles ressortent identiques à l'octet.
+- Test de vie `401` passé sur les deux (par `pg_net`).
+- Relevé à blanc sur `irem.is684` : un lien, un appel Apify, 54 700 vues
+  rapprochées par le lien en 7 s, aucune écriture.
+
+## Le calendrier du créateur suit le jour de Paris (01/10/2026)
+
+Signalé par Rana : le calendrier « vide » chez Ramazan (@asya.ders680) et Isil
+(@baran.notlar863), qui publiaient. La base était saine, et le calendrier du
+manager complet. La page du créateur prenait « aujourd'hui » et le mois affiché
+à l'heure du TÉLÉPHONE (`aujourdhui()`, `new Date()`), alors que le moteur date
+les posts au jour de Paris. Conséquences :
+- en Turquie (une heure d'avance), entre minuit et 1 h, « Aujourd'hui » était
+  vide ;
+- le 30/09 au soir, la grille s'ouvrait déjà sur un mois d'octobre sans aucun
+  post. Ramazan l'a ouverte à 00:31 heure turque ;
+- et un post publié en retard — Isil publie souvent la veille pour le
+  lendemain — ne s'affichait plus nulle part dès le lendemain.
+
+`calendrierPoster.ts` (pur, testé) : la page prend `aujourdhuiParis()`, ouvre
+la grille sur le mois de Paris, et « Aujourd'hui » montre aussi les posts non
+publiés des deux jours précédents, marqués « en retard ». Le calendrier admin
+et manager n'est pas touché. Limite latente repérée au passage :
+`postsCalendrierAdmin` plafonne à 800 lignes, et perd déjà ce qui précède le
+11/09.
+
+## Les posts faisaient la publicité des concurrents (0286, 01/10/2026)
+
+Wilgo dans **43 posts sur 14 jours, dont 30 publiés** : « Benutz die WILGO App…
+dein Cheatcode für gute Noten », « ceux qui ont la mention TB utilisent la
+méthode WILGO », « Wilgo'dan test çöz », et même un reste de fiche App Store
+derrière le CTA micabo. La cause est à la source : des slideshows importés de
+comptes concurrents (`jeanne.wilgo`). Au 01/10, **76 decks validés sur 35
+slideshows** citent un concurrent, dont 56 Wilgo.
+
+Rien ne l'attrapait, et c'était voulu à moitié : `retirerMentionConcurrent`
+(0269) ne coupe que Hustly, parce qu'une coupe aveugle sur « Anki » détruirait
+des comparatifs légitimes. **Décision d'Adrien : un classement ou un comparatif
+reste, une recommandation se remplace.** Trancher entre les deux est un travail
+de lecture, pas une regex — c'est donc le brief du matin, un modèle, qui le
+fait, chaque matin, sur les posts du jour pas encore publiés
+(`docs/brief/PLAYBOOK.md`, étape 2 bis).
+
+- `concurrents` : la liste, éditable en base. Motifs POSIX **en mots entiers**
+  (`\m … \M`) : « Ranking » contient « anki », c'est le faux positif vu au
+  premier repérage. ChatGPT, Gemini et Perplexity n'y sont pas (IA
+  généralistes), ni « notion » (un mot français).
+- `mentions_concurrents(debut, fin)` : lecture seule, une ligne par slide ou
+  légende qui cite un concurrent actif. Elle lit `texte_overlay` élément par
+  élément : dans `slides::text`, le JSON écrit le saut de ligne `\n` et
+  « \nWILGO » n'est plus un mot entier.
+- `corriger_texte_post` / `corriger_hashtags_post` : **les seules écritures que
+  le brief s'autorise**. Post non publié uniquement — la fonction lève sinon,
+  on ne réécrit jamais ce qui est en ligne. Elles corrigent le post, le passage
+  et, s'il porte encore le même texte à cette position, le deck de la langue
+  (les prochains posts naissent propres), jettent le rendu incrusté de la
+  slide, et journalisent avant/après dans `concurrents_corrections`. Pas de
+  bloc `exception` (règle de 0265). Réservées au `service_role`.
+
+Le brief lit aussi les posts **publiés** la veille qui citent encore un
+concurrent (Q10, contrôle) et le stock du pool (Q9 `decks_pool_concurrents`,
+qui doit baisser). Ce qui lui échappe : les posts publiés avant son passage de
+07:52, ~2,4 % des posts.
+
+**Les posts enchaînés (Q12)** sont dans le même passage : deux posts du même
+compte à moins de 5 minutes. L'heure est celle de TikTok quand le lien porte
+l'id de la vidéo (les 32 bits de tête de l'id sont l'horodatage Unix de la
+création), sinon `publie_at`, l'heure du clic « publié » dans l'OS. Sur les 18
+posts du 25/09 au 01/10 qui ont les deux, écart médian **0,9 min**, 90 % sous
+2,1 min : l'heure de l'OS est un bon indicateur. Mais 323 liens sur 341 sont
+des liens courts (`vm.tiktok.com`) sans id, et un créateur qui coche deux
+posts d'un coup sortirait à tort. Le relevé de J+2 résout déjà chaque lien par
+Apify ; y ranger l'heure de création TikTok rendrait la mesure exacte.
+
+Migration appliquée le 01/10, aucun chargeur redéployé : le moteur n'a pas
+changé.
+
+## Plus aucune slide ne cite un concurrent par erreur de placement (0287, 01/10/2026)
+
+0286 ne faisait que repérer et corriger chaque matin ce qui partait. Adrien :
+« je veux que les slides (sauf classements) ne citent pas des concurrents ».
+Le chiffre qui a décidé, sur les decks de `jeanne.wilgo` : **27 decks en
+langue d'origine sur 48 (56 %)** citaient encore un concurrent, contre **27
+traduits sur 105 (26 %)**. La traduction en retire la plupart, son prompt
+interdit les produits tiers ; le chemin source n'a aucun traducteur (0268) et
+le placement micabo ne réécrit qu'UNE slide.
+
+**La règle**, écrite pour le modèle (`corrigerMentionsConcurrents`) comme pour
+le brief :
+- recommandation, consigne, témoignage isolé, méthode à son nom, reste de
+  fiche App Store → le nom du concurrent devient la forme de marque de la
+  langue, **le reste mot pour mot, promesses comprises** (« gratuite »,
+  « vérifiée par des profs » restent : décision d'Adrien) ;
+- classement où le concurrent est le **gagnant** (« Wilgo IA 9/10 » devant
+  ChatGPT et Gemini) → c'est son placement, il devient micabo. Le placement
+  allemand de `5cc2bb38` le faisait déjà de lui-même ;
+- classement ou comparatif où il n'est qu'un élément noté et où micabo gagne
+  (« j'ai utilisé quizlet », « Anki 6/10, perte de temps ») → laissé.
+
+**Le stock** : 99 slides relues une par une, deck entier sous les yeux, en
+cinq langues — **73 remplacées, 26 laissées**, 9 slides de posts non publiés et
+2 légendes `#Wilgo`. Chaque décision et son motif sont dans
+`concurrents_reprise_0287`, la sauvegarde (166 lignes) dans
+`concurrents_reprise_sauvegarde`, le journal dans `concurrents_corrections`.
+Les publiés ne sont pas touchés. Restent 25 slides qui citent un concurrent :
+toutes des classements, marqués `concurrent_laisse` sur la slide.
+
+Deux cas laissés exprès, à trancher dans la file : `9dc90d30` et `fabbb97c`
+(en brouillon) sont faits de **captures de fiches App Store** de concurrents.
+Réécrire le texte n'enlèverait pas l'image ; ils sont à refuser, pas à
+réécrire. Et « study smarter » est une expression anglaise courante : le motif
+StudySmarter passe en un mot.
+
+**Le moteur** : `sansConcurrents` (`import_contenu.ts`) tourne à la sortie de
+`assurerDeckPourLangue`, sur TOUS les chemins — deck déjà prêt, langue
+d'origine, traduit — parce qu'une règle qui ne vit que sur un chemin ne protège
+que ce chemin (0268). Sans mention, il ne coûte qu'une regex sur la liste de
+la table `concurrents` (relue toutes les 10 minutes, repli sur la liste de 0286
+si elle est illisible). Avec mention, un appel modèle court qui ne reçoit à
+réécrire que les slides qui citent, mais lit le deck entier. `concurrents.ts`
+(pur, 11 tests) contrôle la sortie : une réécriture qui cite encore un
+concurrent, contient un tiret long, ou a gonflé (plus d'une ligne ou de moitié
+de plus) n'est pas écrite. Le résultat est rangé dans `contenu_langues` : payé
+une fois par deck. Un « classement » est mémorisé sur sa slide
+(`concurrent_laisse` = le texte jugé) et rejugé seulement si le texte change.
+Un appel raté laisse le deck tel quel : le brief du matin (0286, Q11) est le
+filet.
+
+**Piège de l'outil, à connaître avant la prochaine reprise** : le MCP Supabase
+demande une **confirmation humaine** avant toute instruction destructive
+(`delete`, `drop`). Sans interface pour la donner, l'appel attend son délai de
+60 s et la transaction est annulée, sans un mot sur la cause. Quatre essais
+sont tombés là-dessus (un `delete from burn_rendus` vide, des `drop table` de
+tables temporaires) avant qu'un chronométrage étape par étape ne montre que
+chaque instruction prenait quelques millisecondes. Une reprise passe par des
+tables permanentes et sans `delete` ni `drop` ; une suppression vraiment
+nécessaire se fait à part, et se dit.
+
+**Déploiement du 01/10/2026, après la demande d'Adrien** (« fais la correction
+mtn »). Cinq chargeurs sur `772589b` : `assignation-contenu` (v34),
+`assignation` (v35), `revoquer-post` (v34), `bruler-texte-test` (v24) et
+`minuit-vnext` (v38) — les cinq qui tirent `assurerDeckPourLangue`, environ
++6 Ko chacun. **Trois alias `createClient` ont été renommés** : `ce`→`pe`,
+`he`→`_e`, `de`→`me` ; `De` et `Y` inchangés, relus dans les bundles.
+`bruler-assignes`, `import-contenu` et `renettoyer-contenu` ressortent à taille
+constante (permutation d'identifiants) : leurs bundles du dépôt, déjà en prod,
+sont gardés tels quels. Les quatre autres sont identiques à l'octet.
+
+## Des slides portaient l'OCR brut d'une capture d'écran (0288, 01/10/2026)
+
+Vu en relisant 0287 : sur `8e88d77c`, le texte des slides 6 à 8 était l'OCR
+intégral de l'image — fiche de figures de style tronquée, agenda Google avec
+un clavier entier (163 lignes), notes de maths en russe (188 lignes) — et la
+traduction allemande l'avait recopié. Vidés sur décision d'Adrien : la slide
+part avec son image, sans texte superposé. Sauvegarde dans
+`textes_bruit_sauvegarde`.
+
+**Un seuil de longueur ne suffit pas à trier** : « plus de 40 lignes ou 900
+caractères » a ramassé 4 slides sur 123 slideshows, dont une vraie
+(`e7422935`, « 5 techniques infaillibles », un texte long et légitime). Chaque
+slide a été lue avant d'être vidée. Si l'import doit un jour écarter ce bruit
+à la source, c'est un critère de contenu (proportion de lignes d'un ou deux
+caractères, alphabet différent de la langue du deck), pas de longueur.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
@@ -1546,3 +1901,17 @@ Avant tout `functions deploy`, comparer avec `get_edge_function` : la prod peut
  n'avaient pas bougé : les relire dans le bundle à chaque fois, jamais les
  recopier du déploiement précédent. Huit sentinelles présentes, test de vie
  `401` passé sur les quatre.
+
+
+- **Déploiement du 01/10/2026** (relevé sobre, 0281). Migration 0281 appliquée
+ (deux colonnes sur `passages`, fonction `prendre_verrou_drain_elo`, réservée au
+ `service_role`) ; aucun cron touché. Deux chargeurs sur `a78e993` :
+ `rattrapage-elo` (v21) et `minuit-vnext` (v36) — les deux seuls qui
+ embarquent `rattrapage_elo.ts`. **Les deux alias `createClient` ont été
+ renommés** : `Y`→`ae` et `Ie`→`Ue`, relus dans les bundles. Les dix autres
+ bundles ressortent identiques à l'octet : la lecture de l'usage Apify vit dans
+ `apify_usage.ts` et non dans `apify.ts`, que tirent six autres bundles — y
+ ajouter une fonction, même élaguée, les faisait tous « changer ».
+ Test de vie `401` passé sur les deux **par `pg_net` depuis la base** : le
+ proxy de l'environnement de travail bloque `supabase.co`, l'appel anonyme
+ part donc de `net.http_post` et se lit dans `net._http_response`.

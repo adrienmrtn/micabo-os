@@ -1,10 +1,10 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { QualificationBadge } from "@/components/moteur/QualificationBadge";
 import { indexQualification } from "@/features/moteur/qualification";
-import { ChevronRight, Flame, LinkIcon, RefreshCw, TrendingUp } from "lucide-react";
+import { ChevronRight, Flame, LinkIcon, TrendingUp } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,7 @@ import {
   CardTitle,
   EmptyState,
 } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
-import { lancerMetriques, statsComptes, statsPosts } from "@/features/moteur/api";
+import { statsComptes, statsPosts } from "@/features/moteur/api";
 import { StatsFormatsCard } from "@/features/moteur/StatsFormatsCard";
 import type { StatsPost } from "@/features/moteur/types";
 
@@ -55,7 +54,6 @@ type TriCreateur = "vues" | "elo" | "likes";
 
 export function AdminAnalyticsPage() {
   const { t, i18n } = useTranslation();
-  const queryClient = useQueryClient();
   const [compteId, setCompteId] = React.useState("");
   const [tri, setTri] = React.useState<TriCreateur>("vues");
 
@@ -68,18 +66,9 @@ export function AdminAnalyticsPage() {
   const tousPosts = useQuery({ queryKey: ["stats-posts-viraux"], queryFn: () => statsPosts() });
   const viraux = (tousPosts.data ?? []).filter(estViral);
 
-  // Va chercher les vraies stats sur le profil TikTok de chaque compte (scrape
-  // Apify des 30 derniers posts, rapproché par l'ID du lien publié), puis
-  // rafraîchit le tableau. C'est une opération facturée (Apify) : bouton manuel,
-  // pas d'appel automatique au chargement de la page.
-  const rafraichir = useMutation({
-    mutationFn: () => lancerMetriques(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["stats-comptes"] });
-      queryClient.invalidateQueries({ queryKey: ["stats-posts"] });
-      queryClient.invalidateQueries({ queryKey: ["stats-posts-viraux"] });
-    },
-  });
+  // Plus de bouton « Rafraîchir » (01/10/2026) : il scrapait les 30 derniers
+  // posts de chaque profil (~800 résultats Apify, ~2 $ par clic) alors que le
+  // relevé mesure déjà chaque post, une fois, à J+2 (`_shared/releve_file.ts`).
 
   const cumul = (comptes.data ?? []).reduce(
     (acc, c) => ({
@@ -111,27 +100,6 @@ export function AdminAnalyticsPage() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight">{t("analytics.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("analytics.subtitle")}</p>
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={rafraichir.isPending}
-            onClick={() => rafraichir.mutate()}
-          >
-            <RefreshCw className={cn("size-4", rafraichir.isPending && "animate-spin")} />
-            {rafraichir.isPending ? t("analytics.rafraichirEnCours") : t("analytics.rafraichir")}
-          </Button>
-          {rafraichir.isSuccess && (
-            <p className="text-xs text-success">
-              {t("analytics.rafraichiOk", {
-                count: (rafraichir.data?.resultats ?? []).reduce((n, r) => n + r.releves, 0),
-              })}
-            </p>
-          )}
-          {rafraichir.isError && (
-            <p className="text-xs text-destructive">{(rafraichir.error as Error).message}</p>
-          )}
         </div>
       </div>
 

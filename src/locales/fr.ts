@@ -2050,6 +2050,7 @@ export const fr = {
       passe: "Passé",
       rien: "Rien de prévu aujourd'hui.",
       creneau: "Créneau {{n}}",
+      enRetard: "En retard · {{date}}",
       voirPost: "Voir le post",
       moisPrecedent: "Mois précédent",
       moisSuivant: "Mois suivant",
