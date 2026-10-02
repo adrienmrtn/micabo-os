@@ -1916,6 +1916,27 @@ Ce que les essais sur 835c1781 (1,4 M) ont appris :
   open on the screen » est sorti sur une slide micabo, « Lire à voix haute »
   était du texte resté sur l'image.
 
+**Le gabarit, tenu par le code** (retour d'Adrien sur le cinquième essai :
+« des slides en 3 paragraphes et le placement micabo en 1, bizarre »).
+`_shared/gabarit.ts` (pur, 10 tests) mesure chaque slide du parent :
+paragraphes, lignes par paragraphe, plus longue ligne. La variante doit tenir
+le gabarit de la slide du parent à la même position (une ligne d'écart par
+paragraphe, quatre caractères de plus par ligne, longueur totale entre 0,6 et
+1,5 fois). Une slide hors gabarit repart au modèle avec ses écarts mesurés,
+deux tours au plus ; ce qui reste hors gabarit est écrit dans `defauts`. La
+slide micabo du parent vient souvent du placement, pas de l'auteur : son
+modèle est la voisine de liste (`modeleMicabo`). Même leçon que 0292 : un
+prompt ne tient pas une forme, le code si.
+
+**Le TikTok d'origine sert de modèle de placement.** La page du créateur
+montre, à côté de chaque photo, `post_slides.reference_url`, tiré de
+`structure_slides[].reference_url ?? raw_url`. Pour une variante, ce sera la
+slide du parent à la même position : même forme, donc le même endroit pour le
+texte. `raw_url` reste celui de l'image tirée du pool. Conséquence connue : sur
+un compte `burned`, le burn lit le style sur `reference_url` et l'aligne sur
+l'image, qui n'est plus la même photo ; l'autotest refuse et la slide part en
+classique.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
