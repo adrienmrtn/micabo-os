@@ -2,7 +2,7 @@
  * Nettoyage CIBLÉ d'un slideshow (02/10/2026) : effacer la légende ajoutée,
  * garder tout ce qui porte le sens de l'image.
  *
- *   { contenuId, positions?, consignes?: { [position]: string }, ecrire? } → 202 { ok }
+ *   { contenuId, positions?, consignes?: { [position]: string }, ecrire?, promouvoir? } → 202 { ok }
  *   puis une ligne par slide dans `nettoyage_cible`
  *
  * Pourquoi : le nettoyage de l'import (`cleanImage`, text-removal) efface TOUT
@@ -23,8 +23,10 @@
  * pour le relire avant d'en décider. `ecrire: true` le range au chemin du
  * propre (`propre/<contenu>/<position>.<ext>`) avec sa ligne `media_library`,
  * que l'import reprend tel quel (`trouverPropreExistant`) au lieu de
- * renettoyer. Les images portent `exclu_concurrent` : elles montrent des
- * marques tierces et ne doivent garnir aucun autre slideshow.
+ * renettoyer. `promouvoir: true` fait la même écriture à partir du dernier essai
+ * relu, sans repayer la lecture ni l'effacement. Les images portent
+ * `exclu_concurrent` : elles montrent des marques tierces et ne doivent garnir
+ * aucun autre slideshow.
  */
 
 import { callWithFallback, fetchImageAsInline, MODELES_LECTURE_BURN, textOf, TEXT_MODELS } from "../_shared/gemini.ts";
@@ -111,6 +113,18 @@ async function nettoyerUne(
   const url = `${supabase.storage.from(BUCKET).getPublicUrl(chemin).data.publicUrl}?v=${Date.now()}`;
   if (!ecrire) return { ...base, statut: "essai", chemin, url };
 
+  const mediaId = await enregistrerPropre(supabase, contenu, chemin, url);
+  return { ...base, statut: "ecrit", chemin, url, media_id: mediaId };
+}
+
+/** La ligne `media_library` du propre, comme l'import l'écrit — plus `exclu_concurrent`. */
+async function enregistrerPropre(
+  supabase: ReturnType<typeof serviceClient>,
+  // deno-lint-ignore no-explicit-any
+  contenu: any,
+  chemin: string,
+  url: string,
+): Promise<string> {
   const { data: media, error } = await supabase
     .from("media_library")
     .upsert({
@@ -129,7 +143,37 @@ async function nettoyerUne(
     .select("id")
     .single();
   if (error) throw error;
-  return { ...base, statut: "ecrit", chemin, url, media_id: media.id };
+  return media.id as string;
+}
+
+/**
+ * Promotion d'un essai déjà relu : copie le fichier d'essai au chemin du propre
+ * et écrit sa ligne `media_library`, sans repayer la lecture ni l'effacement.
+ */
+async function promouvoirUne(
+  supabase: ReturnType<typeof serviceClient>,
+  // deno-lint-ignore no-explicit-any
+  contenu: any,
+  position: number,
+): Promise<Record<string, unknown>> {
+  const { data: essai } = await supabase
+    .from("nettoyage_cible")
+    .select("resultat")
+    .eq("contenu_id", contenu.id)
+    .eq("position", position)
+    .eq("resultat->>statut", "essai")
+    .order("fait_le", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const source = (essai?.resultat as { chemin?: string } | undefined)?.chemin;
+  if (!source) throw new Error("aucun essai à promouvoir");
+  const ext = source.split(".").pop() ?? "png";
+  const chemin = `propre/${contenu.id}/${position}.${ext}`;
+  const { error: cp } = await supabase.storage.from(BUCKET).copy(source, chemin);
+  if (cp) throw cp;
+  const url = `${supabase.storage.from(BUCKET).getPublicUrl(chemin).data.publicUrl}?v=${Date.now()}`;
+  const mediaId = await enregistrerPropre(supabase, contenu, chemin, url);
+  return { statut: "ecrit", depuis: source, chemin, url, media_id: mediaId };
 }
 
 Deno.serve(async (request) => {
@@ -139,6 +183,7 @@ Deno.serve(async (request) => {
     const corps = await request.json().catch(() => ({}));
     const contenuId = String(corps?.contenuId ?? "").trim();
     const ecrire = corps?.ecrire === true;
+    const promouvoir = corps?.promouvoir === true;
     const positions: number[] | null = Array.isArray(corps?.positions) ? corps.positions.map(Number) : null;
     const consignes = (corps?.consignes && typeof corps.consignes === "object" ? corps.consignes : {}) as Record<string, string>;
     if (!contenuId) return json({ ok: false, error: "contenuId manquant" }, 400);
@@ -160,7 +205,9 @@ Deno.serve(async (request) => {
           const s = slides[i++];
           let ligne: Record<string, unknown>;
           try {
-            ligne = await nettoyerUne(supabase, contenu, s, String(consignes[String(s.position)] ?? ""), ecrire);
+            ligne = promouvoir
+              ? await promouvoirUne(supabase, contenu, Number(s.position))
+              : await nettoyerUne(supabase, contenu, s, String(consignes[String(s.position)] ?? ""), ecrire);
           } catch (e) {
             ligne = { statut: "erreur", erreur: messageErreur(e).slice(0, 1000) };
           }

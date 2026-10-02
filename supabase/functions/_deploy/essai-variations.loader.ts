@@ -5,7 +5,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "d3a13d258ca8696184237f127d1c426061d56368";
+const SHA = "fea89afa63d3d88ce877cf08faef027d35c89836";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/essai-variations.bundle.js`;
 
@@ -14,9 +14,9 @@ const res = await fetch(url, {
 });
 if (!res.ok) throw new Error(`essai-variations bundle ${res.status} (${url})`);
 const src = await res.text();
-if (!src.includes("Deno.serve") || !src.includes("EMPLACEMENT DU PLACEMENT")) {
+if (!src.includes("Deno.serve") || !src.includes("LA SLIDE micabo")) {
   throw new Error("essai-variations bundle illisible ou tronqué");
 }
 // esbuild renomme l'alias d'un rebuild à l'autre : relire le
 // `import{createClient as …}` du bundle avant de l'effacer, et reporter le nom ici.
-new Function("Y", src)(createClient);
+new Function("ee", src)(createClient);
