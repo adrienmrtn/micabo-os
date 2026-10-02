@@ -1675,6 +1675,29 @@ images (`chaine`, `pas`, `manquants`), avec patience sur le 429 : 42 images
 par minute, zéro erreur. Et 8 images en parallèle dans une invocation dépassent
 sa mémoire (`546 WORKER_RESOURCE_LIMIT`).
 
+### Les deux gestes, faits (0296, 02/10/2026, OK d'Adrien)
+
+- **Hors des pools** : `texte_restant = true` sur les **82** images où l'audit
+  lit des mots ou le filigrane Xiaohongshu. Pas les 47 « chiffres / emojis
+  seuls », pas les 8 calques micabo. La liste et l'état d'avant sont dans
+  `texte_restant_0296`. Le garnissage (`chargerBiblioLabel`) ne les tire plus ;
+  elles apparaissent dans « échecs de nettoyage ».
+- **Re-nettoyage** : les 26 images de slideshows validés (moins `e1b5ef61` #7,
+  une capture d'article où le texte EST la photo), par `renettoyer-contenu`
+  `{contenuId, position}`, les 11 des posts à venir d'abord. Même chemin de
+  stockage, même ligne `media_library`, drapeau remis à `false` si le nettoyage
+  aboutit — donc une image re-nettoyée revient d'elle-même dans les pools.
+  Par vagues de 4 à 8 appels, jamais deux positions du même slideshow dans la
+  même vague (`patchSlideMediaId` relit puis réécrit `structure_slides`).
+
+**Le re-nettoyage touche aussi l'historique des posts publiés.** Le fichier
+est écrasé au même chemin et la ligne `media_library` est la même : les
+`post_slides` de TOUS les posts du slideshow pointent déjà dessus, publiés
+compris (`propagerMediaAuxPostsAssignes` les réécrit de toute façon). Rien ne
+change en ligne, mais dans l'OS un post publié montre ensuite une image qu'il
+n'a pas portée. C'est voulu pour les posts à venir — le créateur voit l'image
+propre sans réassignation —, c'est un défaut connu pour l'historique.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
