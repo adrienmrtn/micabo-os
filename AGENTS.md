@@ -1567,6 +1567,69 @@ lire `placement_micabo_v1_2026_10_01` au bras ancien.
 première fois : `ge`→`he`, `ye`→`Se`, `Le`→`Fe`, `he`→`we`, `W`→`te`). Test de vie
 `401` sur les six.
 
+## Un deck traduit troué partait tel quel (0294, 02/10/2026)
+
+Signalé par Adrien : le TikTok de @leon.lernen990 sur `85379b9e` (classement
+des spécialités médicales) mêlait des slides en français et en allemand. Les
+slides 1 à 4 n'avaient **aucun** texte allemand ; le seul texte à l'écran était
+le français resté dans l'image (la légende Florence de l'image « propre » 3 lit
+encore « Dermatologie 9/10 » : le nettoyage l'avait laissé). Le même deck était
+parti une heure plus tôt chez @tim.arbeit325. Le contrôle de 08:49 l'avait
+repéré (« À trancher ») mais n'a pas le droit de réécrire un deck entier.
+
+Le deck `de` était troué depuis l'import du 10/09, et deux règles l'ont laissé
+passer :
+
+- **à l'écriture**, `parPos.get(s.position) ?? ""` : une slide que le modèle de
+  traduction ne rendait pas devenait une chaîne vide, en silence. Le placement
+  remplissait ensuite sa slide ;
+- **au test « prêt »**, une seule slide avec du texte suffisait. Le deck troué
+  avait sa slide de placement, donc il était « prêt » à vie et ne repassait
+  jamais par la traduction.
+
+Trois decks dans ce cas en base : `85379b9e` de (2 posts publiés le 02/10),
+`cc30ddf8` es (couverture vide, publiée le 30/09), `f36096d3` tr (jamais servi).
+Vidés le 02/10 (`slides = []`, sauvegarde dans `decks_desalignes_sauvegarde`) :
+ils sont retraduits en entier à la prochaine assignation.
+
+Le correctif, dans `assurerDeckPourLangue` :
+
+- `positionsSansTexte(source, deck)` (`_shared/deck_structure.ts`, pur, 5 tests,
+  réexporté par `deckStructure.ts`) : les positions où la source a du texte et
+  la langue n'en a pas. Une slide vide dans la SOURCE n'est pas exigée — c'est
+  un choix (0288) ;
+- le deck source est lu **avant** le test « prêt », et un deck traduit n'est
+  prêt que s'il couvre toutes ces positions ; sinon il est retraduit en entier ;
+- une traduction incomplète est redemandée **une** fois, puis abandonnée sans
+  être écrite (`Traduction incomplète`) : l'assignation journalise « Deck
+  échoué » et repioche ;
+- `livrerDeck` refuse en sortie tout deck troué, sur tous les chemins — même
+  arbitrage que 0279 : un post de moins vaut mieux qu'un post à moitié muet.
+
+**Coût** : une lecture du deck source de plus par appel, y compris sur le chemin
+« prêt ». Un slideshow dont la traduction rend toujours une slide vide ne sort
+plus dans cette langue ; ça se voit dans le journal du drain, ça ne part plus en
+ligne.
+
+**Reste ouvert** : le texte d'origine laissé dans certaines images « propres »
+(`texte_restant = false` alors que la légende lit le texte). Dans les autres
+langues l'overlay le recouvre en partie ; c'est la même slide, à regarder dans
+la fiche de `85379b9e`.
+
+**Déploiement du 02/10/2026, après OK d'Adrien.** Cinq chargeurs sur `828ce5c` :
+`assignation-contenu` (v39), `assignation` (v40), `bruler-texte-test` (v29),
+`minuit-vnext` (v43) et `revoquer-post` (v39), +913 octets chacun. **Les cinq
+alias `createClient` ont été renommés** : `he`→`_e`, `Se`→`ve`, `te`→`re`,
+`Fe`→`Be`, `we`→`be`. `bruler-assignes`, `import-contenu` et
+`renettoyer-contenu` ressortent à taille constante (permutation) : leurs
+bundles du dépôt sont gardés. Test de vie `401` passé sur les cinq (par
+`pg_net`).
+
+Le même jour, **0293** ajoute Flashka à `concurrents` (`\mflashka\M`) avant
+l'import de la source @flashka_es : appli de flashcards IA, même pitch que
+micabo. « Professor Ka », sa mascotte, n'est pas dans le motif : la remplacer par
+micabo prêterait à micabo un tuteur IA.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
