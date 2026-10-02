@@ -2077,6 +2077,18 @@ l'effacement (Claude + Bria) tourne donc sans attendre le détecteur, avec une
 consigne qui nomme l'icône seule ; sans reste, il n'efface rien et ne coûte
 que la lecture.
 
+**Bilan du 02/10.** 137 posts : 114 sous 5 000 vues (sortis avant le
+pipeline), 1 rejeté sur la note d'import, 1 refusé par Adrien dans la file,
+1 validé par lui, **20 en file**. Images : 15 slides où il restait du Astra
+(logo, icône seule, interface sur un écran, page App Store, URL
+`astra-ai.co`, un bouton « Buy Astra AI Plan »), 2 qui ont demandé un second
+passage (l'effaceur avait redessiné une pastille au lettrage brouillé) ; puis
+une relecture par Claude des 130 slides des 21 slideshows : aucune trace.
+Texte : 21 slides, 17 en micabo, 4 sans marque. Chaque slideshow porte dans
+`file_note` ce qui a été touché et où regarder. Trois slides d'emir.study
+partagent leur image avec un autre slideshow (dédoublonnage de l'import) :
+un calque posé dessus dans l'éditeur réécrirait aussi l'autre.
+
 **Piège du MCP, précisé** : le corps plpgsql du trigger (points-virgules entre
 `$f$`) est passé par `apply_migration`. Le même texte par `execute_sql`,
 précédé d'un `drop trigger if exists`, a attendu ses 60 s sans rien appliquer.
