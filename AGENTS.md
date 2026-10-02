@@ -1841,6 +1841,81 @@ et `revoquer-post`, +683 octets chacun. **Les quatre alias `createClient` ont
 (permutation) : leurs bundles du dépôt sont gardés. Versions déployées : v40,
 v41, v44, v40. Test de vie `401` passé sur les quatre (par `pg_net`).
 
+## Réinjection des rejetés et nettoyage ciblé de flashka (0300, 02/10/2026)
+
+Re-notés avec le prompt de 0299, 74 des 94 slideshows rejetés à l'import
+(`elo_insuffisant`) des sources actives passaient le seuil. Adrien en a fait
+rentrer **22** : luna.study4 (13), flashka_es (8), user5507909029330 (1).
+jeanne.wilgo (44) attend sa décision. Chacun repart à l'étape `pertinence`
+avec la note de l'essai (même prompt, pas de second appel) et `statut =
+brouillon` : le pipeline refait la note d'import, le tier, le nettoyage, et
+s'arrête dans la file. État d'avant dans `reinjection_0300`.
+
+**Flashka : le nettoyage de l'import effaçait le sens de l'image.** Ses slides
+reposent sur des vignettes — le logo de l'IA notée (ChatGPT, Gemini, Meta AI)
+en haut à gauche, une copie notée (5/10, 4/10, 3/10) en haut à droite, trois
+copies à 10/10 et 100 % sur la dernière. Le texte ajouté n'est qu'une courte
+légende entre les deux (« Burlas... », « Risas... »). Le text-removal efface
+tout ce qui ressemble à du texte : sur les 4 flashka validés avant 0300, il ne
+restait qu'un selfie, et Adrien avait réécrit « ChatGPT Burlas 5/10 » dans le
+deck pour compenser.
+
+`nettoyage-cible` (chargeur `_deploy`) : un modèle de vision (celui de la
+lecture du burn) rend deux listes de rectangles, à effacer et à garder ;
+`_shared/nettoyage_cible.ts` (pur, 8 tests) rogne le masque hors des zones à
+garder et l'abandonne s'il n'en reste pas assez ; `fal-ai/bria/eraser`
+(`_shared/fal_eraser.ts`) ne reconstruit que sous le masque. `ecrire: false`
+range l'essai sous `essai/nettoyage-cible/…`, `promouvoir: true` le recopie au
+chemin du propre une fois relu. Les propres portent `exclu_concurrent` : ils
+montrent des marques tierces et ne garnissent aucun autre slideshow. Le deck ne
+porte plus que la légende ; la dernière slide dit « la app micabo ».
+
+Relu par `decrire-images` : 35 propres sur 40 au premier passage, 2 reprises
+réussies, 2 retouches légères laissées à la file (8b92903d #2, f772e9cb #5).
+Les 3 « restes » signalés sous la note sont le texte imprimé de la copie
+elle-même.
+
+**Ni `REPLICATE_API_TOKEN` ni `STABILITY_KEY` ne sont posés sur l'Edge.** Le
+LaMa d'`inpaint.ts` rend donc `null` partout, et le repli « Replicate » de
+`cleanImage` n'existe pas en pratique : Fal est le seul fournisseur.
+
+**Douze flashka quasi identiques dans le pool** (les 4 validés + les 8) : même
+mème, seul le selfie change. À Adrien de décider combien en garder dans la
+file.
+
+**Voir une image depuis l'environnement de travail** : le proxy bloque
+`supabase.co` et `pg_net` tronque un corps binaire. `decrire-images` (chargeur,
+modèle du burn) décrit une image du Storage ; `apercu-images` (autonome) la
+rend en base64 réduite, trop lourde pour être relue souvent.
+
+## Variantes des slideshows gagnants : essai à blanc (02/10/2026)
+
+Demande d'Adrien : pour chaque slideshow passé à **50 000 vues** ou plus chez
+nous (23 au 02/10), deux ou trois slideshows dans le même moule, **contenu
+neuf** (même format, même hook, même ton, même nombre de slides, d'autres
+idées), images du **même compte source** (jamais celles du parent), à valider
+dans la file. Rien n'y entre avant son verdict sur un essai.
+
+`essai-variations` (chargeur, écrit dans `essai_variations` seulement) :
+Claude écrit les variantes et choisit chaque image par sa légende ; le pool ne
+garde que les propres que l'audit de 0295 a relus **sans texte**, hors
+slideshows en file, et écarte les légendes qui parlent de texte, d'appli,
+d'écran, de logo ou de langue.
+
+Ce que les essais sur 835c1781 (1,4 M) ont appris :
+
+- **la slide micabo fait partie du moule.** Celle du parent est un élément de
+  la liste (« je révise mes fiches micabo dans les toilettes »). Le placement
+  générique écrasait une technique et inventait (« un exam de droit », « l'appli
+  sait que j'ai un exam »). La variante écrit la sienne au même endroit, avec ce
+  que fait micabo et rien d'autre (fiches ou flashcards depuis cours, notes ou
+  PDF, se tester quelques minutes par jour) ;
+- **la promesse de couverture doit être tenue par chaque élément** : sans la
+  consigne, « trucs de psychopathe » donnait « relire le lendemain » ;
+- **une légende Florence ne suffit pas à juger une image** : « Hyperfocus app
+  open on the screen » est sorti sur une slide micabo, « Lire à voix haute »
+  était du texte resté sur l'image.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
