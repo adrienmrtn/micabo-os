@@ -1946,7 +1946,11 @@ lui. Une variante n'est écrite que sans aucun défaut — gabarit, image hors
 pool ou déjà prise, micabo absent ou mal placé, concurrent, tiret long, ou
 promesse que micabo ne tient pas (photo, capture, audio, rappel, planning :
 `PROMESSES_INTERDITES`, renvoyée au modèle comme un écart de gabarit).
-Écrite, elle naît `rejete` et ne passe `brouillon` qu'à la dernière écriture :
+Une image hors pool ou déjà prise n'est pas un défaut : le modèle invente
+parfois un identifiant (« 589a8ab2-…-000000000000 » au premier essai), donc
+`reparerImages` la remplace par l'image du pool dont la légende partage le plus
+de mots avec celle demandée (une image de hook en slide 1), et le note dans
+`images_reparees`. Écrite, elle naît `rejete` et ne passe `brouillon` qu'à la dernière écriture :
 
 - `creation_mode = manuel`, `parent_id`, `profondeur + 1`, tier **B**, un
   passage, labels, musique et format du parent, `placement_manuel` si la slide
