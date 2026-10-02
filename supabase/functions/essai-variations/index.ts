@@ -25,6 +25,7 @@
 
 import { type Concurrent, CONCURRENTS_DEFAUT, concurrentsCites, versMicaboDepuis } from "../_shared/concurrents.ts";
 import { callWithFallback, integrateSophia, MODELES_LECTURE_BURN, textOf, TEXT_MODELS } from "../_shared/gemini.ts";
+import { decrireGabarit, ecartsGabarit, type Gabarit, gabarit, modeleMicabo } from "../_shared/gabarit.ts";
 import { nettoyerTexteDeck } from "../_shared/marque.ts";
 import { citeMicabo } from "../_shared/placement.ts";
 import { assertAuthorised, chargerPrompt, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
@@ -43,20 +44,24 @@ function consigne(input: {
   titre: string;
   deck: SlideDeck[];
   imagesParent: Map<number, string>;
+  gabarits: Map<number, Gabarit>;
+  posMicabo: number | null;
   pool: Image[];
   n: number;
 }): string {
-  const posMicabo = input.deck.find((s) => s.position_sophia || citeMicabo(s.texte_overlay))?.position ?? null;
+  const posMicabo = input.posMicabo;
   const deck = input.deck
     .map((s) => {
       const img = input.imagesParent.get(s.position);
       const marque = s.position === posMicabo ? " (SLIDE micabo)" : "";
-      return `Slide ${s.position}${marque}${img ? ` [image : ${img}]` : ""} : « ${s.texte_overlay ?? ""} »`;
+      const g = input.gabarits.get(s.position);
+      return `Slide ${s.position}${marque}${img ? ` [image : ${img}]` : ""} : « ${s.texte_overlay ?? ""} »` +
+        (g ? `\n→ gabarit à reproduire : ${decrireGabarit(g)}` : "");
     })
     .join("\n\n");
   const regleMicabo = posMicabo != null
     ? `LA SLIDE micabo — slide ${posMicabo}, comme dans le parent
-- À la slide ${posMicabo}, et seulement là, écris la slide micabo dans la MÊME forme que celle du parent : un élément de la liste comme les autres (le même genre d'habitude que les autres slides, aussi bizarre, aussi concrète), où l'appli micabo est l'outil, pas le sujet. Une seule phrase ou deux, courtes, comme dans le parent.
+- À la slide ${posMicabo}, et seulement là, écris la slide micabo dans la MÊME forme que celle du parent : un élément de la liste comme les autres (le même genre d'habitude que les autres slides, aussi bizarre, aussi concrète), où l'appli micabo est l'outil, pas le sujet. Sa FORME est celle des autres éléments de la liste, jamais une phrase d'un seul bloc : suis le gabarit donné pour la slide ${posMicabo}, même s'il ne ressemble pas au texte du parent à cette place.
 - Écris toujours « l'appli micabo », en minuscules, une seule fois dans tout le slideshow.
 - Ce que fait micabo, et RIEN d'autre : à partir de ses cours, de ses notes ou d'un PDF, l'appli crée les fiches ou les flashcards, et on se teste dessus quelques minutes par jour. N'invente aucune autre fonction (pas d'audio, pas de planning, pas de rappel, pas de professeur, pas d'IA qui « sait » ou « devine »), aucun chiffre sur l'appli, aucune matière ni note que le parent ne cite pas.
 - Ailleurs que sur cette slide, aucune appli, aucun site, aucune marque.`
@@ -77,7 +82,7 @@ ${deck}
 CE QU'IL FAUT GARDER — le moule
 - Exactement ${nb} slides, chacune avec le même RÔLE que la slide du parent à la même position (couverture, puis chaque élément de la liste, puis la fin s'il y en a une).
 - La même promesse de couverture et la même voix : même personne (je / tu), même registre, même humour, même façon de parler d'un élève.
-- La même forme de slide : même longueur à peu près (nombre de lignes, longueur des lignes), mêmes retours à la ligne, même construction (par exemple : une phrase-titre, puis l'exemple concret, puis l'explication, puis la chute).
+- La FORME de chaque slide est celle de la slide du parent à la même position, donnée par son « gabarit » : même nombre de paragraphes (séparés par une ligne vide, écrite \\n\\n), même nombre de lignes dans chaque paragraphe (une de plus ou de moins au plus), lignes pas plus longues que celles du parent. Reviens à la ligne comme le parent, au même rythme, et garde la même construction (par exemple : une phrase-titre, puis l'exemple concret, puis l'explication, puis la chute). Le code mesure ce gabarit et te renverra toute slide qui ne le tient pas.
 - La couverture peut reprendre la promesse du parent presque mot pour mot, ou la décliner. Les deux sont permis, varie entre les ${input.n} slideshows.
 
 CE QUI DOIT ÊTRE NEUF — le contenu
@@ -148,11 +153,65 @@ function defauts(
   return d;
 }
 
+/**
+ * Renvoie au modèle les slides qui ne tiennent pas leur gabarit, avec leurs
+ * écarts mesurés, et ne remplace que celles qui reviennent conformes. Deux
+ * tours au plus : au-delà, l'écart reste dans `defauts` et se voit.
+ */
+async function tenirGabarit(
+  v: Variante,
+  gabarits: Map<number, Gabarit>,
+  langue: string,
+): Promise<{ variante: Variante; tours: number }> {
+  let courante = v;
+  for (let tour = 1; tour <= 2; tour++) {
+    const fautives = courante.slides
+      .map((s) => ({ s, g: gabarits.get(s.position) }))
+      .filter((x): x is { s: SlideVariante; g: Gabarit } => !!x.g)
+      .map(({ s, g }) => ({ s, g, ecarts: ecartsGabarit(g, gabarit(s.texte)) }))
+      .filter((x) => x.ecarts.length > 0);
+    if (fautives.length === 0) return { variante: courante, tours: tour - 1 };
+    const demande = `Langue : ${langue}. Voici un slideshow TikTok, slide par slide :
+${courante.slides.map((s) => `Slide ${s.position} : « ${s.texte} »`).join("\n\n")}
+
+Ces slides ne tiennent pas leur gabarit. Réécris-les en gardant EXACTEMENT la même idée, le même ton et les mêmes mots autant que possible : ne change que la mise en forme (retours à la ligne, paragraphes séparés par une ligne vide écrite \\n\\n) et, s'il le faut, la longueur.
+${fautives.map((f) => `- Slide ${f.s.position} : gabarit à tenir = ${decrireGabarit(f.g)} · écarts mesurés : ${f.ecarts.join(" · ")}`).join("\n")}
+
+Réponds en JSON strict, rien d'autre. Jamais de guillemet droit dans les textes : écris « » ou ’.
+{"slides":[{"position":2,"texte":"…"}]}`;
+    let corrigees: Array<{ position: number; texte: string }> = [];
+    try {
+      const brut = textOf(await callWithFallback(MODELES_VARIANTES, [{ text: demande }]));
+      const m = brut.match(/\{[\s\S]*\}/);
+      const lu = m ? (JSON.parse(m[0]) as { slides?: Array<{ position?: unknown; texte?: unknown }> }) : {};
+      corrigees = (lu.slides ?? [])
+        .map((x) => ({ position: Number(x.position), texte: String(x.texte ?? "") }))
+        .filter((x) => Number.isFinite(x.position) && x.texte.trim());
+    } catch {
+      return { variante: courante, tours: tour };
+    }
+    const parPos = new Map(corrigees.map((c) => [c.position, c.texte]));
+    courante = {
+      ...courante,
+      slides: courante.slides.map((s) => {
+        const neuf = parPos.get(s.position);
+        const g = gabarits.get(s.position);
+        if (!neuf || !g) return s;
+        // On ne garde la réécriture que si elle fait mieux que l'original.
+        return ecartsGabarit(g, gabarit(neuf)).length < ecartsGabarit(g, gabarit(s.texte)).length
+          ? { ...s, texte: neuf }
+          : s;
+      }),
+    };
+  }
+  return { variante: courante, tours: 2 };
+}
+
 async function essayer(contenuId: string, n: number): Promise<Record<string, unknown>> {
   const supabase = serviceClient();
   const { data: parent, error } = await supabase
     .from("contenus")
-    .select("id, titre, langue_source, compte_reference_id, structure_slides")
+    .select("id, titre, langue_source, compte_reference_id, structure_slides, source_url")
     .eq("id", contenuId)
     .single();
   if (error || !parent) throw new Error(`parent introuvable : ${error?.message ?? contenuId}`);
@@ -166,7 +225,26 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
   const deck = ((cl?.slides ?? []) as SlideDeck[]).slice().sort((a, b) => a.position - b.position);
   if (deck.length === 0) throw new Error("deck source vide");
 
-  const structure = (parent.structure_slides ?? []) as Array<{ position: number; media_id?: string | null }>;
+  const structure = (parent.structure_slides ?? []) as Array<{
+    position: number;
+    media_id?: string | null;
+    raw_url?: string | null;
+    reference_url?: string | null;
+  }>;
+  const modeles = new Map(
+    structure.map((s) => [Number(s.position), s.reference_url ?? s.raw_url ?? null] as const),
+  );
+  const posMicabo = deck.find((s) => s.position_sophia || citeMicabo(s.texte_overlay))?.position ?? null;
+  const gabarits = new Map<number, Gabarit>(deck.map((s) => [s.position, gabarit(s.texte_overlay)]));
+  if (posMicabo != null) {
+    gabarits.set(
+      posMicabo,
+      modeleMicabo(
+        deck.map((s) => ({ position: s.position, texte: s.texte_overlay ?? "", placement: !!s.position_sophia })),
+        posMicabo,
+      ),
+    );
+  }
   const idsParent = structure.map((s) => s.media_id).filter((x): x is string => !!x);
   const { data: imgsParent } = idsParent.length
     ? await supabase.from("media_library").select("id, caption, url").in("id", idsParent)
@@ -229,6 +307,8 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
     titre: parent.titre ?? "",
     deck,
     imagesParent,
+    gabarits,
+    posMicabo,
     pool,
     n,
   });
@@ -243,6 +323,12 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
       if (essai >= 1) throw e;
     }
   }
+  // Le gabarit se mesure, il ne se croit pas : une slide qui ne le tient pas
+  // repart au modèle avec ses écarts, deux fois au plus.
+  const corrections_gabarit = await Promise.all(
+    variantes.map((v) => tenirGabarit(v, gabarits, langue)),
+  );
+  variantes = corrections_gabarit.map((c) => c.variante);
   const dureeVariantes = Date.now() - debut;
 
   // Le placement, comme à l'assignation : prompt courant, corrections, marque.
@@ -253,7 +339,6 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
     .limit(40);
   const masterPrompt = (await chargerPrompt(supabase, "placement_micabo")) ?? "";
 
-  const posMicabo = deck.find((s) => s.position_sophia || citeMicabo(s.texte_overlay))?.position ?? null;
   const resultats = await Promise.all(variantes.map(async (v, k) => {
     const slides = v.slides
       .slice()
@@ -263,10 +348,25 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
     const base = {
       angle: v.angle,
       titre: v.titre,
-      defauts: defauts({ ...v, slides }, deck.length, parId, concurrents, posMicabo, prisesAilleurs),
+      defauts: [
+        ...defauts({ ...v, slides }, deck.length, parId, concurrents, posMicabo, prisesAilleurs),
+        ...slides.flatMap((s) => {
+          const g = gabarits.get(s.position);
+          return g ? ecartsGabarit(g, gabarit(s.texte)).map((e) => `slide ${s.position} : ${e}`) : [];
+        }),
+      ],
+      tours_gabarit: corrections_gabarit[k].tours,
       slides: slides.map((s) => {
         const img = parId.get(s.media_id);
-        return { ...s, url: img?.url ?? null, caption: img?.caption ?? null, image_de: img?.contenu_id ?? null };
+        return {
+          ...s,
+          url: img?.url ?? null,
+          caption: img?.caption ?? null,
+          image_de: img?.contenu_id ?? null,
+          // Le modèle de placement montré au créateur : la slide du TikTok
+          // d'origine à la même position, puisque la variante en a la forme.
+          modele_url: modeles.get(s.position) ?? null,
+        };
       }),
     };
     // Comme `slideCitantMicabo` à l'assignation : une slide qui cite déjà
@@ -293,12 +393,21 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
     parent: {
       id: contenuId,
       titre: parent.titre,
+      source_url: parent.source_url ?? null,
       vues: vuesMax?.vues ?? null,
       langue,
       slides: deck.map((s) => {
         const mid = structure.find((x) => x.position === s.position)?.media_id;
         const img = mid ? capParent.get(mid) : null;
-        return { position: s.position, texte: s.texte_overlay, micabo: !!s.position_sophia, url: img?.url ?? null, caption: img?.caption ?? null };
+        return {
+          position: s.position,
+          texte: s.texte_overlay,
+          micabo: !!s.position_sophia,
+          url: img?.url ?? null,
+          caption: img?.caption ?? null,
+          modele_url: modeles.get(s.position) ?? null,
+          gabarit: decrireGabarit(gabarits.get(s.position) ?? gabarit(s.texte_overlay)),
+        };
       }),
     },
     pool: pool.length,
