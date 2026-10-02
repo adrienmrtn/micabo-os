@@ -1382,6 +1382,84 @@ slide a été lue avant d'être vidée. Si l'import doit un jour écarter ce bru
 à la source, c'est un critère de contenu (proportion de lignes d'un ou deux
 caractères, alphabet différent de la langue du deck), pas de longueur.
 
+## « Permission denied » : canShare mentait sur ce que share accepte (02/10/2026)
+
+Trois créateurs bloqués en quatre jours sur le bouton « Enregistrer les N
+photos », tous sur Android. Gencay l'a rapporté comme une « synchronization
+error » ; le vrai message est sur la capture de Vojtěch Galacz, affiché en rouge
+sous le bouton :
+
+> **Failed to execute 'share' on 'Navigator': Permission denied**
+
+C'est une `DOMException` de Chrome que `setErreurPartage(e.message)` peignait
+**brute** à un créateur, en anglais, au milieu d'une page traduite.
+
+**Chromium plafonne `navigator.share()` à 10 fichiers et 50 Mio au total**
+(`kMaxSharedFileCount`, `kMaxSharedFileBytes`). Au-delà, rejet immédiat avec ce
+message. **Et `canShare()` ne vérifie ni l'un ni l'autre** : il ne teste que la
+présence des champs et la validité de l'url. Il répond donc `true` pour une
+charge que `share()` refusera. C'est un écart connu de Chromium, pas une liberté
+de la spec — et `peutPartager` en faisait son unique prédicat.
+
+La même cause explique les trois signalements : Vojtěch avait **12 photos**
+(> 10, sa capture dit « Save the 12 photos », donc le préchargement avait
+réussi) ; Gencay en avait 6, donc c'est le plafond des 50 Mio — nos slides
+passent par l'upscale et sont réencodées en qualité 95 ; Judit a trouvé seule le
+contournement, « it works when downloading them one by one », parce qu'un
+fichier seul ne dépasse aucune des deux limites.
+
+**Ce n'était pas une régression.** `PosterPostPage.tsx` et `telechargement.ts`
+n'ont pas bougé depuis #67 (14/09) ; les douze derniers déploiements production
+ne touchent au poster que par le calendrier (#93). Le « ça marchait avant » d'un
+créateur venait d'un post plus lourd ou de son navigateur, pas d'un déploiement.
+Vérifier le `git log` du fichier AVANT de chercher quel déploiement a cassé quoi.
+
+Quatre pièces :
+
+- **`partageLots.ts`** (module pur, front seulement — l'Edge ne partage jamais de
+  fichiers), qui porte les deux constantes Chromium et `decouperEnLots`.
+  `peutPartager` applique les plafonds **avant** de demander son avis à
+  `canShare`. Les deux nombres sont recopiés en dur parce qu'aucune détection de
+  fonctionnalité ne permet de les découvrir.
+- **Un lot par tap.** On découpe, et chaque lot demande son propre geste :
+  l'activation utilisateur est consommée par le premier partage, enchaîner sans
+  tap rouvrirait le même « Permission denied » par l'autre porte.
+- **Le refus livre quand même.** Le partage était dans le `try` avec un `return`
+  avant le ZIP : toute exception laissait le créateur avec **zéro fichier** et
+  une DOMException sous les yeux. Le `catch` bascule désormais sur le ZIP
+  complet. C'est toute la distance entre « le bouton a échoué » et « le bouton ne
+  fait rien ».
+- **Des textes actionnables**, clés `posts.*` en fr et en en. `setErreurPartage`
+  ne porte plus jamais `e.message` ; le `name` et la charge réelle partent en
+  `console.warn`. Cette ligne-là aurait tranché en un jour entre « trop de
+  fichiers », « trop lourd » et « geste perdu », trois causes qui rendent toutes
+  le même message.
+
+**Deux défauts latents fermés au passage**, aucun des deux signalé :
+
+- `recupererVisuelsUniformises` avait une boucle `await` **nue** : un seul 404
+  rejetait la requête entière, `nbPhotos` tombait à 0 et le bouton se désactivait
+  sans un mot. Elle tolère désormais l'échec par visuel et **remonte**
+  `manquants` — avec un bouton « réessayer ». On ne publie pas un diaporama
+  amputé en silence : c'est l'arbitrage de 0279.
+- Le nom de fichier était keyé sur `slide.position`, que 0279 a vu dupliquée en
+  prod. Deux `File` de même nom, et `zip.file()` **écrase** : une photo
+  disparaissait du ZIP sans une erreur. Keyé sur le rang, unique par
+  construction.
+
+**Ce qui reste non vérifié** : la session n'avait pas accès à
+`qkmiwnmiwsvwkttldqgb` (le connecteur Supabase ne listait que l'org Sophia), donc
+le poids réel des slides de Gencay n'est pas mesuré. Les 50 Mio restent
+l'hypothèse la plus probable, pas un fait. À confirmer en sommant
+`media_library.metadata->>'size'` sur ses `post_slides` — en gardant en tête que
+c'est la taille **stockée**, et que le client refetch la version recadrée.
+
+**Ce que le découpage ne règle pas** : Gencay dit le 02/10 « it only downloads 1
+image » là où il voyait une feuille de partage avant. Le code ne peut produire
+que deux sorties — la feuille avec tous les fichiers du lot, ou un `.zip` — donc
+soit il décrit le ZIP, soit `canShare` rend `false` sur son navigateur. À
+reprendre avec lui s'il reste bloqué après ce correctif.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers

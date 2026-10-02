@@ -1716,6 +1716,18 @@ export const en = {
       enregistrerPhoto: "Save this photo",
       enregistrerAide:
         "On iPhone: choose \"Save images\", they land in your camera roll.",
+      enregistrerLot: "Save photos {{de}}–{{a}} of {{total}}",
+      partageParLots: "Your phone only takes a few photos at a time. Tap again for the rest.",
+      partagePuisZip:
+        "Your phone refused to share them all at once, so we downloaded a ZIP instead. You can also save the photos one by one below.",
+      partageEchec: "Couldn't save the photos. Try one by one below.",
+      photoEchec: "Couldn't save this photo. Try again in a moment.",
+      visuelsManquants_one:
+        "{{count}} photo couldn't be prepared. Don't publish without it — retry.",
+      visuelsManquants_other:
+        "{{count}} photos couldn't be prepared. Don't publish without them — retry.",
+      reessayerVisuels: "Retry",
+      visuelsEchec: "The photos couldn't be prepared. Reload the page.",
       preparation: "Preparing the photos…",
       copierTout: "Copy all texts",
       taperPourCopier: "Tap to copy",

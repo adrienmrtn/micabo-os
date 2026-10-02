@@ -1721,6 +1721,20 @@ export const fr = {
       enregistrerPhoto: "Enregistrer cette photo",
       enregistrerAide:
         "Sur iPhone : choisis « Enregistrer les images », elles arrivent dans ta pellicule.",
+      enregistrerLot: "Enregistrer les photos {{de}}–{{a}} sur {{total}}",
+      partageParLots:
+        "Ton téléphone ne prend que quelques photos à la fois. Retape pour la suite.",
+      partagePuisZip:
+        "Ton téléphone a refusé de toutes les partager d'un coup, on t'a téléchargé un ZIP à la place. Tu peux aussi enregistrer les photos une par une ci-dessous.",
+      partageEchec:
+        "Impossible d'enregistrer les photos. Essaie une par une ci-dessous.",
+      photoEchec: "Impossible d'enregistrer cette photo. Réessaie dans un instant.",
+      visuelsManquants_one:
+        "{{count}} photo n'a pas pu être préparée. Ne publie pas sans elle — réessaie.",
+      visuelsManquants_other:
+        "{{count}} photos n'ont pas pu être préparées. Ne publie pas sans elles — réessaie.",
+      reessayerVisuels: "Réessayer",
+      visuelsEchec: "Les photos n'ont pas pu être préparées. Recharge la page.",
       preparation: "Préparation des photos…",
       copierTout: "Copier tous les textes",
       taperPourCopier: "Taper pour copier",

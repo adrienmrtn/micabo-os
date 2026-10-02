@@ -54,11 +54,9 @@ import {
   recupererVisuelsUniformises,
   telechargerFichier,
 } from "@/features/moteur/telechargement";
+import { decouperEnLots, nomVisuel } from "@/features/moteur/partageLots";
 import type { Media, Post, PostSlide } from "@/features/moteur/types";
 
-function nomFichier(postId: string, position: number) {
-  return `${postId.slice(0, 8)}-${String(position).padStart(2, "0")}.jpg`;
-}
 
 /**
  * Slide « burned » : le texte est déjà incrusté sur l'image. Le créateur n'a
@@ -362,6 +360,8 @@ export function PosterPostPage() {
   const [lienPublie, setLienPublie] = React.useState("");
   const [loupe, setLoupe] = React.useState<string | null>(null);
   const [erreurPartage, setErreurPartage] = React.useState<string | null>(null);
+  const [infoPartage, setInfoPartage] = React.useState<string | null>(null);
+  const [indexLot, setIndexLot] = React.useState(0);
   const [enCours, setEnCours] = React.useState(false);
   const [rechargeMsg, setRechargeMsg] = React.useState<string | null>(null);
 
@@ -388,19 +388,27 @@ export function PosterPostPage() {
   // foulée du tap, il ne peut pas attendre un fetch. C'est aussi ici que les
   // slides sont ramenées au même format — un post peut mélanger plusieurs
   // TikToks sources quand l'assignation a pioché un visuel de secours.
+  // On ne précharge que les photos nettoyées : enregistrer un visuel au texte
+  // encore incrusté reviendrait à le faire publier tel quel. Le nom est keyé
+  // sur le RANG et non sur `slide.position` — deux slides à la même position
+  // (0279) produisaient deux fichiers de même nom, et `zip.file()` écrase.
+  const visuels = React.useMemo(
+    () =>
+      liste
+        .filter(estPropre)
+        .map((slide, i) => ({
+          slideId: slide.id,
+          url: visuelSlide(slide)!,
+          nom: nomVisuel(id ?? "", i + 1, visuelSlide(slide)!),
+        })),
+    [liste, id],
+  );
+
   const fichiers = useQuery({
-    queryKey: ["fichiers", id, liste.map(visuelSlide).join("|")],
+    queryKey: ["fichiers", id, visuels.map((v) => v.url).join("|")],
     enabled: liste.length > 0,
     staleTime: Infinity,
-    queryFn: () =>
-      recupererVisuelsUniformises(
-        // On ne précharge que les photos nettoyées : enregistrer un visuel au
-        // texte encore incrusté reviendrait à le faire publier tel quel.
-        liste.filter(estPropre).map((slide) => ({
-          url: visuelSlide(slide)!,
-          nom: nomFichier(id!, slide.position),
-        })),
-      ),
+    queryFn: () => recupererVisuelsUniformises(visuels),
   });
 
   const rafraichir = () => {
@@ -484,24 +492,66 @@ export function PosterPostPage() {
     }
   }
 
+  const prets = React.useMemo(() => fichiers.data?.fichiers ?? [], [fichiers.data]);
+  const manquants = fichiers.data?.manquants ?? [];
+
+  // Chromium refuse plus de 10 fichiers ou plus de 50 Mio d'un coup, et
+  // `canShare` ne le dit pas (voir `partageLots.ts`). On découpe donc nous-mêmes,
+  // et chaque lot demande son propre tap : l'activation utilisateur est
+  // consommée par le premier partage, enchaîner sans geste rouvrirait
+  // exactement le « Permission denied » qu'on ferme.
+  const lots = React.useMemo(() => decouperEnLots(prets), [prets]);
+  const lotCourant = lots[indexLot] ?? [];
+  const dejaEnvoyes = lots.slice(0, indexLot).reduce((n, l) => n + l.length, 0);
+
+  React.useEffect(() => {
+    setIndexLot(0);
+    setInfoPartage(null);
+  }, [id, lots.length]);
+
+  async function zipComplet(donnees: Post) {
+    const zip = new JSZip();
+    prets.forEach((f) => zip.file(f.name, f));
+    zip.file("textes.txt", texteComplet(donnees, liste));
+    telechargerFichier(await zip.generateAsync({ type: "blob" }), `post-${id}.zip`);
+  }
+
   /** Tout d'un coup : feuille de partage sur mobile, ZIP sur ordinateur. */
   async function toutEnregistrer(donnees: Post) {
     setErreurPartage(null);
-    const prets = fichiers.data ?? [];
+    setInfoPartage(null);
+    if (prets.length === 0) return;
 
+    // `enCours` couvre TOUTE la fonction, partage compris : il n'était posé que
+    // dans la branche ZIP, donc un second tap pendant la feuille de partage
+    // lançait un partage concurrent, que Chrome refuse — un deuxième message
+    // brut par-dessus le premier.
+    setEnCours(true);
     try {
-      if (peutPartager(prets)) {
-        await partagerFichiers(prets, t("posts.title"));
+      if (peutPartager(lotCourant)) {
+        const partage = await partagerFichiers(lotCourant, t("posts.title"));
+        // Feuille fermée par le créateur : un abandon n'est pas une panne.
+        if (!partage) return;
+        const suivant = indexLot + 1;
+        setIndexLot(suivant < lots.length ? suivant : 0);
+        if (suivant < lots.length) setInfoPartage(t("posts.partageParLots"));
         return;
       }
-
-      setEnCours(true);
-      const zip = new JSZip();
-      prets.forEach((f) => zip.file(f.name, f));
-      zip.file("textes.txt", texteComplet(donnees, liste));
-      telechargerFichier(await zip.generateAsync({ type: "blob" }), `post-${id}.zip`);
+      // Pas de feuille utilisable (ordinateur, ou API absente) : ZIP de tout.
+      await zipComplet(donnees);
     } catch (e) {
-      setErreurPartage(e instanceof Error ? e.message : String(e));
+      // La feuille a refusé la charge. On LIVRE quand même plutôt que de
+      // laisser le créateur devant un bouton mort avec une DOMException en
+      // anglais sous les yeux : c'est très exactement ce qui a bloqué trois
+      // créateurs du 29/09 au 02/10.
+      console.warn("Partage impossible, repli ZIP :", e);
+      try {
+        await zipComplet(donnees);
+        setErreurPartage(t("posts.partagePuisZip"));
+      } catch (e2) {
+        console.warn("Repli ZIP impossible :", e2);
+        setErreurPartage(t("posts.partageEchec"));
+      }
     } finally {
       setEnCours(false);
     }
@@ -510,18 +560,25 @@ export function PosterPostPage() {
   /** Une seule photo : même logique, à l'échelle de la slide. */
   async function enregistrerUne(slide: PostSlide) {
     setErreurPartage(null);
-    const nom = nomFichier(id!, slide.position);
-    const dejaPret = (fichiers.data ?? []).find((f) => f.name === nom);
+    setInfoPartage(null);
+    // Recherche par identifiant de slide, pas par nom : c'est le nom qui a
+    // changé de clé (rang et non position), et deux slides pouvaient le partager.
+    const visuel = visuels.find((v) => v.slideId === slide.id);
+    const url = visuel?.url ?? visuelSlide(slide);
+    if (!url) return;
+    const nom = visuel?.nom ?? nomVisuel(id ?? "", slide.position, url);
+    const dejaPret = prets.find((f) => f.name === nom);
 
     try {
-      const fichier = dejaPret ?? (await recupererFichier(visuelSlide(slide)!, nom));
+      const fichier = dejaPret ?? (await recupererFichier(url, nom));
       if (peutPartager([fichier])) {
         await partagerFichiers([fichier], nom);
         return;
       }
       telechargerFichier(fichier, nom);
     } catch (e) {
-      setErreurPartage(e instanceof Error ? e.message : String(e));
+      console.warn("Enregistrement d'une photo impossible :", e);
+      setErreurPartage(t("posts.photoEchec"));
     }
   }
 
@@ -552,7 +609,8 @@ export function PosterPostPage() {
   const rechargesRestantes = Math.max(0, MAX_RECHARGES_CREATEUR - rechargesUtilisees);
   const peutRecharger = !estAdmin && !publie && !donnees.est_test;
 
-  const nbPhotos = (fichiers.data ?? []).length;
+  const nbPhotos = prets.length;
+  const partageDispo = peutPartager(lotCourant);
   // Slides dont la photo n'est pas nettoyée : absente OU gardée avec son texte.
   // On le signale plutôt que de laisser publier une image au texte incrusté.
   const slidesNonNettoyees = liste.filter((s) => !estPropre(s)).length;
@@ -622,13 +680,21 @@ export function PosterPostPage() {
             disabled={enCours || fichiers.isFetching || nbPhotos === 0}
             onClick={() => toutEnregistrer(donnees)}
           >
-            {peutPartager(fichiers.data ?? []) ? <Share /> : <Download />}
+            {partageDispo ? <Share /> : <Download />}
             {/* `isFetching`, pas `isPending` : une requête désactivée (aucune
                 slide à précharger) reste « pending » indéfiniment dans React
                 Query, et le bouton annonçait une préparation qui n'existait pas. */}
+            {/* Le libellé par lots ne vaut que pour la feuille de partage : sur
+                ordinateur le ZIP livre les photos d'un seul coup. */}
             {fichiers.isFetching
               ? t("posts.preparation")
-              : t("posts.enregistrerPhotos", { count: nbPhotos })}
+              : partageDispo && lots.length > 1
+                ? t("posts.enregistrerLot", {
+                    de: dejaEnvoyes + 1,
+                    a: dejaEnvoyes + lotCourant.length,
+                    total: nbPhotos,
+                  })
+                : t("posts.enregistrerPhotos", { count: nbPhotos })}
           </Button>
           <p className="text-xs text-muted-foreground">{t("posts.enregistrerAide")}</p>
 
@@ -637,9 +703,23 @@ export function PosterPostPage() {
               {t("posts.slidesNonNettoyees", { count: slidesNonNettoyees })}
             </p>
           )}
-          {fichiers.isError && (
-            <p className="text-sm text-destructive">{(fichiers.error as Error).message}</p>
+          {/* Une photo injoignable ne fait plus tomber les autres, mais elle se
+              VOIT et se réessaie : publier un diaporama amputé est pire. */}
+          {manquants.length > 0 && (
+            <div className="space-y-2 rounded-md bg-destructive/10 px-3 py-2">
+              <p className="text-xs text-destructive">
+                {t("posts.visuelsManquants", { count: manquants.length })}
+              </p>
+              <Button size="sm" variant="outline" onClick={() => void fichiers.refetch()}>
+                <RefreshCw className={fichiers.isFetching ? "animate-spin" : undefined} />
+                {t("posts.reessayerVisuels")}
+              </Button>
+            </div>
           )}
+          {fichiers.isError && (
+            <p className="text-sm text-destructive">{t("posts.visuelsEchec")}</p>
+          )}
+          {infoPartage && <p className="text-sm text-muted-foreground">{infoPartage}</p>}
           {erreurPartage && <p className="text-sm text-destructive">{erreurPartage}</p>}
 
           <Button
