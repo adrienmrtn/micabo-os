@@ -1715,6 +1715,52 @@ change en ligne, mais dans l'OS un post publié montre ensuite une image qu'il
 n'a pas portée. C'est voulu pour les posts à venir — le créateur voit l'image
 propre sans réassignation —, c'est un défaut connu pour l'historique.
 
+## Localisation scolaire dans les traductions (0297, 02/10/2026)
+
+Les slideshows viennent surtout de France, et rien ne disait au traducteur quoi
+faire du système scolaire d'origine. Sur les decks espagnols, allemands et
+turcs : « brevet » recopié 14 fois sur 36 (« Geschichte-Erdkunde-Brevet »,
+« dictée brevet » à chercher sur YouTube), les notes sur 20 recopiées
+(« Ich hatte eine 18 », « Saqué un 18 », « 18 aldım » — un échec sur 100),
+Yvan Monka gardé 4 fois sur 6. La règle « chiffres : garde-les » y poussait.
+
+**Et trois langues n'avaient AUCUN prompt.** `traduction_es`, `traduction_de`
+et `traduction_en` n'existaient pas : `assurerDeckPourLangue` retombait sur
+`DEFAULT_TRANSLATE_PROMPT` (gemini.ts), dix lignes sans localisation, qui
+parlent encore de « l'appli Sophia » et font retirer tout produit tiers,
+classements compris. L'italien et le portugais sont toujours dans ce cas (aucun
+compte aujourd'hui).
+
+0297 ajoute un bloc « 9 bis » à chaque prompt de traduction et crée les trois
+qui manquaient (sauvegarde `prompts_sauvegarde_0297`) :
+
+1. examens et classes → l'équivalent local s'il existe VRAIMENT (LGS, Abitur,
+   selectividad, YKS…), sinon une formule générique ;
+2. notes → converties au barème local, exception explicite à « garde les
+   chiffres » ;
+3. personnes, youtubeurs, sites du pays d'origine → **toujours généralisés**,
+   jamais remplacés par un équivalent que le modèle croirait connaître (pas de
+   liste blanche : à décider avec Adrien si on en veut une) ;
+4. une recherche à taper se traduit dans les mots d'un élève local ;
+5. le pays d'origine présenté comme cadre de l'élève devient le pays du public.
+
+Vérifié à blanc par `essai-placement` sur huit decks avant de conclure, puis
+deux glissements corrigés (brevet devenu « selectividad », « Abi-Schnitt von
+über 1,3 »). Seules les prochaines traductions changent : le stock déjà traduit
+garde ses « brevet » et ses « 18 », à reprendre à part.
+
+**Piège du MCP, élargi** (voir 0287) : `execute_sql` et `apply_migration`
+attendent une confirmation humaine — puis meurent à 60 s sans rien appliquer —
+dès qu'une chaîne contient un **point-virgule** ou un **nombre impair
+d'apostrophes droites**, même entre `$q$…$q$`. Le découpeur du MCP ne connaît
+pas les chaînes dollar. Écrire « · » et « ’ » dans le texte, ou passer par
+`chr(59)` / `chr(39)`. Une instruction réellement destructive n'y est pour rien.
+
+**Le texte d'une slide peut porter un filigrane** : sur `ff91768b` #7, l'OCR
+avait recopié « 小红书号: 119180449 » dans le deck source, et la traduction l'avait
+suivi en allemand et en espagnol (deux posts publiés). Retiré des trois decks le
+02/10 (sauvegarde `textes_bruit_sauvegarde`). L'image le porte toujours.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers

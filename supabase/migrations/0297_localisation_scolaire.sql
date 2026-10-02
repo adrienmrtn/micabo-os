@@ -426,3 +426,20 @@ Le slideshow vient d’un autre pays, le plus souvent la France, parfois les Ét
 
 5. Le pays d’origine présenté comme le cadre de l’élève (« les meilleurs lycées de France ») disparaît ou devient le pays du public. Un pays cité comme exemple étranger (« les lycéens chinois ») reste.$q$)
 on conflict (cle) do nothing;
+
+-- ── Après l'essai à blanc (même jour) ─────────────────────────────────────
+-- Huit decks retraduits par `essai-placement`, sans écriture : notes
+-- converties, Yvan Monka retiré, LGS et matières turques, « dictado ESO »,
+-- « los mejores institutos de España ». Deux glissements, corrigés ici : le
+-- brevet devenu « selectividad » en espagnol, et « Abi-Schnitt von über 1,3 »
+-- (donc PIRE que 1,3) en allemand.
+
+update public.prompts set contenu = contenu || $q$
+
+6. Le brevet n’est PAS la selectividad : l’un ferme le collège (15 ans), l’autre le lycée (18 ans). Garde le niveau de l’élève : brevet → los finales de 4º de la ESO, bac → la selectividad.$q$, updated_at = now()
+where cle = 'traduction_es' and contenu not like '%Le brevet n’est PAS la selectividad%';
+
+update public.prompts set contenu = contenu || $q$
+
+6. En Allemagne, la note la plus PETITE est la meilleure. « Plus de 18 de moyenne » devient « besser als 1,3 » ou « unter 1,3 », jamais « über 1,3 ». Une moyenne qui monte (« j’ai bien augmenté ») devient un Schnitt qui baisse.$q$, updated_at = now()
+where cle = 'traduction_de' and contenu not like '%la note la plus PETITE est la meilleure%';
