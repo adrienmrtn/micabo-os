@@ -2029,6 +2029,20 @@ Avant/après dans `astra_reprise_0302`. Un deck qui cite Astra sur plus d'une
 slide n'est pas réécrit en aveugle : deux slides micabo seraient une double
 mention.
 
+**Seuil de 5 000 vues** (0303, consigne d'Adrien pendant l'import : « garde que
+les slideshows > 5k vues, même pas besoin de calculer pertinence »). 68 posts
+sur 137 sont sortis avant toute étape du pipeline — les workers scrapent
+d'abord, rien n'avait été payé au-delà du scrape. Le seuil vit dans
+`sources_vues_min` (par source, réutilisable) et un trigger `before insert`
+fait naître le contenu `rejete` + `done` + `elo_insuffisant`, avec la raison
+dans `file_note`. Le scrape reste payé : il faut lire le post pour connaître
+ses vues.
+
+**Piège du MCP, précisé** : le corps plpgsql du trigger (points-virgules entre
+`$f$`) est passé par `apply_migration`. Le même texte par `execute_sql`,
+précédé d'un `drop trigger if exists`, a attendu ses 60 s sans rien appliquer.
+`create or replace trigger` (PG 14+) évite le `drop`.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
