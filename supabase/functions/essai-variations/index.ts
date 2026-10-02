@@ -98,7 +98,7 @@ ${pool}
 
 LÉGENDE TikTok : une phrase dans le ton du parent puis 3 à 5 hashtags de révision, comme la légende du parent.
 
-Réponds en JSON strict, rien d'autre :
+Réponds en JSON strict, rien d'autre. Dans les textes, jamais de guillemet droit : écris « » ou ’.
 {"variantes":[{"angle":"en une phrase, ce qui change par rapport au parent","titre":"la légende TikTok","slides":[{"position":1,"texte":"…","media_id":"…","pourquoi_image":"en quelques mots"}]}]}`;
 }
 
@@ -223,18 +223,26 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
     : CONCURRENTS_DEFAUT;
 
   const debut = Date.now();
-  const sortie = await callWithFallback(MODELES_VARIANTES, [{
-    text: consigne({
-      langue,
-      vues: Number(vuesMax?.vues ?? 0),
-      titre: parent.titre ?? "",
-      deck,
-      imagesParent,
-      pool,
-      n,
-    }),
-  }]);
-  const variantes = lireVariantes(textOf(sortie));
+  const texteConsigne = consigne({
+    langue,
+    vues: Number(vuesMax?.vues ?? 0),
+    titre: parent.titre ?? "",
+    deck,
+    imagesParent,
+    pool,
+    n,
+  });
+  // Un guillemet droit oublié dans une slide casse tout le JSON : un second
+  // essai, pas plus — c'est un appel long.
+  let variantes: Variante[] = [];
+  for (let essai = 0; ; essai++) {
+    try {
+      variantes = lireVariantes(textOf(await callWithFallback(MODELES_VARIANTES, [{ text: texteConsigne }])));
+      break;
+    } catch (e) {
+      if (essai >= 1) throw e;
+    }
+  }
   const dureeVariantes = Date.now() - debut;
 
   // Le placement, comme à l'assignation : prompt courant, corrections, marque.
