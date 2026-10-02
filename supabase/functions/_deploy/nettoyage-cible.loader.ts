@@ -5,7 +5,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "036b209cfcb7aaf5e07c464fae9707216a8884c6";
+const SHA = "ed1a129b24c73699c49e148629016e787390bb1b";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/nettoyage-cible.bundle.js`;
 
