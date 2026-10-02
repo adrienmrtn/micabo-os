@@ -120,6 +120,15 @@ Réponds en JSON strict, rien d'autre. Dans les textes, jamais de guillemet droi
 {"variantes":[{"angle":"en une phrase, ce qui change par rapport au parent","titre":"la légende TikTok","slides":[{"position":1,"texte":"…","media_id":"…","pourquoi_image":"en quelques mots"}]}]}`;
 }
 
+/**
+ * Coupe par point de code, pas par unité UTF-16 : `slice` peut couper un emoji
+ * en deux, et Postgres refuse la moitié de surrogate qui reste (PGRST102,
+ * « Empty or invalid json » sur 766074b1, dont le titre a 📚 au 70e caractère).
+ */
+function couper(texte: string, n: number): string {
+  return Array.from(texte).slice(0, n).join("");
+}
+
 function lireVariantes(brut: string): Variante[] {
   const m = brut.match(/\{[\s\S]*\}/);
   if (!m) throw new Error(`réponse sans JSON : ${brut.slice(0, 200)}`);
@@ -415,7 +424,7 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
     for (const d of decksSoeurs ?? []) {
       for (const sl of ((d.slides ?? []) as SlideDeck[]).slice(1)) {
         const premiere = String(sl.texte_overlay ?? "").split(/\n\s*\n/)[0].replace(/\s*\n\s*/g, " ").trim();
-        if (premiere && !citeMicabo(premiere)) ideesPrises.push(premiere.slice(0, 90));
+        if (premiere && !citeMicabo(premiere)) ideesPrises.push(couper(premiere, 90));
       }
     }
   }
@@ -622,7 +631,7 @@ async function ecrireVariante(
 ): Promise<string> {
   if (v.defauts.length > 0) throw new Error(`variante refusée : ${v.defauts.join(" · ")}`);
   const note = [
-    `Variante de « ${String(parent.titre ?? "").replace(/\s+/g, " ").slice(0, 70)} »`,
+    `Variante de « ${couper(String(parent.titre ?? "").replace(/\s+/g, " "), 70)} »`,
     vues ? `(${Number(vues).toLocaleString("fr-FR")} vues chez nous)` : "",
     `· ${v.angle}`,
     "· Modèle de placement de chaque slide : la slide du TikTok d'origine.",
