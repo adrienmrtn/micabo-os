@@ -1,7 +1,9 @@
 /**
- * Essai à blanc des variantes d'un slideshow gagnant (02/10/2026).
+ * Variantes d'un slideshow gagnant (02/10/2026) : essai à blanc, puis écriture.
  *
- *   { contenuId, n? } → 202 { ok, essai }   puis la ligne `essai_variations`
+ *   { contenuId, n? }                    → 202 { ok, essai }, la ligne `essai_variations`
+ *   { chaine: [ids], ecrire: true, n? }  → une variante par parent, écrite en FILE,
+ *                                          un parent par invocation, en chaîne
  *
  * Demande d'Adrien : pour chaque slideshow qui a fait au moins 50 000 vues chez
  * nous, deux ou trois slideshows « dans le même style », à valider dans la
@@ -20,7 +22,12 @@
  *
  * Le travail dépasse le délai d'un appel `pg_net` (120 s) : la fonction rend
  * la main tout de suite et range son résultat dans `essai_variations` (RLS,
- * aucune policy), la seule table qu'elle écrit.
+ * aucune policy). Sans `ecrire`, c'est la seule table qu'elle écrit.
+ *
+ * Avec `ecrire` (décision d'Adrien du 02/10 : une seule variante par parent,
+ * toutes en file), une variante sans défaut devient un slideshow `brouillon`
+ * prêt à valider — voir `ecrireVariante`. Les parents passent un par un : le
+ * suivant voit les images et les idées déjà prises par le précédent.
  */
 
 import { type Concurrent, CONCURRENTS_DEFAUT, concurrentsCites, versMicaboDepuis } from "../_shared/concurrents.ts";
@@ -28,6 +35,7 @@ import { callWithFallback, integrateSophia, MODELES_LECTURE_BURN, textOf, TEXT_M
 import { decrireGabarit, ecartsGabarit, type Gabarit, gabarit, modeleMicabo } from "../_shared/gabarit.ts";
 import { nettoyerTexteDeck } from "../_shared/marque.ts";
 import { citeMicabo } from "../_shared/placement.ts";
+import { passagesPourTier } from "../_shared/tierlist.ts";
 import { assertAuthorised, chargerPrompt, json, messageErreur, serviceClient } from "../_shared/supabase.ts";
 
 type SlideDeck = { position: number; texte_overlay: string | null; position_sophia?: boolean };
@@ -48,6 +56,7 @@ function consigne(input: {
   posMicabo: number | null;
   pool: Image[];
   n: number;
+  ideesPrises: string[];
 }): string {
   const posMicabo = input.posMicabo;
   const deck = input.deck
@@ -63,7 +72,7 @@ function consigne(input: {
     ? `LA SLIDE micabo — slide ${posMicabo}, comme dans le parent
 - À la slide ${posMicabo}, et seulement là, écris la slide micabo dans la MÊME forme que celle du parent : un élément de la liste comme les autres (le même genre d'habitude que les autres slides, aussi bizarre, aussi concrète), où l'appli micabo est l'outil, pas le sujet. Sa FORME est celle des autres éléments de la liste, jamais une phrase d'un seul bloc : suis le gabarit donné pour la slide ${posMicabo}, même s'il ne ressemble pas au texte du parent à cette place.
 - Écris toujours « l'appli micabo », en minuscules, une seule fois dans tout le slideshow.
-- Ce que fait micabo, et RIEN d'autre : à partir de ses cours, de ses notes ou d'un PDF, l'appli crée les fiches ou les flashcards, et on se teste dessus quelques minutes par jour. N'invente aucune autre fonction (pas d'audio, pas de planning, pas de rappel, pas de professeur, pas d'IA qui « sait » ou « devine »), aucun chiffre sur l'appli, aucune matière ni note que le parent ne cite pas.
+- Ce que fait micabo, et RIEN d'autre : à partir de ses cours, de ses notes ou d'un PDF, l'appli crée les fiches ou les flashcards, et on se teste dessus quelques minutes par jour. N'invente aucune autre fonction : pas de photo, de capture ni de scan, pas d'audio, pas de planning, pas de rappel, pas de professeur, pas d'IA qui « sait » ou « devine », aucun chiffre sur l'appli, aucune matière ni note que le parent ne cite pas.
 - Ailleurs que sur cette slide, aucune appli, aucun site, aucune marque.`
     : `Aucun nom d'application, de site ou de marque, et ne cite jamais micabo : la slide micabo est ajoutée après toi.`;
   const pool = input.pool
@@ -87,7 +96,11 @@ CE QU'IL FAUT GARDER — le moule
 
 CE QUI DOIT ÊTRE NEUF — le contenu
 - Chaque élément de liste est une IDÉE DIFFÉRENTE de toutes celles du parent : pas une reformulation, pas la même astuce avec d'autres mots, pas un exemple voisin. Si le parent parle de chewing-gum, aucune variante ne parle de goût, de saveur ou d'odeur.
-- Les ${input.n} slideshows ne se recopient pas entre eux non plus : aucune idée ne revient deux fois.
+- Les ${input.n} slideshows ne se recopient pas entre eux non plus : aucune idée ne revient deux fois.${
+    input.ideesPrises.length > 0
+      ? `\n- D'autres variantes de ce compte existent déjà. Ces idées sont PRISES, n'en reprends aucune, même reformulée :\n${input.ideesPrises.map((i) => `  · ${i}`).join("\n")}`
+      : ""
+  }
 - Chaque élément tient la promesse de la couverture AUSSI FORT que le parent. Si la couverture promet des choses bizarres, extrêmes ou gênantes, chaque élément est un COMPORTEMENT qu'un témoin trouverait vraiment étrange (on le raconterait à ses amis), pas un conseil de révision classique qu'on lit partout (relire le lendemain, ranger son téléphone, faire des pauses, se fixer un objectif…).
 - Tout ce qui est affirmé doit être vrai et vérifiable : un vrai effet de psychologie ou de mémoire, une vraie technique, un vrai nom. N'invente ni étude, ni chiffre, ni nom d'effet. En cas de doute, reste concret et n'avance pas de science.
 - Aucun nom de personne.
@@ -153,28 +166,45 @@ function defauts(
   return d;
 }
 
+/** Ce que la slide micabo ne doit jamais promettre : micabo ne fait que cours, notes ou PDF → fiches. */
+const PROMESSES_INTERDITES =
+  /\b(photo\w*|picture\w*|screenshot\w*|captur\w*|scann?\w*|audio|vocal\w*|voice|enregistr\w*|record\w*|notif\w*|remind\w*|planning|planifi\w*|schedul\w*|devin\w*|sait que|knows|prof(esseur)? (ia|virtuel)|tuteur|tutor)\b/i;
+
+function ecartsMicabo(texte: string): string[] {
+  const m = texte.match(PROMESSES_INTERDITES);
+  const d: string[] = [];
+  if (m) d.push(`promet « ${m[0]} » : micabo crée seulement des fiches ou des flashcards depuis des cours, des notes ou un PDF`);
+  if (!citeMicabo(texte)) d.push("ne cite pas l'appli micabo");
+  return d;
+}
+
 /**
  * Renvoie au modèle les slides qui ne tiennent pas leur gabarit, avec leurs
  * écarts mesurés, et ne remplace que celles qui reviennent conformes. Deux
  * tours au plus : au-delà, l'écart reste dans `defauts` et se voit.
  */
+function ecartsSlide(s: SlideVariante, g: Gabarit, posMicabo: number | null): string[] {
+  return [...ecartsGabarit(g, gabarit(s.texte)), ...(s.position === posMicabo ? ecartsMicabo(s.texte) : [])];
+}
+
 async function tenirGabarit(
   v: Variante,
   gabarits: Map<number, Gabarit>,
   langue: string,
+  posMicabo: number | null,
 ): Promise<{ variante: Variante; tours: number }> {
   let courante = v;
   for (let tour = 1; tour <= 2; tour++) {
     const fautives = courante.slides
       .map((s) => ({ s, g: gabarits.get(s.position) }))
       .filter((x): x is { s: SlideVariante; g: Gabarit } => !!x.g)
-      .map(({ s, g }) => ({ s, g, ecarts: ecartsGabarit(g, gabarit(s.texte)) }))
+      .map(({ s, g }) => ({ s, g, ecarts: ecartsSlide(s, g, posMicabo) }))
       .filter((x) => x.ecarts.length > 0);
     if (fautives.length === 0) return { variante: courante, tours: tour - 1 };
     const demande = `Langue : ${langue}. Voici un slideshow TikTok, slide par slide :
 ${courante.slides.map((s) => `Slide ${s.position} : « ${s.texte} »`).join("\n\n")}
 
-Ces slides ne tiennent pas leur gabarit. Réécris-les en gardant EXACTEMENT la même idée, le même ton et les mêmes mots autant que possible : ne change que la mise en forme (retours à la ligne, paragraphes séparés par une ligne vide écrite \\n\\n) et, s'il le faut, la longueur.
+Ces slides ne tiennent pas leur gabarit ou promettent ce que l'appli ne fait pas. Réécris-les en gardant EXACTEMENT la même idée, le même ton et les mêmes mots autant que possible : ne change que la mise en forme (retours à la ligne, paragraphes séparés par une ligne vide écrite \\n\\n), s'il le faut la longueur, et retire toute promesse signalée. L'appli micabo crée seulement des fiches ou des flashcards à partir de cours, de notes ou d'un PDF, et on se teste dessus.
 ${fautives.map((f) => `- Slide ${f.s.position} : gabarit à tenir = ${decrireGabarit(f.g)} · écarts mesurés : ${f.ecarts.join(" · ")}`).join("\n")}
 
 Réponds en JSON strict, rien d'autre. Jamais de guillemet droit dans les textes : écris « » ou ’.
@@ -198,9 +228,8 @@ Réponds en JSON strict, rien d'autre. Jamais de guillemet droit dans les textes
         const g = gabarits.get(s.position);
         if (!neuf || !g) return s;
         // On ne garde la réécriture que si elle fait mieux que l'original.
-        return ecartsGabarit(g, gabarit(neuf)).length < ecartsGabarit(g, gabarit(s.texte)).length
-          ? { ...s, texte: neuf }
-          : s;
+        const reecrite = { ...s, texte: neuf };
+        return ecartsSlide(reecrite, g, posMicabo).length < ecartsSlide(s, g, posMicabo).length ? reecrite : s;
       }),
     };
   }
@@ -251,7 +280,7 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
   const supabase = serviceClient();
   const { data: parent, error } = await supabase
     .from("contenus")
-    .select("id, titre, langue_source, compte_reference_id, structure_slides, source_url")
+    .select("id, titre, langue_source, compte_reference_id, structure_slides, source_url, placement_manuel, profondeur, application_id, format_id, musique_url, musique_titre, musique_plateforme")
     .eq("id", contenuId)
     .single();
   if (error || !parent) throw new Error(`parent introuvable : ${error?.message ?? contenuId}`);
@@ -278,7 +307,13 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
     gabarits.set(
       posMicabo,
       modeleMicabo(
-        deck.map((s) => ({ position: s.position, texte: s.texte_overlay ?? "", placement: !!s.position_sophia })),
+        // Une slide micabo écrite à la main est un vrai gabarit ; celle du
+        // placement automatique, non.
+        deck.map((s) => ({
+          position: s.position,
+          texte: s.texte_overlay ?? "",
+          placement: !!s.position_sophia && !parent.placement_manuel,
+        })),
         posMicabo,
       ),
     );
@@ -300,9 +335,40 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
     .eq("compte_reference_id", parent.compte_reference_id)
     .like("storage_path", "propre/%")
     .eq("texte_restant", false)
+    .eq("exclu_concurrent", false)
     .not("caption", "is", null)
     .limit(1000);
   if (ep) throw ep;
+
+  // Les variantes déjà écrites pour ce compte : leurs images d'origine ne
+  // repartent pas, et leurs idées ne reviennent pas.
+  const { data: soeurs } = await supabase
+    .from("contenus")
+    .select("id, structure_slides")
+    .eq("compte_reference_id", parent.compte_reference_id)
+    .not("parent_id", "is", null)
+    .eq("creation_mode", "manuel");
+  const imagesPrises = new Set(
+    (soeurs ?? []).flatMap((v) =>
+      ((v.structure_slides ?? []) as Array<{ source_media_id?: string | null }>)
+        .map((s) => s.source_media_id)
+        .filter((x): x is string => !!x)
+    ),
+  );
+  const ideesPrises: string[] = [];
+  if ((soeurs ?? []).length > 0) {
+    const { data: decksSoeurs } = await supabase
+      .from("contenu_langues")
+      .select("slides")
+      .in("contenu_id", (soeurs ?? []).map((v) => v.id as string))
+      .eq("langue", langue);
+    for (const d of decksSoeurs ?? []) {
+      for (const sl of ((d.slides ?? []) as SlideDeck[]).slice(1)) {
+        const premiere = String(sl.texte_overlay ?? "").split(/\n\s*\n/)[0].replace(/\s*\n\s*/g, " ").trim();
+        if (premiere && !citeMicabo(premiere)) ideesPrises.push(premiere.slice(0, 90));
+      }
+    }
+  }
   // Florence décrit le BRUT : une légende qui parle de texte, de mots ou
   // d'écriture signale une image où il reste peut-être de quoi lire, dans une
   // seule langue. Une appli, un écran ou un logo nommés peuvent montrer un
@@ -311,7 +377,8 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
   const AVEC_TEXTE =
     /\b(text|texte|written|writing|words?|phrase|says|letters?|caption|title|app|application|logo|brand|screen|écran|french|français|english|anglais)\b/i;
   const candidates = ((poolBrut ?? []) as Image[]).filter((i) =>
-    i.contenu_id !== contenuId && !idsParent.includes(i.id) && !AVEC_TEXTE.test(i.caption ?? "")
+    i.contenu_id !== contenuId && !idsParent.includes(i.id) && !imagesPrises.has(i.id) &&
+    !AVEC_TEXTE.test(i.caption ?? "")
   );
   // `texte_restant = false` ne prouve rien (0295) : seule une image que l'audit
   // a relue et trouvée sans texte entre, et pas celle d'un slideshow encore en
@@ -349,6 +416,7 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
     posMicabo,
     pool,
     n,
+    ideesPrises,
   });
   // Un guillemet droit oublié dans une slide casse tout le JSON : un second
   // essai, pas plus — c'est un appel long.
@@ -364,7 +432,7 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
   // Le gabarit se mesure, il ne se croit pas : une slide qui ne le tient pas
   // repart au modèle avec ses écarts, deux fois au plus.
   const corrections_gabarit = await Promise.all(
-    variantes.map((v) => tenirGabarit(v, gabarits, langue)),
+    variantes.map((v) => tenirGabarit(v, gabarits, langue, posMicabo)),
   );
   variantes = corrections_gabarit.map((c) => c.variante);
   const dureeVariantes = Date.now() - debut;
@@ -390,7 +458,7 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
         ...defauts({ ...v, slides }, deck.length, parId, concurrents, posMicabo, prisesAilleurs),
         ...slides.flatMap((s) => {
           const g = gabarits.get(s.position);
-          return g ? ecartsGabarit(g, gabarit(s.texte)).map((e) => `slide ${s.position} : ${e}`) : [];
+          return g ? ecartsSlide(s, g, posMicabo).map((e) => `slide ${s.position} : ${e}`) : [];
         }),
       ],
       tours_gabarit: corrections_gabarit[k].tours,
@@ -449,10 +517,191 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
       }),
     },
     pool: pool.length,
+    idees_prises: ideesPrises.length,
     modele: MODELES_VARIANTES[0],
     duree_variantes_ms: dureeVariantes,
     variantes: resultats,
+    _ecriture: { parent, posMicabo, langue, vues: vuesMax?.vues ?? null },
   };
+}
+
+type ResultatVariante = {
+  angle: string;
+  titre: string;
+  defauts: string[];
+  slides: Array<SlideVariante & { modele_url: string | null }>;
+};
+
+/**
+ * Écrit une variante dans la FILE (`brouillon` + `import_statut = done`).
+ *
+ * - Les images sont COPIÉES sous `propre/<variante>/<position>` avec leur
+ *   propre ligne `media_library` : l'éditeur de la file aplatit ses calques sur
+ *   le `storage_path` de l'image ; sans copie, retoucher la variante réécrirait
+ *   l'image du slideshow d'où elle vient, et de tous ses posts. La copie n'a pas
+ *   de label et n'est pas auditée : elle ne garnit rien d'autre.
+ * - `reference_url` = la slide du TikTok d'origine à la même position (le
+ *   modèle de placement du créateur), `raw_url` = le brut de l'image tirée,
+ *   `source_media_id` = l'image d'origine, pour qu'aucune autre variante ne la
+ *   reprenne.
+ * - `creation_mode = manuel` : le slideshow est composé, pas importé.
+ * - Tier B, un passage : il doit se faire mesurer comme un import moyen.
+ * - Le slideshow naît `rejete` et ne passe `brouillon` qu'à la dernière écriture :
+ *   une variante à moitié écrite n'apparaît ni dans la file, ni à l'import.
+ */
+async function ecrireVariante(
+  supabase: ReturnType<typeof serviceClient>,
+  // deno-lint-ignore no-explicit-any
+  parent: any,
+  v: ResultatVariante,
+  posMicabo: number | null,
+  langue: string,
+  vues: number | null,
+  essaiId: string,
+): Promise<string> {
+  if (v.defauts.length > 0) throw new Error(`variante refusée : ${v.defauts.join(" · ")}`);
+  const note = [
+    `Variante de « ${String(parent.titre ?? "").replace(/\s+/g, " ").slice(0, 70)} »`,
+    vues ? `(${Number(vues).toLocaleString("fr-FR")} vues chez nous)` : "",
+    `· ${v.angle}`,
+    "· Modèle de placement de chaque slide : la slide du TikTok d'origine.",
+  ].filter(Boolean).join(" ");
+  const { data: neuf, error: e1 } = await supabase
+    .from("contenus")
+    .insert({
+      titre: v.titre,
+      structure_slides: [],
+      compte_reference_id: parent.compte_reference_id,
+      langue_source: langue,
+      musique_url: parent.musique_url,
+      musique_titre: parent.musique_titre,
+      musique_plateforme: parent.musique_plateforme,
+      statut: "rejete",
+      import_statut: "done",
+      import_etape: "variation",
+      import_erreur: "variante en cours d'écriture",
+      parent_id: parent.id,
+      profondeur: Number(parent.profondeur ?? 0) + 1,
+      creation_mode: "manuel",
+      application_id: parent.application_id,
+      format_id: parent.format_id,
+      placement_manuel: posMicabo != null,
+      file_note: note,
+      import_elo_rapport: { variante_de: parent.id, vues_parent: vues, angle: v.angle, essai: essaiId },
+    })
+    .select("id")
+    .single();
+  if (e1 || !neuf) throw e1 ?? new Error("insertion du slideshow");
+  const id = neuf.id as string;
+
+  const sources = v.slides.map((s) => s.media_id);
+  const { data: medias, error: e2 } = await supabase
+    .from("media_library")
+    .select("id, storage_path, caption, caption_statut, caption_modele, caption_le, est_hook, upscale_le, visage_identifiable, visage_premier_plan, langue, compte_reference_id, application_id, contenu_id")
+    .in("id", sources);
+  if (e2) throw e2;
+  const parId = new Map((medias ?? []).map((m) => [m.id as string, m]));
+  const contenusSources = [...new Set((medias ?? []).map((m) => m.contenu_id as string | null).filter((x): x is string => !!x))];
+  const { data: structuresSources } = await supabase.from("contenus").select("id, structure_slides").in("id", contenusSources);
+  const brutParMedia = new Map<string, string | null>();
+  for (const c of structuresSources ?? []) {
+    for (const sl of (c.structure_slides ?? []) as Array<{ media_id?: string | null; raw_url?: string | null }>) {
+      if (sl.media_id) brutParMedia.set(sl.media_id, sl.raw_url ?? null);
+    }
+  }
+
+  const structure: Array<Record<string, unknown>> = [];
+  for (const s of v.slides) {
+    const src = parId.get(s.media_id);
+    if (!src) throw new Error(`image ${s.media_id} introuvable`);
+    const ext = String(src.storage_path).split("?")[0].split(".").pop() ?? "jpg";
+    const chemin = `propre/${id}/${s.position}.${ext}`;
+    const { error: ec } = await supabase.storage.from("medias").copy(String(src.storage_path), chemin);
+    if (ec) throw ec;
+    const url = `${supabase.storage.from("medias").getPublicUrl(chemin).data.publicUrl}?v=${Date.now()}`;
+    const { data: copie, error: em } = await supabase
+      .from("media_library")
+      .insert({
+        compte_reference_id: src.compte_reference_id,
+        contenu_id: id,
+        application_id: src.application_id,
+        storage_path: chemin,
+        url,
+        source: "nettoye_reference",
+        langue: src.langue,
+        visage_identifiable: src.visage_identifiable,
+        visage_premier_plan: src.visage_premier_plan,
+        verifie_le: new Date().toISOString(),
+        texte_restant: false,
+        upscale_le: src.upscale_le,
+        caption: src.caption,
+        caption_statut: src.caption_statut,
+        caption_modele: src.caption_modele,
+        caption_le: src.caption_le,
+        est_hook: s.position === 1 ? true : src.est_hook,
+      })
+      .select("id")
+      .single();
+    if (em || !copie) throw em ?? new Error("copie de l'image");
+    structure.push({
+      position: s.position,
+      media_id: copie.id,
+      raw_url: brutParMedia.get(s.media_id) ?? null,
+      reference_url: s.modele_url ?? null,
+      source_media_id: s.media_id,
+    });
+  }
+  const { error: e3 } = await supabase.from("contenus").update({ structure_slides: structure }).eq("id", id);
+  if (e3) throw e3;
+
+  const hashtags = (v.titre.match(/#[\p{L}\p{N}_]+/gu) ?? []).slice(0, 5);
+  const { error: e4 } = await supabase.from("contenu_langues").insert({
+    contenu_id: id,
+    langue,
+    slides: v.slides.map((s) => ({
+      position: s.position,
+      texte_overlay: s.texte,
+      position_sophia: s.position === posMicabo,
+    })),
+    hashtags: hashtags.length >= 3 ? hashtags.join(" ") : null,
+  });
+  if (e4) throw e4;
+
+  const { data: labels } = await supabase.from("contenu_labels").select("label_id").eq("contenu_id", parent.id);
+  if ((labels ?? []).length > 0) {
+    const { error: e5 } = await supabase
+      .from("contenu_labels")
+      .insert((labels ?? []).map((l) => ({ contenu_id: id, label_id: l.label_id })));
+    if (e5) throw e5;
+  }
+
+  const { error: e6 } = await supabase
+    .from("contenus")
+    .update({
+      statut: "brouillon",
+      import_etape: "done",
+      import_erreur: null,
+      tier: "B",
+      passages_cible: passagesPourTier("B"),
+      tier_maj_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (e6) throw e6;
+  return id;
+}
+
+/** Relance le parent suivant de la chaîne, sans attendre sa réponse. */
+function relancer(corps: Record<string, unknown>): void {
+  const base = Deno.env.get("SUPABASE_URL");
+  const secret = Deno.env.get("CRON_SECRET");
+  if (!base || !secret) return;
+  const p = fetch(`${base}/functions/v1/essai-variations`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-cron-secret": secret },
+    body: JSON.stringify(corps),
+  }).catch(() => null);
+  const edge = (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  edge?.waitUntil(p);
 }
 
 Deno.serve(async (request) => {
@@ -460,8 +709,10 @@ Deno.serve(async (request) => {
   if (denied) return denied;
   try {
     const corps = await request.json().catch(() => ({}));
-    const contenuId = String(corps?.contenuId ?? "").trim();
-    const n = Math.min(4, Math.max(1, Math.floor(Number(corps?.n ?? 3)) || 3));
+    const chaine = (Array.isArray(corps?.chaine) ? corps.chaine : []).map(String);
+    const contenuId = String(corps?.contenuId ?? chaine[0] ?? "").trim();
+    const ecrire = corps?.ecrire === true;
+    const n = ecrire ? 1 : Math.min(4, Math.max(1, Math.floor(Number(corps?.n ?? 3)) || 3));
     if (!contenuId) return json({ ok: false, error: "contenuId manquant" }, 400);
 
     const supabase = serviceClient();
@@ -473,8 +724,30 @@ Deno.serve(async (request) => {
     if (error) throw error;
 
     const travail = essayer(contenuId, n)
-      .then((resultat) => supabase.from("essai_variations").update({ resultat, fini_le: new Date().toISOString() }).eq("id", ligne.id))
-      .catch((e) => supabase.from("essai_variations").update({ erreur: messageErreur(e).slice(0, 2000), fini_le: new Date().toISOString() }).eq("id", ligne.id));
+      .then(async (resultat) => {
+        const { _ecriture, ...rapport } = resultat as Record<string, unknown> & {
+          _ecriture: { parent: unknown; posMicabo: number | null; langue: string; vues: number | null };
+        };
+        let ecrit: string | null = null;
+        let erreur: string | null = null;
+        if (ecrire) {
+          const v = (rapport.variantes as ResultatVariante[])[0];
+          try {
+            ecrit = await ecrireVariante(supabase, _ecriture.parent, v, _ecriture.posMicabo, _ecriture.langue, _ecriture.vues, ligne.id);
+          } catch (e) {
+            erreur = messageErreur(e).slice(0, 2000);
+          }
+        }
+        await supabase
+          .from("essai_variations")
+          .update({ resultat: { ...rapport, ecrit }, erreur, fini_le: new Date().toISOString() })
+          .eq("id", ligne.id);
+      })
+      .catch((e) => supabase.from("essai_variations").update({ erreur: messageErreur(e).slice(0, 2000), fini_le: new Date().toISOString() }).eq("id", ligne.id))
+      // Le parent suivant part quoi qu'il arrive à celui-ci.
+      .finally(() => {
+        if (ecrire && chaine.length > 1) relancer({ chaine: chaine.slice(1), ecrire: true });
+      });
     const edge = (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime;
     if (edge) edge.waitUntil(travail);
     else await travail;
