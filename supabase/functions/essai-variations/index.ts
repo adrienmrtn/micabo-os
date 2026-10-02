@@ -12,9 +12,11 @@
  *
  * Cet essai fabrique les variantes comme le ferait l'automate, et s'arrête
  * avant la file : rien dans `contenus`, `contenu_langues` ni `media_library`.
- * Le placement micabo est simulé comme la production le ferait à
- * l'assignation (`placement_micabo`, corrections, règles de la marque), pour
- * juger un post entier et pas une liste de textes.
+ * Quand le parent porte sa slide micabo comme un élément de la liste (835c1781 :
+ * « je révise mes fiches micabo dans les toilettes »), la variante écrit la
+ * sienne au même endroit, dans la même forme : c'est le moule qui a marché.
+ * Sinon le placement est simulé comme à l'assignation (`placement_micabo`,
+ * corrections, règles de la marque). Dans les deux cas on juge un post entier.
  *
  * Le travail dépasse le délai d'un appel `pg_net` (120 s) : la fonction rend
  * la main tout de suite et range son résultat dans `essai_variations` (RLS,
@@ -44,15 +46,21 @@ function consigne(input: {
   pool: Image[];
   n: number;
 }): string {
+  const posMicabo = input.deck.find((s) => s.position_sophia || citeMicabo(s.texte_overlay))?.position ?? null;
   const deck = input.deck
     .map((s) => {
       const img = input.imagesParent.get(s.position);
-      const texte = s.position_sophia
-        ? "(EMPLACEMENT DU PLACEMENT micabo — ignore ce texte : à cette place, écris une slide de contenu ordinaire, comme ses voisines)"
-        : `« ${s.texte_overlay ?? ""} »`;
-      return `Slide ${s.position}${img ? ` [image : ${img}]` : ""} : ${texte}`;
+      const marque = s.position === posMicabo ? " (SLIDE micabo)" : "";
+      return `Slide ${s.position}${marque}${img ? ` [image : ${img}]` : ""} : « ${s.texte_overlay ?? ""} »`;
     })
     .join("\n\n");
+  const regleMicabo = posMicabo != null
+    ? `LA SLIDE micabo — slide ${posMicabo}, comme dans le parent
+- À la slide ${posMicabo}, et seulement là, écris la slide micabo dans la MÊME forme que celle du parent : un élément de la liste comme les autres (le même genre d'habitude que les autres slides, aussi bizarre, aussi concrète), où l'appli micabo est l'outil, pas le sujet. Une seule phrase ou deux, courtes, comme dans le parent.
+- Écris toujours « l'appli micabo », en minuscules, une seule fois dans tout le slideshow.
+- Ce que fait micabo, et RIEN d'autre : à partir de ses cours, de ses notes ou d'un PDF, l'appli crée les fiches ou les flashcards, et on se teste dessus quelques minutes par jour. N'invente aucune autre fonction (pas d'audio, pas de planning, pas de rappel, pas de professeur, pas d'IA qui « sait » ou « devine »), aucun chiffre sur l'appli, aucune matière ni note que le parent ne cite pas.
+- Ailleurs que sur cette slide, aucune appli, aucun site, aucune marque.`
+    : `Aucun nom d'application, de site ou de marque, et ne cite jamais micabo : la slide micabo est ajoutée après toi.`;
   const pool = input.pool
     .map((i) => `${i.id} · ${i.est_hook ? "[couverture] " : ""}${i.caption ?? "(sans légende)"}`)
     .join("\n");
@@ -75,10 +83,13 @@ CE QU'IL FAUT GARDER — le moule
 CE QUI DOIT ÊTRE NEUF — le contenu
 - Chaque élément de liste est une IDÉE DIFFÉRENTE de toutes celles du parent : pas une reformulation, pas la même astuce avec d'autres mots, pas un exemple voisin. Si le parent parle de chewing-gum, aucune variante ne parle de goût, de saveur ou d'odeur.
 - Les ${input.n} slideshows ne se recopient pas entre eux non plus : aucune idée ne revient deux fois.
+- Chaque élément tient la promesse de la couverture AUSSI FORT que le parent. Si la couverture promet des choses bizarres, extrêmes ou gênantes, chaque élément est un COMPORTEMENT qu'un témoin trouverait vraiment étrange (on le raconterait à ses amis), pas un conseil de révision classique qu'on lit partout (relire le lendemain, ranger son téléphone, faire des pauses, se fixer un objectif…).
 - Tout ce qui est affirmé doit être vrai et vérifiable : un vrai effet de psychologie ou de mémoire, une vraie technique, un vrai nom. N'invente ni étude, ni chiffre, ni nom d'effet. En cas de doute, reste concret et n'avance pas de science.
-- Aucun nom d'application, de site, de marque ou de personne. Ne cite jamais micabo : la slide micabo est ajoutée après toi.
+- Aucun nom de personne.
 - Pas de tiret long (—). Pas d'emoji si le parent n'en a pas.
 - Rien qui ne parle pas à un élève ou un étudiant qui révise.
+
+${regleMicabo}
 
 LES IMAGES
 Pour chaque slide, choisis UNE image dans la liste ci-dessous (identifiant exact), qui illustre CETTE slide : le décor, l'objet ou la situation dont parle la slide. Pour la couverture, prends de préférence une image marquée [couverture]. Jamais deux fois la même image dans un slideshow, et pas deux fois la même image entre les ${input.n} slideshows. Si aucune image ne colle vraiment, prends la plus neutre (bureau, cahier, élève qui travaille), jamais une image qui contredit la slide.
@@ -109,15 +120,27 @@ function lireVariantes(brut: string): Variante[] {
 }
 
 /** Ce que l'automate refuserait d'écrire : on le signale au lieu de le cacher. */
-function defauts(v: Variante, nb: number, pool: Map<string, Image>, concurrents: Concurrent[]): string[] {
+function defauts(
+  v: Variante,
+  nb: number,
+  pool: Map<string, Image>,
+  concurrents: Concurrent[],
+  posMicabo: number | null,
+  prisesAilleurs: Set<string>,
+): string[] {
   const d: string[] = [];
   if (v.slides.length !== nb) d.push(`${v.slides.length} slides au lieu de ${nb}`);
   const vus = new Set<string>();
+  const micabo = v.slides.filter((s) => citeMicabo(s.texte)).map((s) => s.position);
+  if (posMicabo != null && (micabo.length !== 1 || micabo[0] !== posMicabo)) {
+    d.push(`micabo attendu sur la slide ${posMicabo}, trouvé sur [${micabo.join(", ")}]`);
+  }
+  if (posMicabo == null && micabo.length > 0) d.push(`cite micabo (slides ${micabo.join(", ")})`);
   for (const s of v.slides) {
     if (!pool.has(s.media_id)) d.push(`slide ${s.position} : image hors du pool (${s.media_id})`);
     if (vus.has(s.media_id)) d.push(`slide ${s.position} : image déjà prise`);
+    if (prisesAilleurs.has(s.media_id)) d.push(`slide ${s.position} : image prise par une autre variante`);
     vus.add(s.media_id);
-    if (citeMicabo(s.texte)) d.push(`slide ${s.position} : cite micabo`);
     const c = concurrentsCites(s.texte, concurrents);
     if (c.length > 0) d.push(`slide ${s.position} : cite ${c.join(", ")}`);
     if (s.texte.includes("—")) d.push(`slide ${s.position} : tiret long`);
@@ -164,7 +187,13 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
     .not("caption", "is", null)
     .limit(1000);
   if (ep) throw ep;
-  const pool = ((poolBrut ?? []) as Image[]).filter((i) => i.contenu_id !== contenuId && !idsParent.includes(i.id));
+  // Florence décrit le BRUT : une légende qui parle de texte, de mots ou
+  // d'écriture signale une image où il reste peut-être de quoi lire, dans une
+  // seule langue. On ne la propose pas.
+  const AVEC_TEXTE = /\b(text|texte|written|writing|words?|phrase|says|letters?|caption|title)\b/i;
+  const pool = ((poolBrut ?? []) as Image[]).filter((i) =>
+    i.contenu_id !== contenuId && !idsParent.includes(i.id) && !AVEC_TEXTE.test(i.caption ?? "")
+  );
   const parId = new Map(pool.map((i) => [i.id, i]));
   if (pool.length < deck.length) throw new Error(`pool trop maigre : ${pool.length} images`);
 
@@ -199,11 +228,26 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
     .limit(40);
   const masterPrompt = (await chargerPrompt(supabase, "placement_micabo")) ?? "";
 
-  const resultats = await Promise.all(variantes.map(async (v) => {
+  const posMicabo = deck.find((s) => s.position_sophia || citeMicabo(s.texte_overlay))?.position ?? null;
+  const resultats = await Promise.all(variantes.map(async (v, k) => {
     const slides = v.slides
       .slice()
       .sort((a, b) => a.position - b.position)
       .map((s) => ({ ...s, texte: nettoyerTexteDeck(s.texte, langue) }));
+    const prisesAilleurs = new Set(variantes.filter((_, j) => j !== k).flatMap((x) => x.slides.map((s) => s.media_id)));
+    const base = {
+      angle: v.angle,
+      titre: v.titre,
+      defauts: defauts({ ...v, slides }, deck.length, parId, concurrents, posMicabo, prisesAilleurs),
+      slides: slides.map((s) => {
+        const img = parId.get(s.media_id);
+        return { ...s, url: img?.url ?? null, caption: img?.caption ?? null, image_de: img?.contenu_id ?? null };
+      }),
+    };
+    // Comme `slideCitantMicabo` à l'assignation : une slide qui cite déjà
+    // micabo EST le placement, le moteur n'en ajoute pas un second.
+    const deja = slides.find((s) => citeMicabo(s.texte));
+    if (deja) return { ...base, placement: { position: deja.position, texte: deja.texte, remplace: null, mode: "écrit par la variante" } };
     const p = await integrateSophia({
       masterPrompt,
       corrections: (corrections ?? []).map((c) => ({ original_text: c.texte_origine, corrected_text: c.texte_corrige })),
@@ -213,16 +257,10 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
       marque: "micabo",
     }).catch(() => null);
     return {
-      angle: v.angle,
-      titre: v.titre,
-      defauts: defauts({ ...v, slides }, deck.length, parId, concurrents),
+      ...base,
       placement: p
-        ? { position: p.chosenPosition, texte: nettoyerTexteDeck(p.variants[p.bestIndex] ?? "", langue), remplace: slides.find((s) => s.position === p.chosenPosition)?.texte ?? null }
+        ? { position: p.chosenPosition, texte: nettoyerTexteDeck(p.variants[p.bestIndex] ?? "", langue), remplace: slides.find((s) => s.position === p.chosenPosition)?.texte ?? null, mode: "placement_micabo" }
         : null,
-      slides: slides.map((s) => {
-        const img = parId.get(s.media_id);
-        return { ...s, url: img?.url ?? null, caption: img?.caption ?? null, image_de: img?.contenu_id ?? null };
-      }),
     };
   }));
 
