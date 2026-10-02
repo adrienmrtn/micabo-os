@@ -1746,8 +1746,16 @@ qui manquaient (sauvegarde `prompts_sauvegarde_0297`) :
 
 Vérifié à blanc par `essai-placement` sur huit decks avant de conclure, puis
 deux glissements corrigés (brevet devenu « selectividad », « Abi-Schnitt von
-über 1,3 »). Seules les prochaines traductions changent : le stock déjà traduit
-garde ses « brevet » et ses « 18 », à reprendre à part.
+über 1,3 »).
+
+**Le stock est repris par 0298** : 111 decks traduits (48 slideshows, 39 en
+allemand, 29 en espagnol, 40 en turc, 3 en français) dont la source porte un
+repère scolaire du pays d'origine sont **vidés**, pas réécrits — changer un
+examen ou une note change le sens de la slide. `assurerDeckPourLangue` les
+retraduit à la prochaine assignation avec les prompts de 0297, puis repasse les
+concurrents et le placement v2. L'état d'avant et le motif trouvé sont dans
+`localisation_reprise_0297` ; le retour arrière recopie `slides_avant`. Les 16
+passages déjà assignés partent avec leur copie, les publiés ne bougent pas.
 
 **Piège du MCP, élargi** (voir 0287) : `execute_sql` et `apply_migration`
 attendent une confirmation humaine — puis meurent à 60 s sans rien appliquer —
@@ -1797,7 +1805,8 @@ chargeurs sur `ef3bead` : `assignation-contenu`, `assignation`, `minuit-vnext`
 et `revoquer-post`, +683 octets chacun. **Les quatre alias `createClient` ont
 été renommés** : `_e`→`xe`, `ve`→`$e`, `Be`→`Je`, `be`→`Se`. `bruler-assignes`,
 `import-contenu` et `renettoyer-contenu` ressortent à taille constante
-(permutation) : leurs bundles du dépôt sont gardés.
+(permutation) : leurs bundles du dépôt sont gardés. Versions déployées : v40,
+v41, v44, v40. Test de vie `401` passé sur les quatre (par `pg_net`).
 
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
