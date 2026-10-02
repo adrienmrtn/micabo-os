@@ -166,6 +166,56 @@ function defauts(
   return d;
 }
 
+function mots(t: string): Set<string> {
+  return new Set(
+    t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/).filter((m) => m.length > 3),
+  );
+}
+
+/**
+ * Remplace les images hors pool ou déjà prises (dans la variante ou par une
+ * variante précédente du même appel) par l'image libre du pool dont la légende
+ * partage le plus de mots avec la slide et sa justification ; une image de
+ * couverture pour la slide 1 quand il y en a.
+ */
+function reparerImages(
+  v: Variante,
+  pool: Image[],
+  prisesAilleurs: Set<string>,
+): { variante: Variante; notes: string[] } {
+  const parId = new Map(pool.map((i) => [i.id, i]));
+  const prises = new Set(prisesAilleurs);
+  const notes: string[] = [];
+  const valides = new Set<string>();
+  for (const s of v.slides) {
+    if (parId.has(s.media_id) && !prises.has(s.media_id) && !valides.has(s.media_id)) valides.add(s.media_id);
+  }
+  const slides = v.slides.map((s) => {
+    if (valides.has(s.media_id) && !prises.has(s.media_id)) {
+      prises.add(s.media_id);
+      return s;
+    }
+    const cible = mots(`${s.pourquoi_image ?? ""} ${s.texte}`);
+    const libres = pool.filter((i) => !prises.has(i.id) && !valides.has(i.id));
+    const candidates = s.position === 1 && libres.some((i) => i.est_hook) ? libres.filter((i) => i.est_hook) : libres;
+    let meilleure: Image | null = null;
+    let score = -1;
+    for (const i of candidates) {
+      const m = mots(i.caption ?? "");
+      const commun = [...cible].filter((x) => m.has(x)).length;
+      if (commun > score) {
+        score = commun;
+        meilleure = i;
+      }
+    }
+    if (!meilleure) return s;
+    prises.add(meilleure.id);
+    notes.push(`slide ${s.position} : image ${s.media_id || "absente"} remplacée par ${meilleure.id}`);
+    return { ...s, media_id: meilleure.id, pourquoi_image: `${s.pourquoi_image ?? ""} (réparée : ${meilleure.caption ?? ""})` };
+  });
+  return { variante: { ...v, slides }, notes };
+}
+
 /** Ce que la slide micabo ne doit jamais promettre : micabo ne fait que cours, notes ou PDF → fiches. */
 const PROMESSES_INTERDITES =
   /\b(photo\w*|picture\w*|screenshot\w*|captur\w*|scann?\w*|audio|vocal\w*|voice|enregistr\w*|record\w*|notif\w*|remind\w*|planning|planifi\w*|schedul\w*|devin\w*|sait que|knows|prof(esseur)? (ia|virtuel)|tuteur|tutor)\b/i;
@@ -435,6 +485,16 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
     variantes.map((v) => tenirGabarit(v, gabarits, langue, posMicabo)),
   );
   variantes = corrections_gabarit.map((c) => c.variante);
+  // Un identifiant d'image inventé ou repris ne vaut pas de jeter la variante :
+  // l'image est remplacée par la plus proche du pool, et ça se voit.
+  const reparees: string[][] = [];
+  const prisesTirage = new Set<string>();
+  variantes = variantes.map((v) => {
+    const r = reparerImages(v, pool, prisesTirage);
+    reparees.push(r.notes);
+    r.variante.slides.forEach((s) => prisesTirage.add(s.media_id));
+    return r.variante;
+  });
   const dureeVariantes = Date.now() - debut;
 
   // Le placement, comme à l'assignation : prompt courant, corrections, marque.
@@ -462,6 +522,7 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
         }),
       ],
       tours_gabarit: corrections_gabarit[k].tours,
+      images_reparees: reparees[k],
       slides: slides.map((s) => {
         const img = parId.get(s.media_id);
         return {
