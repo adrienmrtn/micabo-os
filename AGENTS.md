@@ -1769,6 +1769,39 @@ avait recopié « 小红书号: 119180449 » dans le deck source, et la traducti
 suivi en allemand et en espagnol (deux posts publiés). Retiré des trois decks le
 02/10 (sauvegarde `textes_bruit_sauvegarde`). L'image le porte toujours.
 
+## Pertinence d'import : la place du CTA, pas le sujet (0299, 02/10/2026)
+
+Deux mesures sur 141 slideshows passés au moins deux fois chez nous (vues
+corrigées de l'âge), qui valent pour toute la note d'import :
+
+- **Vues du TikTok d'origine** : corrélation faible (Spearman 0,24) et non
+  linéaire. De moins de 5 000 à 200 000 vues d'origine, nos médianes restent
+  entre 1 200 et 1 500. Au-delà de 200 000, elles triplent (4 340 puis 5 672).
+  Le plafond C de `VUES_SOURCE_MIN_B_PLUS` (10 000) ne sépare donc rien. Le lien
+  est fort chez luna.study4 (0,71), nul chez jeena_study_tips (0,10) et
+  jeanne.wilgo (−0,12). Pas touché : à décider avec Adrien.
+- **Pertinence** : corrélée à l'envers (−0,30). Sous 30 : 3 497 vues de
+  médiane, à 60 et plus : 1 444. L'ancien prompt notait le SUJET (« est-ce une
+  méthode de révision ») : les faits de médecine et le classement des
+  spécialités, nos meilleurs posts, prenaient 0 à 5.
+
+`pertinence_micabo` note désormais une question : peut-on remplacer une slide
+par une recommandation naturelle de micabo, devant un public d'élèves ou
+d'étudiants ? Vérifié à blanc avant la bascule par **`essai-pertinence`**
+(lecture seule, `{contenuIds, cle}`, chargeur `_deploy`) : corrélation avec nos
+vues de −0,29 à +0,10 sur 140 importés, et sur 35 rejetés, charisme, citations
+et pubs Peech restent sous 20 quand les slideshows médecine passent de 0 à 90.
+Il note large (82,7 de moyenne contre 52,1) : la note d'import repose davantage
+sur les vues d'origine. Le poids (30/70) n'est pas touché — le baisser à 15 %
+faisait monter les entrées en A de 44 à 77, surtout des sources de 80 000 à
+200 000 vues, qui ne font pas mieux que les petites.
+
+Ancien prompt : `pertinence_micabo_v1_2026_10_02`. Re-notés à blanc, 74 des 94
+slideshows rejetés à l'import (`elo_insuffisant`) des sources actives
+passeraient le seuil : 44 jeanne.wilgo, 13 luna.study4, 8 jeena_study_tips,
+8 flashka_es, 1 user5507909029330. Non réinjectés le 02/10 : ça coûte un
+nettoyage complet et ça remplit la file.
+
 ## Au tirage, ce que la langue n'a pas encore vu passe devant (02/10/2026)
 
 Le recul de 30 jours (`RECUL_MEME_COMPTE_JOURS`) est **par compte**. Rien
