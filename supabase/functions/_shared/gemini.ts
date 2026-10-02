@@ -238,13 +238,24 @@ export const DEFAULT_TRANSLATE_PROMPT = `Règles de traduction impératives :
 export async function ocrFrame(imageUrl: string): Promise<string> {
   const image = await fetchImageAsInline(imageUrl);
 
-  const prompt = `Transcris exactement le texte incrusté sur cette slide TikTok,
-en langue d'origine, sans le corriger ni le traduire.
+  // 02/10/2026 (emir.study) : sans la liste « texte de la scène », le modèle
+  // recopiait tout ce qu'il lisait — une fiche « MITOCHONDRIA » affichée sur un
+  // portable, 44 lignes d'un article scientifique, l'interface d'une appli —
+  // à la suite de la légende, et parfois au milieu (« 1:25 », un chrono).
+  const prompt = `Transcris exactement la LÉGENDE incrustée sur cette slide TikTok : le texte
+que le créateur a AJOUTÉ par-dessus la photo (police d'application, souvent
+blanche à contour noir ou sur un bandeau coloré). En langue d'origine, sans le
+corriger ni le traduire, ligne par ligne dans l'ordre de lecture.
 
-Ignore : logos, marques dans le décor, texte sur les vêtements, barre de statut
-du téléphone. Garde le nom d'une app/d'un podcast si c'est le sujet de la slide.
+Ne transcris JAMAIS le texte qui fait partie de la photo elle-même : écran
+d'ordinateur, de tablette ou de téléphone photographié, interface d'une appli
+affichée sur un appareil, page de cahier, de livre ou de document, fiche,
+tableau, affiche, emballage, vêtement, chronomètre ou horloge, logo ou badge
+d'une marque, filigrane, barre de statut. Ce texte-là est souvent plus petit,
+en perspective, dans une autre langue que la légende.
+Garde le nom d'une app/d'un podcast s'il est écrit DANS la légende.
 
-Si la slide ne contient aucun texte incrusté, réponds exactement : (aucun texte)`;
+Si la slide ne contient aucune légende ajoutée, réponds exactement : (aucun texte)`;
 
   const parts = await callWithFallback(TEXT_MODELS, [{ text: prompt }, image]);
   const text = textOf(parts).trim();
