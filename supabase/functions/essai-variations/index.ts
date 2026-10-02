@@ -191,9 +191,23 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
   // d'écriture signale une image où il reste peut-être de quoi lire, dans une
   // seule langue. On ne la propose pas.
   const AVEC_TEXTE = /\b(text|texte|written|writing|words?|phrase|says|letters?|caption|title)\b/i;
-  const pool = ((poolBrut ?? []) as Image[]).filter((i) =>
+  const candidates = ((poolBrut ?? []) as Image[]).filter((i) =>
     i.contenu_id !== contenuId && !idsParent.includes(i.id) && !AVEC_TEXTE.test(i.caption ?? "")
   );
+  // `texte_restant = false` ne prouve rien (0295) : seule une image que l'audit
+  // a relue et trouvée sans texte entre, et pas celle d'un slideshow encore en
+  // file, qu'Adrien n'a pas vu.
+  const ids = candidates.map((i) => i.id);
+  const sources = [...new Set(candidates.map((i) => i.contenu_id).filter((x): x is string => !!x))];
+  const [{ data: audit, error: ea }, { data: statuts, error: es }] = await Promise.all([
+    supabase.from("audit_propres_0295").select("media_id, reste").in("media_id", ids),
+    supabase.from("contenus").select("id, statut").in("id", sources),
+  ]);
+  if (ea) throw ea;
+  if (es) throw es;
+  const propres = new Set((audit ?? []).filter((a) => a.reste === "aucun").map((a) => a.media_id as string));
+  const enFile = new Set((statuts ?? []).filter((c) => c.statut === "brouillon").map((c) => c.id as string));
+  const pool = candidates.filter((i) => propres.has(i.id) && !(i.contenu_id && enFile.has(i.contenu_id)));
   const parId = new Map(pool.map((i) => [i.id, i]));
   if (pool.length < deck.length) throw new Error(`pool trop maigre : ${pool.length} images`);
 
