@@ -1761,6 +1761,44 @@ avait recopié « 小红书号: 119180449 » dans le deck source, et la traducti
 suivi en allemand et en espagnol (deux posts publiés). Retiré des trois decks le
 02/10 (sauvegarde `textes_bruit_sauvegarde`). L'image le porte toujours.
 
+## Au tirage, ce que la langue n'a pas encore vu passe devant (02/10/2026)
+
+Le recul de 30 jours (`RECUL_MEME_COMPTE_JOURS`) est **par compte**. Rien
+n'empêchait un slideshow de passer sur trois comptes de la même langue en
+quelques jours, devant la même audience. Mesuré du 10 au 30/09, sur un même
+slideshow, le deuxième passage dans une langue fait **0,57× le premier en
+allemand, 0,63× en espagnol, 0,81× en turc, 0,86× en français**. En Espagne
+(3 comptes), 67 % des posts de carla.curso418 après le 22/09 étaient déjà passés
+en espagnol : 523 vues de médiane, contre 1 117 sur ses inédits.
+
+`prefererInedits` (`tierlist.ts`, pur, 6 tests) restreint le groupe retenu par
+`prioriserTiersHauts` aux slideshows sans passage dans la langue du compte
+depuis `RECUL_MEME_LANGUE_JOURS` (30), et rend le groupe entier s'il n'y en a
+aucun. **Une préférence, jamais un filtre** : l'arbitrage du 19/09 (un post de
+moins plutôt qu'un doublon) vaut pour le même compte, pas pour la même langue.
+Elle s'applique **après** le tier, donc `PART_TIRAGE_C` reste exacte. Le
+repêchage essaie lui aussi les inédits de la langue d'abord.
+
+Ce que ça n'achète PAS : du stock. Le 02/10, 49 slideshows devaient un passage
+(68 passages) pour 54 posts par jour. La préférence répartit mieux ce stock
+entre les langues, elle n'en ajoute pas. Et deux workers de la même langue dans
+la même rafale peuvent encore choisir le même inédit : la préférence est lue
+avant l'écriture, sans verrou — c'est assumé, le coût est un « déjà vu », pas un
+doublon de compte.
+
+**Piège de mesure, celui du 26/09 en plus grossier** : « 53 slideshows validés
+jamais postés en Espagne » n'est PAS une réserve pour l'Espagne. 33 avaient leur
+cycle plein (passés ailleurs, en attente de verdict), 20 seulement devaient un
+passage, et les 48 autres posts du jour les voulaient aussi. Ne jamais compter
+le pool sans le filtre de cycle.
+
+**Déploiement du 02/10/2026** (demande d'Adrien, « fais donc »). Quatre
+chargeurs sur `ef3bead` : `assignation-contenu`, `assignation`, `minuit-vnext`
+et `revoquer-post`, +683 octets chacun. **Les quatre alias `createClient` ont
+été renommés** : `_e`→`xe`, `ve`→`$e`, `Be`→`Je`, `be`→`Se`. `bruler-assignes`,
+`import-contenu` et `renettoyer-contenu` ressortent à taille constante
+(permutation) : leurs bundles du dépôt sont gardés.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
