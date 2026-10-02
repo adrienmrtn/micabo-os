@@ -5,9 +5,11 @@ import {
 import { assurerDeckPourLangue } from "./import_contenu.ts";
 import {
   RECUL_MEME_COMPTE_JOURS,
+  RECUL_MEME_LANGUE_JOURS,
   ajouterJoursParis,
   estTier,
   melanger,
+  prefererInedits,
   prioriserTiersHauts,
   type Tier,
 } from "./tierlist.ts";
@@ -900,6 +902,43 @@ async function restantsParContenu(
 }
 
 /**
+ * Slideshows du pool passés dans la langue du compte, sur n'importe quel compte
+ * de cette langue, depuis `RECUL_MEME_LANGUE_JOURS` (02/10/2026).
+ *
+ * Les comptes inactifs comptent : leurs posts sont toujours en ligne, devant la
+ * même audience. Une lecture ratée lève, comme les autres lectures du tirage :
+ * elle ne doit pas passer pour « rien n'a été vu ».
+ */
+async function dejaPassesDansLaLangue(
+  supabase: Supabase,
+  langue: string | null,
+  contenuIds: string[],
+  jour: string,
+): Promise<Set<string>> {
+  if (!langue || contenuIds.length === 0) return new Set();
+  const { data: comptesLangue, error } = await supabase
+    .from("comptes")
+    .select("id")
+    .eq("langue", langue);
+  if (error) throw new Error(`Comptes en ${langue} : ${error.message}`);
+  const ids = (comptesLangue ?? []).map((c) => c.id as string);
+  if (ids.length === 0) return new Set();
+  const depuis = ajouterJoursParis(jour, -RECUL_MEME_LANGUE_JOURS);
+  const vus = await lireParLots<{ contenu_id: string }>(
+    contenuIds,
+    `Passages en ${langue} des ${RECUL_MEME_LANGUE_JOURS} derniers jours`,
+    (lot) =>
+      supabase
+        .from("passages")
+        .select("contenu_id")
+        .in("compte_id", ids)
+        .gte("date_publication_prevue", depuis)
+        .in("contenu_id", lot),
+  );
+  return new Set(vus.map((v) => v.contenu_id));
+}
+
+/**
  * Pioche le slideshow du prochain post d'un créateur.
  *
  * 1. pool = labels du créateur ∩ slideshows prêts (famille UGC, application) ;
@@ -909,9 +948,10 @@ async function restantsParContenu(
  *    hasard, avec un cycle d'1 passage ouvert au vol (« pas assez de posts à
  *    faire → on remet quelques posts en D pour remplir »).
  *
- * Un même slideshow peut repasser sur un compte qui l'a déjà posté un autre
- * jour ; il ne peut pas sortir deux fois le MÊME jour sur le même compte.
- * La langue ne filtre plus rien : le deck est traduit à la demande.
+ * Un slideshow ne revient pas sur le même compte avant `RECUL_MEME_COMPTE_JOURS`.
+ * La langue ne filtre rien (le deck est traduit à la demande), mais elle
+ * ORIENTE : à tier égal, un slideshow pas encore passé dans la langue du compte
+ * sort avant un slideshow que cette audience a déjà vu (`prefererInedits`).
  */
 async function choisirContenu(
   supabase: Supabase,
@@ -926,10 +966,11 @@ async function choisirContenu(
   const ignorerCycles = Boolean(opts.ignorerElo);
   const { data: compteApp } = await supabase
     .from("comptes")
-    .select("application_id")
+    .select("application_id, langue")
     .eq("id", compteId)
     .maybeSingle();
   const applicationId = (compteApp?.application_id as string | undefined) ?? null;
+  const langueCompte = (compteApp?.langue as string | undefined) ?? null;
 
   // Contenu IDs portant au moins un label du compte
   const liens = await lireParLots<{ contenu_id: string }>(
@@ -1011,10 +1052,17 @@ async function choisirContenu(
   );
 
   const dus = pool.filter((c) => (restants.get(c.id) ?? 0) > 0);
+  const dejaDansLaLangue = await dejaPassesDansLaLangue(
+    supabase,
+    langueCompte,
+    pool.map((c) => c.id),
+    jour,
+  );
   // Les B+ passent d'abord, mais une part des tirages (`PART_TIRAGE_C`) est
   // réservée aux C : sans elle, un C ne pouvait jamais être mesuré, donc jamais
-  // remonter.
-  const pick = tirerAuHasard(prioriserTiersHauts(dus));
+  // remonter. Dans le groupe retenu, ce que la langue n'a pas encore vu passe
+  // devant (02/10/2026).
+  const pick = tirerAuHasard(prefererInedits(prioriserTiersHauts(dus), dejaDansLaLangue));
   if (pick) return versCandidat(pick, restants.get(pick.id) ?? 0, false);
 
   // Remplissage : pas assez de passages dus → on repêche un slideshow en D
@@ -1043,11 +1091,15 @@ async function choisirContenu(
   // quota. C'est l'arbitrage du 19/09 — un post de moins vaut mieux qu'un
   // doublon, et huit créateurs sur le même slideshow le même jour EST un
   // doublon vu de l'audience.
-  const repechables = melanger(
-    pool.filter(
-      (c) => !estTier(c.tier) || c.tier === "D" || Number(c.passages_cible ?? 0) === 0,
-    ),
+  const enD = pool.filter(
+    (c) => !estTier(c.tier) || c.tier === "D" || Number(c.passages_cible ?? 0) === 0,
   );
+  // Mélangés à l'intérieur de chaque groupe (0275), les inédits de la langue
+  // d'abord.
+  const repechables = [
+    ...melanger(enD.filter((c) => !dejaDansLaLangue.has(c.id))),
+    ...melanger(enD.filter((c) => dejaDansLaLangue.has(c.id))),
+  ];
 
   for (const repeche of repechables) {
     const { data, error } = await supabase.rpc("repecher_contenu", {

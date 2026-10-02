@@ -388,3 +388,39 @@ export function prioriserTiersHauts<T extends { tier: string | null }>(
   if (bas.length === 0) return hauts;
   return alea() < PART_TIRAGE_C ? bas : hauts;
 }
+
+/**
+ * Fenêtre pendant laquelle un passage dans une langue fait d'un slideshow un
+ * « déjà vu » pour cette audience (02/10/2026). Même durée que le recul par
+ * compte : au-delà, l'audience a tourné.
+ */
+export const RECUL_MEME_LANGUE_JOURS = 30;
+
+/**
+ * Dans le groupe retenu par `prioriserTiersHauts`, préfère les slideshows qui
+ * ne sont pas encore passés dans la langue du compte (02/10/2026).
+ *
+ * Le recul de 30 jours est PAR COMPTE : rien n'empêchait un slideshow de passer
+ * sur trois comptes de la même langue en quelques jours, devant la même
+ * audience. Mesuré du 10 au 30/09, sur un même slideshow, le deuxième passage
+ * dans une langue fait 0,57× le premier en allemand, 0,63× en espagnol, 0,81×
+ * en turc et 0,86× en français. En Espagne, 67 % des posts de carla.curso418
+ * après le 22/09 étaient des slideshows déjà passés en espagnol : 523 vues de
+ * médiane contre 1 117 sur ses inédits.
+ *
+ * Une PRÉFÉRENCE, jamais un filtre : quand tout le groupe est déjà passé dans
+ * la langue, il est rendu entier. Le pool est trop maigre pour qu'un compte
+ * reste sous quota pour ça — l'arbitrage du 19/09 (un post de moins plutôt
+ * qu'un doublon) vaut pour le même COMPTE, pas pour la même langue.
+ *
+ * Appliquée APRÈS le tier : la part réservée aux C (`PART_TIRAGE_C`) reste
+ * exacte, et un B+ déjà vu dans la langue passe toujours avant un C inédit
+ * quand le tirage tombe sur les B+.
+ */
+export function prefererInedits<T extends { id: string }>(
+  candidats: T[],
+  dejaDansLaLangue: ReadonlySet<string>,
+): T[] {
+  const inedits = candidats.filter((c) => !dejaDansLaLangue.has(c.id));
+  return inedits.length > 0 ? inedits : candidats;
+}
