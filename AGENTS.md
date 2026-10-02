@@ -1965,6 +1965,23 @@ de mots avec celle demandée (une image de hook en slide 1), et le note dans
 Deux parents sur 23 écartés : `c8b9a2d2` (refusé dans la file) et `0d6c5f82`
 (cold-study, sans label : sa variante ne serait jamais tirée).
 
+**Résultat du 02/10** : **21 variantes sur 21 en file** (`brouillon` + `done`,
+`creation_mode = manuel`, `parent_id` posé). Quatre chaînes en parallèle, une
+par compte source — deux chaînes sur le même compte se disputeraient le même
+pool d'images — à ~20 s par parent. Deux refus au premier passage, repassés
+seuls : un gabarit (9 lignes au lieu de 7 sur une slide de 607fe062) et
+`766074b1`, dont le titre porte 📚 au 70ᵉ caractère : `slice(0, 70)` coupait
+l'emoji en deux, et Postgres refuse une moitié de surrogate (PGRST102,
+« Empty or invalid json »). Coupe par point de code (`couper`).
+
+Deux variantes (`ea6bfa57`, `15e9a236`, jeena_study_tips) n'ont pas de slide
+micabo : leur parent n'en avait pas dans le deck source. `placement_manuel`
+reste faux et le placement v2 les place à l'assignation, comme tout import.
+
+Vu en relisant leurs parents : **ElibroAI** n'était pas dans `concurrents`
+(7 decks validés, 4 posts publiés). Ajouté par 0301, motif à trois graphies
+(`ElibroAI`, `elibroAI`, `elibro.ai`).
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
