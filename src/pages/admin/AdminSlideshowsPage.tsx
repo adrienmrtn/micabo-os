@@ -1784,11 +1784,14 @@ export function AdminSlideshowsPage() {
   const { applicationId } = useApplication();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  // « actifs » = tout sauf les rejetés. Défaut : la bibliothèque utile, pas la
-  // pile des TikToks écartés à l'import.
+  // Défaut : les VALIDES, la bibliothèque que le moteur pioche. « actifs » (tout
+  // sauf les rejetés) mêlait les imports en cours et la file de validation à la
+  // bibliothèque : le 02/10, les slideshows d'emir.study en plein nettoyage y
+  // apparaissaient comme s'ils avaient sauté la file. Ils restent sous « En
+  // cours » et dans /admin/file.
   const [filtre, setFiltre] = React.useState<
     "actifs" | "tous" | "valide" | "rejete" | "brouillon"
-  >("actifs");
+  >("valide");
   const [filtreLabel, setFiltreLabel] = React.useState<FiltreLabel>(null);
   const [filtreCompte, setFiltreCompte] = React.useState<FiltreCompte>(null);
   const [filtreUgc, setFiltreUgc] = React.useState<FiltreUgc>("tous");
@@ -2183,7 +2186,7 @@ export function AdminSlideshowsPage() {
               </p>
             )}
             <div className="flex flex-wrap items-center gap-1.5">
-              {(["actifs", "tous", "valide", "rejete", "brouillon"] as const).map((f) => (
+              {(["valide", "brouillon", "actifs", "tous", "rejete"] as const).map((f) => (
                 <Chip key={f} actif={filtre === f} onClick={() => setFiltre(f)}>
                   {t(`contenus.filtre.${f}`)}
                 </Chip>
