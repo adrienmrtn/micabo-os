@@ -1571,11 +1571,15 @@ première fois : `ge`→`he`, `ye`→`Se`, `Le`→`Fe`, `he`→`we`, `W`→`te`)
 
 Signalé par Adrien : le TikTok de @leon.lernen990 sur `85379b9e` (classement
 des spécialités médicales) mêlait des slides en français et en allemand. Les
-slides 1 à 4 n'avaient **aucun** texte allemand ; le seul texte à l'écran était
-le français resté dans l'image (la légende Florence de l'image « propre » 3 lit
-encore « Dermatologie 9/10 » : le nettoyage l'avait laissé). Le même deck était
-parti une heure plus tôt chez @tim.arbeit325. Le contrôle de 08:49 l'avait
-repéré (« À trancher ») mais n'a pas le droit de réécrire un deck entier.
+slides 1 à 4 n'avaient **aucun** texte allemand. Le français ne venait PAS des
+images propres : l'audit de 0295 les trouve propres, et la légende Florence qui
+lisait « Dermatologie 9/10 » est calculée sur l'image BRUTE
+(`capturerCaptionSlide` reçoit `raw_url`), pas sur la propre. Hypothèse la plus
+probable : la page du créateur montre à côté de chaque slide la photo d'origine
+comme modèle de placement, et sans texte allemand à poser le créateur a pris
+celles-là. Le même deck était parti une heure plus tôt chez @tim.arbeit325. Le
+contrôle de 08:49 l'avait repéré (« À trancher ») mais n'a pas le droit de
+réécrire un deck entier.
 
 Le deck `de` était troué depuis l'import du 10/09, et deux règles l'ont laissé
 passer :
@@ -1611,10 +1615,8 @@ Le correctif, dans `assurerDeckPourLangue` :
 plus dans cette langue ; ça se voit dans le journal du drain, ça ne part plus en
 ligne.
 
-**Reste ouvert** : le texte d'origine laissé dans certaines images « propres »
-(`texte_restant = false` alors que la légende lit le texte). Dans les autres
-langues l'overlay le recouvre en partie ; c'est la même slide, à regarder dans
-la fiche de `85379b9e`.
+**Reste ouvert** : le texte d'origine laissé dans d'autres images « propres »,
+mesuré par l'audit de 0295 ci-dessous.
 
 **Déploiement du 02/10/2026, après OK d'Adrien.** Cinq chargeurs sur `828ce5c` :
 `assignation-contenu` (v39), `assignation` (v40), `bruler-texte-test` (v29),
@@ -1629,6 +1631,49 @@ Le même jour, **0293** ajoute Flashka à `concurrents` (`\mflashka\M`) avant
 l'import de la source @flashka_es : appli de flashcards IA, même pitch que
 micabo. « Professor Ka », sa mascotte, n'est pas dans le motif : la remplacer par
 micabo prêterait à micabo un tuteur IA.
+
+## Audit des images propres : le texte que le nettoyage a laissé (0295, 02/10/2026)
+
+`media_library.texte_restant` ne dit rien : l'import écrit `false` après chaque
+nettoyage, sans rien vérifier (stockage du propre dans `import_contenu.ts`). Les
+1 208 images `propre/…` étaient toutes « sans texte ».
+
+`audit-propres` (fonction de lecture, chargeur `_deploy`) relit chaque image
+avec `gemini-2.5-flash`, en lui donnant le texte du deck source à la même
+position pour séparer le texte AJOUTÉ (à effacer) du texte de la scène (cahier,
+écran), et range le verdict dans `audit_propres_0295` (RLS, aucune policy).
+Elle n'écrit nulle part ailleurs.
+
+Résultat du 02/10 : **1 071 propres, 79 partielles, 58 complètes**. Rangées :
+
+| genre | images | dans un slideshow validé | posts publiés | posts à venir |
+|---|---|---|---|---|
+| texte (mots) | 78 | 23 (16 slideshows) | 128 | 10 |
+| filigrane Xiaohongshu (`小红书号`) | 4 | 4 | 5 | 3 |
+| chiffres / emojis seuls | 47 | 33 (15 slideshows) | 212 | 13 |
+| calque micabo posé dans la file | 8 | 7 | 11 | 1 |
+
+Les calques micabo (« Micabo Education ») sont voulus : ce sont des blocs PNG
+aplatis par l'éditeur de `/admin/file`. Le texte vu par le modèle inclut des
+captures d'écran (article, page YouTube) où il fait partie de la photo.
+
+**Deux surfaces, deux gestes.** Les images d'un slideshow servent à ses propres
+posts quel que soit `texte_restant` (`resoudreVisuelsAssignation` ne relit que
+l'existence de la ligne) ; elles demandent un re-nettoyage, un calque ou une
+slide retirée dans la file. Le pool de garnissage (`chargerBiblioLabel`), lui,
+prend toute image propre du label avec `texte_restant = false`, **y compris
+celles des slideshows rejetés** : 44 images avec du texte n'y sont que par là.
+Passer leur drapeau à `true` les en sort sans toucher aux slideshows.
+
+**Piège de méthode** : la légende Florence est calculée sur le BRUT. Elle ne
+dit rien de l'image propre ; ne pas s'en servir pour juger un nettoyage.
+
+**Piège d'exécution** : 27 appels × 3 images en parallèle ont fait répondre
+**429** au Storage pendant deux minutes (09:00–09:02 UTC) — le même Storage qui
+sert les images aux créateurs. L'audit tourne désormais en 3 chaînes de 2
+images (`chaine`, `pas`, `manquants`), avec patience sur le 429 : 42 images
+par minute, zéro erreur. Et 8 images en parallèle dans une invocation dépassent
+sa mémoire (`546 WORKER_RESOURCE_LIMIT`).
 
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
