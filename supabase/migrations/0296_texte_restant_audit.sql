@@ -43,3 +43,14 @@ update public.media_library ml
   from public.texte_restant_0296 t
  where t.media_id = ml.id
    and ml.texte_restant = false;
+
+-- Suite (même jour) : la trace du re-nettoyage. Une ligne par image passée par
+-- `renettoyer-contenu` (26), pour relancer l'audit sur elles seules et
+-- comparer au verdict d'avant (`texte_restant_0296.reste`).
+create table if not exists public.renettoyage_0296 (
+  media_id uuid primary key,
+  contenu_id uuid,
+  position integer,
+  fait_le timestamptz not null default now()
+);
+alter table public.renettoyage_0296 enable row level security;

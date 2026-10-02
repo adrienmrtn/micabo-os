@@ -1690,6 +1690,23 @@ sa mémoire (`546 WORKER_RESOURCE_LIMIT`).
   Par vagues de 4 à 8 appels, jamais deux positions du même slideshow dans la
   même vague (`patchSlideMediaId` relit puis réécrit `structure_slides`).
 
+**Résultat, relu par l'audit** (`renettoyage_0296`, verdicts frais dans
+`audit_propres_0295`) : première passe **11 propres sur 26**, seconde passe sur
+les 15 restantes **7 de plus** — **18 propres, 8 qui gardent du texte**. Le
+moteur de nettoyage n'est pas déterministe : une seconde passe vaut la peine,
+une troisième probablement pas. Ce qui résiste : les titres en encart (« LE
+DEVOIR 📚 », « LE TEMPS ⌚ », « SES »), un autocollant italien (`17277702` #1,
+que la traduction espagnole avait d'ailleurs recopié : « sfi dante »), du texte
+manuscrit (`09c607a2` #1) et trois filigranes Xiaohongshu. Ces 8-là relèvent de
+la file (calque, slide retirée) ; leur `texte_restant` est repassé à `true`.
+
+**Piège** : `renettoyer-contenu` remet `texte_restant = false` dès que le
+moteur rend une image, sans la relire. Une image ratée revient donc dans les
+pools de garnissage. Après un re-nettoyage, relancer l'audit sur les images
+touchées (`audit-propres` avec `{offset, limit: 1}` — l'offset suit l'ordre
+`created_at, id` des `propre/…`, stable puisque l'upsert garde la ligne) et
+remettre le drapeau sur celles qui gardent du texte.
+
 **Le re-nettoyage touche aussi l'historique des posts publiés.** Le fichier
 est écrasé au même chemin et la ligne `media_library` est la même : les
 `post_slides` de TOUS les posts du slideshow pointent déjà dessus, publiés
