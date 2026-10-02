@@ -6,7 +6,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "dd929fe38b52d5df14dea12a2f7dc38da26d152c";
+const SHA = "91348c09f70959e3372399fa1b026e1056464b59";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/audit-propres.bundle.js`;
 
@@ -20,4 +20,4 @@ if (!src.includes("Deno.serve") || !src.includes("audit_propres_0295")) {
 }
 // esbuild renomme l'alias d'un rebuild à l'autre : relire le
 // `import{createClient as …}` du bundle avant de l'effacer, et reporter le nom ici.
-new Function("C", src)(createClient);
+new Function("I", src)(createClient);
