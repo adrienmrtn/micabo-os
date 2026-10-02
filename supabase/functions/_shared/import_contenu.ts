@@ -79,6 +79,7 @@ import {
   ETAPES_ELO_OU_APRES,
   etapeAChange,
 } from "./import_progres.ts";
+import { positionsSansTexte } from "./deck_structure.ts";
 import { lireParLots } from "./lots.ts";
 import { nettoyerTexteDeck } from "./marque.ts";
 import { citeMicabo, marquerPlacement, slideCitantMicabo } from "./placement.ts";
@@ -1370,16 +1371,13 @@ export async function assurerDeckPourLangue(
   // légende était « prêt » à vie, et CHAQUE passage retombait sur le pool
   // statique de `assignation_contenu.ts` — c'est ce qui a envoyé des hashtags
   // français sur deux TikTok turcs les 08 et 13/09/2026.
-  const pret =
-    deck.length > 0 &&
-    deck.some((s) => s.texte_overlay) &&
-    hashtags.length > 0 &&
-    (placementManuel || deck.some((s) => s.position_sophia));
-  if (pret) return await sansConcurrents(supabase, cl.id, deck, hashtags, langue);
-
   const langueSource = contenu.langue_source ?? "fr";
 
-  // Besoin du deck source comme base de traduction
+  // Le deck source, lu AVANT le test « prêt » : un deck traduit n'est prêt que
+  // si chaque slide qui a du texte dans la source en a aussi un ici (0294).
+  // Avant, une seule slide remplie suffisait — celle du placement — et un deck
+  // troué à la traduction ne repassait jamais par elle : 85379b9e est parti
+  // deux fois le 02/10 avec quatre slides vides en allemand.
   const { data: clSource } = await supabase
     .from("contenu_langues")
     .select("id, slides")
@@ -1387,6 +1385,24 @@ export async function assurerDeckPourLangue(
     .eq("langue", langueSource)
     .maybeSingle();
   const deckSource = [...((clSource?.slides ?? []) as SlideLangue[])];
+  const trous = langue === langueSource ? [] : positionsSansTexte(deckSource, deck);
+  if (trous.length > 0 && deck.some((s) => s.texte_overlay)) {
+    console.warn(
+      `[traduction] deck=${cl.id} ${langue} troué (slides ${trous.join(",")} sans texte) : retraduit en entier`,
+    );
+  }
+
+  const pret =
+    deck.length > 0 &&
+    deck.some((s) => s.texte_overlay) &&
+    hashtags.length > 0 &&
+    trous.length === 0 &&
+    (placementManuel || deck.some((s) => s.position_sophia));
+  if (pret) {
+    return livrerDeck(contenuId, langue, deckSource, langueSource,
+      await sansConcurrents(supabase, cl.id, deck, hashtags, langue));
+  }
+
   if (deckSource.length === 0 || !deckSource.some((s) => s.texte_overlay)) {
     throw new Error("Deck langue source vide — impossible de traduire");
   }
@@ -1403,7 +1419,7 @@ export async function assurerDeckPourLangue(
       texte_overlay: nettoyerTexteDeck(s.texte_overlay ?? "", langue),
     }));
     await supabase.from("contenu_langues").update({ slides: deck }).eq("id", cl.id);
-  } else if (deck.length === 0 || deck.every((s) => !s.texte_overlay)) {
+  } else if (deck.length === 0 || deck.every((s) => !s.texte_overlay) || trous.length > 0) {
     const voix = await voixSource(supabase, contenu.compte_reference_id);
     const dedie = await chargerPrompt(supabase, `traduction_${langue}`);
     const base =
@@ -1412,37 +1428,58 @@ export async function assurerDeckPourLangue(
       .filter(Boolean)
       .join("\n\n");
 
-    const traductions = await translateSlideshow({
-      slides: deckSource.map((s) => ({
+    // Une traduction à qui il manque une slide n'est pas écrite (0294) : le
+    // `?? ""` ci-dessous en faisait une slide vide, et le deck troué partait
+    // tel quel. On redemande une fois, puis on renonce : l'appelant repioche
+    // un autre slideshow, et le deck sera retenté à la prochaine assignation.
+    let manquantes: number[] = [];
+    for (let essai = 1; essai <= 2; essai++) {
+      const traductions = await translateSlideshow({
+        slides: deckSource.map((s) => ({
+          position: s.position,
+          original: s.texte_overlay ?? "",
+        })),
+        sourceTitle: contenu.titre ?? "",
+        rules: regles || undefined,
+        langue,
+        variation: false,
+        // En placement manuel, le CTA est déjà dans le texte source : il doit
+        // survivre à la traduction, sur la même slide, sans que `micabo` soit
+        // traduit. On le dit au traducteur. Même chose quand la source cite déjà
+        // micabo pour une autre raison (placement automatique de la langue
+        // source, concurrent remplacé) : ce micabo-là EST le placement (0289).
+        ctaManuel: placementManuel || slideCitantMicabo(deckSource) != null
+          ? {
+            slide: deckSource.find((s) => s.position_sophia)?.position ?? slideCitantMicabo(deckSource),
+          }
+          : undefined,
+      });
+      const parPos = new Map(traductions.slides.map((t) => [Number(t.position), t.translated]));
+      const candidat = deckSource.map((s) => ({
         position: s.position,
-        original: s.texte_overlay ?? "",
-      })),
-      sourceTitle: contenu.titre ?? "",
-      rules: regles || undefined,
-      langue,
-      variation: false,
-      // En placement manuel, le CTA est déjà dans le texte source : il doit
-      // survivre à la traduction, sur la même slide, sans que `micabo` soit
-      // traduit. On le dit au traducteur. Même chose quand la source cite déjà
-      // micabo pour une autre raison (placement automatique de la langue
-      // source, concurrent remplacé) : ce micabo-là EST le placement (0289).
-      ctaManuel: placementManuel || slideCitantMicabo(deckSource) != null
-        ? {
-          slide: deckSource.find((s) => s.position_sophia)?.position ?? slideCitantMicabo(deckSource),
-        }
-        : undefined,
-    });
-    const parPos = new Map(traductions.slides.map((t) => [t.position, t.translated]));
-    deck = deckSource.map((s) => ({
-      position: s.position,
-      // Filet : le prompt porte déjà ces règles, mais un modèle n'est pas une
-      // garantie. Les deux passes sont idempotentes, les repasser ne coûte rien.
-      texte_overlay: nettoyerTexteDeck(parPos.get(s.position) ?? "", langue),
-      // Le CTA voyage avec la traduction : la slide qui le portait en source le
-      // porte toujours, et rien ne doit le replacer.
-      position_sophia: placementManuel ? s.position_sophia : false,
-    }));
-    if (traductions.hashtags) hashtags = traductions.hashtags;
+        // Filet : le prompt porte déjà ces règles, mais un modèle n'est pas une
+        // garantie. Les deux passes sont idempotentes, les repasser ne coûte rien.
+        texte_overlay: nettoyerTexteDeck(parPos.get(Number(s.position)) ?? "", langue),
+        // Le CTA voyage avec la traduction : la slide qui le portait en source le
+        // porte toujours, et rien ne doit le replacer.
+        position_sophia: placementManuel ? s.position_sophia : false,
+      }));
+      manquantes = positionsSansTexte(deckSource, candidat);
+      if (manquantes.length > 0) {
+        console.warn(
+          `[traduction] contenu=${contenuId} ${langue} essai ${essai} : slides ${manquantes.join(",")} sans texte`,
+        );
+        continue;
+      }
+      deck = candidat;
+      if (traductions.hashtags) hashtags = traductions.hashtags;
+      break;
+    }
+    if (manquantes.length > 0) {
+      throw new Error(
+        `Traduction incomplète (${langue}) : slides ${manquantes.join(",")} sans texte après 2 essais`,
+      );
+    }
     await supabase
       .from("contenu_langues")
       .update({ slides: deck, hashtags: hashtags || null })
@@ -1510,13 +1547,38 @@ export async function assurerDeckPourLangue(
     .select("slides, hashtags")
     .eq("id", cl.id)
     .single();
-  return await sansConcurrents(
+  return livrerDeck(contenuId, langue, deckSource, langueSource, await sansConcurrents(
     supabase,
     cl.id,
     (frais?.slides ?? deck) as SlideLangue[],
     ((frais as { hashtags?: string | null } | null)?.hashtags ?? hashtags ?? "").trim(),
     langue,
-  );
+  ));
+}
+
+/**
+ * Dernier contrôle avant qu'un deck parte chez un créateur (0294) : aucune
+ * slide vide là où la source a du texte. Toutes les livraisons passent par
+ * `assurerDeckPourLangue`, donc c'est ici qu'on le tient — l'assignation
+ * attrape l'erreur, journalise « Deck échoué » et repioche, comme pour le
+ * garde-fou de 0279. Un post de moins vaut mieux qu'un post à moitié muet.
+ * La langue source n'est pas contrôlée : ses slides vides sont des choix (0288).
+ */
+function livrerDeck(
+  contenuId: string,
+  langue: string,
+  deckSource: SlideLangue[],
+  langueSource: string,
+  r: { slides: SlideLangue[]; hashtags: string },
+): { slides: SlideLangue[]; hashtags: string } {
+  if (langue === langueSource) return r;
+  const vides = positionsSansTexte(deckSource, r.slides);
+  if (vides.length > 0) {
+    throw new Error(
+      `Deck ${langue} troué sur contenu=${contenuId} : slides ${vides.join(",")} sans texte alors que la source en a`,
+    );
+  }
+  return r;
 }
 
 let concurrentsLus: { a: number; liste: Concurrent[] } | null = null;
