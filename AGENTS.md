@@ -1982,6 +1982,53 @@ Vu en relisant leurs parents : **ElibroAI** n'était pas dans `concurrents`
 (7 decks validés, 4 posts publiés). Ajouté par 0301, motif à trois graphies
 (`ElibroAI`, `elibroAI`, `elibro.ai`).
 
+## Source @emir.study et le logo astra AI (0302, 02/10/2026)
+
+Demande d'Adrien : importer @emir.study (turc, 137 slideshows), « attention au
+logo astra AI sur chaque slideshow ». Essai sur un seul post avant d'enfiler
+le compte, et ce qu'il a montré :
+
+- **le logo n'est pas un filigrane en coin.** C'est un badge — pictogramme
+  doré en triple boucle, mot « astra », carré « AI », sur une pastille noire —
+  posé au milieu de la slide qui fait la pub de l'appli (sur l'écran du
+  portable), avec « Astra AI uygulamasını kullanıyorum, ChatGPT o kadar iyi
+  çalışmıyor ». Les autres slides n'en ont pas ;
+- **le nettoyage de l'import le laisse entier.** `fal-ai/image-editing/text-removal`
+  efface la légende, pas un logo : relu après import, « entièrement présent et
+  parfaitement net » ;
+- **`nettoyage-cible` l'efface en partant du propre** (`depuis: "propre"`),
+  pas du brut : l'image a déjà perdu sa légende et a été agrandie par l'import,
+  on n'y touche que le logo. Premier essai raté pour une raison utile à savoir :
+  le modèle avait marqué l'écran du portable « à garder », et le garde-fou du
+  masque (`masqueSur`) abandonne une zone à effacer qui recouvre une zone à
+  garder. Avec « ne garde RIEN autour du logo » et une marge large, l'effacement
+  est propre (relu : rien du pictogramme ni de la pastille, écran reconstruit
+  crédible) ;
+- **l'effaceur rend du `.png`, l'import du `.jpg`** : deux chemins, deux lignes
+  `media_library`. Sans repointage, la slide gardait l'image au logo.
+  `nettoyage-cible` repointe désormais la slide (`patch_contenu_slide_media`,
+  atomique) et passe l'ancienne ligne `exclu_concurrent`.
+
+**Le repérage passe par un modèle bon marché.** `decrire-images` avec
+`modeles: ["gemini-2.5-flash"]` et une question OUI/NON sur le logo : calibré
+sur la paire avant/après (OUI sur l'ancienne image, NON sur la nouvelle et sur
+une slide sans logo). Chaque slide de chaque slideshow importé est relue
+(`astra_detection_0302`, passe 1), l'effacement ne tourne que sur les OUI, et
+une passe 2 relit après effacement. Claude ne lit que les slides qui ont le
+logo.
+
+**Le texte** : Astra est dans `concurrents` depuis 0286, donc `sansConcurrents`
+l'aurait remplacé à la fabrication du deck. Mais la file montre le deck source
+tel que l'OCR l'a lu (« Astra Al », un L pour un I). La mention devient la forme
+turque de la marque dans le deck source, le reste mot pour mot (règle de 0287),
+et la slide est marquée `position_sophia`. `astra_vers_micabo_tr` traite
+l'accusatif collé (« Astra AI’ı » → « micabo’yu ») avant le nom nu, puis
+`micabo_avec_article` (0267) pose « uygulaması » et déplace le suffixe :
+« Astra Al uygulamasını kullanıyorum » → « micabo uygulamasını kullanıyorum ».
+Avant/après dans `astra_reprise_0302`. Un deck qui cite Astra sur plus d'une
+slide n'est pas réécrit en aveugle : deux slides micabo seraient une double
+mention.
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
