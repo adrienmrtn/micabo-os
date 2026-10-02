@@ -1937,6 +1937,30 @@ un compte `burned`, le burn lit le style sur `reference_url` et l'aligne sur
 l'image, qui n'est plus la même photo ; l'autotest refuse et la slide part en
 classique.
 
+**L'automate, lancé le 02/10** (décision d'Adrien : « UNIQUEMENT 1 variante,
+pas de photo, envoie-les tous en queue »). `essai-variations` avec
+`{ chaine: [ids], ecrire: true }` traite un parent par invocation et relance
+le suivant ; chaque parent voit les images (`source_media_id`) et les idées
+(première ligne de chaque slide) déjà prises par les variantes écrites avant
+lui. Une variante n'est écrite que sans aucun défaut — gabarit, image hors
+pool ou déjà prise, micabo absent ou mal placé, concurrent, tiret long, ou
+promesse que micabo ne tient pas (photo, capture, audio, rappel, planning :
+`PROMESSES_INTERDITES`, renvoyée au modèle comme un écart de gabarit).
+Écrite, elle naît `rejete` et ne passe `brouillon` qu'à la dernière écriture :
+
+- `creation_mode = manuel`, `parent_id`, `profondeur + 1`, tier **B**, un
+  passage, labels, musique et format du parent, `placement_manuel` si la slide
+  micabo est écrite, et une `file_note` qui dit de quel slideshow elle vient ;
+- **ses images sont des COPIES** (`propre/<variante>/<position>`, ligne
+  `media_library` à elle, sans label). L'éditeur de la file aplatit ses calques
+  sur le `storage_path` de l'image : sans copie, retoucher la variante aurait
+  réécrit l'image du slideshow d'origine et celle de tous ses posts publiés.
+  Les copies ne sont pas auditées, donc jamais reprises par un autre tirage ;
+- `hashtags` = ceux de la légende, s'il y en a au moins trois.
+
+Deux parents sur 23 écartés : `c8b9a2d2` (refusé dans la file) et `0d6c5f82`
+(cold-study, sans label : sa variante ne serait jamais tirée).
+
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 
 `chargerPassagesFenetre` sélectionnait `date_publication_prevue IN (4 derniers
