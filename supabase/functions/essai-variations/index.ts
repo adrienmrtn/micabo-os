@@ -207,6 +207,46 @@ Réponds en JSON strict, rien d'autre. Jamais de guillemet droit dans les textes
   return { variante: courante, tours: 2 };
 }
 
+/**
+ * Le modèle de placement de chaque position : la slide du TikTok d'origine,
+ * texte compris, là où le créateur voit où poser le sien. Quand l'éditeur de la
+ * file a remplacé une image, `raw_url` et `reference_url` pointent sur un propre
+ * sans texte, qui ne montre rien : on reprend alors l'original à la même
+ * position (`brut/<tiktok>/<position>`), mais seulement si le TikTok avait
+ * autant de slides que le slideshow — une slide retirée ou déplacée ferait
+ * pointer le modèle sur la mauvaise.
+ */
+async function modelesDePlacement(
+  supabase: ReturnType<typeof serviceClient>,
+  structure: Array<{ position: number; raw_url?: string | null; reference_url?: string | null }>,
+): Promise<Map<number, string | null>> {
+  const BRUT = /\/medias\/brut\/([^/]+)\/(\d+)\.[a-z]+/i;
+  const ids = structure.map((s) => (s.reference_url ?? s.raw_url ?? "").match(BRUT)?.[1]).filter((x): x is string => !!x);
+  const tiktok = ids[0] ?? null;
+  let originaux: string[] = [];
+  if (tiktok) {
+    const { data } = await supabase.storage.from("medias").list(`brut/${tiktok}`, { limit: 100 });
+    originaux = (data ?? []).map((f) => f.name);
+  }
+  const memeNombre = originaux.length === structure.length;
+  const out = new Map<number, string | null>();
+  for (const s of structure) {
+    const propre = s.reference_url ?? s.raw_url ?? null;
+    if (propre && BRUT.test(propre)) {
+      out.set(Number(s.position), propre);
+      continue;
+    }
+    const nom = originaux.find((n) => n.startsWith(`${s.position}.`));
+    out.set(
+      Number(s.position),
+      tiktok && memeNombre && nom
+        ? supabase.storage.from("medias").getPublicUrl(`brut/${tiktok}/${nom}`).data.publicUrl
+        : null,
+    );
+  }
+  return out;
+}
+
 async function essayer(contenuId: string, n: number): Promise<Record<string, unknown>> {
   const supabase = serviceClient();
   const { data: parent, error } = await supabase
@@ -231,9 +271,7 @@ async function essayer(contenuId: string, n: number): Promise<Record<string, unk
     raw_url?: string | null;
     reference_url?: string | null;
   }>;
-  const modeles = new Map(
-    structure.map((s) => [Number(s.position), s.reference_url ?? s.raw_url ?? null] as const),
-  );
+  const modeles = await modelesDePlacement(supabase, structure);
   const posMicabo = deck.find((s) => s.position_sophia || citeMicabo(s.texte_overlay))?.position ?? null;
   const gabarits = new Map<number, Gabarit>(deck.map((s) => [s.position, gabarit(s.texte_overlay)]));
   if (posMicabo != null) {
