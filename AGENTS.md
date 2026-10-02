@@ -2038,6 +2038,45 @@ fait naître le contenu `rejete` + `done` + `elo_insuffisant`, avec la raison
 dans `file_note`. Le scrape reste payé : il faut lire le post pour connaître
 ses vues.
 
+**Ils semblaient avoir sauté la file — ils ne l'avaient pas fait.** Adrien a
+vu les slideshows d'emir.study dans « Slideshows » pendant leur import. Le
+filtre par défaut de la page était « Sans les rejetés » : il mêlait la
+bibliothèque, la file de validation et les imports en cours. Aucun n'était
+`valide` sauf le premier, validé par Adrien lui-même (`valide_par`). Le défaut
+est désormais « Valides » ; les autres restent sous « En cours » et dans
+`/admin/file`.
+
+**L'OCR recopiait la photo** (`ocrFrame`, gemini.ts). Le prompt disait
+« transcris le texte incrusté » et n'excluait que logos, vêtements et barre de
+statut. Sur emir.study il a recopié, à la suite de la légende, une fiche
+« MITOCHONDRIA » affichée sur une tablette, 44 lignes d'un article
+scientifique (la vraie légende perdue au milieu), l'interface de l'appli Astra,
+un chrono au milieu d'une phrase, et mélangé l'ordre des lignes d'une slide.
+Le prompt dit maintenant : la LÉGENDE ajoutée seulement, jamais le texte de la
+photo (écran, interface, cahier, document, chrono, badge…), dans l'ordre de
+lecture. `import-contenu` v37 sur `7818a8b` ; le reste du bundle est une
+permutation d'identifiants. Les 21 decks d'emir.study ont été relus avec le
+nouveau prompt (même modèle, sur le brut) : 13 corrigés, avant/après dans
+`ocr_reprise_0302_slides`.
+
+**Les promesses d'Astra ne sont pas celles de micabo.** Les 21 slides qui
+recommandaient Astra (et une Nerdmask, ajoutée à `concurrents`) ont été
+relues une par une : micabo quand la promesse tient (répétition espacée,
+notes ou cours → tests et flashcards, se tester), formulation sans marque
+quand elle ne tient pas (« professeur particulier IA », explication pas à pas
+des problèmes de maths, découpage en explications simples — règle de 0291),
+et « résumés façon podcast » retiré (micabo ne fait pas d'audio). Une slide
+micabo par deck ; trois decks sans micabo, que le placement servira à
+l'assignation.
+
+**Le détecteur bon marché rate l'icône seule.** Le nettoyage de l'import
+efface les mots « astra » et « AI » et laisse le pictogramme doré. Interrogé,
+gemini-2.5-flash décrit « un pictogramme doré en triple boucle »… et répond
+NON parce que le mot manque. Sur les slides qui font la pub de l'appli,
+l'effacement (Claude + Bria) tourne donc sans attendre le détecteur, avec une
+consigne qui nomme l'icône seule ; sans reste, il n'efface rien et ne coûte
+que la lecture.
+
 **Piège du MCP, précisé** : le corps plpgsql du trigger (points-virgules entre
 `$f$`) est passé par `apply_migration`. Le même texte par `execute_sql`,
 précédé d'un `drop trigger if exists`, a attendu ses 60 s sans rien appliquer.
