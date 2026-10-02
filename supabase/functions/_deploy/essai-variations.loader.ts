@@ -5,7 +5,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "51b285f2aaf7e2cc8e9e9179d8f217542b25ecf0";
+const SHA = "abc34851c38213827c35ac9a7dc6eaf3a388cb6f";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/essai-variations.bundle.js`;
 
