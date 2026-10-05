@@ -1911,6 +1911,33 @@ et `revoquer-post`, +683 octets chacun. **Les quatre alias `createClient` ont
 (permutation) : leurs bundles du dépôt sont gardés. Versions déployées : v40,
 v41, v44, v40. Test de vie `401` passé sur les quatre (par `pg_net`).
 
+### Tier par tier (05/10/2026)
+
+Appliquée à tout le groupe B+ d'un coup, la préférence faisait passer
+n'importe quel B jamais testé devant un S ou un A déjà vu dans la langue. Or,
+du 22/09 au 02/10, un S/A déjà vu dans la langue faisait **3 972 vues de
+médiane, un B inédit 1 275**. Le premier passage dans une langue vaut mieux
+que le deuxième **à tier égal**, pas d'un tier à l'autre. Le 03/10, avec 67
+nouveaux slideshows en B ou C, les gagnants sont sortis du tirage : **8 % des
+posts** sur des slideshows éprouvés, contre 24 % la veille, alors que
+`835c1781` (1,4 M) et `20bb2017` devaient chacun 2 passages.
+
+`prefererInedits` ne retire donc plus un slideshow déjà vu que si un inédit
+**du même tier** existe. Les tiers retrouvent leur poids d'avant le 02/10 dans
+le tirage, qui reste uniforme par slideshow ; un slideshow sans tier forme son
+propre groupe. Le repêchage n'est pas concerné (tout y est en D). Trois tests
+de plus dans `tierlist.test.ts`, dont celui qui verrouille le cas : un B inédit
+n'évince pas un S déjà vu.
+
+**Déploiement du 05/10/2026** (demande d'Adrien). Quatre chargeurs sur
+`4781398` : `assignation-contenu` (v42), `assignation` (v43), `minuit-vnext`
+(v46) et `revoquer-post` (v42), +63 octets chacun. **Les quatre alias
+`createClient` sont inchangés** (`xe`, `$e`, `Je`, `Se`), relus dans les
+bundles. Sept bundles ressortent à taille constante (permutation :
+`audit-propres`, `bruler-assignes`, `decrire-images`, `essai-placement`,
+`essai-variations`, `normaliser-format`, `renettoyer-contenu`) : ceux du dépôt
+sont gardés. Test de vie `401` passé sur les quatre (par `pg_net`).
+
 ## Réinjection des rejetés et nettoyage ciblé de flashka (0300, 02/10/2026)
 
 Re-notés avec le prompt de 0299, 74 des 94 slideshows rejetés à l'import
