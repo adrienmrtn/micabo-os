@@ -428,9 +428,25 @@ sont pas rejugés : les médianes de ces D restent sous 1 000. Vérifié en prod
 la fonction rend `false` sur les deux plafonnés et sur un cycle en attente,
 sans rien écrire.
 
-Ce qui n'a **pas** changé : les reposts bonus rejouent le post à J+7 quel que
-soit le statut du slideshow. c8b9a2d2, refusé dans la file, est revenu le
-04/10 par son repost bonus.
+**Un refusé ne revient plus par son repost bonus (0305).** c8b9a2d2, refusé
+dans la file, était reparti le 04/10 chez camille.travail692 : le repost bonus
+rejoue le post à J+7 et `assignerRepostsBonusDuJour` ne lit jamais
+`contenus.statut`. Décision d'Adrien : bloquer. Tout est en base, sans chargeur
+à redéployer, puisque le moteur ne prend que les reposts `prevu` :
+
+- `reposts_bonus_slideshow_refuse` (BEFORE INSERT OR UPDATE) : un repost qui
+  naît ou repasse `prevu` sur un slideshow `rejete` devient `abandonne`,
+  raison « Slideshow refusé » ;
+- `contenus_refus_abandonne_reposts` (AFTER UPDATE OF statut) : un slideshow
+  qui passe `rejete` abandonne ses reposts encore prévus ;
+- la règle vit dans `repost_bonus_a_abandonner(contenu)`, vérifiable en
+  lecture (vraie sur c8b9a2d2, fausse sur 835c1781).
+
+La course entre la lecture du TS et la création est fermée par 0265 :
+`creer_publication_atomique` ne solde qu'un repost encore `prevu`, sinon elle
+lève et rien ne part. Seul `rejete` bloque : un slideshow remis en file garde
+ses reposts. Au 05/10, aucun repost prévu sur un refusé, donc la reprise n'a
+rien touché ; les 4 reposts prévus portent sur des slideshows valides.
 
 ## Le retrait d'un label attirait le repli vers lui (0277, 28/09/2026)
 
