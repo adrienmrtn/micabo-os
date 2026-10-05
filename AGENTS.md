@@ -378,6 +378,60 @@ le défaut réécrit ne peut pas voir le défaut. Le contrôle du 27/09 annonça
 déplacer. Pour ce chemin, le seul angle qui révèle quoi que ce soit est de
 compter **les passages du JOUR par slideshow**.
 
+## Le repêchage jetait les verdicts, et les D tournaient sans fin (0304, 05/10/2026)
+
+Signalé par Adrien : « les contenus recyclés en boucle font des vues de merde,
+et pourtant je les vois encore ». Sur 58 slideshows passés au moins 6 fois, un
+7ᵉ à 15ᵉ passage fait **0,6×** les trois premiers du même slideshow, et un
+16ᵉ ou plus **0,4×**. Mais les gagnants recyclés restent au-dessus de la
+médiane du réseau (1 150 à 1 450 contre 1 318 pour un premier passage) et
+sortent encore des hits. Décision d'Adrien : **on ne touche pas au recyclage
+des gagnants**. Le recyclage vraiment mauvais était ailleurs, dans le
+repêchage des D.
+
+**0276 n'imposait le verdict qu'au jour près.** Un cycle de repêchage porte un
+passage : dès qu'il est inséré, le cycle est plein. La garde de 0276 bloquait
+un deuxième repêchage le même jour, pas le lendemain. Le lendemain,
+`repecher_contenu` rouvrait donc un cycle et remettait `tier_maj_at` à
+`now()`, alors que le passage de la veille n'était pas encore mesuré (J+2). Le
+verdict ne lit que les passages depuis `tier_maj_at` : le passage de la veille
+sortait du cycle **sans avoir été jugé**. Un D ne pouvait remonter que si le
+dernier passage avant une pause de deux jours faisait 1 000 vues.
+
+Les trois D les plus recyclés ont perdu ainsi **8 passages au-dessus du seuil
+de sortie** : c8b9a2d2 a fait 79 800 vues chez camille.travail692 le 27/09 et
+est resté en D (10 repêchages, dont 8 pendant les rafales buguées des 27 et
+28/09) ; cc30ddf8 a perdu 5 688 et 1 319 (8 repêchages) ; 8c3c08db 3 603 et
+1 005 (13 repêchages). Les 19 lignes « D > D » de c8b9a2d2 dans
+`contenu_tier_historique` ne sont pas 19 repêchages : beaucoup sont les
+réécritures concurrentes des rafales. **Compter les passages, pas les lignes
+d'historique.**
+
+`repecher_contenu` (0304) a deux gardes de plus, sans changement côté TS (la
+boucle de `choisirContenu` repioche déjà sur `false`), donc sans chargeur à
+redéployer :
+
+- **un cycle est déjà ouvert** (`passages_cible > 0`) → false. Soit un worker
+  concurrent va le consommer (0275), soit son passage attend son verdict. La
+  requalification remet la cible d'un D à 0 quand elle l'a jugé : il redevient
+  repêchable à ce moment-là, pas avant ;
+- **trois repêchages depuis l'entrée en D, sans remonter** → false. On compte
+  les passages (hors reposts bonus et posts test) créés depuis la dernière
+  ligne d'historique qui va d'autre chose vers D. En D, la cible est 0, donc
+  tout passage depuis l'entrée est un repêchage. S'il remonte, il quitte D ;
+  s'il y retombe, le compteur repart.
+
+Au 05/10, sur les 13 D valides : 8c3c08db et cc30ddf8 ne sont plus
+repêchables, 4 attendent leur verdict (dont 07630f3b et e0159ade, déjà à trois
+repêchages), 7 restent repêchables. Les bons passages jetés par le défaut ne
+sont pas rejugés : les médianes de ces D restent sous 1 000. Vérifié en prod :
+la fonction rend `false` sur les deux plafonnés et sur un cycle en attente,
+sans rien écrire.
+
+Ce qui n'a **pas** changé : les reposts bonus rejouent le post à J+7 quel que
+soit le statut du slideshow. c8b9a2d2, refusé dans la file, est revenu le
+04/10 par son repost bonus.
+
 ## Le retrait d'un label attirait le repli vers lui (0277, 28/09/2026)
 
 Un compte créé le 28/09 (`leon.lernen977`) est né **sans label**, donc sans

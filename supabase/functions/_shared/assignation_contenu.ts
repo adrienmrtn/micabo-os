@@ -1075,10 +1075,11 @@ async function choisirContenu(
   // garde-fou ne pouvait pas se déclencher, et sept créateurs sortaient le même
   // slideshow le même jour.
   //
-  // `repecher_contenu` rend `false` dans deux cas, et l'appelant passe au
-  // candidat suivant dans les deux : le slideshow a DÉJÀ été repêché pour ce
-  // jour (0276), ou un autre worker vient d'ouvrir son cycle sans l'avoir
-  // encore consommé (0275).
+  // `repecher_contenu` rend `false` dans trois cas, et l'appelant passe au
+  // candidat suivant dans tous : le slideshow a DÉJÀ été repêché pour ce
+  // jour (0276) ; un cycle est déjà ouvert, soit pas encore consommé (0275),
+  // soit en attente de son verdict (0304) ; ou c'est un D déjà repêché trois
+  // fois depuis son entrée en D sans remonter (0304).
   //
   // 0275 seul ne suffisait pas : dès que le premier worker avait inséré son
   // passage, le cycle était plein, donc rouvrable, donc rouvert par le worker
