@@ -250,7 +250,11 @@ describe("melanger", () => {
  * jamais un filtre : un compte ne doit pas rester sous quota pour ça.
  */
 describe("prefererInedits", () => {
-  const groupe = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  const groupe = [
+    { id: "a", tier: "B" },
+    { id: "b", tier: "B" },
+    { id: "c", tier: "B" },
+  ];
 
   it("garde seulement les slideshows pas encore passés dans la langue", () => {
     expect(prefererInedits(groupe, new Set(["a", "c"])).map((c) => c.id)).toEqual(["b"]);
@@ -281,5 +285,42 @@ describe("prefererInedits", () => {
 
   it("garde une fenêtre aussi longue que le recul par compte", () => {
     expect(RECUL_MEME_LANGUE_JOURS).toBeGreaterThanOrEqual(RECUL_MEME_COMPTE_JOURS);
+  });
+
+  // 05/10/2026 : la préférence joue tier par tier. Sur tout le groupe B+, un B
+  // jamais testé évinçait un S déjà vu (3 972 vues de médiane contre 1 275).
+  it("ne laisse pas un B inédit évincer un S déjà vu dans la langue", () => {
+    const dus = [
+      { id: "s-vu", tier: "S" },
+      { id: "b-inedit", tier: "B" },
+    ];
+    expect(prefererInedits(dus, new Set(["s-vu"])).map((c) => c.id)).toEqual(["s-vu", "b-inedit"]);
+  });
+
+  it("préfère l'inédit à l'intérieur d'un même tier", () => {
+    const dus = [
+      { id: "a-vu", tier: "A" },
+      { id: "a-inedit", tier: "A" },
+      { id: "b-vu", tier: "B" },
+      { id: "b-inedit", tier: "B" },
+      { id: "s-vu", tier: "S" },
+    ];
+    expect(prefererInedits(dus, new Set(["a-vu", "b-vu", "s-vu"])).map((c) => c.id)).toEqual([
+      "a-inedit",
+      "b-inedit",
+      "s-vu",
+    ]);
+  });
+
+  it("traite les slideshows sans tier comme un groupe à part", () => {
+    const dus = [
+      { id: "x-vu", tier: null },
+      { id: "x-inedit", tier: null },
+      { id: "c-vu", tier: "C" },
+    ];
+    expect(prefererInedits(dus, new Set(["x-vu", "c-vu"])).map((c) => c.id)).toEqual([
+      "x-inedit",
+      "c-vu",
+    ]);
   });
 });

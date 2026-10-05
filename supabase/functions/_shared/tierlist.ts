@@ -416,11 +416,30 @@ export const RECUL_MEME_LANGUE_JOURS = 30;
  * Appliquée APRÈS le tier : la part réservée aux C (`PART_TIRAGE_C`) reste
  * exacte, et un B+ déjà vu dans la langue passe toujours avant un C inédit
  * quand le tirage tombe sur les B+.
+ *
+ * Et appliquée TIER PAR TIER (05/10/2026). Sur tout le groupe B+ d'un coup,
+ * elle faisait passer n'importe quel B jamais testé devant un S ou un A déjà
+ * vu dans la langue. Or, du 22/09 au 02/10, un S/A déjà vu dans la langue
+ * faisait 3 972 vues de médiane, un B inédit 1 275 : le premier passage dans
+ * une langue vaut mieux que le deuxième À TIER ÉGAL, pas d'un tier à l'autre.
+ * Le 03/10, avec 67 nouveaux slideshows en B ou C, elle a sorti les gagnants
+ * du tirage : 8 % des posts sur des slideshows éprouvés, contre 24 % la
+ * veille, alors que 835c1781 (1,4 M) et 20bb2017 devaient chacun 2 passages.
+ *
+ * Donc : dans chaque tier, les inédits de la langue s'il y en a, sinon tout le
+ * tier. Les tiers gardent leur poids d'avant le 02/10 dans le tirage, qui
+ * reste uniforme par slideshow. Un slideshow sans tier forme son propre
+ * groupe. L'ordre d'entrée est conservé.
  */
-export function prefererInedits<T extends { id: string }>(
+export function prefererInedits<T extends { id: string; tier: string | null }>(
   candidats: T[],
   dejaDansLaLangue: ReadonlySet<string>,
 ): T[] {
-  const inedits = candidats.filter((c) => !dejaDansLaLangue.has(c.id));
-  return inedits.length > 0 ? inedits : candidats;
+  const inedits = new Set<string | null>();
+  for (const c of candidats) {
+    if (!dejaDansLaLangue.has(c.id)) inedits.add(c.tier ?? null);
+  }
+  return candidats.filter(
+    (c) => !inedits.has(c.tier ?? null) || !dejaDansLaLangue.has(c.id),
+  );
 }

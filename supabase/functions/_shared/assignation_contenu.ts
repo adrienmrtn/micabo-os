@@ -1061,7 +1061,8 @@ async function choisirContenu(
   // Les B+ passent d'abord, mais une part des tirages (`PART_TIRAGE_C`) est
   // réservée aux C : sans elle, un C ne pouvait jamais être mesuré, donc jamais
   // remonter. Dans le groupe retenu, ce que la langue n'a pas encore vu passe
-  // devant (02/10/2026).
+  // devant (02/10/2026), mais tier par tier (05/10/2026) : un B jamais testé
+  // n'évince plus un S ou un A déjà vu dans la langue.
   const pick = tirerAuHasard(prefererInedits(prioriserTiersHauts(dus), dejaDansLaLangue));
   if (pick) return versCandidat(pick, restants.get(pick.id) ?? 0, false);
 
