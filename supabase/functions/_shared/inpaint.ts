@@ -96,7 +96,7 @@ function chunk(type: string, data: Uint8Array): Uint8Array {
 }
 
 /** Masque PNG 8 bits : fond noir, rectangles blancs sur les zones de texte. */
-async function masquePNG(w: number, h: number, zones: Zone[]): Promise<Uint8Array> {
+export async function masquePNG(w: number, h: number, zones: Zone[]): Promise<Uint8Array> {
   // Une scanline = 1 octet de filtre (0) + w octets (0 = noir, 255 = blanc).
   const brut = new Uint8Array((w + 1) * h);
   for (const z of zones) {

@@ -451,6 +451,76 @@ le défaut réécrit ne peut pas voir le défaut. Le contrôle du 27/09 annonça
 déplacer. Pour ce chemin, le seul angle qui révèle quoi que ce soit est de
 compter **les passages du JOUR par slideshow**.
 
+## Le repêchage jetait les verdicts, et les D tournaient sans fin (0304, 05/10/2026)
+
+Signalé par Adrien : « les contenus recyclés en boucle font des vues de merde,
+et pourtant je les vois encore ». Sur 58 slideshows passés au moins 6 fois, un
+7ᵉ à 15ᵉ passage fait **0,6×** les trois premiers du même slideshow, et un
+16ᵉ ou plus **0,4×**. Mais les gagnants recyclés restent au-dessus de la
+médiane du réseau (1 150 à 1 450 contre 1 318 pour un premier passage) et
+sortent encore des hits. Décision d'Adrien : **on ne touche pas au recyclage
+des gagnants**. Le recyclage vraiment mauvais était ailleurs, dans le
+repêchage des D.
+
+**0276 n'imposait le verdict qu'au jour près.** Un cycle de repêchage porte un
+passage : dès qu'il est inséré, le cycle est plein. La garde de 0276 bloquait
+un deuxième repêchage le même jour, pas le lendemain. Le lendemain,
+`repecher_contenu` rouvrait donc un cycle et remettait `tier_maj_at` à
+`now()`, alors que le passage de la veille n'était pas encore mesuré (J+2). Le
+verdict ne lit que les passages depuis `tier_maj_at` : le passage de la veille
+sortait du cycle **sans avoir été jugé**. Un D ne pouvait remonter que si le
+dernier passage avant une pause de deux jours faisait 1 000 vues.
+
+Les trois D les plus recyclés ont perdu ainsi **8 passages au-dessus du seuil
+de sortie** : c8b9a2d2 a fait 79 800 vues chez camille.travail692 le 27/09 et
+est resté en D (10 repêchages, dont 8 pendant les rafales buguées des 27 et
+28/09) ; cc30ddf8 a perdu 5 688 et 1 319 (8 repêchages) ; 8c3c08db 3 603 et
+1 005 (13 repêchages). Les 19 lignes « D > D » de c8b9a2d2 dans
+`contenu_tier_historique` ne sont pas 19 repêchages : beaucoup sont les
+réécritures concurrentes des rafales. **Compter les passages, pas les lignes
+d'historique.**
+
+`repecher_contenu` (0304) a deux gardes de plus, sans changement côté TS (la
+boucle de `choisirContenu` repioche déjà sur `false`), donc sans chargeur à
+redéployer :
+
+- **un cycle est déjà ouvert** (`passages_cible > 0`) → false. Soit un worker
+  concurrent va le consommer (0275), soit son passage attend son verdict. La
+  requalification remet la cible d'un D à 0 quand elle l'a jugé : il redevient
+  repêchable à ce moment-là, pas avant ;
+- **trois repêchages depuis l'entrée en D, sans remonter** → false. On compte
+  les passages (hors reposts bonus et posts test) créés depuis la dernière
+  ligne d'historique qui va d'autre chose vers D. En D, la cible est 0, donc
+  tout passage depuis l'entrée est un repêchage. S'il remonte, il quitte D ;
+  s'il y retombe, le compteur repart.
+
+Au 05/10, sur les 13 D valides : 8c3c08db et cc30ddf8 ne sont plus
+repêchables, 4 attendent leur verdict (dont 07630f3b et e0159ade, déjà à trois
+repêchages), 7 restent repêchables. Les bons passages jetés par le défaut ne
+sont pas rejugés : les médianes de ces D restent sous 1 000. Vérifié en prod :
+la fonction rend `false` sur les deux plafonnés et sur un cycle en attente,
+sans rien écrire.
+
+**Un refusé ne revient plus par son repost bonus (0305).** c8b9a2d2, refusé
+dans la file, était reparti le 04/10 chez camille.travail692 : le repost bonus
+rejoue le post à J+7 et `assignerRepostsBonusDuJour` ne lit jamais
+`contenus.statut`. Décision d'Adrien : bloquer. Tout est en base, sans chargeur
+à redéployer, puisque le moteur ne prend que les reposts `prevu` :
+
+- `reposts_bonus_slideshow_refuse` (BEFORE INSERT OR UPDATE) : un repost qui
+  naît ou repasse `prevu` sur un slideshow `rejete` devient `abandonne`,
+  raison « Slideshow refusé » ;
+- `contenus_refus_abandonne_reposts` (AFTER UPDATE OF statut) : un slideshow
+  qui passe `rejete` abandonne ses reposts encore prévus ;
+- la règle vit dans `repost_bonus_a_abandonner(contenu)`, vérifiable en
+  lecture (vraie sur c8b9a2d2, fausse sur 835c1781).
+
+La course entre la lecture du TS et la création est fermée par 0265 :
+`creer_publication_atomique` ne solde qu'un repost encore `prevu`, sinon elle
+lève et rien ne part. Seul `rejete` bloque : un slideshow remis en file garde
+ses reposts. Au 05/10, aucun repost prévu sur un refusé, donc la reprise n'a
+rien touché ; les 4 reposts prévus portent sur des slideshows valides.
+
 ## Le retrait d'un label attirait le repli vers lui (0277, 28/09/2026)
 
 Un compte créé le 28/09 (`leon.lernen977`) est né **sans label**, donc sans
@@ -1454,6 +1524,745 @@ caractères » a ramassé 4 slides sur 123 slideshows, dont une vraie
 slide a été lue avant d'être vidée. Si l'import doit un jour écarter ce bruit
 à la source, c'est un critère de contenu (proportion de lignes d'un ou deux
 caractères, alphabet différent de la langue du deck), pas de longueur.
+
+## Placement micabo : seconde moitié, une mention par deck (0289/0290, 01/10/2026)
+
+Le doc « Placement micabo : réflexion et propositions » (01/10) a mesuré ce que
+faisait le placement : **47 % des placements récitaient une fonction** de l'appli
+(« génère tes fiches », « au bon moment », « crée ton plan de révision »), **10
+sur 24 cassaient le deck** (numéro faux, item de classement perdu, outro
+écrasée, « faits fous » devenus pub), et **22 % des decks citaient micabo deux
+fois** (38 % en turc). Décisions d'Adrien : seconde moitié du deck, PeECH
+concurrent, les slides allemandes reprises, le stock déjà placé **n'est pas
+replacé** (seuls les prochains decks), et un contrôle LLM chaque matin.
+
+**Les doubles mentions ne venaient presque jamais du placement.** Elles venaient
+d'un concurrent remplacé par micabo (0287), d'une appli tierce que la traduction
+avait remplacée, ou d'un CTA écrit à la main sans cocher la case — puis
+`placerSophiaSurDeck` ajoutait son propre micabo ailleurs. D'où, dans
+`assurerDeckPourLangue` : **les concurrents passent avant le placement**, et
+**une slide qui cite déjà micabo est marquée comme placement** au lieu d'en
+recevoir un second (`slideCitantMicabo`, `marquerPlacement`). Le prompt des
+concurrents et `appliquerVerdicts` ne laissent plus qu'**une slide nommer
+micabo** : les autres recommandations deviennent sans marque. La traduction
+reçoit `ctaManuel` dès que la source cite micabo, quelle qu'en soit la raison.
+
+**Réponse à la question d'Adrien** (« quand il y a déjà un placement manuel,
+juste traduction ? ») : oui si la slide est cochée dans l'éditeur
+(`placement_manuel`) — c'était déjà le cas. Non si micabo est seulement écrit
+dans le texte : le moteur en ajoutait un second. C'est fermé par la détection
+ci-dessus.
+
+**Seconde moitié du deck** (`positionsPermises`, `_shared/placement.ts`, pur,
+7 tests) : la moitié haute du deck **plus** les 3 dernières, jamais la
+couverture. On ouvre, on ne resserre jamais : sur 4 slides, la moitié seule
+n'en laisserait que 2.
+
+**Le placement contournait les règles de la marque.** `placerSophiaSurDeck`
+écrivait la variante du modèle sans `nettoyerTexteDeck` : 11 decks, 2 passages
+et 2 `post_slides` non publiés étaient revenus à « die App micabo » après la
+reprise de 0278. Corrigé dans le moteur, stock repris par 0289 avec
+`micabo_ordre_de_slides` (sauvegarde `avant_placement_0289_2026_10_01` dans
+`micabo_marque_sauvegarde`). Même famille que 0268.
+
+**Le prompt v2** est posé sous `placement_micabo_v2`, clé que le moteur **ne
+lit pas** : la bascule de `placement_micabo` attend le verdict d'Adrien sur
+l'essai à blanc. Le suffixe du code, lui, est déjà en production : gabarit des
+voisines, « ne recopie jamais une autre slide », forme de marque par langue
+(`FORME_MARQUE`), et la meilleure variante choisie sur « un élève l'aurait-il
+écrite » plutôt que sur la seule conformité.
+
+### L'essai à blanc (`essai-placement`, 0290)
+
+Une fonction qui fabrique le deck comme la production (traduction comprise),
+puis fait tourner sur ce même deck l'ancien moteur (`avant.ts`, figé) et le
+nouveau, **sans rien écrire**. 30 paires : les 20 slideshows dont le texte
+d'origine existe encore sans placement (tous de source anglaise), 20 en
+français et 10 en anglais. Résultats rangés dans `essai_placement_0289`, avec la
+clé A/B du jugement à l'aveugle (RLS active, aucune policy) — `net._http_response`
+est purgé en quelques heures. Les deux versions sont dans l'onglet « Essai à
+blanc » du doc, à juger par Adrien.
+
+| Compteur (30 paires) | Ancien | Nouveau |
+| --- | --- | --- |
+| fiche produit (génère, au bon moment, plan auto…) | 13 | 3 |
+| deux mentions de micabo dans le deck | 14 | 0 |
+| promet une lecture audio | 1 | 9 |
+| plus long que la plus longue voisine + 20 % | 3 | 8 |
+| sur la dernière slide | 9 | 5 |
+
+**Leçon de méthode : un exemple dans un prompt se recopie.** Au premier passage,
+« mon prof m'a demandé ce que j'utilisais », donné comme exemple de preuve,
+ressortait mot pour mot dans **9 placements sur 22** — même avec « ne recopie
+jamais les exemples » ajouté. Le seul remède a été de retirer l'exemple et de
+décrire la forme sans phrase citable.
+
+**PeECH devenait « micabo » avec sa promesse audio** : 9 essais sur 30 disaient
+« transforme tes notes en audio avec l'appli micabo ». Tranché par Adrien :
+micabo ne fait pas d'audio, PeECH devient sans marque (0291, ci-dessous).
+
+### Le contrôle de 08:49
+
+`docs/brief/PLACEMENT.md` + **Q13** (`placements_a_controler`). Chaque matin, la
+routine « Contrôle placement micabo » (`trig_01EPvFVm9SVHfVU9NvrXSWRT`, liée à la
+session qui a fait ce travail) relit la slide micabo de chaque post non publié
+de J-2 à J, la juge contre huit règles (une mention, gabarit, marque, longueur,
+fiche produit, une idée, pas d'audio, promesse de la couverture), corrige au plus 25 posts
+par `corriger_texte_post` et écrit la page « AAAA-MM-JJ · Contrôle placements ».
+Une routine à session neuve ne marche pas ici : elle naîtrait sans Supabase,
+sans Notion et sans dépôt (le paramètre `connectors` est refusé pour cette
+organisation).
+
+### Déploiement du 01/10/2026
+
+Cinq chargeurs sur `3898647` : `assignation-contenu` (v35), `assignation`
+(v36), `minuit-vnext` (v39), `revoquer-post` (v35) et `bruler-texte-test`
+(v25), plus `essai-placement` (v2, nouveau, alias `z`). **Les cinq alias
+`createClient` ont été renommés** : `pe`→`ge`, `_e`→`ye`, `De`→`Le`, `me`→`he`,
+`Y`→`W`. Test de vie `401` passé sur les six. `bruler-assignes`,
+`import-contenu` et `renettoyer-contenu` ressortent à taille constante
+(permutation) : leurs bundles du dépôt sont gardés.
+
+**`new RegExp` au niveau d'un module partagé fait « changer » tous les
+bundles.** Le premier `MOTIF_MICABO` était construit par `new RegExp(...)` : esbuild
+ne l'élaguait pas, même annoté `/* @__PURE__ */`, et il entrait dans trois bundles
+qui ne s'en servent pas. Un littéral `/…/iu` s'élague. Même leçon que
+`apify_usage.ts` (0281).
+
+La branche `claude/wizardly-allen-c3xioi` a été repartie de `main` (son ancien
+sommet `6a4de96` était le contenu déjà fusionné de #95, arbre identique) : les
+chargeurs des déploiements précédents pointent sur des SHA que GitHub sert
+toujours.
+
+## micabo ne fait pas d'audio : PeECH sans marque (0291, 01/10/2026)
+
+Décision d'Adrien après l'essai à blanc : « micabo ne fait pas d'audio, PeECH
+sans marque ». PeECH lit les notes à voix haute ; la règle de 0287 (une
+recommandation de concurrent devient micabo) lui faisait prêter cette fonction à
+micabo. Une fausse promesse sur le produit, juste avant le téléchargement.
+
+- **`concurrents_sans_marque`** : les concurrents dont une slide ne devient
+  jamais micabo, mais une formulation sans marque (« une appli audio »).
+  `versMicaboDepuis` la lit, `appliquerVerdicts` refuse une réécriture qui y
+  met micabo, et le prompt des concurrents reçoit la liste (`sansMarque`). Si
+  la table est illisible, le repli de `CONCURRENTS_DEFAUT` garde PeECH sans
+  marque.
+- **Une table à part, pas une colonne.** `alter table concurrents add column`
+  a fait attendre l'outil MCP sa confirmation humaine jusqu'au délai de 60 s,
+  deux fois, sans rien appliquer : même piège que les `delete`/`drop` de 0287,
+  étendu aux ajouts de colonne. Une création de table passe.
+- **Le stock** : 17 slides prêtaient l'audio à micabo. 12 decks turcs, où la
+  traduction avait remplacé PeECH par micabo (« notlarımı micabo uygulaması ile
+  sese çeviriyorum »), et `78e85e05` en cinq langues : un placement **manuel**
+  qui listait « mode audio » parmi les fonctions de micabo. Réécrits au plus
+  court, chaque décision dans `audio_0291`, sauvegarde
+  `avant_sans_audio_2026_10_01`, deux posts non publiés corrigés par
+  `corriger_texte_post`. Les turcs avaient aussi un placement ailleurs : la
+  réécriture ferme du même coup leur double mention.
+- **Le prompt v2** le dit (« micabo ne lit pas les notes à voix haute »), et la
+  slide d'une appli audio n'est plus une place pour micabo. Le contrôle de
+  08:49 en fait une règle de priorité haute.
+- **Troisième passage de l'essai** (celui qu'Adrien juge) : fiche produit
+  16 → 1, deux mentions 13 → 0, audio 0 → 0, plus long que les voisines 4 → 8,
+  dernière slide 11 → 4. Le prompt invente encore parfois une matière ou une
+  note absente du deck (« partiel d'histoire », « B+ in Biology ») malgré
+  l'interdiction ajoutée : le contrôle de 08:49 le traite comme un défaut.
+
+## Bascule du placement sur la v2, numérotation tenue par le code (0292, 01/10/2026)
+
+**Verdict d'Adrien** : « globalement A est un peu mieux que B, mais l'idée globale
+est surtout de voir sur un post entier : pas de bafouillement (si classement,
+les chiffres du classement restent), pas d'emmêlement, clarté, sens ». A et B
+étaient tirés au hasard par deck (A = nouveau sur 17 lignes) : démasqués, ses 9
+choix donnent **4 au nouveau, 3 à l'ancien, 2 égalités**. Avec les compteurs du
+passage final (fiche produit 16 → 1, double mention 13 → 0), `placement_micabo`
+reçoit la v2 ; l'ancien est rangé sous `placement_micabo_v1_2026_10_01` — le
+retour se fait en le recopiant. Seuls les prochains decks sont placés avec.
+
+**Son critère, appliqué aux 30 posts entiers, a trouvé ce que les compteurs ne
+voyaient pas** : la numérotation cassée. Ancien 7 fois sur 30 (outro écrasée par
+un « conseil n°4 » après le n°5, « 5. » à la place du « 4. » remplacé), nouveau 5
+(« 2, 4, 4 », un « 5. » ajouté à un deck sans numéros, le titre de la slide
+suivante recopié). Un prompt ne tient pas ça — le suffixe disait déjà « reprendre
+EXACTEMENT le préfixe ». C'est donc le code qui le tient :
+
+- **`choisirVariante`** (`_shared/placement.ts`, pur, 13 tests) : `alignerPrefixe`
+  remet le numéro de la slide remplacée mot pour mot (« 3. », « conseil n°3 »,
+  « Tip #4 », seul sur sa ligne s'il l'était) et retire un numéro ajouté à un
+  deck qui n'en a pas ; `casseLeDeck` écarte une variante qui recopie le titre
+  d'une autre slide (comparé sans son numéro) ou qui perd la note d'un
+  classement (`6/10`). La meilleure qui tient est écrite.
+- **Aucune ne tient → on redemande** (`integrateSophia`, boucle de 4 essais). Sur
+  l'essai, le cas « toutes recopient la slide suivante » est revenu propre au
+  second appel. Au dernier essai on garde la meilleure, numéro remis, et le
+  contrôle de 08:49 la verra.
+
+Vérifié sur les 5 decks fautifs après déploiement : les 5 propres.
+
+**L'essai à blanc n'a plus de témoin** : son bras « avant » lit
+`placement_micabo`, qui EST la v2 depuis 0292. Pour rejouer une comparaison, faire
+lire `placement_micabo_v1_2026_10_01` au bras ancien.
+
+**Déploiement** : cinq chargeurs sur `13d3bd7` — `assignation-contenu` (v38),
+`assignation` (v39), `minuit-vnext` (v42), `revoquer-post` (v38),
+`bruler-texte-test` (v28) — et `essai-placement` (v5). Alias relus : `he`, `Se`,
+`Fe`, `we`, `te`, `re` (le 01/10 au soir, 0291 les avait tous renommés une
+première fois : `ge`→`he`, `ye`→`Se`, `Le`→`Fe`, `he`→`we`, `W`→`te`). Test de vie
+`401` sur les six.
+
+## Un deck traduit troué partait tel quel (0294, 02/10/2026)
+
+Signalé par Adrien : le TikTok de @leon.lernen990 sur `85379b9e` (classement
+des spécialités médicales) mêlait des slides en français et en allemand. Les
+slides 1 à 4 n'avaient **aucun** texte allemand. Le français ne venait PAS des
+images propres : l'audit de 0295 les trouve propres, et la légende Florence qui
+lisait « Dermatologie 9/10 » est calculée sur l'image BRUTE
+(`capturerCaptionSlide` reçoit `raw_url`), pas sur la propre. Hypothèse la plus
+probable : la page du créateur montre à côté de chaque slide la photo d'origine
+comme modèle de placement, et sans texte allemand à poser le créateur a pris
+celles-là. Le même deck était parti une heure plus tôt chez @tim.arbeit325. Le
+contrôle de 08:49 l'avait repéré (« À trancher ») mais n'a pas le droit de
+réécrire un deck entier.
+
+Le deck `de` était troué depuis l'import du 10/09, et deux règles l'ont laissé
+passer :
+
+- **à l'écriture**, `parPos.get(s.position) ?? ""` : une slide que le modèle de
+  traduction ne rendait pas devenait une chaîne vide, en silence. Le placement
+  remplissait ensuite sa slide ;
+- **au test « prêt »**, une seule slide avec du texte suffisait. Le deck troué
+  avait sa slide de placement, donc il était « prêt » à vie et ne repassait
+  jamais par la traduction.
+
+Trois decks dans ce cas en base : `85379b9e` de (2 posts publiés le 02/10),
+`cc30ddf8` es (couverture vide, publiée le 30/09), `f36096d3` tr (jamais servi).
+Vidés le 02/10 (`slides = []`, sauvegarde dans `decks_desalignes_sauvegarde`) :
+ils sont retraduits en entier à la prochaine assignation.
+
+Le correctif, dans `assurerDeckPourLangue` :
+
+- `positionsSansTexte(source, deck)` (`_shared/deck_structure.ts`, pur, 5 tests,
+  réexporté par `deckStructure.ts`) : les positions où la source a du texte et
+  la langue n'en a pas. Une slide vide dans la SOURCE n'est pas exigée — c'est
+  un choix (0288) ;
+- le deck source est lu **avant** le test « prêt », et un deck traduit n'est
+  prêt que s'il couvre toutes ces positions ; sinon il est retraduit en entier ;
+- une traduction incomplète est redemandée **une** fois, puis abandonnée sans
+  être écrite (`Traduction incomplète`) : l'assignation journalise « Deck
+  échoué » et repioche ;
+- `livrerDeck` refuse en sortie tout deck troué, sur tous les chemins — même
+  arbitrage que 0279 : un post de moins vaut mieux qu'un post à moitié muet.
+
+**Coût** : une lecture du deck source de plus par appel, y compris sur le chemin
+« prêt ». Un slideshow dont la traduction rend toujours une slide vide ne sort
+plus dans cette langue ; ça se voit dans le journal du drain, ça ne part plus en
+ligne.
+
+**Reste ouvert** : le texte d'origine laissé dans d'autres images « propres »,
+mesuré par l'audit de 0295 ci-dessous.
+
+**Déploiement du 02/10/2026, après OK d'Adrien.** Cinq chargeurs sur `828ce5c` :
+`assignation-contenu` (v39), `assignation` (v40), `bruler-texte-test` (v29),
+`minuit-vnext` (v43) et `revoquer-post` (v39), +913 octets chacun. **Les cinq
+alias `createClient` ont été renommés** : `he`→`_e`, `Se`→`ve`, `te`→`re`,
+`Fe`→`Be`, `we`→`be`. `bruler-assignes`, `import-contenu` et
+`renettoyer-contenu` ressortent à taille constante (permutation) : leurs
+bundles du dépôt sont gardés. Test de vie `401` passé sur les cinq (par
+`pg_net`).
+
+Le même jour, **0293** ajoute Flashka à `concurrents` (`\mflashka\M`) avant
+l'import de la source @flashka_es : appli de flashcards IA, même pitch que
+micabo. « Professor Ka », sa mascotte, n'est pas dans le motif : la remplacer par
+micabo prêterait à micabo un tuteur IA.
+
+## Audit des images propres : le texte que le nettoyage a laissé (0295, 02/10/2026)
+
+`media_library.texte_restant` ne dit rien : l'import écrit `false` après chaque
+nettoyage, sans rien vérifier (stockage du propre dans `import_contenu.ts`). Les
+1 208 images `propre/…` étaient toutes « sans texte ».
+
+`audit-propres` (fonction de lecture, chargeur `_deploy`) relit chaque image
+avec `gemini-2.5-flash`, en lui donnant le texte du deck source à la même
+position pour séparer le texte AJOUTÉ (à effacer) du texte de la scène (cahier,
+écran), et range le verdict dans `audit_propres_0295` (RLS, aucune policy).
+Elle n'écrit nulle part ailleurs.
+
+Résultat du 02/10 : **1 071 propres, 79 partielles, 58 complètes**. Rangées :
+
+| genre | images | dans un slideshow validé | posts publiés | posts à venir |
+|---|---|---|---|---|
+| texte (mots) | 78 | 23 (16 slideshows) | 128 | 10 |
+| filigrane Xiaohongshu (`小红书号`) | 4 | 4 | 5 | 3 |
+| chiffres / emojis seuls | 47 | 33 (15 slideshows) | 212 | 13 |
+| calque micabo posé dans la file | 8 | 7 | 11 | 1 |
+
+Les calques micabo (« Micabo Education ») sont voulus : ce sont des blocs PNG
+aplatis par l'éditeur de `/admin/file`. Le texte vu par le modèle inclut des
+captures d'écran (article, page YouTube) où il fait partie de la photo.
+
+**Deux surfaces, deux gestes.** Les images d'un slideshow servent à ses propres
+posts quel que soit `texte_restant` (`resoudreVisuelsAssignation` ne relit que
+l'existence de la ligne) ; elles demandent un re-nettoyage, un calque ou une
+slide retirée dans la file. Le pool de garnissage (`chargerBiblioLabel`), lui,
+prend toute image propre du label avec `texte_restant = false`, **y compris
+celles des slideshows rejetés** : 44 images avec du texte n'y sont que par là.
+Passer leur drapeau à `true` les en sort sans toucher aux slideshows.
+
+**Piège de méthode** : la légende Florence est calculée sur le BRUT. Elle ne
+dit rien de l'image propre ; ne pas s'en servir pour juger un nettoyage.
+
+**Piège d'exécution** : 27 appels × 3 images en parallèle ont fait répondre
+**429** au Storage pendant deux minutes (09:00–09:02 UTC) — le même Storage qui
+sert les images aux créateurs. L'audit tourne désormais en 3 chaînes de 2
+images (`chaine`, `pas`, `manquants`), avec patience sur le 429 : 42 images
+par minute, zéro erreur. Et 8 images en parallèle dans une invocation dépassent
+sa mémoire (`546 WORKER_RESOURCE_LIMIT`).
+
+### Les deux gestes, faits (0296, 02/10/2026, OK d'Adrien)
+
+- **Hors des pools** : `texte_restant = true` sur les **82** images où l'audit
+  lit des mots ou le filigrane Xiaohongshu. Pas les 47 « chiffres / emojis
+  seuls », pas les 8 calques micabo. La liste et l'état d'avant sont dans
+  `texte_restant_0296`. Le garnissage (`chargerBiblioLabel`) ne les tire plus ;
+  elles apparaissent dans « échecs de nettoyage ».
+- **Re-nettoyage** : les 26 images de slideshows validés (moins `e1b5ef61` #7,
+  une capture d'article où le texte EST la photo), par `renettoyer-contenu`
+  `{contenuId, position}`, les 11 des posts à venir d'abord. Même chemin de
+  stockage, même ligne `media_library`, drapeau remis à `false` si le nettoyage
+  aboutit — donc une image re-nettoyée revient d'elle-même dans les pools.
+  Par vagues de 4 à 8 appels, jamais deux positions du même slideshow dans la
+  même vague (`patchSlideMediaId` relit puis réécrit `structure_slides`).
+
+**Résultat, relu par l'audit** (`renettoyage_0296`, verdicts frais dans
+`audit_propres_0295`) : première passe **11 propres sur 26**, seconde passe sur
+les 15 restantes **7 de plus** — **18 propres, 8 qui gardent du texte**. Le
+moteur de nettoyage n'est pas déterministe : une seconde passe vaut la peine,
+une troisième probablement pas. Ce qui résiste : les titres en encart (« LE
+DEVOIR 📚 », « LE TEMPS ⌚ », « SES »), un autocollant italien (`17277702` #1,
+que la traduction espagnole avait d'ailleurs recopié : « sfi dante »), du texte
+manuscrit (`09c607a2` #1) et trois filigranes Xiaohongshu. Ces 8-là relèvent de
+la file (calque, slide retirée) ; leur `texte_restant` est repassé à `true`.
+
+**Piège** : `renettoyer-contenu` remet `texte_restant = false` dès que le
+moteur rend une image, sans la relire. Une image ratée revient donc dans les
+pools de garnissage. Après un re-nettoyage, relancer l'audit sur les images
+touchées (`audit-propres` avec `{offset, limit: 1}` — l'offset suit l'ordre
+`created_at, id` des `propre/…`, stable puisque l'upsert garde la ligne) et
+remettre le drapeau sur celles qui gardent du texte.
+
+**Le re-nettoyage touche aussi l'historique des posts publiés.** Le fichier
+est écrasé au même chemin et la ligne `media_library` est la même : les
+`post_slides` de TOUS les posts du slideshow pointent déjà dessus, publiés
+compris (`propagerMediaAuxPostsAssignes` les réécrit de toute façon). Rien ne
+change en ligne, mais dans l'OS un post publié montre ensuite une image qu'il
+n'a pas portée. C'est voulu pour les posts à venir — le créateur voit l'image
+propre sans réassignation —, c'est un défaut connu pour l'historique.
+
+## Localisation scolaire dans les traductions (0297, 02/10/2026)
+
+Les slideshows viennent surtout de France, et rien ne disait au traducteur quoi
+faire du système scolaire d'origine. Sur les decks espagnols, allemands et
+turcs : « brevet » recopié 14 fois sur 36 (« Geschichte-Erdkunde-Brevet »,
+« dictée brevet » à chercher sur YouTube), les notes sur 20 recopiées
+(« Ich hatte eine 18 », « Saqué un 18 », « 18 aldım » — un échec sur 100),
+Yvan Monka gardé 4 fois sur 6. La règle « chiffres : garde-les » y poussait.
+
+**Et trois langues n'avaient AUCUN prompt.** `traduction_es`, `traduction_de`
+et `traduction_en` n'existaient pas : `assurerDeckPourLangue` retombait sur
+`DEFAULT_TRANSLATE_PROMPT` (gemini.ts), dix lignes sans localisation, qui
+parlent encore de « l'appli Sophia » et font retirer tout produit tiers,
+classements compris. L'italien et le portugais sont toujours dans ce cas (aucun
+compte aujourd'hui).
+
+0297 ajoute un bloc « 9 bis » à chaque prompt de traduction et crée les trois
+qui manquaient (sauvegarde `prompts_sauvegarde_0297`) :
+
+1. examens et classes → l'équivalent local s'il existe VRAIMENT (LGS, Abitur,
+   selectividad, YKS…), sinon une formule générique ;
+2. notes → converties au barème local, exception explicite à « garde les
+   chiffres » ;
+3. personnes, youtubeurs, sites du pays d'origine → **toujours généralisés**,
+   jamais remplacés par un équivalent que le modèle croirait connaître (pas de
+   liste blanche : à décider avec Adrien si on en veut une) ;
+4. une recherche à taper se traduit dans les mots d'un élève local ;
+5. le pays d'origine présenté comme cadre de l'élève devient le pays du public.
+
+Vérifié à blanc par `essai-placement` sur huit decks avant de conclure, puis
+deux glissements corrigés (brevet devenu « selectividad », « Abi-Schnitt von
+über 1,3 »).
+
+**Le stock est repris par 0298** : 111 decks traduits (48 slideshows, 39 en
+allemand, 29 en espagnol, 40 en turc, 3 en français) dont la source porte un
+repère scolaire du pays d'origine sont **vidés**, pas réécrits — changer un
+examen ou une note change le sens de la slide. `assurerDeckPourLangue` les
+retraduit à la prochaine assignation avec les prompts de 0297, puis repasse les
+concurrents et le placement v2. L'état d'avant et le motif trouvé sont dans
+`localisation_reprise_0297` ; le retour arrière recopie `slides_avant`. Les 16
+passages déjà assignés partent avec leur copie, les publiés ne bougent pas.
+
+**Piège du MCP, élargi** (voir 0287) : `execute_sql` et `apply_migration`
+attendent une confirmation humaine — puis meurent à 60 s sans rien appliquer —
+dès qu'une chaîne contient un **point-virgule** ou un **nombre impair
+d'apostrophes droites**, même entre `$q$…$q$`. Le découpeur du MCP ne connaît
+pas les chaînes dollar. Écrire « · » et « ’ » dans le texte, ou passer par
+`chr(59)` / `chr(39)`. Une instruction réellement destructive n'y est pour rien.
+
+**Le texte d'une slide peut porter un filigrane** : sur `ff91768b` #7, l'OCR
+avait recopié « 小红书号: 119180449 » dans le deck source, et la traduction l'avait
+suivi en allemand et en espagnol (deux posts publiés). Retiré des trois decks le
+02/10 (sauvegarde `textes_bruit_sauvegarde`). L'image le porte toujours.
+
+## Pertinence d'import : la place du CTA, pas le sujet (0299, 02/10/2026)
+
+Deux mesures sur 141 slideshows passés au moins deux fois chez nous (vues
+corrigées de l'âge), qui valent pour toute la note d'import :
+
+- **Vues du TikTok d'origine** : corrélation faible (Spearman 0,24) et non
+  linéaire. De moins de 5 000 à 200 000 vues d'origine, nos médianes restent
+  entre 1 200 et 1 500. Au-delà de 200 000, elles triplent (4 340 puis 5 672).
+  Le plafond C de `VUES_SOURCE_MIN_B_PLUS` (10 000) ne sépare donc rien. Le lien
+  est fort chez luna.study4 (0,71), nul chez jeena_study_tips (0,10) et
+  jeanne.wilgo (−0,12). Pas touché : à décider avec Adrien.
+- **Pertinence** : corrélée à l'envers (−0,30). Sous 30 : 3 497 vues de
+  médiane, à 60 et plus : 1 444. L'ancien prompt notait le SUJET (« est-ce une
+  méthode de révision ») : les faits de médecine et le classement des
+  spécialités, nos meilleurs posts, prenaient 0 à 5.
+
+`pertinence_micabo` note désormais une question : peut-on remplacer une slide
+par une recommandation naturelle de micabo, devant un public d'élèves ou
+d'étudiants ? Vérifié à blanc avant la bascule par **`essai-pertinence`**
+(lecture seule, `{contenuIds, cle}`, chargeur `_deploy`) : corrélation avec nos
+vues de −0,29 à +0,10 sur 140 importés, et sur 35 rejetés, charisme, citations
+et pubs Peech restent sous 20 quand les slideshows médecine passent de 0 à 90.
+Il note large (82,7 de moyenne contre 52,1) : la note d'import repose davantage
+sur les vues d'origine. Le poids (30/70) n'est pas touché — le baisser à 15 %
+faisait monter les entrées en A de 44 à 77, surtout des sources de 80 000 à
+200 000 vues, qui ne font pas mieux que les petites.
+
+Ancien prompt : `pertinence_micabo_v1_2026_10_02`. Re-notés à blanc, 74 des 94
+slideshows rejetés à l'import (`elo_insuffisant`) des sources actives
+passeraient le seuil : 44 jeanne.wilgo, 13 luna.study4, 8 jeena_study_tips,
+8 flashka_es, 1 user5507909029330. Non réinjectés le 02/10 : ça coûte un
+nettoyage complet et ça remplit la file.
+
+## Au tirage, ce que la langue n'a pas encore vu passe devant (02/10/2026)
+
+Le recul de 30 jours (`RECUL_MEME_COMPTE_JOURS`) est **par compte**. Rien
+n'empêchait un slideshow de passer sur trois comptes de la même langue en
+quelques jours, devant la même audience. Mesuré du 10 au 30/09, sur un même
+slideshow, le deuxième passage dans une langue fait **0,57× le premier en
+allemand, 0,63× en espagnol, 0,81× en turc, 0,86× en français**. En Espagne
+(3 comptes), 67 % des posts de carla.curso418 après le 22/09 étaient déjà passés
+en espagnol : 523 vues de médiane, contre 1 117 sur ses inédits.
+
+`prefererInedits` (`tierlist.ts`, pur, 6 tests) restreint le groupe retenu par
+`prioriserTiersHauts` aux slideshows sans passage dans la langue du compte
+depuis `RECUL_MEME_LANGUE_JOURS` (30), et rend le groupe entier s'il n'y en a
+aucun. **Une préférence, jamais un filtre** : l'arbitrage du 19/09 (un post de
+moins plutôt qu'un doublon) vaut pour le même compte, pas pour la même langue.
+Elle s'applique **après** le tier, donc `PART_TIRAGE_C` reste exacte. Le
+repêchage essaie lui aussi les inédits de la langue d'abord.
+
+Ce que ça n'achète PAS : du stock. Le 02/10, 49 slideshows devaient un passage
+(68 passages) pour 54 posts par jour. La préférence répartit mieux ce stock
+entre les langues, elle n'en ajoute pas. Et deux workers de la même langue dans
+la même rafale peuvent encore choisir le même inédit : la préférence est lue
+avant l'écriture, sans verrou — c'est assumé, le coût est un « déjà vu », pas un
+doublon de compte.
+
+**Piège de mesure, celui du 26/09 en plus grossier** : « 53 slideshows validés
+jamais postés en Espagne » n'est PAS une réserve pour l'Espagne. 33 avaient leur
+cycle plein (passés ailleurs, en attente de verdict), 20 seulement devaient un
+passage, et les 48 autres posts du jour les voulaient aussi. Ne jamais compter
+le pool sans le filtre de cycle.
+
+**Déploiement du 02/10/2026** (demande d'Adrien, « fais donc »). Quatre
+chargeurs sur `ef3bead` : `assignation-contenu`, `assignation`, `minuit-vnext`
+et `revoquer-post`, +683 octets chacun. **Les quatre alias `createClient` ont
+été renommés** : `_e`→`xe`, `ve`→`$e`, `Be`→`Je`, `be`→`Se`. `bruler-assignes`,
+`import-contenu` et `renettoyer-contenu` ressortent à taille constante
+(permutation) : leurs bundles du dépôt sont gardés. Versions déployées : v40,
+v41, v44, v40. Test de vie `401` passé sur les quatre (par `pg_net`).
+
+### Tier par tier (05/10/2026)
+
+Appliquée à tout le groupe B+ d'un coup, la préférence faisait passer
+n'importe quel B jamais testé devant un S ou un A déjà vu dans la langue. Or,
+du 22/09 au 02/10, un S/A déjà vu dans la langue faisait **3 972 vues de
+médiane, un B inédit 1 275**. Le premier passage dans une langue vaut mieux
+que le deuxième **à tier égal**, pas d'un tier à l'autre. Le 03/10, avec 67
+nouveaux slideshows en B ou C, les gagnants sont sortis du tirage : **8 % des
+posts** sur des slideshows éprouvés, contre 24 % la veille, alors que
+`835c1781` (1,4 M) et `20bb2017` devaient chacun 2 passages.
+
+`prefererInedits` ne retire donc plus un slideshow déjà vu que si un inédit
+**du même tier** existe. Les tiers retrouvent leur poids d'avant le 02/10 dans
+le tirage, qui reste uniforme par slideshow ; un slideshow sans tier forme son
+propre groupe. Le repêchage n'est pas concerné (tout y est en D). Trois tests
+de plus dans `tierlist.test.ts`, dont celui qui verrouille le cas : un B inédit
+n'évince pas un S déjà vu.
+
+**Déploiement du 05/10/2026** (demande d'Adrien). Quatre chargeurs sur
+`4781398` : `assignation-contenu` (v42), `assignation` (v43), `minuit-vnext`
+(v46) et `revoquer-post` (v42), +63 octets chacun. **Les quatre alias
+`createClient` sont inchangés** (`xe`, `$e`, `Je`, `Se`), relus dans les
+bundles. Sept bundles ressortent à taille constante (permutation :
+`audit-propres`, `bruler-assignes`, `decrire-images`, `essai-placement`,
+`essai-variations`, `normaliser-format`, `renettoyer-contenu`) : ceux du dépôt
+sont gardés. Test de vie `401` passé sur les quatre (par `pg_net`).
+
+## Réinjection des rejetés et nettoyage ciblé de flashka (0300, 02/10/2026)
+
+Re-notés avec le prompt de 0299, 74 des 94 slideshows rejetés à l'import
+(`elo_insuffisant`) des sources actives passaient le seuil. Adrien en a fait
+rentrer **22** : luna.study4 (13), flashka_es (8), user5507909029330 (1).
+jeanne.wilgo (44) attend sa décision. Chacun repart à l'étape `pertinence`
+avec la note de l'essai (même prompt, pas de second appel) et `statut =
+brouillon` : le pipeline refait la note d'import, le tier, le nettoyage, et
+s'arrête dans la file. État d'avant dans `reinjection_0300`.
+
+**Flashka : le nettoyage de l'import effaçait le sens de l'image.** Ses slides
+reposent sur des vignettes — le logo de l'IA notée (ChatGPT, Gemini, Meta AI)
+en haut à gauche, une copie notée (5/10, 4/10, 3/10) en haut à droite, trois
+copies à 10/10 et 100 % sur la dernière. Le texte ajouté n'est qu'une courte
+légende entre les deux (« Burlas... », « Risas... »). Le text-removal efface
+tout ce qui ressemble à du texte : sur les 4 flashka validés avant 0300, il ne
+restait qu'un selfie, et Adrien avait réécrit « ChatGPT Burlas 5/10 » dans le
+deck pour compenser.
+
+`nettoyage-cible` (chargeur `_deploy`) : un modèle de vision (celui de la
+lecture du burn) rend deux listes de rectangles, à effacer et à garder ;
+`_shared/nettoyage_cible.ts` (pur, 8 tests) rogne le masque hors des zones à
+garder et l'abandonne s'il n'en reste pas assez ; `fal-ai/bria/eraser`
+(`_shared/fal_eraser.ts`) ne reconstruit que sous le masque. `ecrire: false`
+range l'essai sous `essai/nettoyage-cible/…`, `promouvoir: true` le recopie au
+chemin du propre une fois relu. Les propres portent `exclu_concurrent` : ils
+montrent des marques tierces et ne garnissent aucun autre slideshow. Le deck ne
+porte plus que la légende ; la dernière slide dit « la app micabo ».
+
+Relu par `decrire-images` : 35 propres sur 40 au premier passage, 2 reprises
+réussies, 2 retouches légères laissées à la file (8b92903d #2, f772e9cb #5).
+Les 3 « restes » signalés sous la note sont le texte imprimé de la copie
+elle-même.
+
+**Ni `REPLICATE_API_TOKEN` ni `STABILITY_KEY` ne sont posés sur l'Edge.** Le
+LaMa d'`inpaint.ts` rend donc `null` partout, et le repli « Replicate » de
+`cleanImage` n'existe pas en pratique : Fal est le seul fournisseur.
+
+**Douze flashka quasi identiques dans le pool** (les 4 validés + les 8) : même
+mème, seul le selfie change. À Adrien de décider combien en garder dans la
+file.
+
+**Voir une image depuis l'environnement de travail** : le proxy bloque
+`supabase.co` et `pg_net` tronque un corps binaire. `decrire-images` (chargeur,
+modèle du burn) décrit une image du Storage ; `apercu-images` (autonome) la
+rend en base64 réduite, trop lourde pour être relue souvent.
+
+## Variantes des slideshows gagnants : essai à blanc (02/10/2026)
+
+Demande d'Adrien : pour chaque slideshow passé à **50 000 vues** ou plus chez
+nous (23 au 02/10), deux ou trois slideshows dans le même moule, **contenu
+neuf** (même format, même hook, même ton, même nombre de slides, d'autres
+idées), images du **même compte source** (jamais celles du parent), à valider
+dans la file. Rien n'y entre avant son verdict sur un essai.
+
+`essai-variations` (chargeur, écrit dans `essai_variations` seulement) :
+Claude écrit les variantes et choisit chaque image par sa légende ; le pool ne
+garde que les propres que l'audit de 0295 a relus **sans texte**, hors
+slideshows en file, et écarte les légendes qui parlent de texte, d'appli,
+d'écran, de logo ou de langue.
+
+Ce que les essais sur 835c1781 (1,4 M) ont appris :
+
+- **la slide micabo fait partie du moule.** Celle du parent est un élément de
+  la liste (« je révise mes fiches micabo dans les toilettes »). Le placement
+  générique écrasait une technique et inventait (« un exam de droit », « l'appli
+  sait que j'ai un exam »). La variante écrit la sienne au même endroit, avec ce
+  que fait micabo et rien d'autre (fiches ou flashcards depuis cours, notes ou
+  PDF, se tester quelques minutes par jour) ;
+- **la promesse de couverture doit être tenue par chaque élément** : sans la
+  consigne, « trucs de psychopathe » donnait « relire le lendemain » ;
+- **une légende Florence ne suffit pas à juger une image** : « Hyperfocus app
+  open on the screen » est sorti sur une slide micabo, « Lire à voix haute »
+  était du texte resté sur l'image.
+
+**Le gabarit, tenu par le code** (retour d'Adrien sur le cinquième essai :
+« des slides en 3 paragraphes et le placement micabo en 1, bizarre »).
+`_shared/gabarit.ts` (pur, 10 tests) mesure chaque slide du parent :
+paragraphes, lignes par paragraphe, plus longue ligne. La variante doit tenir
+le gabarit de la slide du parent à la même position (une ligne d'écart par
+paragraphe, quatre caractères de plus par ligne, longueur totale entre 0,6 et
+1,5 fois). Une slide hors gabarit repart au modèle avec ses écarts mesurés,
+deux tours au plus ; ce qui reste hors gabarit est écrit dans `defauts`. La
+slide micabo du parent vient souvent du placement, pas de l'auteur : son
+modèle est la voisine de liste (`modeleMicabo`). Même leçon que 0292 : un
+prompt ne tient pas une forme, le code si.
+
+**Le TikTok d'origine sert de modèle de placement.** La page du créateur
+montre, à côté de chaque photo, `post_slides.reference_url`, tiré de
+`structure_slides[].reference_url ?? raw_url`. Pour une variante, ce sera la
+slide du parent à la même position : même forme, donc le même endroit pour le
+texte. `raw_url` reste celui de l'image tirée du pool. Conséquence connue : sur
+un compte `burned`, le burn lit le style sur `reference_url` et l'aligne sur
+l'image, qui n'est plus la même photo ; l'autotest refuse et la slide part en
+classique.
+
+**L'automate, lancé le 02/10** (décision d'Adrien : « UNIQUEMENT 1 variante,
+pas de photo, envoie-les tous en queue »). `essai-variations` avec
+`{ chaine: [ids], ecrire: true }` traite un parent par invocation et relance
+le suivant ; chaque parent voit les images (`source_media_id`) et les idées
+(première ligne de chaque slide) déjà prises par les variantes écrites avant
+lui. Une variante n'est écrite que sans aucun défaut — gabarit, image hors
+pool ou déjà prise, micabo absent ou mal placé, concurrent, tiret long, ou
+promesse que micabo ne tient pas (photo, capture, audio, rappel, planning :
+`PROMESSES_INTERDITES`, renvoyée au modèle comme un écart de gabarit).
+Une image hors pool ou déjà prise n'est pas un défaut : le modèle invente
+parfois un identifiant (« 589a8ab2-…-000000000000 » au premier essai), donc
+`reparerImages` la remplace par l'image du pool dont la légende partage le plus
+de mots avec celle demandée (une image de hook en slide 1), et le note dans
+`images_reparees`. Écrite, elle naît `rejete` et ne passe `brouillon` qu'à la dernière écriture :
+
+- `creation_mode = manuel`, `parent_id`, `profondeur + 1`, tier **B**, un
+  passage, labels, musique et format du parent, `placement_manuel` si la slide
+  micabo est écrite, et une `file_note` qui dit de quel slideshow elle vient ;
+- **ses images sont des COPIES** (`propre/<variante>/<position>`, ligne
+  `media_library` à elle, sans label). L'éditeur de la file aplatit ses calques
+  sur le `storage_path` de l'image : sans copie, retoucher la variante aurait
+  réécrit l'image du slideshow d'origine et celle de tous ses posts publiés.
+  Les copies ne sont pas auditées, donc jamais reprises par un autre tirage ;
+- `hashtags` = ceux de la légende, s'il y en a au moins trois.
+
+Deux parents sur 23 écartés : `c8b9a2d2` (refusé dans la file) et `0d6c5f82`
+(cold-study, sans label : sa variante ne serait jamais tirée).
+
+**Résultat du 02/10** : **21 variantes sur 21 en file** (`brouillon` + `done`,
+`creation_mode = manuel`, `parent_id` posé). Quatre chaînes en parallèle, une
+par compte source — deux chaînes sur le même compte se disputeraient le même
+pool d'images — à ~20 s par parent. Deux refus au premier passage, repassés
+seuls : un gabarit (9 lignes au lieu de 7 sur une slide de 607fe062) et
+`766074b1`, dont le titre porte 📚 au 70ᵉ caractère : `slice(0, 70)` coupait
+l'emoji en deux, et Postgres refuse une moitié de surrogate (PGRST102,
+« Empty or invalid json »). Coupe par point de code (`couper`).
+
+Deux variantes (`ea6bfa57`, `15e9a236`, jeena_study_tips) n'ont pas de slide
+micabo : leur parent n'en avait pas dans le deck source. `placement_manuel`
+reste faux et le placement v2 les place à l'assignation, comme tout import.
+
+Vu en relisant leurs parents : **ElibroAI** n'était pas dans `concurrents`
+(7 decks validés, 4 posts publiés). Ajouté par 0301, motif à trois graphies
+(`ElibroAI`, `elibroAI`, `elibro.ai`).
+
+## Source @emir.study et le logo astra AI (0302, 02/10/2026)
+
+Demande d'Adrien : importer @emir.study (turc, 137 slideshows), « attention au
+logo astra AI sur chaque slideshow ». Essai sur un seul post avant d'enfiler
+le compte, et ce qu'il a montré :
+
+- **le logo n'est pas un filigrane en coin.** C'est un badge — pictogramme
+  doré en triple boucle, mot « astra », carré « AI », sur une pastille noire —
+  posé au milieu de la slide qui fait la pub de l'appli (sur l'écran du
+  portable), avec « Astra AI uygulamasını kullanıyorum, ChatGPT o kadar iyi
+  çalışmıyor ». Les autres slides n'en ont pas ;
+- **le nettoyage de l'import le laisse entier.** `fal-ai/image-editing/text-removal`
+  efface la légende, pas un logo : relu après import, « entièrement présent et
+  parfaitement net » ;
+- **`nettoyage-cible` l'efface en partant du propre** (`depuis: "propre"`),
+  pas du brut : l'image a déjà perdu sa légende et a été agrandie par l'import,
+  on n'y touche que le logo. Premier essai raté pour une raison utile à savoir :
+  le modèle avait marqué l'écran du portable « à garder », et le garde-fou du
+  masque (`masqueSur`) abandonne une zone à effacer qui recouvre une zone à
+  garder. Avec « ne garde RIEN autour du logo » et une marge large, l'effacement
+  est propre (relu : rien du pictogramme ni de la pastille, écran reconstruit
+  crédible) ;
+- **l'effaceur rend du `.png`, l'import du `.jpg`** : deux chemins, deux lignes
+  `media_library`. Sans repointage, la slide gardait l'image au logo.
+  `nettoyage-cible` repointe désormais la slide (`patch_contenu_slide_media`,
+  atomique) et passe l'ancienne ligne `exclu_concurrent`.
+
+**Le repérage passe par un modèle bon marché.** `decrire-images` avec
+`modeles: ["gemini-2.5-flash"]` et une question OUI/NON sur le logo : calibré
+sur la paire avant/après (OUI sur l'ancienne image, NON sur la nouvelle et sur
+une slide sans logo). Chaque slide de chaque slideshow importé est relue
+(`astra_detection_0302`, passe 1), l'effacement ne tourne que sur les OUI, et
+une passe 2 relit après effacement. Claude ne lit que les slides qui ont le
+logo.
+
+**Le texte** : Astra est dans `concurrents` depuis 0286, donc `sansConcurrents`
+l'aurait remplacé à la fabrication du deck. Mais la file montre le deck source
+tel que l'OCR l'a lu (« Astra Al », un L pour un I). La mention devient la forme
+turque de la marque dans le deck source, le reste mot pour mot (règle de 0287),
+et la slide est marquée `position_sophia`. `astra_vers_micabo_tr` traite
+l'accusatif collé (« Astra AI’ı » → « micabo’yu ») avant le nom nu, puis
+`micabo_avec_article` (0267) pose « uygulaması » et déplace le suffixe :
+« Astra Al uygulamasını kullanıyorum » → « micabo uygulamasını kullanıyorum ».
+Avant/après dans `astra_reprise_0302`. Un deck qui cite Astra sur plus d'une
+slide n'est pas réécrit en aveugle : deux slides micabo seraient une double
+mention.
+
+**Seuil de 5 000 vues** (0303, consigne d'Adrien pendant l'import : « garde que
+les slideshows > 5k vues, même pas besoin de calculer pertinence »). 68 posts
+sur 137 sont sortis avant toute étape du pipeline — les workers scrapent
+d'abord, rien n'avait été payé au-delà du scrape. Le seuil vit dans
+`sources_vues_min` (par source, réutilisable) et un trigger `before insert`
+fait naître le contenu `rejete` + `done` + `elo_insuffisant`, avec la raison
+dans `file_note`. Le scrape reste payé : il faut lire le post pour connaître
+ses vues.
+
+**Ils semblaient avoir sauté la file — ils ne l'avaient pas fait.** Adrien a
+vu les slideshows d'emir.study dans « Slideshows » pendant leur import. Le
+filtre par défaut de la page était « Sans les rejetés » : il mêlait la
+bibliothèque, la file de validation et les imports en cours. Aucun n'était
+`valide` sauf le premier, validé par Adrien lui-même (`valide_par`). Le défaut
+est désormais « Valides » ; les autres restent sous « En cours » et dans
+`/admin/file`.
+
+**L'OCR recopiait la photo** (`ocrFrame`, gemini.ts). Le prompt disait
+« transcris le texte incrusté » et n'excluait que logos, vêtements et barre de
+statut. Sur emir.study il a recopié, à la suite de la légende, une fiche
+« MITOCHONDRIA » affichée sur une tablette, 44 lignes d'un article
+scientifique (la vraie légende perdue au milieu), l'interface de l'appli Astra,
+un chrono au milieu d'une phrase, et mélangé l'ordre des lignes d'une slide.
+Le prompt dit maintenant : la LÉGENDE ajoutée seulement, jamais le texte de la
+photo (écran, interface, cahier, document, chrono, badge…), dans l'ordre de
+lecture. `import-contenu` v37 sur `7818a8b` ; le reste du bundle est une
+permutation d'identifiants. Les 21 decks d'emir.study ont été relus avec le
+nouveau prompt (même modèle, sur le brut) : 13 corrigés, avant/après dans
+`ocr_reprise_0302_slides`.
+
+**Les promesses d'Astra ne sont pas celles de micabo.** Les 21 slides qui
+recommandaient Astra (et une Nerdmask, ajoutée à `concurrents`) ont été
+relues une par une : micabo quand la promesse tient (répétition espacée,
+notes ou cours → tests et flashcards, se tester), formulation sans marque
+quand elle ne tient pas (« professeur particulier IA », explication pas à pas
+des problèmes de maths, découpage en explications simples — règle de 0291),
+et « résumés façon podcast » retiré (micabo ne fait pas d'audio). Une slide
+micabo par deck ; trois decks sans micabo, que le placement servira à
+l'assignation.
+
+**Le détecteur bon marché rate l'icône seule.** Le nettoyage de l'import
+efface les mots « astra » et « AI » et laisse le pictogramme doré. Interrogé,
+gemini-2.5-flash décrit « un pictogramme doré en triple boucle »… et répond
+NON parce que le mot manque. Sur les slides qui font la pub de l'appli,
+l'effacement (Claude + Bria) tourne donc sans attendre le détecteur, avec une
+consigne qui nomme l'icône seule ; sans reste, il n'efface rien et ne coûte
+que la lecture.
+
+**Bilan du 02/10.** 137 posts : 114 sous 5 000 vues (sortis avant le
+pipeline), 1 rejeté sur la note d'import, 1 refusé par Adrien dans la file,
+1 validé par lui, **20 en file**. Images : 15 slides où il restait du Astra
+(logo, icône seule, interface sur un écran, page App Store, URL
+`astra-ai.co`, un bouton « Buy Astra AI Plan »), 2 qui ont demandé un second
+passage (l'effaceur avait redessiné une pastille au lettrage brouillé) ; puis
+une relecture par Claude des 130 slides des 21 slideshows : aucune trace.
+Texte : 21 slides, 17 en micabo, 4 sans marque. Chaque slideshow porte dans
+`file_note` ce qui a été touché et où regarder. Trois slides d'emir.study
+partagent leur image avec un autre slideshow (dédoublonnage de l'import) :
+un calque posé dessus dans l'éditeur réécrirait aussi l'autre.
+
+**Piège du MCP, précisé** : le corps plpgsql du trigger (points-virgules entre
+`$f$`) est passé par `apply_migration`. Le même texte par `execute_sql`,
+précédé d'un `drop trigger if exists`, a attendu ses 60 s sans rien appliquer.
+`create or replace trigger` (PG 14+) évite le `drop`.
 
 ## Relevé des stats : une file, pas une fenêtre (0259, 14/09/2026)
 

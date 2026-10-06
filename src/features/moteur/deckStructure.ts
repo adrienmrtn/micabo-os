@@ -8,5 +8,6 @@
 export {
   realignerDeck,
   positionsOrphelines,
+  positionsSansTexte,
   type SlideDeck,
 } from "../../../supabase/functions/_shared/deck_structure.ts";

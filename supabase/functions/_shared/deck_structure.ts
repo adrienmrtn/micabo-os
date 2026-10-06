@@ -84,3 +84,26 @@ export function positionsOrphelines(
     .map((s) => Number(s.position))
     .filter((p) => !connues.has(p));
 }
+
+/**
+ * Positions où la source a du texte et le deck de la langue n'en a pas (0294).
+ *
+ * Le 02/10/2026, deux créateurs allemands ont publié `85379b9e` avec les
+ * slides 1 à 4 SANS texte : le français resté dans l'image était seul à
+ * l'écran. Le deck `de` était troué depuis l'import du 10/09 — le modèle de
+ * traduction n'avait rendu qu'une partie des slides, et `?? ""` avait écrit
+ * une chaîne vide pour chaque slide manquante. Le placement avait ensuite
+ * rempli la 5ᵉ, et un deck « prêt dès qu'une slide a du texte » n'était plus
+ * jamais retraduit. Trois decks dans ce cas en base.
+ *
+ * Une slide vide dans la SOURCE n'est pas exigée : c'est un choix (0288, l'OCR
+ * d'une capture vidé, la slide part avec son image seule). Une position
+ * absente du deck compte comme vide.
+ */
+export function positionsSansTexte(source: SlideDeck[], deck: SlideDeck[]): number[] {
+  const textes = new Map(deck.map((s) => [Number(s.position), (s.texte_overlay ?? "").trim()]));
+  return source
+    .filter((s) => (s.texte_overlay ?? "").trim() !== "")
+    .map((s) => Number(s.position))
+    .filter((p) => !textes.get(p));
+}
