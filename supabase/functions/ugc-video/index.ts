@@ -32,6 +32,9 @@
  *   { action: "demo_ajouter", chemin, langue, titre? }
  *       → MP4 déjà déposé par l'admin sous ugc/demos/ : métadonnées retirées
  *         en place, media_library, ugc_demos.
+ *   { action: "video_importer", url, genre: "rendu" | "demo", moteur?, langue?, titre? }
+ *       → une vidéo faite ailleurs (Genjutsu) ou une démo envoyée : rapatriée,
+ *         sans métadonnées, media_library (et ugc_demos pour une démo).
  *
  * Rien ici n'est lu par l'assignation : c'est l'atelier du premier lot.
  */
@@ -750,6 +753,63 @@ async function ajouterDemo(supabase: Supabase, chemin: string, langue: string, t
   return { demo: data };
 }
 
+/* ─── Vidéos rendues ailleurs ──────────────────────────────────────────── */
+
+/**
+ * Une vidéo faite hors de l'atelier (réaction Genjutsu de Higgsfield, lancée
+ * depuis la session de travail, qui seule a le MCP) ou une démo envoyée par
+ * Adrien : rapatriée depuis son URL, métadonnées retirées, rangée dans le
+ * bucket et dans `media_library`. Une démo entre aussi dans `ugc_demos`.
+ */
+async function importerVideo(supabase: Supabase, body: Record<string, unknown>) {
+  const url = String(body.url ?? "").trim();
+  if (!/^https:\/\//.test(url)) throw new Error("url https attendue");
+  const genre = body.genre === "demo" ? "demo" : "rendu";
+  const langue = String(body.langue ?? "").trim().toLowerCase();
+  if (genre === "demo" && !/^[a-z]{2}$/.test(langue)) throw new Error("langue : code à deux lettres");
+  const moteur = String(body.moteur ?? "").trim().toLowerCase();
+  if (genre === "rendu" && !/^[a-z0-9.-]{3,40}$/.test(moteur)) {
+    throw new Error("moteur attendu (genjutsu-480p, …)");
+  }
+
+  const { octets } = await telecharger(url);
+  const propre = mp4SansMetadonnees(octets);
+  const restes = metadonneesMp4(propre);
+  if (restes.length) throw new Error(`Métadonnées restantes : ${restes.join(", ")}`);
+
+  const id = crypto.randomUUID();
+  const chemin = genre === "demo" ? `ugc/demos/${id}.mp4` : `ugc/rendus/externes/${id}/reaction.mp4`;
+  const urlPub = await deposer(supabase, chemin, propre, "video/mp4");
+  const meta = await sonderVideoMeta(urlPub);
+  const dureeMs = meta.durationSec ? Math.round(meta.durationSec * 1000) : null;
+
+  const { data: media, error } = await supabase
+    .from("media_library")
+    .insert({
+      storage_path: chemin,
+      url: urlPub,
+      source: genre === "demo" ? "fourni_par_freelance" : "genere_ia",
+      tags: genre === "demo" ? ["ai-ugc", "demo"] : ["ai-ugc", "rendu", moteur],
+      ...(genre === "demo" ? { langue } : {}),
+      upscale_le: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (error || !media) throw new Error(`media_library : ${error?.message ?? "?"}`);
+
+  let demo: unknown = null;
+  if (genre === "demo") {
+    const { data, error: e2 } = await supabase
+      .from("ugc_demos")
+      .insert({ titre: String(body.titre ?? "").trim(), langue, media_id: media.id, duree_ms: dureeMs })
+      .select("*")
+      .single();
+    if (e2) throw new Error(`ugc_demos : ${e2.message}`);
+    demo = data;
+  }
+  return { media_id: media.id, url: urlPub, chemin, duree_ms: dureeMs, octets: propre.length, demo };
+}
+
 /* ─── Aperçu ───────────────────────────────────────────────────────────── */
 
 /**
@@ -973,6 +1033,10 @@ Deno.serve(async (request) => {
           String(body.titre ?? "").trim(),
         )),
       });
+    }
+
+    if (action === "video_importer") {
+      return json({ ok: true, ...(await importerVideo(supabase, body)) });
     }
 
     return json({ error: "action inconnue" }, 400);
