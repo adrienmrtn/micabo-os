@@ -5,7 +5,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "b5566859b281c17f2d7b706f4933a71362fc1644";
+const SHA = "c92fb8995a9060ddf1b91d7557a058a83522d772";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/ugc-video.bundle.js`;
 
