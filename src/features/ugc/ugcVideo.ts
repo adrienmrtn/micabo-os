@@ -9,7 +9,9 @@ export {
   estMoteurKling,
   idVideoTiktok,
   instantsPlanche,
+  LANGUES_UGC,
   lireCoupe,
+  lireTraductionUgc,
   MOTEUR_DEFAUT,
   MOTEURS_KLING,
   normaliserTextes,
@@ -17,9 +19,10 @@ export {
   PRIX_IMAGE_PERSONA,
   promptCoupe,
   promptPersona,
+  promptTraductionUgc,
   RATIO_DUREE_MIN,
   REACTION_MAX_S,
   REACTION_MIN_S,
   renduAssezLong,
 } from "../../../supabase/functions/_shared/ugc_video.ts";
-export type { Coupe, MoteurKling, SegmentTexte } from "../../../supabase/functions/_shared/ugc_video.ts";
+export type { Coupe, LangueUgc, MoteurKling, SegmentTexte } from "../../../supabase/functions/_shared/ugc_video.ts";

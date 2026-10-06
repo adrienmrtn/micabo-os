@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Check, Clapperboard, Download, ExternalLink, Loader2, Play, Scissors, Upload, X } from "lucide-react";
+import { Check, Clapperboard, Copy, Download, ExternalLink, Languages, Loader2, Play, Scissors, Upload, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
   listerModeles,
   listerPersonasAtelier,
   listerRendus,
+  retraduire,
   suivreRendus,
   urlMedia,
   type PersonaAtelier,
@@ -31,6 +32,7 @@ import {
 import {
   coutRendu,
   dureeReactionValide,
+  LANGUES_UGC,
   MOTEUR_DEFAUT,
   MOTEURS_KLING,
   REACTION_MAX_S,
@@ -312,6 +314,11 @@ function Textes({ modele }: { modele: UgcModele }) {
   const [reaction, setReaction] = React.useState(lire("reaction"));
   const [demo, setDemo] = React.useState(lire("demo"));
 
+  const traduire = useMutation({
+    mutationFn: () => retraduire(modele.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ugc-atelier", "modeles"] }),
+  });
+
   const enregistrer = useMutation({
     mutationFn: () =>
       enregistrerTextes(modele.id, [
@@ -335,10 +342,80 @@ function Textes({ modele }: { modele: UgcModele }) {
           <Textarea id={`txt-d-${modele.id}`} rows={3} value={demo} onChange={(e) => setDemo(e.target.value)} />
         </div>
       </div>
-      <Button type="button" size="sm" variant="outline" disabled={enregistrer.isPending} onClick={() => enregistrer.mutate()}>
-        {enregistrer.isPending ? <Loader2 className="animate-spin" /> : <Check />}
-        {t("ugcAtelier.enregistrer")}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant="outline" disabled={enregistrer.isPending} onClick={() => enregistrer.mutate()}>
+          {enregistrer.isPending ? <Loader2 className="animate-spin" /> : <Check />}
+          {t("ugcAtelier.enregistrer")}
+        </Button>
+        <Button type="button" size="sm" variant="outline" disabled={traduire.isPending} onClick={() => traduire.mutate()}>
+          {traduire.isPending ? <Loader2 className="animate-spin" /> : <Languages />}
+          {t("ugcAtelier.retraduire")}
+        </Button>
+      </div>
+      <TextesParLangue modele={modele} />
+    </div>
+  );
+}
+
+/**
+ * Ce que le créateur recevra : le texte de sa langue, la capture d'origine qui
+ * montre où le poser, et le lien du TikTok d'origine.
+ */
+function TextesParLangue({ modele }: { modele: UgcModele }) {
+  const { t } = useTranslation();
+  const [copie, setCopie] = React.useState<string | null>(null);
+  const langues = LANGUES_UGC.filter((l) => modele.traductions?.[l]);
+  if (langues.length === 0) {
+    return <p className="text-xs text-muted-foreground">{t("ugcAtelier.traductionsAttente")}</p>;
+  }
+  const copier = (cle: string, texte: string) => {
+    void navigator.clipboard.writeText(texte).then(() => {
+      setCopie(cle);
+      window.setTimeout(() => setCopie(null), 1500);
+    });
+  };
+  return (
+    <div className="grid gap-4 md:grid-cols-[160px_1fr]">
+      <div className="space-y-1">
+        {modele.image_ref_path ? (
+          <img className="w-40 rounded-md" src={urlMedia(modele.image_ref_path) ?? undefined} alt={t("ugcAtelier.capturePlacement")} />
+        ) : null}
+        <p className="text-xs text-muted-foreground">{t("ugcAtelier.capturePlacement")}</p>
+        <a className="inline-flex items-center gap-1 text-xs underline" href={modele.source_url} target="_blank" rel="noreferrer">
+          <ExternalLink className="size-3" />
+          {t("ugcAtelier.tiktokOrigine")}
+        </a>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {langues.map((l) => {
+          const tr = modele.traductions[l]!;
+          return (
+            <div key={l} className="space-y-1 rounded-md border p-2">
+              <div className="flex items-center justify-between">
+                <Badge variant="outline">{l}</Badge>
+                {tr.alertes.length ? <Badge variant="error">{t("ugcAtelier.alerteConcurrent")}</Badge> : null}
+              </div>
+              {tr.segments
+                .filter((s) => s.texte)
+                .map((s) => (
+                  <div key={s.segment} className="space-y-1">
+                    <p className="text-[11px] uppercase text-muted-foreground">
+                      {t(s.segment === "demo" ? "ugcAtelier.texteDemo" : "ugcAtelier.texteReaction")}
+                    </p>
+                    <p className="whitespace-pre-wrap text-sm">{s.texte}</p>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => copier(`${l}-${s.segment}`, s.texte)}>
+                      {copie === `${l}-${s.segment}` ? <Check /> : <Copy />}
+                      {t("ugcAtelier.copier")}
+                    </Button>
+                  </div>
+                ))}
+              {tr.alertes.map((a) => (
+                <p key={a} className="text-xs text-destructive">{a}</p>
+              ))}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

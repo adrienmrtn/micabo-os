@@ -24,6 +24,9 @@ export interface UgcModele {
   image_ref_path: string | null;
   image_propre_path: string | null;
   textes: SegmentTexte[];
+  /** Le texte à coller, par langue (0309). */
+  traductions: Partial<Record<string, { segments: SegmentTexte[]; alertes: string[] }>>;
+  traduit_le: string | null;
   statut: "a_couper" | "pret" | "archive";
   erreur: string | null;
   created_at: string;
@@ -135,6 +138,10 @@ export function importerModele(url: string) {
 
 export function couperModele(id: string, debut_s: number, fin_s: number, demo_debut_s: number | null) {
   return appeler<{ ok: true }>({ action: "modele_couper", id, debut_s, fin_s, demo_debut_s });
+}
+
+export function retraduire(id: string) {
+  return appeler<{ ok: true }>({ action: "modele_traduire", id });
 }
 
 export function enregistrerTextes(id: string, textes: SegmentTexte[]) {

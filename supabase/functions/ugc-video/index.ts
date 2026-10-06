@@ -40,7 +40,6 @@ import { downloadMedia, scrapeVideoPost } from "../_shared/apify.ts";
 import { imageSansMetadonnees } from "../_shared/image_metadonnees.ts";
 import { nettoyerTexteDeck } from "../_shared/marque.ts";
 import { falLlmTexte } from "../_shared/fal_llm.ts";
-import { editerNanoBananaPro } from "../_shared/fal_nano_banana.ts";
 import { sonderVideoMeta } from "../_shared/fal_normaliser_video.ts";
 import {
   falAuthHeaders,
@@ -87,6 +86,7 @@ import {
 
 const BUCKET = "medias";
 const MODELE_COUPE = "google/gemini-2.5-flash";
+const MODELE_NANO_BANANA_EDIT = "fal-ai/nano-banana-pro/edit";
 /** Au-delà, un rendu encore « en cours » est réputé perdu. */
 const KLING_ABANDON_MS = 60 * 60 * 1000;
 const IMAGE_ABANDON_MS = 15 * 60 * 1000;
@@ -512,14 +512,30 @@ async function lancerRendu(supabase: Supabase, renduId: string): Promise<void> {
       .filter(Boolean);
     if (refs.length === 0) throw new Error("persona sans images");
 
-    // 1. Le persona dans l'image de départ.
-    const nb = await editerNanoBananaPro(
-      [urlPublique(supabase, figure1), ...refs],
-      promptPersona(r.decor === "source" ? "source" : "persona"),
+    // 1. Le persona dans l'image de départ. Pas `editerNanoBananaPro` : son
+    // budget de 120 s ne suffit pas toujours avec six références (Inès,
+    // 06/10 : encore IN_PROGRESS à 120 s), et l'allonger dans le module
+    // partagé ferait « changer » les bundles du moteur qui tirent
+    // `ugc_face_swap.ts`. Même appel, budget de 5 minutes, en tâche de fond.
+    const nb = await falQueueAwaitJson(
+      MODELE_NANO_BANANA_EDIT,
+      await falQueueSubmit(MODELE_NANO_BANANA_EDIT, {
+        prompt: promptPersona(r.decor === "source" ? "source" : "persona"),
+        image_urls: [urlPublique(supabase, figure1), ...refs],
+        num_images: 1,
+        aspect_ratio: "auto",
+        output_format: "png",
+        resolution: "1K",
+        safety_tolerance: "6",
+      }),
       undefined,
-      { aspectRatio: "auto" },
+      300_000,
     );
-    const nette = imageSansMetadonnees(nb.bytes);
+    const imageNb = ((nb.images ?? (nb.data as Record<string, unknown> | undefined)?.images) as
+      | Array<{ url?: string }>
+      | undefined)?.[0]?.url;
+    if (!imageNb) throw new Error(`Nano Banana sans image : ${JSON.stringify(nb).slice(0, 200)}`);
+    const nette = imageSansMetadonnees((await falDownloadBytes(imageNb)).bytes);
     const imagePath = `ugc/rendus/${renduId}/persona.${nette.ext}`;
     await deposer(supabase, imagePath, nette.octets, nette.mime);
     await majRendu(supabase, renduId, { image_persona_path: imagePath, etape: "kling" });
