@@ -23,6 +23,7 @@ import {
   type ContenuListe,
 } from "@/features/moteur/api";
 import { useApplication } from "@/features/moteur/ApplicationContext";
+import { couleurLabelLisible } from "@/features/moteur/couleurLabel";
 import { cn } from "@/lib/utils";
 
 const selectClass =
@@ -396,9 +397,9 @@ export function TestBrulerTexteCard() {
                   setFiltreLabel(filtreLabel === l.id ? null : l.id)
                 }
                 style={
-                  filtreLabel === l.id || !l.couleur
+                  filtreLabel === l.id || !couleurLabelLisible(l.couleur)
                     ? undefined
-                    : { borderColor: l.couleur, color: l.couleur }
+                    : { borderColor: l.couleur!, color: l.couleur! }
                 }
               >
                 {l.nom}

@@ -37,6 +37,7 @@ import {
 import { NettoyageEtapes } from "@/components/moteur/NettoyageEtapes";
 import { UpscaleMediaControl } from "@/components/moteur/UpscaleMediaControl";
 import { LabelEditor } from "@/features/moteur/LabelPicker";
+import { couleurLabelLisible } from "@/features/moteur/couleurLabel";
 import { remettreEnFile } from "@/features/moteur/fileValidationApi";
 import { HistoriqueTier } from "@/features/moteur/HistoriqueTier";
 import { PassagesSlideshow } from "@/features/moteur/PassagesSlideshow";
@@ -2295,9 +2296,9 @@ export function AdminSlideshowsPage() {
                       setFiltreLabel(filtreLabel === l.id ? null : l.id)
                     }
                     style={
-                      filtreLabel === l.id || !l.couleur
+                      filtreLabel === l.id || !couleurLabelLisible(l.couleur)
                         ? undefined
-                        : { borderColor: l.couleur, color: l.couleur }
+                        : { borderColor: l.couleur!, color: l.couleur! }
                     }
                   >
                     {l.nom}
@@ -2466,8 +2467,8 @@ export function AdminSlideshowsPage() {
                             tabIndex={0}
                             className="rounded border px-1 py-0.5 text-[10px] hover:bg-muted"
                             style={
-                              l.couleur
-                                ? { borderColor: l.couleur, color: l.couleur }
+                              couleurLabelLisible(l.couleur)
+                                ? { borderColor: l.couleur!, color: l.couleur! }
                                 : undefined
                             }
                             onClick={(e) => {

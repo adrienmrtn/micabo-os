@@ -163,10 +163,30 @@ Le même jour à 14:03 UTC, ce remplacement a été défait pour `asya.ders680`
 | `2c25985f` | 7683630825610513686, anti-rot routine | C | le soir, avant de dormir |
 
 Tiers par la formule d'import : les deux derniers ont moins de 10 000 vues
-d'origine. Ils sont en `brouillon` : rien n'entre dans le pool sans un admin.
-Une fois validés, le stock passe à 15 white posts, soit 27 passages par cycle
-pour trois comptes à 2 posts par jour, et chaque compte peut en recevoir 15
-avant de buter sur le recul de 30 jours (7 jours et demi).
+d'origine. **Validés le 06/10 à 16:17 UTC** à la demande d'Adrien (`valide_par`
+vide, comme le premier lot). Le stock passe à 15 white posts, soit 27 passages
+par cycle pour trois comptes à 2 posts par jour, et chaque compte peut en
+recevoir 15 avant de buter sur le recul de 30 jours (7 jours et demi).
+
+**Qui reçoit quoi, et quand.** `anna.examen886` reçoit ses 2 white posts à
+l'assignation de minuit (`minuit-vnext`, 22:00 UTC). Les deux comptes neufs ne
+sont PAS servis à minuit : ils sont encore en warmup. C'est
+`minuit-vnext-journee` (`5,20,35,50 * * * *`, assignation de tous les comptes
+pour le jour de Paris) qui les sert au premier passage après la fin du warmup,
+le jour même : `lea.studium381` vers 08:20 UTC le 07/10, `deniz.sinav272` vers
+11:35 UTC. Ensuite, comme tout le monde, à chaque minuit.
+
+**La couleur d'un label peut le rendre invisible** (06/10). `white-post` est
+blanc (#ffffff), et les puces de label prennent la couleur du label pour leur
+texte et leur bordure (filtres et cartes de `/admin/slideshows`, carte du burn)
+ou pour leur fond sous un texte blanc (`LabelPicker` actif, fiches compte et
+source) : le label s'écrivait blanc sur blanc et la page Slideshows semblait ne
+pas l'avoir. `couleurLabelLisible` (`src/features/moteur/couleurLabel.ts`,
+pur, 6 tests) rend `null` sous un contraste de 1,8 avec le blanc, et la puce
+retombe sur son style par défaut, comme un label sans couleur. Le seuil ne
+refuse que l'illisible : l'ambre de Hook (#f59e0b, 2,1) reste coloré. La
+couleur enregistrée n'est pas touchée. La pastille du Pilotage a pris un
+liseré pour la même raison.
 
 Un compte qui porte `white-post` avec un autre label tire les white posts comme
 les autres, dans les mêmes règles (tier, recul de 30 jours, part des C).

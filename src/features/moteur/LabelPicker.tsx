@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { useApplication } from "@/features/moteur/ApplicationContext";
 import { listerLabels } from "@/features/moteur/api";
+import { couleurLabelLisible } from "@/features/moteur/couleurLabel";
 
 /**
  * Pastilles de labels (multi-sélection). `selected` = ids cochés ;
@@ -67,8 +68,8 @@ export function LabelPicker({
                 : "rounded-md border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted"
             }
             style={
-              on && lab.couleur
-                ? { backgroundColor: lab.couleur, borderColor: lab.couleur }
+              on && couleurLabelLisible(lab.couleur)
+                ? { backgroundColor: lab.couleur!, borderColor: lab.couleur! }
                 : undefined
             }
           >

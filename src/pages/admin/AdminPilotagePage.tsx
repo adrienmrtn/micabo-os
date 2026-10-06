@@ -130,8 +130,9 @@ function LabelsPilotageCard() {
               key={lab.id}
               className="flex items-center gap-1.5 border border-border/80 px-2 py-1 text-xs"
             >
+              {/* liseré : une pastille blanche (white-post) disparaissait sur le fond */}
               <span
-                className="size-2.5 rounded-full"
+                className="size-2.5 rounded-full ring-1 ring-border"
                 style={{ backgroundColor: lab.couleur ?? "#888" }}
               />
               <span className="font-medium">{lab.nom}</span>
