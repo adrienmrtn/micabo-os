@@ -300,6 +300,24 @@ Les quatre nouvelles portent le même sweat gris et le même chignon : le
 prompt de base était commun. À varier si les comptes se ressemblent trop.
 ~40 crédits Higgsfield dépensés pour les cinq.
 
+**Personas par Higgsfield AI Influencer** (06/10, demande d'Adrien : les
+cinq premières « pas assez crédibles »). `ai_influencer_prepare` puis
+`ai_influencer_generate`, palier `normal`, traits explicites et
+`randomize = false`, un brief « étudiante ordinaire, pas un mannequin,
+pores, sans maquillage, photo de téléphone » : **1,125 crédit la fiche**.
+La fiche est un casting sur fond blanc (visage + pied), pas une photo
+d'atelier : les cinq vues sont refaites par Nano Banana Pro (Fal, 2K,
+0,15 $) avec la fiche en référence, la face d'abord, puis les quatre autres
+avec la face ET la fiche (même visage, même chambre, même tenue). Deux
+pièges vus : un « selfie » où elle TIENT un téléphone (le téléphone est la
+caméra, le dire), et des affiches au mur avec des lettres inventées (un
+tell d'IA qui repasserait dans chaque vidéo en décor « persona » : les
+redemander sans lettres). Les lunettes demandées sur la fiche d'Elif ont
+fini posées sur sa cuisse : abandonnées. **Jade** (`37ace51e`,
+européenne, chambre blanche, cardigan beige) et **Elif** (`776c62f5`,
+Moyen-Orient, chambre beige à la lampe, sweat kaki) : 2,25 crédits
+Higgsfield et 1,80 $ Fal pour les deux.
+
 **Regarder une image ou une vidéo depuis l'environnement de travail** : le
 proxy bloque `supabase.co` et le CDN de Higgsfield, pas `fal.media`.
 `ugc-video` `{ action: "apercu", chemins }` recopie les fichiers du bucket sur
