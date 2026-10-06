@@ -410,6 +410,23 @@ l'identité que A. Une seconde image de départ, avec la pose décrite mot à
 mot, a eu les bras justes mais un autre visage, un plan plus large et un
 portable à la place de l'iPad : écartée. ~1,05 $ (deux images + Kling).
 
+**Genjutsu de Higgsfield** (`hf_mult_motion_control`, essai du même jour,
+même image de départ de Jade). Prix lus par `get_cost` (rien n'est lancé) :
+**~7 crédits/s en 720p, ~11 en 1080p, ~3 en 480p, 4 s facturées au
+minimum** — 56 crédits la réaction de 7,8 s en 720p, 88 en 1080p, 24 en
+480p ; le remplacement (`hf_mult_replace_object`) coûte pareil. Sur
+Starter (~0,07 $ le crédit) : ~4 $ la vidéo en 720p, contre ~1 $ sur Fal.
+Essai en 480p (24 crédits, ~1,70 $) : **la vidéo entière est gardée**
+(8,04 s pour 7,78), le balayage du bras compris, le mouvement suit la
+source image par image, le texte incrusté disparaît. Mais Genjutsu garde la
+SCÈNE de la vidéo (la penderie de la source, recolorée) et pas la chambre
+de l'image, ajoute les lunettes que la source porte sur la tête, et tient
+le visage de Jade moins bien que Nano Banana + Kling. C'est un
+remplacement de personne, de la famille de Kling O1 (~1,30 $ la vidéo en
+1080×1920 sur Fal), pas un motion control. Le CDN de Higgsfield est
+bloqué ici : la vidéo revient par un `trim-video` Fal sur toute sa durée,
+qui la ré-encode (x264, retiré par `mp4SansMetadonnees`).
+
 **Pièges du MCP, précisés le 06/10** : `drop policy if exists`, même sur une
 table qui n'existe pas encore, fait attendre une confirmation humaine et la
 migration meurt à 60 s sans rien appliquer. Une migration qui crée ses tables
