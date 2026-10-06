@@ -93,6 +93,26 @@ describe("PosterUgcPage", () => {
     expect(container.querySelectorAll("video")).toHaveLength(2);
   });
 
+  it("donne le son de la vidéo d'origine à poser dans TikTok", async () => {
+    publication = {
+      ...base,
+      musique_url: "https://www.tiktok.com/music/original-sound-studyywithsachii-7689196856089381646",
+    };
+    renderPage();
+    await screen.findByText("Le son de la vidéo d'origine");
+    expect(screen.getByText(/mets-lui le son de la vidéo d'origine/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Ouvrir le son" }).getAttribute("href")).toBe(
+      publication.musique_url,
+    );
+  });
+
+  it("sans son connu, demande un son tendance", async () => {
+    renderPage();
+    await screen.findByText("Vidéo du jour");
+    expect(screen.queryByText("Le son de la vidéo d'origine")).toBeNull();
+    expect(screen.getByText(/ajoute un son tendance/)).toBeTruthy();
+  });
+
   it("refuse un lien hors TikTok et publie avec un lien TikTok", async () => {
     renderPage();
     const champ = await screen.findByLabelText("Lien du post publié");

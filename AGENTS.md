@@ -577,7 +577,19 @@ pour copier) avec la capture, la légende, le lien du post publié.
    `ugc/rendus/externes/<id>/reaction.mp4` + `media_library`. Une démo :
    `genre: "demo", langue`, sous `ugc/demos/` + `ugc_demos` ;
 4. un `insert` dans `ugc_publications` (texte pris dans
-   `ugc_modeles.traductions`, capture = `image_ref_path`).
+   `ugc_modeles.traductions`, capture = `image_ref_path`). Le son vient tout
+   seul (0311, ci-dessous).
+
+**Le son de la vidéo d'origine** (0311, signalé par Adrien sur la première
+vidéo : « pas de son à mettre »). La vidéo est livrée muette, et le créateur
+doit poser dans TikTok le son de la source, comme la musique d'un post
+classique. `ugc_modeles.musique_url` (la page TikTok du son, lue par Apify à
+l'import, `lienMusique`) est recopiée dans la publication par un trigger
+`before insert` quand elle naît sans son ; un son posé à l'insertion est
+gardé. La page vidéo montre « Le son de la vidéo d'origine » juste sous la
+vidéo (« Utiliser ce son » dans TikTok) et ne parle de son tendance que
+quand aucun son n'est connu. La vidéo du 06/10 d'eva, déjà publiée, n'a pas
+été reprise.
 Rien ne la crée tout seul chaque jour, **et c'est voulu** : Adrien veut
 mieux calibrer avant d'automatiser (06/10), donc pas de vidéo le 07/10. Pas
 de relevé des vues non plus : le relevé ne lit que `passages`.

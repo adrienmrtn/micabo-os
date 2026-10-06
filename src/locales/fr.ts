@@ -139,6 +139,11 @@ export const fr = {
         "Sur iPhone : choisis « Enregistrer la vidéo », elle arrive dans ta pellicule.",
       sonAide:
         "La vidéo est muette : ajoute un son tendance dans TikTok avant de publier.",
+      sonAideOrigine:
+        "La vidéo est muette : mets-lui le son de la vidéo d'origine dans TikTok (bouton ci-dessous).",
+      sonTitre: "Le son de la vidéo d'origine",
+      sonOrigineAide:
+        "Ouvre-le dans TikTok, choisis « Utiliser ce son », puis ajoute ta vidéo.",
       demo: "Démo de l'appli",
       demoAide: "À mettre juste après la vidéo, dans le même TikTok.",
       enregistrerDemo: "Enregistrer la démo",
