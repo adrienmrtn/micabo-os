@@ -425,7 +425,27 @@ le visage de Jade moins bien que Nano Banana + Kling. C'est un
 remplacement de personne, de la famille de Kling O1 (~1,30 $ la vidéo en
 1080×1920 sur Fal), pas un motion control. Le CDN de Higgsfield est
 bloqué ici : la vidéo revient par un `trim-video` Fal sur toute sa durée,
-qui la ré-encode (x264, retiré par `mp4SansMetadonnees`).
+qui la ré-encode (x264, retiré par `mp4SansMetadonnees`). Un plan plus
+gros ne change pas le classement : le crédit tombe à 0,033 € (ULTRA
+annuel) au mieux, soit ~1,85 € la vidéo en 720p, et une recharge coûte le
+même prix quel que soit le plan (~0,0475 € le crédit, 90 jours).
+
+**Kling O1 avec Jade sur la même réaction** (à la main, ~1,30 $) : le
+meilleur des trois. Vidéo entière (7,71 s pour 7,77, 1080×1920 à 24 i/s),
+le balayage du bras près de l'objectif compris, mains sur les hanches,
+menton levé et tête qui se balance au même tempo que la source ; texte
+effacé, pas de lunettes (le prompt les interdit, Genjutsu les avait
+ajoutées). Et **la chambre est celle de Jade**, pas celle de la source :
+fenêtre, affiches noir et blanc, plante, bureau, là où le prompt ne
+demandait qu'un changement léger. Avec une vue de face prise dans sa
+chambre, `elements` emporte le décor avec le visage. Le visage tient
+(sourcils, grain de beauté sur la joue, yeux), le cadrage est celui du
+selfie de Jade, un peu plus large que la source. Ce qui se perd : l'iPad
+posé à plat au premier plan, que la scène de Jade n'a pas. Sur ce chemin,
+un objet de la source n'est gardé que si la chambre du persona peut le
+porter. Le SEI `kling-ai` était cette fois APRÈS la tranche IDR dans le
+premier échantillon : `mp4SansMetadonnees` le retire quand même (185
+images identiques au `framemd5`).
 
 **Pièges du MCP, précisés le 06/10** : `drop policy if exists`, même sur une
 table qui n'existe pas encore, fait attendre une confirmation humaine et la

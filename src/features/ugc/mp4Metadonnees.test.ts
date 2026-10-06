@@ -193,7 +193,7 @@ const ECHANTILLONS = [
   [...nal(...SEI_MIXTE), ...nal(0x41, ...ascii("PPP3"))],
 ];
 
-function moovVideo(morceaux: number[]): number[] {
+function moovVideo(morceaux: number[], ech: number[][] = ECHANTILLONS): number[] {
   const avcC = boite("avcC", [1, 0x64, 0, 0x1f, 0xff, 0xe0, 0]);
   const avc1 = boite(
     "avc1",
@@ -205,20 +205,20 @@ function moovVideo(morceaux: number[]): number[] {
     "stbl",
     boite("stsd", [0, 0, 0, 0], u32(1), avc1),
     boite("stsc", [0, 0, 0, 0], u32(2), u32(1), u32(2), u32(1), u32(2), u32(1), u32(1)),
-    boite("stsz", [0, 0, 0, 0], u32(0), u32(3), ...ECHANTILLONS.map((e) => u32(e.length))),
+    boite("stsz", [0, 0, 0, 0], u32(0), u32(3), ...ech.map((e) => u32(e.length))),
     table("stco", morceaux),
   );
   const trak = boite("trak", boite("mdia", hdlr("VideoHandler"), boite("minf", stbl)));
   return boite("moov", avecDates("mvhd"), trak);
 }
 
-function fichierVideo(): Uint8Array {
-  const debut = ftyp.length + moovVideo([0, 0]).length + 8;
-  const premier = ECHANTILLONS[0]!.length + ECHANTILLONS[1]!.length;
+function fichierVideo(ech: number[][] = ECHANTILLONS): Uint8Array {
+  const debut = ftyp.length + moovVideo([0, 0], ech).length + 8;
+  const premier = ech[0]!.length + ech[1]!.length;
   return Uint8Array.from([
     ...ftyp,
-    ...moovVideo([debut, debut + premier]),
-    ...boite("mdat", ECHANTILLONS.flat()),
+    ...moovVideo([debut, debut + premier], ech),
+    ...boite("mdat", ech.flat()),
   ]);
 }
 
@@ -254,6 +254,15 @@ describe("mp4SansMetadonnees : SEI de données utilisateur", () => {
     const propre = mp4SansMetadonnees(fichierVideo());
     expect(String.fromCharCode(...propre)).toContain("x264 crf");
     expect(metadonneesMp4(propre)).toEqual(["mdat:sei(x264 crf)"]);
+  });
+
+  it("retire aussi un SEI placé APRÈS la tranche IDR (Kling O1, 06/10)", () => {
+    const ech = [[...nal(0x65, ...ascii("IDR1")), ...nal(...SEI_KLING)], ...ECHANTILLONS.slice(1)];
+    const propre = mp4SansMetadonnees(fichierVideo(ech));
+    expect(String.fromCharCode(...propre)).not.toContain("kling-ai");
+    const sortie = echantillons(propre);
+    expect(sortie[0]).toBe(String.fromCharCode(...nal(0x65, ...ascii("IDR1"))));
+    expect(sortie[1]).toBe(String.fromCharCode(...nal(0x41, ...ascii("PPP2"))));
   });
 
   it("reste idempotent avec un retrait dans mdat", () => {
