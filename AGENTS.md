@@ -90,7 +90,9 @@ pour les reposts bonus. Le statut ne bouge pas — sur un contenu déjà validé
 langue est servable aussitôt.
 
 **Les cinq posts du 06/10**, tous @amayareading, tous en FR / DE / TR, tous
-tier A (note 79,3 : les vues dépassent le plafond de la formule), **en file** :
+tier A (note 79,3 : les vues dépassent le plafond de la formule), **validés le
+06/10 à 11:19 UTC** à la demande d'Adrien (`valide_par` vide : c'est l'agent
+qui a validé, pas un compte admin) :
 
 | contenu | TikTok | slide micabo |
 |---|---|---|
@@ -117,8 +119,8 @@ parce qu'ils postaient tous leurs créneaux sans percer (médianes de 1 060 à
 1 439 vues sur 21 jours, aucun post au-delà de 12 700). Le label a remplacé
 `classic-study` par un `update` de `compte_labels` ; le retour se fait de la
 même façon, il n'y avait rien d'autre sur ces comptes. Leurs passages déjà
-créés gardent leurs slideshows classiques. **Rien ne leur sera servi tant que
-les white posts ne sont pas validés** dans la file.
+créés gardent leurs slideshows classiques ; leurs premiers white posts partent
+à l'assignation de la nuit du 06 au 07/10.
 
 Un compte qui porte `white-post` avec un autre label tire les white posts comme
 les autres, dans les mêmes règles (tier, recul de 30 jours, part des C).
