@@ -150,7 +150,7 @@ export function PosterUgcPage() {
           <p className="text-xs text-muted-foreground">{t("ugcPoster.enregistrerAide")}</p>
           <p className="flex items-start gap-1.5 rounded-md bg-muted/60 px-3 py-2 text-xs">
             <VolumeX className="mt-0.5 size-3.5 shrink-0" />
-            {t("ugcPoster.sonAide")}
+            {donnees.musique_url ? t("ugcPoster.sonAideOrigine") : t("ugcPoster.sonAide")}
           </p>
           {fichiers.isError && (
             <p className="text-sm text-destructive">{(fichiers.error as Error).message}</p>
@@ -158,6 +158,25 @@ export function PosterUgcPage() {
           {erreurPartage && <p className="text-sm text-destructive">{erreurPartage}</p>}
         </CardContent>
       </Card>
+
+      {/* 1 bis — Le son de la vidéo d'origine : la vidéo est livrée muette, le
+          créateur pose CE son dans TikTok (0311), comme la musique d'un post. */}
+      {donnees.musique_url && (
+        <Card className="border-primary/30">
+          <CardContent className="flex flex-wrap items-center gap-3 pt-5">
+            <Music className="size-5 shrink-0 text-primary" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">{t("ugcPoster.sonTitre")}</p>
+              <p className="text-xs text-muted-foreground">{t("ugcPoster.sonOrigineAide")}</p>
+            </div>
+            <Button asChild className="shrink-0">
+              <a href={donnees.musique_url} target="_blank" rel="noreferrer">
+                {t("posts.ouvrirMusique")}
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 2 — La démo de l'appli, quand la source en a une. */}
       {donnees.demo_url && (
@@ -204,23 +223,6 @@ export function PosterUgcPage() {
         </Card>
       )}
 
-      {/* 4 — Le son, quand on en impose un. */}
-      {donnees.musique_url && (
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-3 pt-5">
-            <Music className="size-5 shrink-0 text-primary" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">{t("posts.musique")}</p>
-              <p className="text-xs text-muted-foreground">{t("posts.musiqueFavori")}</p>
-            </div>
-            <Button asChild className="shrink-0">
-              <a href={donnees.musique_url} target="_blank" rel="noreferrer">
-                {t("posts.ouvrirMusique")}
-              </a>
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       {/* 5 — La légende du post TikTok. */}
       {donnees.legende && (

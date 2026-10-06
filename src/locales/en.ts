@@ -139,6 +139,11 @@ export const en = {
         "On iPhone: choose “Save Video”, it lands in your camera roll.",
       sonAide:
         "The video is silent: add a trending sound in TikTok before posting.",
+      sonAideOrigine:
+        "The video is silent: give it the original video's sound in TikTok (button below).",
+      sonTitre: "The original video's sound",
+      sonOrigineAide:
+        "Open it in TikTok, tap “Use this sound”, then add your video.",
       demo: "App demo",
       demoAide: "Put it right after the video, in the same TikTok.",
       enregistrerDemo: "Save the demo",
