@@ -21,6 +21,8 @@
  *       → relève les Kling soumis et finalise ceux qui sont prêts : contrôle de
  *         durée, MP4 sans métadonnées, ligne media_library, statut `a_valider`.
  *   { action: "rendu_decider", id, decision: "valide" | "rejete", motif? }
+ *   { action: "apercu", chemins, largeur? }
+ *       → copies sur le CDN Fal, pour regarder depuis l'environnement de travail.
  *   { action: "demo_ajouter", chemin, langue, titre? }
  *       → MP4 déjà déposé par l'admin sous ugc/demos/ : métadonnées retirées
  *         en place, media_library, ugc_demos.
@@ -561,6 +563,33 @@ async function ajouterDemo(supabase: Supabase, chemin: string, langue: string, t
   return { demo: data };
 }
 
+/* ─── Aperçu ───────────────────────────────────────────────────────────── */
+
+/**
+ * Copie de fichiers du bucket sur le CDN Fal, pour les REGARDER depuis
+ * l'environnement de travail : son proxy bloque `supabase.co`, pas
+ * `fal.media`. Une image passe réduite par le rendu du Storage ; une vidéo
+ * passe telle quelle (on en tire les images à côté, avec ffmpeg).
+ */
+async function apercu(supabase: Supabase, chemins: string[], largeur: number) {
+  const base = urlPublique(supabase, "").replace(/\/object\/public\/medias\/?$/, "");
+  const sortie: Array<{ chemin: string; url?: string; erreur?: string }> = [];
+  for (const chemin of chemins.slice(0, 12)) {
+    try {
+      if (chemin.includes("..") || chemin.startsWith("/")) throw new Error("chemin refusé");
+      const video = /\.(mp4|mov|webm)$/i.test(chemin);
+      const { octets, mime } = video
+        ? { octets: await lireStorage(supabase, chemin), mime: "video/mp4" }
+        : await telecharger(`${base}/render/image/public/medias/${chemin}?width=${largeur}&quality=75`);
+      const nom = chemin.split("/").slice(-2).join("-");
+      sortie.push({ chemin, url: await falHebergerOctets(octets, mime || "image/jpeg", nom) });
+    } catch (e) {
+      sortie.push({ chemin, erreur: messageErreur(e) });
+    }
+  }
+  return { fichiers: sortie };
+}
+
 /* ─── Entrée ───────────────────────────────────────────────────────────── */
 
 Deno.serve(async (request) => {
@@ -582,6 +611,12 @@ Deno.serve(async (request) => {
     if (action === "persona_brouillon") {
       const urls = Array.isArray(body.urls) ? body.urls.map(String) : [];
       return json({ ok: true, ...(await personaBrouillon(supabase, String(body.cle ?? ""), urls)) });
+    }
+
+    if (action === "apercu") {
+      const chemins = Array.isArray(body.chemins) ? body.chemins.map(String) : [];
+      const largeur = Math.min(Math.max(Number(body.largeur ?? 540), 120), 1080);
+      return json({ ok: true, ...(await apercu(supabase, chemins, largeur)) });
     }
 
     if (action === "persona_creer") {
