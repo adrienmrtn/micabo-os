@@ -985,6 +985,8 @@ export interface MonCompte {
   langue: string;
   warmup_started_at: string | null;
   warmup_ends_at: string | null;
+  /** Compte vidéo AI UGC (0310) : une vidéo par jour, aucun slideshow, pas de warmup. */
+  ugc_ai_video?: boolean | null;
 }
 
 /** Tous les comptes du poster connecté (RLS : ses lignes seulement). */
@@ -992,7 +994,7 @@ export async function mesComptes(): Promise<MonCompte[]> {
   const { data, error } = await supabase
     .from("comptes")
     .select(
-      "id, persona_nom, persona_bio, handle_tiktok, avatar_url, langue, warmup_started_at, warmup_ends_at",
+      "id, persona_nom, persona_bio, handle_tiktok, avatar_url, langue, warmup_started_at, warmup_ends_at, ugc_ai_video",
     )
     .eq("is_active", true)
     .order("created_at", { ascending: true });

@@ -254,6 +254,350 @@ ces langues : pour tenir, il faut environ deux white posts neufs par jour.
   appels REST), et aucun réglage, prompt, modèle de nudge ni fonction SQL ne
   contient plus ce domaine.
 
+## AI UGC : l'atelier, premier lot (0308/0309, 06/10/2026)
+
+Un post AI UGC, ce sont **deux vidéos et un texte** que le créateur assemble
+dans TikTok : la **réaction** d'un TikTok source refaite par le persona du
+compte, une **démo** de l'appli micabo prise dans une bibliothèque par langue,
+et le **texte** de la vidéo d'origine (traduit) qu'il colle là où il était.
+Pas de placement micabo : la démo est le placement. Un compte = un persona
+(`comptes_ugc_persona_unique` le garantit depuis 0174). Décision d'Adrien du
+06/10 : **cinq personas, cinq versions de chaque vidéo** (une par persona).
+
+**Ce lot est un atelier, isolé du moteur.** Rien n'est lu par l'assignation,
+aucun `contenus` n'est créé, le label `ai-ugc` n'existe pas encore : né sans
+compte, il serait le « moins utilisé » du repli de `manage-users` et partirait
+sur le premier compte classique créé (le piège de 0277 et du 06/10). Il naît
+au lot 2 avec son exclusion dans `labels_repli.ts`.
+
+- **Tables** (0308, RLS admin) : `ugc_modeles` (la vidéo source, sa planche,
+  la coupe, l'image de départ, les textes par segment), `ugc_rendus` (une
+  réaction rendue pour un persona : moteur, décor, statut, coût, jugement),
+  `ugc_demos` (démos par langue). Les vidéos livrables sont des lignes
+  `media_library` nées avec `upscale_le` posé et sans label : aucun pool de
+  garnissage ni l'upscale ne les voit. `ugc_reactions`, `ugc_utilisations` et
+  `ugc_video_posts` (l'ancien module retiré le 14/09) restent dormantes.
+- **`ugc-video`** (chargeur `_deploy`, alias relu à chaque rebuild) :
+  import d'un TikTok (Apify, planche d'une image toutes les ~0,5 s par
+  `extract-nth-frame`, coupe proposée par `gemini-2.5-flash`), coupe du
+  segment réaction (Fal `trim-video`), image de départ et la même sans texte,
+  OCR des deux segments, texte traduit par langue (0309), rendus, démos,
+  import de personas depuis des URL, `personas_nettoyer` et
+  `videos_renettoyer` (repassent photos et MP4 déjà rangés quand le retrait
+  des métadonnées progresse), et `apercu` (voir plus bas). Les étapes longues
+  tournent en tâche de fond (`EdgeRuntime.waitUntil`) : l'écran relit les
+  tables.
+- **Un rendu** : Nano Banana Pro pose le persona dans l'image de départ
+  (`decor = persona` : sa chambre, de la frame source on ne garde que la pose ;
+  `decor = source` : le décor d'origine), puis Kling motion control
+  (`character_orientation = video`, `keep_original_sound = false` : livrée
+  muette, le créateur pose un son natif). Kling met plusieurs minutes : la
+  fonction **soumet et n'attend pas** ; `rendus_suivre` relève (la page
+  l'appelle toutes les 20 s tant qu'un rendu attend). Gardes : réaction entre
+  3 et 30 s, rendu refusé sous 85 % de la durée de la réaction (Kling tronque
+  parfois), abandon à 1 h.
+- **L'image du persona a le format de l'image de départ, jamais « auto »**
+  (`ratioNanoBanana`). En « auto », Nano Banana a rendu pour Inès un
+  **triptyque paysage** (trois vues côte à côte) sur une frame en 9:16, et
+  Kling l'aurait animé tel quel. L'image rendue est mesurée
+  (`dimensionsImage`, sans décodage) et redemandée une fois si sa forme ne
+  colle pas (`formeConforme`, 6 %) ; la seconde image n'entre pas dans
+  `cout_usd`. Nano Banana passe par la file Fal avec 5 minutes de budget, pas
+  par `editerNanoBananaPro` (120 s, trop court avec six références, et
+  l'allonger ferait « changer » les bundles du moteur via `ugc_face_swap.ts`).
+- **Les objets de la frame restent**, y compris ceux que la personne ne
+  touche pas encore : Clara et Manon avaient perdu l'iPad que la source ferme
+  deux secondes plus tard, et leur main se tend vers l'objectif dans le vide.
+  Le prompt le dit ; rien ne le vérifie, c'est la validation qui juge.
+- **Kling motion control ne sait pas manipuler un objet.** Il recopie le
+  squelette (bras, mains, visage), pas ce qui arrive à l'iPad : sur le premier
+  modèle, AUCUN des six rendus ne ferme l'iPad (main qui attrape l'objectif,
+  iPad qui reste ouvert, plaque grise qui flotte chez A). Une réaction dont le
+  temps fort est un objet manipulé ne passe pas par ce chemin.
+- **Prix Fal lus le 06/10** : Kling motion control 0,112 $/s (v2.6 pro),
+  0,07 (v2.6 standard), 0,168 (v3 pro), 0,126 (v3 standard) ; Nano Banana Pro
+  0,15 $ l'image. Une réaction de 6 s revient à ~0,82 $ (v2.6 pro) ou ~1,16 $
+  (v3 pro), donc **4 à 6 $ par vidéo source** pour cinq personas.
+- **MP4 sans métadonnées** (`_shared/mp4_metadonnees.ts`, pur, 11 tests) :
+  retire `udta`, `meta`, `uuid` (XMP, C2PA) partout, met à zéro les dates de
+  `mvhd`/`tkhd`/`mdhd`, vide le nom de `hdlr` et le `compressorname`, et
+  recale `stco`/`co64` mdat par mdat. Rien n'est ré-encodé. Vérifié à côté
+  sur quatre MP4 ffmpeg (faststart, moov en fin, clés Apple, C2PA simulé) :
+  décodage OK, flux identiques au `framemd5`. Un MP4 fragmenté est refusé.
+- **Kling signe DANS le flux vidéo** : un SEI « données utilisateur » (H.264
+  type 5, UUID puis `kling-ai`) en tête du premier échantillon, que le
+  retrait des boîtes ne voit pas. Trouvé sur les premiers rendus en cherchant
+  les chaînes du fichier. Un NAL SEI qui ne porte QUE ce type de message est
+  retiré de son échantillon (`stsz` et `stco`/`co64` recalés) ; x264 range
+  ses réglages au même endroit. 33 octets par rendu, 173 images sur 173
+  identiques au `framemd5`. Un SEI mixte (point de reprise + données
+  utilisateur) est laissé et signalé par `metadonneesMp4`, donc la
+  finalisation refuse le fichier plutôt que de le livrer.
+- **Photos des personas sans métadonnées** (`_shared/image_metadonnees.ts`,
+  pur) : elles serviront de photo de profil. PNG : seuls les chunks d'image
+  restent (iCCP remplacé par sRGB, son nom signe l'outil) ; JPEG par
+  `jpegSansMetadonnees`. Les 25 photos des cinq personas ont été repassées
+  le 06/10 (58 à 921 octets retirés chacune), et chaque image de départ d'un
+  rendu naît propre. **Un filigrane invisible écrit dans les pixels (SynthID
+  sur les images Google, Nano Banana compris) n'est pas une métadonnée** :
+  rien ici ne le retire.
+- **Le texte à coller, par langue** (0309, `ugc_modeles.traductions`) : fr,
+  de, tr, es, en, avec la capture d'origine (`image_ref_path`) qui montre où
+  le poser et le lien du TikTok d'origine, à l'écran avec un bouton copier.
+  Toute appli ou méthode nommée devient micabo dans sa forme de langue, une
+  fois. **La forme se tient dans le code** (leçon de 0292) : le prompt
+  demandait des retours à la ligne « au même rythme », et l'allemand est
+  revenu sur une ligne pour six. Le prompt donne le nombre de lignes de
+  chaque segment, `formeTraductionTenue` refuse plus d'une ligne d'écart,
+  deux essais par modèle. Un concurrent qui survit est une alerte à l'écran,
+  pas une coupe. Et la marque ne se coupe pas entre deux lignes
+  (`marqueSurUneLigne`) : sur @studyywithsachii, trois langues sur cinq
+  rendaient « micabo- / App », « micabo / uygulamasını », « micabo / app » ;
+  le retour à la ligne passe juste avant la marque, même nombre de lignes. **Aistote** (« la méthode aistote », la première vidéo) entre
+  dans `concurrents` par 0309.
+- **Personas par Higgsfield** (MCP connecté à la session) : visage par Soul
+  2.0 (0,12 crédit l'image), angles, tête baissée et photo de profil par
+  Nano Banana Pro avec le visage en référence (2 crédits l'image). Rapatriés
+  par `persona_brouillon` (le CDN Higgsfield est bloqué par le proxy de
+  l'environnement de travail), créés par `persona_creer`.
+
+**Les cinq personas du 06/10** (aucun compte encore) : Clara (`4b9e6c4f`),
+Inès (`a7b7bb2c`), Léa (`db62f97b`), Manon (`62fca58c`), quatre visages Soul
+2.0 avec leur chambre, et A (`ee9bd860`), créé le 01/09 par Nano Banana dans
+l'OS, dont face, angles et tête baissée ont été refaits dans une chambre (ses
+photos studio sur fond gris auraient mis le persona devant un mur gris en
+décor « persona » ; elles restent sous `ugc/personas/draft/8e786da4-…`).
+Les quatre nouvelles portent le même sweat gris et le même chignon : le
+prompt de base était commun. À varier si les comptes se ressemblent trop.
+~40 crédits Higgsfield dépensés pour les cinq.
+
+**Personas par Higgsfield AI Influencer** (06/10, demande d'Adrien : les
+cinq premières « pas assez crédibles »). `ai_influencer_prepare` puis
+`ai_influencer_generate`, palier `normal`, traits explicites et
+`randomize = false`, un brief « étudiante ordinaire, pas un mannequin,
+pores, sans maquillage, photo de téléphone » : **1,125 crédit la fiche**.
+La fiche est un casting sur fond blanc (visage + pied), pas une photo
+d'atelier : les cinq vues sont refaites par Nano Banana Pro (Fal, 2K,
+0,15 $) avec la fiche en référence, la face d'abord, puis les quatre autres
+avec la face ET la fiche (même visage, même chambre, même tenue). Deux
+pièges vus : un « selfie » où elle TIENT un téléphone (le téléphone est la
+caméra, le dire), et des affiches au mur avec des lettres inventées (un
+tell d'IA qui repasserait dans chaque vidéo en décor « persona » : les
+redemander sans lettres). Les lunettes demandées sur la fiche d'Elif ont
+fini posées sur sa cuisse : abandonnées. **Jade** (`37ace51e`,
+européenne, chambre blanche, cardigan beige) et **Elif** (`776c62f5`,
+Moyen-Orient, chambre beige à la lampe, sweat kaki) : 2,25 crédits
+Higgsfield et 1,80 $ Fal pour les deux.
+
+**Regarder une image ou une vidéo depuis l'environnement de travail** : le
+proxy bloque `supabase.co` et le CDN de Higgsfield, pas `fal.media`.
+`ugc-video` `{ action: "apercu", chemins }` recopie les fichiers du bucket sur
+le CDN Fal (image réduite en `resize=contain` ; sans hauteur, le rendu du
+Storage recadre au centre) ; on les télécharge ensuite et ffmpeg en tire les
+images d'une vidéo.
+
+**Piège de lecture des journaux Edge** : le runtime écrit `shutdown` (raison
+`EarlyDrop`) ~10 s après la réponse alors qu'une tâche `waitUntil` continue.
+Le 06/10, j'ai cru un import mort sur ce seul journal et passé l'atelier en
+synchrone ; l'import avait fini en ~3 min (vidéo de 33 s), au-delà des 150 s
+d'une requête. Retour à la tâche de fond le jour même. Vérifier la ligne en
+base avant de conclure à une mort.
+
+**Pas de démo n'est pas une démo à 0 s.** `Number(null)` vaut 0 : la page
+envoie `demo_debut_s: null` quand il n'y a pas de démo, et `modele_couper`
+lisait une démo à 0 s, donc l'OCR de la « démo » relisait la légende de la
+réaction (@studyywithsachii, 06/10). `lireDebutDemo` rend null pour null,
+absent ou vide, et une démo qui commence avant la fin de la réaction est
+refusée.
+
+**Déploiement du 06/10** : migrations 0308 (tables neuves seulement, plus
+`ugc_modeles.erreur` ajoutée dans la foulée) et 0309 appliquées,
+`ugc-video` en chargeur (**v13**) sur `1120156`, alias `je`, test de vie
+`401` passé à chaque version. Aucun autre chargeur n'a bougé : le moteur ne
+tire ni `ugc_video.ts`, ni `mp4_metadonnees.ts`, ni `image_metadonnees.ts`.
+La page `/admin/ugc/atelier` n'est en production qu'après fusion dans
+`main`. Test de plomberie sur un tutoriel Gizmo (import, planche, coupe) :
+bon, et la coupe vide était juste, personne n'y est filmé. Modèle archivé.
+
+**Le premier modèle réel** (`b557fc8d`, @etudiant_pass 7679514675842682134,
+« Pov t'arrives a apprendre 150 pages… la méthode aistote ») : réaction de
+0 à 5,919 s, OCR exact, cinq langues. Six rendus en décor « persona » :
+Clara (v2.6 pro et v3 pro), Inès, Léa, Manon, A (v2.6 pro). Visages stables,
+mains propres, 1040×1984 à 30 i/s, muet — **mais aucun n'a de sens** : le
+temps fort de la source est la fermeture de l'iPad (1,6 → 4 s), et Kling ne
+l'a reproduite nulle part (voir plus haut). J'avais livré ces rendus en
+écrivant « le geste passe partout » après une planche à une image par
+seconde, qui montre des mains et des visages, pas une action. Adrien l'a vu
+tout de suite. **Une revue de rendu se fait à 5 images par seconde, à côté
+de la source, en suivant le temps fort.** v3 pro ne se distingue pas de v2.6
+pro pour 40 % de plus. 0,796 $ le rendu (6 s), ~6,2 $ dépensés sur ce
+modèle, triptyque d'Inès et deux images perdues au délai de 120 s compris.
+
+**Remplacer la personne dans la vidéo d'origine** (essai du 06/10, à la
+main, rien dans `ugc-video`) : `fal-ai/kling-video/o1/video-to-video/edit`
+avec le persona en `elements` (face + trois angles) et un prompt qui fait
+trois choses en un passage : la personne devient le persona, le texte
+incrusté disparaît, la chambre change un peu (murs beiges, un cadre, une
+guirlande). **L'iPad se ferme vraiment**, puisque le mouvement vient de la
+vraie vidéo ; texte effacé, visage proche de Léa (un peu plus fin), cadrage
+un peu plus large que la source, 1080×1920 à 24 i/s, 5,7 s pour 5,9.
+0,168 $/s, ~1 $ la vidéo. Il exige 720 px de large au moins : la réaction
+de 576×1024 a été agrandie avant. La sortie porte, comme motion control,
+`udta` et le SEI `kling-ai`, retirés par `mp4SansMetadonnees`. Autres
+candidats lus et non essayés : `fal-ai/wan/v2.2-14b/animate/replace`
+(0,04 à 0,08 $ la seconde, garde le décor tel quel et ne retire pas le
+texte), `decart/lucy-edit/pro` (0,15 $/s, sans image de référence).
+
+**Une réaction sans objet par motion control** (même jour, `a349f4ae`,
+@studyywithsachii 7689196881917906189, 318 000 vues, « …using the Aistote
+method… » ; persona A) : l'attitude passe (mains sur les hanches, yeux
+fermés, menton levé, tête qui se balance, au même tempo que la source une
+fois calée), et l'iPad posé à plat reste à sa place. Deux défauts :
+
+- **le geste près de l'objectif est avalé** : la source ouvre sur 2,5 s de
+  bras qui balaie l'image tout près de la caméra ; Kling les a ramassées en
+  ~0,5 s et rendu 5,3 s pour 7,8. La garde des 85 % l'a refusé (`echec`) ;
+- **l'image de départ a perdu A** : la première frame est un bras flou en
+  plein mouvement, et Nano Banana en a fait une autre fille (blonde, traits
+  différents) en mains jointes, cadrée au centre comme en studio. Rien ne
+  compare aujourd'hui le visage de l'image de départ à celui du persona.
+
+Une réaction se choisit donc sans objet manipulé ET sans geste collé à
+l'objectif, et sa première frame doit être nette.
+
+**La coupe vient de la vidéo, pas de l'image** (même jour, Jade sur la même
+réaction, à la main). Deux images de départ très différentes (A en mains
+jointes, Jade bras croisés) ont donné **exactement 159 images, 5,3 s** :
+Kling écarte toujours les mêmes images de la vidéo de référence, celles où
+le bras cache la personne (sa doc demande « upper body visible, without
+obstruction »). On ne l'évite pas en soignant l'image de départ ; on l'évite
+en coupant la réaction après le geste, ou par le remplacement Kling O1, qui
+garde la vidéo entière. Jade, elle, est restée Jade du début à la fin
+(visage, cardigan, chambre, iPad) : un persona AI Influencer tient mieux
+l'identité que A. Une seconde image de départ, avec la pose décrite mot à
+mot, a eu les bras justes mais un autre visage, un plan plus large et un
+portable à la place de l'iPad : écartée. ~1,05 $ (deux images + Kling).
+
+**Genjutsu de Higgsfield** (`hf_mult_motion_control`, essai du même jour,
+même image de départ de Jade). Prix lus par `get_cost` (rien n'est lancé) :
+**~7 crédits/s en 720p, ~11 en 1080p, ~3 en 480p, 4 s facturées au
+minimum** — 56 crédits la réaction de 7,8 s en 720p, 88 en 1080p, 24 en
+480p ; le remplacement (`hf_mult_replace_object`) coûte pareil. Sur
+Starter (~0,07 $ le crédit) : ~4 $ la vidéo en 720p, contre ~1 $ sur Fal.
+Essai en 480p (24 crédits, ~1,70 $) : **la vidéo entière est gardée**
+(8,04 s pour 7,78), le balayage du bras compris, le mouvement suit la
+source image par image, le texte incrusté disparaît. Mais Genjutsu garde la
+SCÈNE de la vidéo (la penderie de la source, recolorée) et pas la chambre
+de l'image, ajoute les lunettes que la source porte sur la tête, et tient
+le visage de Jade moins bien que Nano Banana + Kling. C'est un
+remplacement de personne, de la famille de Kling O1 (~1,30 $ la vidéo en
+1080×1920 sur Fal), pas un motion control. Le CDN de Higgsfield est
+bloqué ici : la vidéo revient par un `trim-video` Fal sur toute sa durée,
+qui la ré-encode (x264, retiré par `mp4SansMetadonnees`). Un plan plus
+gros ne change pas le classement : le crédit tombe à 0,033 € (ULTRA
+annuel) au mieux, soit ~1,85 € la vidéo en 720p, et une recharge coûte le
+même prix quel que soit le plan (~0,0475 € le crédit, 90 jours).
+
+**Kling O1 avec Jade sur la même réaction** (à la main, ~1,30 $) : le
+meilleur des trois. Vidéo entière (7,71 s pour 7,77, 1080×1920 à 24 i/s),
+le balayage du bras près de l'objectif compris, mains sur les hanches,
+menton levé et tête qui se balance au même tempo que la source ; texte
+effacé, pas de lunettes (le prompt les interdit, Genjutsu les avait
+ajoutées). Et **la chambre est celle de Jade**, pas celle de la source :
+fenêtre, affiches noir et blanc, plante, bureau, là où le prompt ne
+demandait qu'un changement léger. Avec une vue de face prise dans sa
+chambre, `elements` emporte le décor avec le visage. Le visage tient
+(sourcils, grain de beauté sur la joue, yeux), le cadrage est celui du
+selfie de Jade, un peu plus large que la source. Ce qui se perd : l'iPad
+posé à plat au premier plan, que la scène de Jade n'a pas. Sur ce chemin,
+un objet de la source n'est gardé que si la chambre du persona peut le
+porter. Le SEI `kling-ai` était cette fois APRÈS la tranche IDR dans le
+premier échantillon : `mp4SansMetadonnees` le retire quand même (185
+images identiques au `framemd5`).
+
+**Pièges du MCP, précisés le 06/10** : `drop policy if exists`, même sur une
+table qui n'existe pas encore, fait attendre une confirmation humaine et la
+migration meurt à 60 s sans rien appliquer. Une migration qui crée ses tables
+crée leurs policies sans `drop`.
+
+**Fal `extract-nth-frame`** rend des images réparties uniformément de 0 à la
+fin, pas toutes les N images : mesuré sur une vidéo rouge/vert/bleu d'1 s
+chacune, 8 images pour 3 s (3 rouges, 2 vertes, 3 bleues). `instantsPlanche`
+les date ainsi.
+
+## Comptes vidéo AI UGC : @eva.learn, la première vidéo (0310, 06/10/2026)
+
+Décisions d'Adrien du 06/10, après les quatre essais sur @studyywithsachii :
+**on garde Genjutsu** (Higgsfield), pas Kling O1 ni Nano Banana + Kling, et
+**en 480p** ; un compte vidéo est un compte créateur **classique, sauf qu'il
+reçoit UNE vidéo par jour**, un MP4 complet. Quand la source a une démo de
+l'appli, Adrien envoie la démo en second MP4.
+
+**Le modèle de données.** `ugc_publications` (0310) : le compte, le jour, la
+vidéo (`video_url` recopiée, bucket public), la démo facultative, le texte à
+coller dans la langue du compte, la capture de la vidéo d'origine qui montre
+où le poser, la légende, publié + lien TikTok. Une par compte et par jour
+(index unique, une annulée libère le jour). Le créateur lit les siennes (RLS
+par `comptes.poster_id`) et n'écrit que par `ugc_publication_marquer(id,
+url)` : lien TikTok exigé, url nulle pour dépublier, rien rendu quand elle
+refuse (le front le lit comme un refus). Ni le lien du TikTok d'origine ni
+le compte source n'y sont, comme dans `posts_poster`.
+
+**Pourquoi pas `posts`** : le quota du jour, la recharge (`revoquer-post`
+réassignerait un SLIDESHOW), le relevé et la qualification lisent tous
+`passages` et des slides d'images. Un post vidéo y serait un intrus que
+chaque chemin devrait apprendre à sauter.
+
+**Le moteur ne voit pas un compte vidéo, et ça tient à deux choses** :
+aucun label (l'assignation journaliserait « aucun label » et passerait), et
+**un warmup vide** (`warmup_ends_at` nul : l'assignation, le relevé et la
+qualification ne prennent que les comptes sortis de warmup). La page du
+créateur cache la carte warmup d'un compte `ugc_ai_video`. **Ne pas démarrer
+son warmup, ne pas lui donner de label** : avec un label, il recevrait des
+slideshows. `comptes.ugc_ai_video` (colonne dormante depuis le 14/09) est
+réutilisée pour le marquer.
+
+**Le calendrier du créateur** mêle ses vidéos à ses posts
+(`entreeCalendrierUgc` : même « Aujourd'hui », mêmes retards, même grille) et
+ouvre `/ugc/:id` (`PosterUgcPage`) : la vidéo, l'enregistrer (feuille de
+partage sur iPhone, fichier chargé dès l'ouverture), « la vidéo est muette,
+ajoute un son tendance », la démo s'il y en a une, le texte à coller (taper
+pour copier) avec la capture, la légende, le lien du post publié.
+
+**Le chemin d'une vidéo, aujourd'hui à la main** :
+1. Genjutsu (`hf_mult_motion_control`, 480p, ~3 crédits/s, 24 la vidéo de
+   7,8 s) lancé depuis la session de travail par le MCP Higgsfield : l'Edge
+   n'a pas de clé Higgsfield ;
+2. la vidéo revient par un `trim-video` Fal sur toute sa durée (le CDN
+   Higgsfield est bloqué ici), puis sur le CDN Fal ;
+3. `ugc-video` `{ action: "video_importer", url, genre: "rendu", moteur:
+   "genjutsu-480p" }` la rapatrie, retire les métadonnées, la range sous
+   `ugc/rendus/externes/<id>/reaction.mp4` + `media_library`. Une démo :
+   `genre: "demo", langue`, sous `ugc/demos/` + `ugc_demos` ;
+4. un `insert` dans `ugc_publications` (texte pris dans
+   `ugc_modeles.traductions`, capture = `image_ref_path`).
+Rien ne la crée tout seul chaque jour : l'automatiser (et la montrer dans le
+calendrier admin) est le prochain lot. Pas de relevé des vues non plus : le
+relevé ne lit que `passages`.
+
+**@eva.learn** (compte `fd30e4af`, créé le 06/10) : login `eva@micabo.app`
+(poster `5a7dece1`, créé par `manage-users` `create` avec `type_compte:
+"aucun"`, le mot de passe a été donné à Adrien, pas écrit ici), compte en
+**français** (choix d'Adrien), persona **Jade** (`37ace51e`), nom affiché Eva,
+photo de profil de Jade, une vidéo par jour, aucun label, warmup vide. Le
+compte a été inséré en SQL : `manage-users` ne crée un premier compte qu'en
+consommant la file des labels. Première vidéo, **pour le 06/10**
+(`d4dbe23b`) : la réaction Genjutsu 480p de Jade (8,04 s, 1,27 Mo, media
+`0c564eb1`), le texte français de `a349f4ae` (« …utilisait l'appli
+micabo… »), légende « j’adore trop cette méthode de révision 📚 #revisions
+#etudiant #partiels #studytok ». La capture montre le texte d'origine
+(« Aistote method ») : c'est le modèle de placement, comme la photo
+d'origine d'un slideshow.
+
+**Déploiement du 06/10** : migration 0310 appliquée, `ugc-video` **v14** sur
+`14209ee` (alias `je`), test de vie `401` passé. Aucun chargeur du moteur n'a
+bougé. La page créateur n'est en production qu'après fusion dans `main`.
+
 ## Tierlist des slideshows (0250, en prod depuis le 11/09/2026)
 
 Un slideshow porte **un tier** (`contenus.tier` : D, C, B, A, S, S+) et un
