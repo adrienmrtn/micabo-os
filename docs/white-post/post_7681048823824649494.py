@@ -140,7 +140,7 @@ SLIDES = [
                 "tr": "tüm tetikleyicileri kapattım",
             }},
             {"id": "p1", "x": 451, "align": "right", "base": 549, "size": 42, "pitch": 48, "w": 420, "text": {
-                "fr": "j’ai littéralement 0 notification activée sur toutes mes messageries",
+                "fr": "j’ai littéralement 0\nnotification activée\nsur toutes mes applis\nde messagerie",
                 "de": "ich hab bei all meinen Messengern echt 0 Mitteilungen an",
                 "tr": f"tüm mesajlaşma uygulamalarımda açık bildirim sayısı resmen{NB}0",
             }},
