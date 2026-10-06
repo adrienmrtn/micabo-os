@@ -1,5 +1,5 @@
 """White post @amayareading 7691007701127564576 — « 10/10 hobbies to make you
-dangerously disciplined » (796 800 vues), rendu en FR et en DE.
+dangerously disciplined » (796 800 vues), rendu en FR, DE et TR.
 
 La slide 4 d'origine est une publicité ReadUp : elle devient la slide micabo,
 avec la capture de l'appli de la langue (`captures`). Les autres slides gardent
@@ -8,7 +8,7 @@ leurs photos au pixel près ; seul le texte est réécrit.
 Soulignés entre crochets. Brand : « l’appli micabo » (fr), « die micabo-App »
 (de), toujours en minuscules. Aucun tiret long.
 
-    python3 -I post_7691007701127564576.py <slides_origine/> <capture_fr.jpg> <capture_de.jpg> <sortie/>
+    python3 -I post_7691007701127564576.py <slides_origine/> <capture_fr.jpg> <capture_de.jpg> <capture_tr.jpg> <sortie/> [fr,de,tr]
 
 `slides_origine/` contient s1.jpg … s6.jpg (le scrape Apify du post, dans
 l'ordre). La sortie reçoit <langue>/<n>.jpg, sans aucune métadonnée.
@@ -68,7 +68,32 @@ T = {
       "bleib noch 20 bis 30 Minuten dran, [auch wenn] du dich gelangweilt oder abgelenkt fühlst",
       "du lernst nicht nur den Stoff, du trainierst dich, [dranzubleiben, wenn die Motivation verschwindet]"],
  },
+ "tr": {
+  1: ["seni tehlikeli derecede disiplinli yapacak 10/10 hobi", "(nörobilim onaylı)"],
+  2: ["[sabahları] spor yap",
+      "kortizol seviyen [sabahları zirvede olur] ve güne nasıl başladığın [günün geri kalanının havasını belirler]",
+      "spor yapmak sana [hazzı ertelemeyi] öğretir, hem de [kısa videolarla] dönen bir dünyada",
+      "[rahatsızlık] [rutinin bir parçası] olunca disiplin kolaylaşır"],
+  3: ["[zor bir enstrüman] öğren",
+      "piyano, gitar, davul, hangisi olursa olsun [acemilik dönemini atlayamazsın]",
+      "ilerleme, [sıkıcı temelleri] otomatikleşene kadar [tekrar etmekten] gelir",
+      "sana [sabrı, istikrarı ve hazzı ertelemeyi] çoğu verimlilik tavsiyesinden daha iyi öğretir"],
+  4: ["[her gün] biraz ders çalış",
+      "konuları [önceden tekrar edeceğini] söylüyorsun ama sonunda [her şeyi sınavdan önceki gece] çalışıyorsun",
+      "[ben de aynıydım], ta ki micabo uygulamasını bulana kadar: [ders notlarımı bilgi kartlarına çeviriyor], ben de günde 10 dakika tekrar ediyorum",
+      "hafızanı, düzenini ve [motivasyon yokken bile çalışmaya devam etme] becerini geliştirir"],
+  5: ["bir dövüş sporu yap",
+      "[sürekli düzeltilirsin], tekniğin kötüyse hemen belli olur ve [yorgunken bile] devam etmek zorundasın",
+      "dövüş sporları sana [baskı altında sakin kalmayı] öğretir",
+      "işler zorlaşınca hemen bırakmak yerine"],
+  6: ["[istediğinden daha uzun] çalış",
+      "işin en faydalı kısmı genelde [beynin bırakmak istediğinde] başlar",
+      "sıkıldığını ya da dağıldığını hissettikten [sonra] 20-30 dakika daha devam et",
+      "sadece konuyu öğrenmiyorsun, kendini [motivasyon kaybolduğunda bile devam etmeye] alıştırıyorsun"],
+ },
 }
+
+
 P = 48.5
 
 
@@ -109,9 +134,10 @@ def specs(lang, captures):
     }
 
 if __name__ == "__main__":
-    origine, cap_fr, cap_de, sortie = (Path(a) for a in sys.argv[1:5])
-    captures = {"fr": str(cap_fr), "de": str(cap_de)}
-    for lang in ("fr", "de"):
+    origine, cap_fr, cap_de, cap_tr, sortie = (Path(a) for a in sys.argv[1:6])
+    captures = {"fr": str(cap_fr), "de": str(cap_de), "tr": str(cap_tr)}
+    langues = sys.argv[6].split(",") if len(sys.argv) > 6 else ["fr", "de", "tr"]
+    for lang in langues:
         (sortie / lang).mkdir(parents=True, exist_ok=True)
         for n, spec in specs(lang, captures).items():
             fichier = sortie / lang / f"{n}.jpg"

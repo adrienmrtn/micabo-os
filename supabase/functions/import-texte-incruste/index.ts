@@ -18,6 +18,11 @@
  *     langues: { fr: { images: [url…], hashtags? }, de: { … } }
  *   }
  *
+ * Avec `contenu_id` (et `langues` seulement), la fonction AJOUTE des langues à
+ * un white post existant (0307) au lieu d'en créer un : même nombre d'images
+ * que sa structure, et une langue qui a déjà son deck est refusée. Le statut
+ * du contenu ne bouge pas.
+ *
  * Les images sont des JPEG ; leurs métadonnées sont retirées (EXIF, XMP, ICC,
  * C2PA…) avant d'entrer dans le storage. Une URL `api.apify.com` est lue avec le
  * jeton Apify (`downloadMedia`).
@@ -36,6 +41,7 @@ import { assertAuthorised, json, messageErreur, serviceClient } from "../_shared
 const BUCKET = "medias";
 
 interface CorpsImport {
+  contenu_id?: string | null;
   source_url?: string;
   handle?: string | null;
   titre?: string;
@@ -53,6 +59,81 @@ function erreur(message: string, status = 400): Response {
   return json({ ok: false, error: message }, status);
 }
 
+type Supabase = ReturnType<typeof serviceClient>;
+type LangueImport = { langue: string; images: string[]; hashtags: string };
+type MediaRange = { id: string; langue: string; position: number; storage_path: string; url: string };
+
+/** Télécharge, retire les métadonnées et range chaque image dans le storage.
+ *  `ranges` est rempli au fil de l'eau : l'appelant le vide en cas d'échec. */
+async function rangerImages(
+  supabase: Supabase,
+  contenuId: string,
+  langues: LangueImport[],
+  ranges: string[],
+): Promise<MediaRange[]> {
+  const medias: MediaRange[] = [];
+  for (const l of langues) {
+    for (const [i, url] of l.images.entries()) {
+      const position = i + 1;
+      const octets = jpegSansMetadonnees(await downloadMedia(url));
+      const chemin = cheminIncruste(contenuId, l.langue, position);
+      const { error: errUp } = await supabase.storage.from(BUCKET).upload(chemin, octets, {
+        contentType: "image/jpeg",
+        upsert: false,
+        cacheControl: "3600",
+      });
+      if (errUp) throw new Error(`upload ${chemin} : ${errUp.message}`);
+      ranges.push(chemin);
+      medias.push({
+        id: crypto.randomUUID(),
+        langue: l.langue,
+        position,
+        storage_path: chemin,
+        url: supabase.storage.from(BUCKET).getPublicUrl(chemin).data.publicUrl,
+      });
+    }
+  }
+  return medias;
+}
+
+/** Ajout de langues à un white post existant (0307). */
+async function ajouterLangues(supabase: Supabase, contenuId: string, langues: LangueImport[]): Promise<Response> {
+  const { data: contenu, error: errC } = await supabase
+    .from("contenus")
+    .select("id, statut, texte_incruste, structure_slides")
+    .eq("id", contenuId)
+    .maybeSingle();
+  if (errC) return erreur(messageErreur(errC), 500);
+  if (!contenu) return erreur("contenu introuvable", 404);
+  if (!contenu.texte_incruste) return erreur("ce contenu n'est pas à texte incrusté");
+  const n = Array.isArray(contenu.structure_slides) ? contenu.structure_slides.length : 0;
+  const inegale = langues.find((l) => l.images.length !== n);
+  if (inegale) return erreur(`le contenu a ${n} slides, ${inegale.langue} en apporte ${inegale.images.length}`);
+
+  const { data: decks, error: errD } = await supabase
+    .from("contenu_langues")
+    .select("langue")
+    .eq("contenu_id", contenuId);
+  if (errD) return erreur(messageErreur(errD), 500);
+  const deja = langues.filter((l) => (decks ?? []).some((d) => d.langue === l.langue)).map((l) => l.langue);
+  if (deja.length > 0) return json({ ok: false, error: "langue déjà présente", langues: deja }, 409);
+
+  const ranges: string[] = [];
+  try {
+    const medias = await rangerImages(supabase, contenuId, langues, ranges);
+    const { error: errRpc } = await supabase.rpc("ajouter_langues_texte_incruste", {
+      p_contenu_id: contenuId,
+      p_medias: medias,
+      p_decks: langues.map((l) => ({ langue: l.langue, hashtags: l.hashtags })),
+    });
+    if (errRpc) throw errRpc;
+  } catch (e) {
+    if (ranges.length > 0) await supabase.storage.from(BUCKET).remove(ranges).catch(() => null);
+    return erreur(messageErreur(e), 500);
+  }
+  return json({ ok: true, contenuId, statut: contenu.statut, slides: n, ajoutees: langues.map((l) => l.langue) });
+}
+
 Deno.serve(async (request) => {
   const denied = await assertAuthorised(request);
   if (denied) return denied;
@@ -65,14 +146,18 @@ Deno.serve(async (request) => {
     return erreur("corps JSON illisible");
   }
 
-  const sourceUrl = String(corps.source_url ?? "").trim();
-  if (!sourceUrl) return erreur("source_url requis");
-  const langues = Object.entries(corps.langues ?? {}).map(([langue, v]) => ({
+  const langues: LangueImport[] = Object.entries(corps.langues ?? {}).map(([langue, v]) => ({
     langue: langue.trim().toLowerCase(),
     images: (v?.images ?? []).map((u) => String(u).trim()).filter(Boolean),
     hashtags: (v?.hashtags ?? "").trim(),
   }));
   if (langues.length === 0) return erreur("au moins une langue requise");
+
+  const contenuExistant = String(corps.contenu_id ?? "").trim();
+  if (contenuExistant) return await ajouterLangues(serviceClient(), contenuExistant, langues);
+
+  const sourceUrl = String(corps.source_url ?? "").trim();
+  if (!sourceUrl) return erreur("source_url requis");
   const n = langues[0]!.images.length;
   if (n === 0) return erreur("aucune image");
   const inegale = langues.find((l) => l.images.length !== n);
@@ -160,31 +245,10 @@ Deno.serve(async (request) => {
   const tier: Tier | null = estTier(corps.tier) ? corps.tier : tierImport(note, vues);
 
   const contenuId = crypto.randomUUID();
-  const medias: Array<{ id: string; langue: string; position: number; storage_path: string; url: string }> = [];
   const ranges: string[] = [];
 
   try {
-    for (const l of langues) {
-      for (const [i, url] of l.images.entries()) {
-        const position = i + 1;
-        const octets = jpegSansMetadonnees(await downloadMedia(url));
-        const chemin = cheminIncruste(contenuId, l.langue, position);
-        const { error: errUp } = await supabase.storage.from(BUCKET).upload(chemin, octets, {
-          contentType: "image/jpeg",
-          upsert: false,
-          cacheControl: "3600",
-        });
-        if (errUp) throw new Error(`upload ${chemin} : ${errUp.message}`);
-        ranges.push(chemin);
-        medias.push({
-          id: crypto.randomUUID(),
-          langue: l.langue,
-          position,
-          storage_path: chemin,
-          url: supabase.storage.from(BUCKET).getPublicUrl(chemin).data.publicUrl,
-        });
-      }
-    }
+    const medias = await rangerImages(supabase, contenuId, langues, ranges);
 
     const { error: errRpc } = await supabase.rpc("creer_contenu_texte_incruste", {
       p_contenu: {

@@ -24,4 +24,4 @@ if (!src.includes("Deno.serve") || !src.includes("burn_analyses")) {
 }
 // esbuild renomme l'alias d'un rebuild à l'autre : relire le
 // `import{createClient as …}` du bundle avant de l'effacer, et reporter le nom ici.
-new Function("re", src)(createClient);
+new Function("ne", src)(createClient);

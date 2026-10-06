@@ -115,12 +115,21 @@ def rendre(spec: dict, source: str | None, sortie: str) -> list[dict]:
                             "fin": round(x + largeur, 1)})
             derniere[bloc.get("id", "")] = base
     m = masque.resize((W, H), Image.BOX)
-    img = Image.new("RGB", (W, H), (fond, fond, fond))
+    src = Image.open(source).convert("RGB") if source else None
+    if spec.get("fond_source") and src is not None:
+        # On part de la slide d'origine : tout ce qui n'est pas du texte (photos,
+        # logos, pictos) reste au pixel près. Seuls les blocs de texte d'origine
+        # sont effacés, puis le nouveau texte est posé dessus.
+        img = src.copy()
+        dimg = ImageDraw.Draw(img)
+        for x0, y0, x1, y1 in spec.get("effacer", []):
+            dimg.rectangle([x0, y0, x1, y1], fill=(fond, fond, fond))
+    else:
+        img = Image.new("RGB", (W, H), (fond, fond, fond))
     noir = Image.new("RGB", (W, H), tuple(spec.get("color", (0, 0, 0))))
     img = Image.composite(noir, img, m)
 
-    if source:
-        src = Image.open(source).convert("RGB")
+    if src is not None:
         for p in spec.get("photos", []):
             box = tuple(p["box"])
             dst = tuple(p.get("to", box[:2]))
