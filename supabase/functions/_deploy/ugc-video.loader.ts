@@ -5,7 +5,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "cadf9aaae05178b705951b98d284843f3293b4f7";
+const SHA = "56233ae67ac151357c090d89e8b0e0b236320851";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/ugc-video.bundle.js`;
 
@@ -19,4 +19,4 @@ if (!src.includes("Deno.serve") || !src.includes("fal_status_url")) {
 }
 // esbuild renomme l'alias d'un rebuild à l'autre : relire le
 // `import{createClient as …}` du bundle avant de l'effacer, et reporter le nom ici.
-new Function("Oe", src)(createClient);
+new Function("Ie", src)(createClient);
