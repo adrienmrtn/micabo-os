@@ -7,14 +7,14 @@
  *   { action: "persona_creer", nom, images: { face, left, right, down, profil }, prompt? }
  *       → ugc_personas. Une image = un chemin du bucket ou une URL.
  *   { action: "modele_importer", url }
- *       → ugc_modeles : Apify (vidéo), planche d'images,
+ *       → ugc_modeles. En tâche de fond : Apify (vidéo), planche d'images,
  *         coupe proposée par un modèle de vision.
  *   { action: "modele_couper", id, debut_s, fin_s, demo_debut_s? }
- *       → segment réaction (Fal, sans recodage), image de
+ *       → en tâche de fond : segment réaction (Fal, sans recodage), image de
  *         départ, la même sans texte, OCR des deux segments. Statut `pret`.
  *   { action: "modele_textes", id, textes }
  *   { action: "rendu_lancer", modele_id, persona_id, moteur?, decor? }
- *       → ugc_rendus : Nano Banana (le persona dans l'image
+ *       → ugc_rendus. En tâche de fond : Nano Banana (le persona dans l'image
  *         de départ), puis soumission Kling motion control. Kling met plusieurs
  *         minutes : la fonction ne l'attend pas.
  *   { action: "rendus_suivre" }
@@ -125,12 +125,19 @@ async function imagePropre(supabase: Supabase, source: string): Promise<{ octets
 }
 
 /**
- * Pas de tâche de fond : le 06/10, un import passé à `EdgeRuntime.waitUntil`
- * a été coupé par le runtime ~10 s après la réponse (`shutdown`, raison
- * `EarlyDrop`), au milieu d'un dépôt Storage, sans que le `catch` puisse
- * écrire l'erreur. Chaque action tient sous ~90 s : elle tourne dans la
- * requête, et seul Kling (plusieurs minutes) est relevé à part.
+ * Les étapes longues tournent après la réponse : l'import d'une vidéo de
+ * 33 s a pris ~3 min le 06/10 (Apify, hébergement Fal, planche, modèle de
+ * vision), au-delà des 150 s d'une requête. L'écran relit les tables.
+ *
+ * Piège de lecture des journaux : le runtime écrit `shutdown` (raison
+ * `EarlyDrop`) ~10 s après la réponse alors que la tâche continue. Ce
+ * n'est pas une mort : vérifier la ligne en base avant de conclure.
  */
+function enArrierePlan(travail: Promise<unknown>): void {
+  const edge = (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  const p = travail.catch((e) => console.error("ugc-video (fond)", messageErreur(e)));
+  if (edge) edge.waitUntil(p);
+}
 
 /** `sub` du JWT admin (déjà vérifié par assertAuthorised), sinon null. */
 function auteurDe(request: Request): string | null {
@@ -657,7 +664,7 @@ Deno.serve(async (request) => {
           (m.erreur || Date.now() - new Date(String(m.updated_at)).getTime() > IMPORT_ABANDON_MS);
         if (!perdu) return json({ ok: true, id: existant.id, deja: true });
         await majModele(supabase, existant.id as string, { erreur: null });
-        await importerModele(supabase, existant.id as string, url);
+        enArrierePlan(importerModele(supabase, existant.id as string, url));
         return json({ ok: true, id: existant.id, relance: true });
       }
       const { data, error } = await supabase
@@ -666,7 +673,7 @@ Deno.serve(async (request) => {
         .select("id")
         .single();
       if (error || !data) throw new Error(`ugc_modeles : ${error?.message ?? "?"}`);
-      await importerModele(supabase, data.id as string, url);
+      enArrierePlan(importerModele(supabase, data.id as string, url));
       return json({ ok: true, id: data.id });
     }
 
@@ -682,7 +689,7 @@ Deno.serve(async (request) => {
       }
       const demo = Number.isFinite(Number(body.demo_debut_s)) ? Number(body.demo_debut_s) : null;
       await majModele(supabase, id, { erreur: null, statut: "a_couper" });
-      await couperModele(supabase, id, debut, fin, demo);
+      enArrierePlan(couperModele(supabase, id, debut, fin, demo));
       return json({ ok: true, id });
     }
 
@@ -710,7 +717,7 @@ Deno.serve(async (request) => {
         return json({ error: "Un rendu vivant existe déjà pour ce modèle, ce persona, ce moteur et ce décor" }, 409);
       }
       if (error || !data) throw new Error(`ugc_rendus : ${error?.message ?? "?"}`);
-      await lancerRendu(supabase, data.id as string);
+      enArrierePlan(lancerRendu(supabase, data.id as string));
       return json({ ok: true, id: data.id });
     }
 

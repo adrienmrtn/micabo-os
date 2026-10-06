@@ -259,6 +259,13 @@ le CDN Fal (image réduite en `resize=contain` ; sans hauteur, le rendu du
 Storage recadre au centre) ; on les télécharge ensuite et ffmpeg en tire les
 images d'une vidéo.
 
+**Piège de lecture des journaux Edge** : le runtime écrit `shutdown` (raison
+`EarlyDrop`) ~10 s après la réponse alors qu'une tâche `waitUntil` continue.
+Le 06/10, j'ai cru un import mort sur ce seul journal et passé l'atelier en
+synchrone ; l'import avait fini en ~3 min (vidéo de 33 s), au-delà des 150 s
+d'une requête. Retour à la tâche de fond le jour même. Vérifier la ligne en
+base avant de conclure à une mort.
+
 **Pièges du MCP, précisés le 06/10** : `drop policy if exists`, même sur une
 table qui n'existe pas encore, fait attendre une confirmation humaine et la
 migration meurt à 60 s sans rien appliquer. Une migration qui crée ses tables

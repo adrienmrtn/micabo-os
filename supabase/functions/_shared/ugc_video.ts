@@ -129,6 +129,7 @@ The video has two parts:
 2. then an APP DEMO: a screen recording of a phone app (interface, scrolling, buttons), sometimes with the person small in a corner.
 
 Find the reaction segment: the first and last instants where the person is filmed by the camera and fills the frame, before the app demo starts. Ignore a very first black or transition frame.
+If no person is ever filmed (screen recording only), answer null for debut_s and fin_s and say so in raison.
 
 Answer with JSON only:
 {"debut_s": <number>, "fin_s": <number>, "demo_debut_s": <number or null>, "raison": "<one short sentence>"}`;
