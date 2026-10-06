@@ -241,6 +241,11 @@ au lot 2 avec son exclusion dans `labels_repli.ts`.
   touche pas encore : Clara et Manon avaient perdu l'iPad que la source ferme
   deux secondes plus tard, et leur main se tend vers l'objectif dans le vide.
   Le prompt le dit ; rien ne le vérifie, c'est la validation qui juge.
+- **Kling motion control ne sait pas manipuler un objet.** Il recopie le
+  squelette (bras, mains, visage), pas ce qui arrive à l'iPad : sur le premier
+  modèle, AUCUN des six rendus ne ferme l'iPad (main qui attrape l'objectif,
+  iPad qui reste ouvert, plaque grise qui flotte chez A). Une réaction dont le
+  temps fort est un objet manipulé ne passe pas par ce chemin.
 - **Prix Fal lus le 06/10** : Kling motion control 0,112 $/s (v2.6 pro),
   0,07 (v2.6 standard), 0,168 (v3 pro), 0,126 (v3 standard) ; Nano Banana Pro
   0,15 $ l'image. Une réaction de 6 s revient à ~0,82 $ (v2.6 pro) ou ~1,16 $
@@ -309,9 +314,16 @@ synchrone ; l'import avait fini en ~3 min (vidéo de 33 s), au-delà des 150 s
 d'une requête. Retour à la tâche de fond le jour même. Vérifier la ligne en
 base avant de conclure à une mort.
 
+**Pas de démo n'est pas une démo à 0 s.** `Number(null)` vaut 0 : la page
+envoie `demo_debut_s: null` quand il n'y a pas de démo, et `modele_couper`
+lisait une démo à 0 s, donc l'OCR de la « démo » relisait la légende de la
+réaction (@studyywithsachii, 06/10). `lireDebutDemo` rend null pour null,
+absent ou vide, et une démo qui commence avant la fin de la réaction est
+refusée.
+
 **Déploiement du 06/10** : migrations 0308 (tables neuves seulement, plus
 `ugc_modeles.erreur` ajoutée dans la foulée) et 0309 appliquées,
-`ugc-video` en chargeur (**v11**) sur `b556685`, alias `je`, test de vie
+`ugc-video` en chargeur (**v12**) sur `c92fb89`, alias `je`, test de vie
 `401` passé à chaque version. Aucun autre chargeur n'a bougé : le moteur ne
 tire ni `ugc_video.ts`, ni `mp4_metadonnees.ts`, ni `image_metadonnees.ts`.
 La page `/admin/ugc/atelier` n'est en production qu'après fusion dans
@@ -321,12 +333,48 @@ bon, et la coupe vide était juste, personne n'y est filmé. Modèle archivé.
 **Le premier modèle réel** (`b557fc8d`, @etudiant_pass 7679514675842682134,
 « Pov t'arrives a apprendre 150 pages… la méthode aistote ») : réaction de
 0 à 5,919 s, OCR exact, cinq langues. Six rendus en décor « persona » :
-Clara (v2.6 pro et v3 pro), Inès, Léa, Manon, A (v2.6 pro). Le geste passe
-partout (doigt au menton, main tendue, applaudissement, sourire), visages
-stables, mains propres, 1040×1984 à 30 i/s, muet. **v3 pro ne se distingue
-pas de v2.6 pro sur ce geste** pour 40 % de plus : v2.6 pro reste le défaut.
-0,796 $ le rendu (6 s), ~6,2 $ dépensés sur ce modèle, triptyque d'Inès et
-deux images perdues au délai de 120 s compris.
+Clara (v2.6 pro et v3 pro), Inès, Léa, Manon, A (v2.6 pro). Visages stables,
+mains propres, 1040×1984 à 30 i/s, muet — **mais aucun n'a de sens** : le
+temps fort de la source est la fermeture de l'iPad (1,6 → 4 s), et Kling ne
+l'a reproduite nulle part (voir plus haut). J'avais livré ces rendus en
+écrivant « le geste passe partout » après une planche à une image par
+seconde, qui montre des mains et des visages, pas une action. Adrien l'a vu
+tout de suite. **Une revue de rendu se fait à 5 images par seconde, à côté
+de la source, en suivant le temps fort.** v3 pro ne se distingue pas de v2.6
+pro pour 40 % de plus. 0,796 $ le rendu (6 s), ~6,2 $ dépensés sur ce
+modèle, triptyque d'Inès et deux images perdues au délai de 120 s compris.
+
+**Remplacer la personne dans la vidéo d'origine** (essai du 06/10, à la
+main, rien dans `ugc-video`) : `fal-ai/kling-video/o1/video-to-video/edit`
+avec le persona en `elements` (face + trois angles) et un prompt qui fait
+trois choses en un passage : la personne devient le persona, le texte
+incrusté disparaît, la chambre change un peu (murs beiges, un cadre, une
+guirlande). **L'iPad se ferme vraiment**, puisque le mouvement vient de la
+vraie vidéo ; texte effacé, visage proche de Léa (un peu plus fin), cadrage
+un peu plus large que la source, 1080×1920 à 24 i/s, 5,7 s pour 5,9.
+0,168 $/s, ~1 $ la vidéo. Il exige 720 px de large au moins : la réaction
+de 576×1024 a été agrandie avant. La sortie porte, comme motion control,
+`udta` et le SEI `kling-ai`, retirés par `mp4SansMetadonnees`. Autres
+candidats lus et non essayés : `fal-ai/wan/v2.2-14b/animate/replace`
+(0,04 à 0,08 $ la seconde, garde le décor tel quel et ne retire pas le
+texte), `decart/lucy-edit/pro` (0,15 $/s, sans image de référence).
+
+**Une réaction sans objet par motion control** (même jour, `a349f4ae`,
+@studyywithsachii 7689196881917906189, 318 000 vues, « …using the Aistote
+method… » ; persona A) : l'attitude passe (mains sur les hanches, yeux
+fermés, menton levé, tête qui se balance, au même tempo que la source une
+fois calée), et l'iPad posé à plat reste à sa place. Deux défauts :
+
+- **le geste près de l'objectif est avalé** : la source ouvre sur 2,5 s de
+  bras qui balaie l'image tout près de la caméra ; Kling les a ramassées en
+  ~0,5 s et rendu 5,3 s pour 7,8. La garde des 85 % l'a refusé (`echec`) ;
+- **l'image de départ a perdu A** : la première frame est un bras flou en
+  plein mouvement, et Nano Banana en a fait une autre fille (blonde, traits
+  différents) en mains jointes, cadrée au centre comme en studio. Rien ne
+  compare aujourd'hui le visage de l'image de départ à celui du persona.
+
+Une réaction se choisit donc sans objet manipulé ET sans geste collé à
+l'objectif, et sa première frame doit être nette.
 
 **Pièges du MCP, précisés le 06/10** : `drop policy if exists`, même sur une
 table qui n'existe pas encore, fait attendre une confirmation humaine et la
