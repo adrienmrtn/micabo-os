@@ -457,6 +457,79 @@ fin, pas toutes les N images : mesuré sur une vidéo rouge/vert/bleu d'1 s
 chacune, 8 images pour 3 s (3 rouges, 2 vertes, 3 bleues). `instantsPlanche`
 les date ainsi.
 
+## Comptes vidéo AI UGC : @eva.learn, la première vidéo (0310, 06/10/2026)
+
+Décisions d'Adrien du 06/10, après les quatre essais sur @studyywithsachii :
+**on garde Genjutsu** (Higgsfield), pas Kling O1 ni Nano Banana + Kling, et
+**en 480p** ; un compte vidéo est un compte créateur **classique, sauf qu'il
+reçoit UNE vidéo par jour**, un MP4 complet. Quand la source a une démo de
+l'appli, Adrien envoie la démo en second MP4.
+
+**Le modèle de données.** `ugc_publications` (0310) : le compte, le jour, la
+vidéo (`video_url` recopiée, bucket public), la démo facultative, le texte à
+coller dans la langue du compte, la capture de la vidéo d'origine qui montre
+où le poser, la légende, publié + lien TikTok. Une par compte et par jour
+(index unique, une annulée libère le jour). Le créateur lit les siennes (RLS
+par `comptes.poster_id`) et n'écrit que par `ugc_publication_marquer(id,
+url)` : lien TikTok exigé, url nulle pour dépublier, rien rendu quand elle
+refuse (le front le lit comme un refus). Ni le lien du TikTok d'origine ni
+le compte source n'y sont, comme dans `posts_poster`.
+
+**Pourquoi pas `posts`** : le quota du jour, la recharge (`revoquer-post`
+réassignerait un SLIDESHOW), le relevé et la qualification lisent tous
+`passages` et des slides d'images. Un post vidéo y serait un intrus que
+chaque chemin devrait apprendre à sauter.
+
+**Le moteur ne voit pas un compte vidéo, et ça tient à deux choses** :
+aucun label (l'assignation journaliserait « aucun label » et passerait), et
+**un warmup vide** (`warmup_ends_at` nul : l'assignation, le relevé et la
+qualification ne prennent que les comptes sortis de warmup). La page du
+créateur cache la carte warmup d'un compte `ugc_ai_video`. **Ne pas démarrer
+son warmup, ne pas lui donner de label** : avec un label, il recevrait des
+slideshows. `comptes.ugc_ai_video` (colonne dormante depuis le 14/09) est
+réutilisée pour le marquer.
+
+**Le calendrier du créateur** mêle ses vidéos à ses posts
+(`entreeCalendrierUgc` : même « Aujourd'hui », mêmes retards, même grille) et
+ouvre `/ugc/:id` (`PosterUgcPage`) : la vidéo, l'enregistrer (feuille de
+partage sur iPhone, fichier chargé dès l'ouverture), « la vidéo est muette,
+ajoute un son tendance », la démo s'il y en a une, le texte à coller (taper
+pour copier) avec la capture, la légende, le lien du post publié.
+
+**Le chemin d'une vidéo, aujourd'hui à la main** :
+1. Genjutsu (`hf_mult_motion_control`, 480p, ~3 crédits/s, 24 la vidéo de
+   7,8 s) lancé depuis la session de travail par le MCP Higgsfield : l'Edge
+   n'a pas de clé Higgsfield ;
+2. la vidéo revient par un `trim-video` Fal sur toute sa durée (le CDN
+   Higgsfield est bloqué ici), puis sur le CDN Fal ;
+3. `ugc-video` `{ action: "video_importer", url, genre: "rendu", moteur:
+   "genjutsu-480p" }` la rapatrie, retire les métadonnées, la range sous
+   `ugc/rendus/externes/<id>/reaction.mp4` + `media_library`. Une démo :
+   `genre: "demo", langue`, sous `ugc/demos/` + `ugc_demos` ;
+4. un `insert` dans `ugc_publications` (texte pris dans
+   `ugc_modeles.traductions`, capture = `image_ref_path`).
+Rien ne la crée tout seul chaque jour : l'automatiser (et la montrer dans le
+calendrier admin) est le prochain lot. Pas de relevé des vues non plus : le
+relevé ne lit que `passages`.
+
+**@eva.learn** (compte `fd30e4af`, créé le 06/10) : login `eva@micabo.app`
+(poster `5a7dece1`, créé par `manage-users` `create` avec `type_compte:
+"aucun"`, le mot de passe a été donné à Adrien, pas écrit ici), compte en
+**français** (choix d'Adrien), persona **Jade** (`37ace51e`), nom affiché Eva,
+photo de profil de Jade, une vidéo par jour, aucun label, warmup vide. Le
+compte a été inséré en SQL : `manage-users` ne crée un premier compte qu'en
+consommant la file des labels. Première vidéo, **pour le 06/10**
+(`d4dbe23b`) : la réaction Genjutsu 480p de Jade (8,04 s, 1,27 Mo, media
+`0c564eb1`), le texte français de `a349f4ae` (« …utilisait l'appli
+micabo… »), légende « j’adore trop cette méthode de révision 📚 #revisions
+#etudiant #partiels #studytok ». La capture montre le texte d'origine
+(« Aistote method ») : c'est le modèle de placement, comme la photo
+d'origine d'un slideshow.
+
+**Déploiement du 06/10** : migration 0310 appliquée, `ugc-video` **v14** sur
+`14209ee` (alias `je`), test de vie `401` passé. Aucun chargeur du moteur n'a
+bougé. La page créateur n'est en production qu'après fusion dans `main`.
+
 ## Tierlist des slideshows (0250, en prod depuis le 11/09/2026)
 
 Un slideshow porte **un tier** (`contenus.tier` : D, C, B, A, S, S+) et un
