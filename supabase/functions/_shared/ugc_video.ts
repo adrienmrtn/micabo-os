@@ -264,6 +264,36 @@ export const FORMES_MARQUE_UGC: Record<LangueUgc, string> = {
  * Mêmes règles que les decks : une appli ou une méthode nommée devient micabo
  * (0287), repères scolaires localisés (0297), pas de tiret long (0268).
  */
+/**
+ * La marque et son mot de catégorie, mot par mot, par langue. Les séparateurs
+ * entre ces mots peuvent être un espace, un trait d'union ou un retour à la
+ * ligne : c'est ce que `marqueSurUneLigne` répare.
+ */
+const MOTS_MARQUE_UGC: Record<LangueUgc, RegExp> = {
+  fr: /l['’]appli(?:cation)?(\s+)micabo/giu,
+  de: /micabo-(\s*)App/gu,
+  tr: /micabo(\s+)uygulama\p{L}*/giu,
+  es: /app(\s+)micabo/giu,
+  en: /micabo(\s+)app/giu,
+};
+
+/**
+ * La forme de la marque ne se coupe pas entre deux lignes (« micabo- / App »,
+ * « micabo / uygulamasını », 06/10) : le texte est posé en bloc sur la vidéo,
+ * et la marque coupée se lit mal. Le retour à la ligne est déplacé juste
+ * avant la marque, le nombre de lignes ne change pas.
+ */
+export function marqueSurUneLigne(texte: string, langue: LangueUgc): string {
+  return texte.replace(MOTS_MARQUE_UGC[langue], (forme, sep: string, pos: number, tout: string) => {
+    if (!sep.includes("\n")) return forme;
+    const recollee = forme.replace(sep, langue === "de" ? "" : " ");
+    // L'espace qui précède la marque devient le retour à la ligne.
+    const avant = tout.slice(0, pos);
+    if (/[ \t]$/.test(avant)) return "\u0000" + recollee;
+    return avant === "" || avant.endsWith("\n") ? recollee : "\n" + recollee;
+  }).replace(/[ \t]\u0000/g, "\n");
+}
+
 /** Lignes non vides d'un texte : la forme que le créateur reproduit dans TikTok. */
 export function lignesTexte(texte: string): number {
   return texte.split("\n").filter((l) => l.trim()).length;

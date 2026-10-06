@@ -13,6 +13,7 @@ export {
   idVideoTiktok,
   instantsPlanche,
   LANGUES_UGC,
+  marqueSurUneLigne,
   lireCoupe,
   lireDebutDemo,
   lireTraductionUgc,

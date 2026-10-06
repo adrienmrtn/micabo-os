@@ -60,6 +60,7 @@ import {
   idVideoTiktok,
   instantsPlanche,
   LANGUES_UGC,
+  marqueSurUneLigne,
   type LangueUgc,
   lireCoupe,
   lireDebutDemo,
@@ -414,7 +415,12 @@ async function traduireUne(textes: SegmentTexte[], langue: LangueUgc): Promise<S
     try {
       const sortie = await falLlmTexte({ model, temperature: 0.3, prompt: promptTraductionUgc(textes, langue) });
       const lu = lireTraductionUgc(sortie, textes);
-      if (lu) return lu.map((s) => ({ ...s, texte: s.texte ? nettoyerTexteDeck(s.texte, langue) : "" }));
+      if (lu) {
+        return lu.map((s) => ({
+          ...s,
+          texte: s.texte ? marqueSurUneLigne(nettoyerTexteDeck(s.texte, langue), langue) : "",
+        }));
+      }
       derniere = `réponse illisible ou lignes perdues (${model})`;
     } catch (e) {
       derniere = `${model} : ${messageErreur(e)}`;

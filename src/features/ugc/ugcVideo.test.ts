@@ -5,6 +5,7 @@ import {
   formeConforme,
   formeTraductionTenue,
   lireTraductionUgc,
+  marqueSurUneLigne,
   promptTraductionUgc,
   idVideoTiktok,
   instantsPlanche,
@@ -166,5 +167,24 @@ describe("texte à coller par langue", () => {
 
   it("refuse un segment plein revenu vide, garde un segment vide", () => {
     expect(lireTraductionUgc('{"reaction": "", "demo": ""}', original)).toBeNull();
+  });
+});
+
+describe("la marque ne se coupe pas entre deux lignes", () => {
+  it("déplace le retour à la ligne avant la marque, même nombre de lignes", () => {
+    const de = "in der Bibliothek die micabo-\nApp benutzt hat, also hast";
+    expect(marqueSurUneLigne(de, "de")).toBe("in der Bibliothek die\nmicabo-App benutzt hat, also hast");
+    const tr = "yanındaki kız micabo\nuygulamasını kullanıyordu,";
+    expect(marqueSurUneLigne(tr, "tr")).toBe("yanındaki kız\nmicabo uygulamasını kullanıyordu,");
+    const en = "library was using the micabo\napp, so you tried at home";
+    expect(marqueSurUneLigne(en, "en")).toBe("library was using the\nmicabo app, so you tried at home");
+    const fr = "à côté de toi utilisait l'appli\nmicabo, alors";
+    expect(marqueSurUneLigne(fr, "fr")).toBe("à côté de toi utilisait\nl'appli micabo, alors");
+  });
+
+  it("ne touche pas une marque déjà sur une ligne, ni le reste du texte", () => {
+    const es = "la chica de al lado en\nla biblioteca estaba usando la app micabo,\nasí que";
+    expect(marqueSurUneLigne(es, "es")).toBe(es);
+    expect(marqueSurUneLigne("micabo-\nApp en tête", "de")).toBe("micabo-App en tête");
   });
 });
