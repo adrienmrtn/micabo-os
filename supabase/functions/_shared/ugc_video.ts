@@ -142,7 +142,8 @@ Figures 2 and after show ONE person, the persona, in the persona's own room.
 Make a photo of the persona from Figures 2+, in the persona's room from Figures 2+, reproducing exactly the pose, framing, camera angle, distance, facial expression, gaze and gestures of Figure 1.
 - Face, hair, skin tone, build and clothes come from Figures 2+.
 - Background and lighting come from the room of Figures 2+, seen from the angle that matches Figure 1.
-- Take NOTHING else from Figure 1: not the person, not the room, not the clothes, not the objects.
+- Objects the person holds or touches in Figure 1 (tablet, laptop, phone, notebook, pen, cup) stay, at the same place and size, so the hands can do the same gestures.
+- Take NOTHING else from Figure 1: not the person, not the room, not the clothes, no other object.
 - No text, no captions, no stickers, no emoji, no watermark, no logo.
 - Vertical amateur phone front-camera photo, natural skin texture with pores, same image quality as Figures 2+.`;
 
@@ -190,4 +191,74 @@ export function normaliserTextes(brut: unknown): SegmentTexte[] {
 export function idVideoTiktok(url: string): string | null {
   const m = url.match(/\/video\/(\d{8,})/);
   return m ? m[1]! : null;
+}
+
+/* ─── Texte à coller, par langue ─────────────────────────────────────────── */
+
+/** Les langues du réseau, plus l'anglais. */
+export const LANGUES_UGC = ["fr", "de", "tr", "es", "en"] as const;
+export type LangueUgc = (typeof LANGUES_UGC)[number];
+
+const NOMS_LANGUES: Record<LangueUgc, string> = {
+  fr: "français",
+  de: "allemand",
+  tr: "turc",
+  es: "espagnol",
+  en: "anglais",
+};
+
+/** La marque avec son mot de catégorie, comme dans les decks (0267, 0278). */
+export const FORMES_MARQUE_UGC: Record<LangueUgc, string> = {
+  fr: "« l'appli micabo »",
+  de: "« die micabo-App » (le nom d'abord, l'article suit la phrase : « mit der micabo-App »)",
+  tr: "« micabo uygulaması », le suffixe de cas sur uygulaması (« micabo uygulamasını kullan »)",
+  es: "« la app micabo »",
+  en: "« the micabo app »",
+};
+
+/**
+ * Prompt d'adaptation du texte incrusté d'une vidéo réaction pour une langue.
+ * Mêmes règles que les decks : une appli ou une méthode nommée devient micabo
+ * (0287), repères scolaires localisés (0297), pas de tiret long (0268).
+ */
+export function promptTraductionUgc(textes: SegmentTexte[], langue: LangueUgc): string {
+  const bloc = textes
+    .map((s) => `<${s.segment}>\n${s.texte}\n</${s.segment}>`)
+    .join("\n");
+  return `Tu adaptes le texte incrusté d'une vidéo TikTok (une réaction filmée, suivie d'une démo d'appli d'étude) pour un compte TikTok d'étudiant qui écrit en ${NOMS_LANGUES[langue]}. Le créateur collera ce texte lui-même dans TikTok, au même endroit que sur la vidéo d'origine.
+
+Règles :
+1. Écris en ${NOMS_LANGUES[langue]} naturel, comme un élève ou un étudiant de ce pays l'écrirait sur TikTok : mêmes codes (POV, abréviations courantes), longueur proche, retours à la ligne au même rythme.
+2. Garde le sens, le ton et la chute. N'ajoute rien, ne commente rien.
+3. Toute appli, méthode ou outil d'étude nommé devient micabo, écrit ${FORMES_MARQUE_UGC[langue]}. micabo toujours en minuscules, une seule fois dans tout le texte. Jamais « site » ni « plateforme ».
+4. Examens, classes, notes, personnes ou sites propres au pays d'origine : l'équivalent local s'il existe vraiment, sinon une formule générique. Les notes sont converties au barème local.
+5. Pas de tiret long, pas de guillemets autour du texte, pas d'émoji ajouté.
+6. Si le texte est déjà en ${NOMS_LANGUES[langue]}, ne change que ce qu'imposent les règles 3 et 4, et corrige les fautes d'orthographe évidentes.
+7. Un segment vide reste vide.
+
+Texte d'origine, par segment :
+${bloc}
+
+Réponds en JSON seulement : {"reaction": "...", "demo": "..."}`;
+}
+
+/** Lit la réponse du modèle : un objet JSON, éventuellement entouré de texte. */
+export function lireTraductionUgc(sortie: string, attendus: SegmentTexte[]): SegmentTexte[] | null {
+  const m = sortie.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  let o: Record<string, unknown>;
+  try {
+    o = JSON.parse(m[0]) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const rendu: SegmentTexte[] = [];
+  for (const s of attendus) {
+    const v = o[s.segment];
+    if (typeof v !== "string") return null;
+    // Un segment plein qui revient vide est une réponse ratée, pas une traduction.
+    if (s.texte.trim() && !v.trim()) return null;
+    rendu.push({ segment: s.segment, texte: v.replace(/\r\n/g, "\n").trim() });
+  }
+  return rendu;
 }

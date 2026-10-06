@@ -13,6 +13,12 @@
  *       → en tâche de fond : segment réaction (Fal, sans recodage), image de
  *         départ, la même sans texte, OCR des deux segments. Statut `pret`.
  *   { action: "modele_textes", id, textes }
+ *       → et retraduit en tâche de fond.
+ *   { action: "modele_traduire", id }
+ *       → le texte à coller dans chaque langue (fr, de, tr, es, en), en tâche
+ *         de fond. Lancé aussi en fin de coupe.
+ *   { action: "personas_nettoyer", ids? }
+ *       → réécrit en place les photos des personas sans aucune métadonnée.
  *   { action: "rendu_lancer", modele_id, persona_id, moteur?, decor? }
  *       → ugc_rendus. En tâche de fond : Nano Banana (le persona dans l'image
  *         de départ), puis soumission Kling motion control. Kling met plusieurs
@@ -31,7 +37,8 @@
  */
 
 import { downloadMedia, scrapeVideoPost } from "../_shared/apify.ts";
-import { retirerContentCredentialsBytes } from "../_shared/c2pa.ts";
+import { imageSansMetadonnees } from "../_shared/image_metadonnees.ts";
+import { nettoyerTexteDeck } from "../_shared/marque.ts";
 import { falLlmTexte } from "../_shared/fal_llm.ts";
 import { editerNanoBananaPro } from "../_shared/fal_nano_banana.ts";
 import { sonderVideoMeta } from "../_shared/fal_normaliser_video.ts";
@@ -52,7 +59,10 @@ import {
   estMoteurKling,
   idVideoTiktok,
   instantsPlanche,
+  LANGUES_UGC,
+  type LangueUgc,
   lireCoupe,
+  lireTraductionUgc,
   MOTEUR_DEFAUT,
   MOTEURS_KLING,
   type MoteurKling,
@@ -61,6 +71,7 @@ import {
   PROMPT_KLING,
   promptCoupe,
   promptPersona,
+  promptTraductionUgc,
   REACTION_MAX_S,
   REACTION_MIN_S,
   renduAssezLong,
@@ -113,15 +124,16 @@ async function telecharger(url: string): Promise<{ octets: Uint8Array; mime: str
   return { octets, mime: (r.headers.get("content-type") ?? "").split(";")[0]!.trim() };
 }
 
-/** Image d'un chemin du bucket ou d'une URL, Content Credentials retirés. */
+/**
+ * Image d'un chemin du bucket ou d'une URL, sans AUCUNE métadonnée (EXIF, XMP,
+ * ICC, textes, C2PA) : les photos des personas deviennent les photos de
+ * profil des comptes. JPEG ou PNG, sinon lève.
+ */
 async function imagePropre(supabase: Supabase, source: string): Promise<{ octets: Uint8Array; mime: string; ext: string }> {
   const brut = /^https?:\/\//.test(source)
     ? (await telecharger(source)).octets
     : await lireStorage(supabase, source);
-  const r = await retirerContentCredentialsBytes(brut);
-  const mime = r.mime === "application/octet-stream" ? "image/png" : r.mime;
-  const ext = mime === "image/jpeg" ? "jpg" : mime === "image/webp" ? "webp" : "png";
-  return { octets: r.bytes, mime, ext };
+  return imageSansMetadonnees(brut);
 }
 
 /**
@@ -323,9 +335,11 @@ async function couperModele(
     const reactionPath = `ugc/modeles/${id}/reaction.mp4`;
     await deposer(supabase, reactionPath, coupe.bytes, "video/mp4");
 
-    const image = await telecharger(await premiereImage(coupe.url));
-    const imageRefPath = `ugc/modeles/${id}/image_ref.jpg`;
-    const imageRefUrl = await deposer(supabase, imageRefPath, image.octets, image.mime || "image/jpeg");
+    // La capture d'origine, texte compris : c'est elle qui montre au créateur
+    // où poser le texte. Sans métadonnées, comme tout ce qu'il télécharge.
+    const image = imageSansMetadonnees((await telecharger(await premiereImage(coupe.url))).octets);
+    const imageRefPath = `ugc/modeles/${id}/image_ref.${image.ext}`;
+    const imageRefUrl = await deposer(supabase, imageRefPath, image.octets, image.mime);
 
     // La même image sans texte : Figure 1 de Nano Banana. Sans nettoyage
     // réussi, le prompt interdit déjà le texte, on garde l'image brute.
@@ -333,10 +347,9 @@ async function couperModele(
     try {
       const propre = await cleanImage(imageRefUrl);
       if (propre) {
-        const octets = Uint8Array.from(atob(propre.base64), (c) => c.charCodeAt(0));
-        const ext = propre.mime.includes("jpeg") ? "jpg" : propre.mime.includes("webp") ? "webp" : "png";
-        imagePropreChemin = `ugc/modeles/${id}/image_propre.${ext}`;
-        await deposer(supabase, imagePropreChemin, octets, propre.mime);
+        const net = imageSansMetadonnees(Uint8Array.from(atob(propre.base64), (c) => c.charCodeAt(0)));
+        imagePropreChemin = `ugc/modeles/${id}/image_propre.${net.ext}`;
+        await deposer(supabase, imagePropreChemin, net.octets, net.mime);
       }
     } catch (e) {
       console.error("nettoyage image_ref", messageErreur(e));
@@ -367,9 +380,116 @@ async function couperModele(
       statut: "pret",
       erreur: null,
     });
+    await traduireModele(supabase, id);
   } catch (e) {
     await majModele(supabase, id, { erreur: messageErreur(e) }).catch(() => null);
   }
+}
+
+/* ─── Texte à coller, par langue ──────────────────────────────────────── */
+
+/** Claude d'abord (le texte est court et c'est lui qui part en ligne), Gemini en repli. */
+const MODELES_TRADUCTION = ["anthropic/claude-sonnet-5", "google/gemini-2.5-flash"];
+
+/** Motifs POSIX de la table `concurrents` (`\m … \M`) lus en JavaScript. */
+async function motifsConcurrents(supabase: Supabase): Promise<RegExp[]> {
+  const { data } = await supabase.from("concurrents").select("motif").eq("actif", true);
+  return (data ?? []).flatMap((c) => {
+    try {
+      const js = String(c.motif).replace(/\\m|\\M/g, "\\b");
+      return [new RegExp(js, "i")];
+    } catch {
+      return [];
+    }
+  });
+}
+
+async function traduireUne(textes: SegmentTexte[], langue: LangueUgc): Promise<SegmentTexte[]> {
+  let derniere = "";
+  for (const model of MODELES_TRADUCTION) {
+    try {
+      const sortie = await falLlmTexte({ model, temperature: 0.3, prompt: promptTraductionUgc(textes, langue) });
+      const lu = lireTraductionUgc(sortie, textes);
+      if (lu) return lu.map((s) => ({ ...s, texte: s.texte ? nettoyerTexteDeck(s.texte, langue) : "" }));
+      derniere = `réponse illisible (${model})`;
+    } catch (e) {
+      derniere = `${model} : ${messageErreur(e)}`;
+    }
+  }
+  throw new Error(`Traduction ${langue} : ${derniere}`);
+}
+
+/**
+ * Le texte à coller dans chaque langue. Un concurrent qui survit à la
+ * traduction est signalé (`alertes`) plutôt que caché : c'est l'admin qui
+ * tranche, comme pour un classement (0287).
+ */
+async function traduireModele(supabase: Supabase, id: string): Promise<void> {
+  try {
+    const { data: m } = await supabase.from("ugc_modeles").select("textes").eq("id", id).single();
+    const textes = normaliserTextes(m?.textes);
+    if (!textes.some((s) => s.texte)) return;
+    const motifs = await motifsConcurrents(supabase);
+    const traductions: Record<string, { segments: SegmentTexte[]; alertes: string[] }> = {};
+    await Promise.all(
+      LANGUES_UGC.map(async (langue) => {
+        const segments = await traduireUne(textes, langue);
+        const alertes = segments.flatMap((s) =>
+          motifs.filter((r) => r.test(s.texte)).map((r) => `concurrent cité (${s.segment}) : ${r.source}`)
+        );
+        traductions[langue] = { segments, alertes };
+      }),
+    );
+    await majModele(supabase, id, { traductions, traduit_le: new Date().toISOString(), erreur: null });
+  } catch (e) {
+    await majModele(supabase, id, { erreur: messageErreur(e) }).catch(() => null);
+  }
+}
+
+/* ─── Photos des personas sans métadonnées ─────────────────────────────── */
+
+const COLONNES_PERSONA = [
+  "image_face_url",
+  "image_left_url",
+  "image_right_url",
+  "image_down_url",
+  "image_profile_url",
+] as const;
+
+/** Chemin du bucket d'une URL publique du Storage, sinon null. */
+function cheminDepuisUrl(url: string): string | null {
+  const m = url.match(/\/object\/public\/medias\/([^?]+)/);
+  return m ? decodeURIComponent(m[1]!) : null;
+}
+
+/**
+ * Réécrit en place chaque photo des personas sans métadonnées : elles
+ * deviennent les photos de profil des comptes. Même chemin, même format.
+ */
+async function nettoyerPersonas(supabase: Supabase, ids: string[] | null) {
+  let q = supabase
+    .from("ugc_personas")
+    .select("id, nom, image_face_url, image_left_url, image_right_url, image_down_url, image_profile_url");
+  if (ids?.length) q = q.in("id", ids);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  const rapport: Array<{ persona: string; image: string; avant?: number; apres?: number; erreur?: string }> = [];
+  for (const p of (data ?? []) as unknown as Array<Record<string, string | null>>) {
+    for (const col of COLONNES_PERSONA) {
+      const url = p[col];
+      const chemin = url ? cheminDepuisUrl(url) : null;
+      if (!chemin) continue;
+      try {
+        const brut = await lireStorage(supabase, chemin);
+        const net = imageSansMetadonnees(brut);
+        await deposer(supabase, chemin, net.octets, net.mime);
+        rapport.push({ persona: String(p.nom), image: col, avant: brut.length, apres: net.octets.length });
+      } catch (e) {
+        rapport.push({ persona: String(p.nom), image: col, erreur: messageErreur(e) });
+      }
+    }
+  }
+  return { rapport };
 }
 
 /* ─── Rendus ───────────────────────────────────────────────────────────── */
@@ -399,16 +519,16 @@ async function lancerRendu(supabase: Supabase, renduId: string): Promise<void> {
       undefined,
       { aspectRatio: "auto" },
     );
-    const nette = await retirerContentCredentialsBytes(nb.bytes);
-    const imagePath = `ugc/rendus/${renduId}/persona.png`;
-    await deposer(supabase, imagePath, nette.bytes, "image/png");
+    const nette = imageSansMetadonnees(nb.bytes);
+    const imagePath = `ugc/rendus/${renduId}/persona.${nette.ext}`;
+    await deposer(supabase, imagePath, nette.octets, nette.mime);
     await majRendu(supabase, renduId, { image_persona_path: imagePath, etape: "kling" });
 
     // 2. Kling : l'image du persona + la réaction comme vidéo de mouvement.
     // Les deux sont hébergées chez Fal : les runners ne relisent pas Supabase.
     const reaction = await lireStorage(supabase, String(modele.reaction_path));
     const videoUrl = await falHebergerOctets(reaction, "video/mp4", `reaction-${renduId.slice(0, 8)}.mp4`);
-    const imageUrl = await falHebergerOctets(nette.bytes, "image/png", `persona-${renduId.slice(0, 8)}.png`);
+    const imageUrl = await falHebergerOctets(nette.octets, nette.mime, `persona-${renduId.slice(0, 8)}.${nette.ext}`);
     const moteur = (estMoteurKling(r.moteur) ? r.moteur : MOTEUR_DEFAUT) as MoteurKling;
     const endpoint = MOTEURS_KLING[moteur].endpoint;
     const q = await falQueueSubmit(endpoint, {
@@ -698,7 +818,21 @@ Deno.serve(async (request) => {
       if (!id) return json({ error: "id requis" }, 400);
       const textes: SegmentTexte[] = normaliserTextes(body.textes);
       await majModele(supabase, id, { textes });
+      // Le texte source a changé : les traductions suivent.
+      enArrierePlan(traduireModele(supabase, id));
       return json({ ok: true, textes });
+    }
+
+    if (action === "modele_traduire") {
+      const id = String(body.id ?? "");
+      if (!id) return json({ error: "id requis" }, 400);
+      enArrierePlan(traduireModele(supabase, id));
+      return json({ ok: true, id });
+    }
+
+    if (action === "personas_nettoyer") {
+      const ids = Array.isArray(body.ids) ? body.ids.map(String) : null;
+      return json({ ok: true, ...(await nettoyerPersonas(supabase, ids)) });
     }
 
     if (action === "rendu_lancer") {
