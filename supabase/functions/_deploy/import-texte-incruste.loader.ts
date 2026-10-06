@@ -9,7 +9,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "SHA_A_REMPLIR";
+const SHA = "d5c9ee753c77263e80c804c3ad3d2c7fa73a15a9";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/import-texte-incruste.bundle.js`;
 
