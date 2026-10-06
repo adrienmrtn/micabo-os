@@ -118,9 +118,24 @@ nouvelle langue ou un nouveau contenu, puisque 0307 refuse de remplacer.
 parce qu'ils postaient tous leurs créneaux sans percer (médianes de 1 060 à
 1 439 vues sur 21 jours, aucun post au-delà de 12 700). Le label a remplacé
 `classic-study` par un `update` de `compte_labels` ; le retour se fait de la
-même façon, il n'y avait rien d'autre sur ces comptes. Leurs passages déjà
-créés gardent leurs slideshows classiques ; leurs premiers white posts partent
-à l'assignation de la nuit du 06 au 07/10.
+même façon, il n'y avait rien d'autre sur ces comptes.
+
+Le 06/10 à 11:40 UTC, à la demande d'Adrien, les posts classiques **pas encore
+publiés** du jour ont été remplacés : seuls les deux d'`asya.ders680`
+(`60684d34`, `809b6d65`) l'étaient encore, `lea.arbeit646` avait publié ses
+deux et `anna.examen886` a publié le sien à 11:40:01, vingt secondes avant la
+bascule. Passages et posts sauvegardés dans `white_post_bascule_sauvegarde`
+(RLS, aucune policy), supprimés sous garde « encore `assigne`, sans
+`publie_at` », puis `kick_edge_micabo('assignation-contenu', {compteId,
+date})` **sans `forcer`** : le moteur comble jusqu'au quota, rien de plus. Il a
+tiré `17164fa4` et `5b47357f` en turc, 6 images sur 6 du deck `tr`, texte vide,
+musique et hashtags. Pas par `revoquer-post` : le secret cron y vaut rôle admin,
+et un admin rejette le slideshow pour tout le monde. Les deux slideshows
+classiques retrouvent leur passage dû et repartent ailleurs.
+
+Les autres white posts partent à l'assignation de la nuit du 06 au 07/10. Après
+elle, 8 des 10 passages dus sont pris : la nuit suivante n'en a plus que 2 pour
+6 créneaux, jusqu'aux verdicts de J+2.
 
 Un compte qui porte `white-post` avec un autre label tire les white posts comme
 les autres, dans les mêmes règles (tier, recul de 30 jours, part des C).
@@ -137,8 +152,7 @@ labels sur demande ; ils restent assignables à la main. Module à part pour ne
 pas faire « changer » les bundles du moteur qui tirent `labels_systeme.ts`.
 Aucun compte n'a été créé entre la naissance du label (08:12 UTC) et le
 correctif. **`manage-users` v18 tourne sur `d8e723e`** (alias `ne`→`te`, test de
-vie `401`), commit de `claude/zealous-faraday-6h1qc1` pas encore dans `main` :
-ne pas redéployer `manage-users` depuis un `main` qui ne l'a pas.
+vie `401`), dans `main` depuis #98.
 
 **Un compte qui ne porte QUE `white-post` s'assèche vite.** Le recul de
 30 jours (`RECUL_MEME_COMPTE_JOURS`) lui interdit de revoir un white post dans
