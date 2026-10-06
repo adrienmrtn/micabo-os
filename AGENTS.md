@@ -33,6 +33,79 @@ sert encore : `resoudreVisuelsAssignation` (garnissage d’une slide depuis la
 biblio du label) vit dans `_shared/visuels_assignation.ts`, et les exemples
 feed d’un label dans `src/features/moteur/promptsFeed.ts`.
 
+## Slideshows à texte incrusté : les white posts (0306, 06/10/2026)
+
+Un « white post » a son texte **dessiné dans l'image** : fond blanc, texte noir
+souligné, une petite photo collée (modèle : @amayareading). Traduire à
+l'assignation n'a aucun sens, et une même image ne peut pas servir deux
+langues. Label `white-post`.
+
+**Le modèle de données.** `contenus.texte_incruste = true`. Chaque deck de
+langue (`contenu_langues.slides`) porte **ses propres images** (`media_id` par
+slide) et un `texte_overlay` vide. `structure_slides` ne garde que les
+positions 1..n, **sans média** : un `media_id` y serait un piège — tout chemin
+qui lit la structure servirait l'image d'une langue à toutes.
+
+**Le moteur** (`_shared/texte_incruste.ts`, pur, réexporté en
+`texteIncruste.ts`, 16 tests) :
+
+- `choisirContenu` écarte, AVANT le tirage et avant le repêchage, un incrusté
+  sans deck complet dans la langue du compte (`sansIncrustesHorsLangue`). Zéro
+  requête de plus quand le pool n'en contient pas ;
+- `assurerDeckPourLangue` sort AVANT la création de ligne à la demande : jamais
+  de traduction, jamais de placement micabo, jamais de `sansConcurrents` sur le
+  texte (seuls les hashtags passent le filtre). Une langue sans version lève ;
+- `creerPublicationAtomique` prend le visuel dans le deck de la langue
+  (`visuelsIncrustes`), jamais dans la structure ni par garnissage : une slide
+  sans image lève et l'appelant repioche (même arbitrage que 0279) ;
+- le `media_id` est gardé dans `passages.slides` : un repost bonus rejoue le
+  deck tel quel et doit retrouver l'image de sa langue ;
+- burn : rien à faire, `texte_overlay` est vide. Upscale : les médias naissent
+  avec `upscale_le` posé — SeedVR redessinerait la typographie. Variations :
+  exclues (elles réécrivent un texte qui est dans l'image).
+
+**L'import** passe par `import-texte-incruste` : les images arrivent rendues,
+une série par langue (URL ; une URL `api.apify.com` est lue avec le jeton). La
+fonction retire **toutes** les métadonnées des JPEG (`jpegSansMetadonnees` :
+APP0–APP15 sauf APP14, et COM — EXIF, XMP, ICC, JFIF, C2PA), range dans
+`medias/incruste/<contenu>/<langue>/<n>.jpg`, et crée contenu + médias + decks +
+labels en **une transaction** (`creer_contenu_texte_incruste`, réservée au
+`service_role`) : la file ne voit jamais un slideshow à moitié créé. Note et
+tier d'entrée par la formule de l'import ordinaire (`note_import.ts`, sorti
+d'`import_contenu.ts` pour ça). Le compte d'origine est créé **inactif** :
+l'import ordinaire OCRiserait le texte dessiné et « nettoierait » l'image.
+
+**Le rendu** vit dans `docs/white-post/` (Python, Pillow) : on reproduit
+d'abord l'anglais d'origine au pixel, on ne traduit qu'ensuite. Mesures du
+compte : **Inter Display Regular** 42 px (titres 63 px), interligne 48,5,
+souligné taille/22 à taille × 0,12 sous la ligne de base, noir pur sur 254.
+
+**Premier post, le 06/10** : « 10/10 hobbies to make you dangerously
+disciplined » (`7691007701127564576`, 796 800 vues), rendu en FR et en DE. La
+slide 4 était une publicité ReadUp ; elle devient la slide micabo (« réviser
+tous les jours » / « jeden Tag ein bisschen lernen ») avec la capture de
+l'appli dans la langue. Contenu `97dfd889`, tier A (note 79,3), **en file**.
+Aucun compte ne porte encore `white-post` : rien ne sera servi tant qu'un admin
+ne l'a pas posé sur des comptes FR ou DE.
+
+**État du déploiement au 06/10, à lire avant de toucher aux chargeurs.**
+
+- La migration est appliquée. Le MCP l'a enregistrée sous le nom
+  `0289_texte_incruste` ; le fichier est `0306` parce que la branche
+  `claude/wizardly-allen-c3xioi`, déployée en prod mais non mergée, occupe déjà
+  0289 → 0305.
+- `import-texte-incruste` (v1) tourne sur un chargeur **provisoire** : le bundle
+  est lu dans le key-value store Apify `micabo-white-post`, épinglé par son
+  sha256. À remplacer par le chargeur GitHub habituel dès que le code est
+  poussé.
+- Les changements moteur et front **ne sont pas déployés**. La prod exécute la
+  branche `claude/wizardly-allen-c3xioi` (assignation sur `4781398`) : des
+  bundles construits depuis `main` effaceraient tout ce qu'elle porte. Il faut
+  d'abord rapporter ces changements sur cette branche, regénérer les bundles
+  (`assignation`, `assignation-contenu`, `minuit-vnext`, `revoquer-post`,
+  `bruler-texte-test`), puis redéployer. D'ici là, ne pas valider un white post
+  ni poser `white-post` sur un compte.
+
 ## Tierlist des slideshows (0250, en prod depuis le 11/09/2026)
 
 Un slideshow porte **un tier** (`contenus.tier` : D, C, B, A, S, S+) et un

@@ -79,6 +79,8 @@ import {
 } from "./import_progres.ts";
 import { lireParLots } from "./lots.ts";
 import { nettoyerTexteDeck } from "./marque.ts";
+import { noteImport, scoreDepuisVues } from "./note_import.ts";
+import { deckIncrustePret, deckIncrusteServi, type SlideIncrustee } from "./texte_incruste.ts";
 import { chargerPrompt, messageErreur, serviceClient } from "./supabase.ts";
 
 export type Supabase = ReturnType<typeof serviceClient>;
@@ -132,6 +134,8 @@ export interface SlideLangue {
   position_sophia: boolean;
   /** Texte jugé « classement » par `sansConcurrents` : on ne le rejuge pas (0287). */
   concurrent_laisse?: string | null;
+  /** Texte incrusté (0306) : l'image de cette langue, texte déjà dessiné dedans. */
+  media_id?: string | null;
 }
 
 
@@ -160,20 +164,7 @@ async function lireScoring(supabase: Supabase) {
   };
 }
 
-/**
- * Score « force » du TikTok à partir des vues (0..100).
- * log^1.3 : plus d'écart entre 1k et 20k qu'un log pur (qui compressait le milieu).
- */
-export function scoreDepuisVues(
-  vues: number | null | undefined,
-  plafond = 80_000,
-): number {
-  const p = Math.max(1, plafond);
-  const exp = 1.3;
-  const num = Math.log(1 + (vues ?? 0)) ** exp;
-  const den = Math.log(1 + p) ** exp;
-  return Math.min(100, Math.max(0, (num / den) * 100));
-}
+export { noteImport, scoreDepuisVues };
 
 export interface RapportImport {
   vues: number;
@@ -194,35 +185,6 @@ export interface RapportImport {
   tier: Tier | null;
   /** Texte multiligne prêt pour les logs d'import. */
   texte: string;
-}
-
-/**
- * Note d'import /100 — un seul score, plus de note par langue.
- *
- * Attention : la note seule ne décide pas du tier. `tierImport` plafonne à C
- * tant que le TikTok d'origine n'a pas atteint `VUES_SOURCE_MIN_B_PLUS` vues.
- *
- *   base = (1−poidsVues)×pertinence + poidsVues×scoreVues   (défaut 30/70)
- *   note = (kk × prior + base) / (kk + 1)   avec kk = k/2
- *
- * `kk = k/2` est l'ancienne régularisation « langue d'origine » : la note se
- * juge sur la performance du TikTok chez son auteur, donc dans sa langue.
- */
-export function noteImport(opts: {
-  pertinence: number;
-  vues: number | null | undefined;
-  prior: number;
-  k: number;
-  poidsVues?: number;
-  vuesPlafond?: number;
-}): number {
-  const poidsVues = Math.min(1, Math.max(0, opts.poidsVues ?? 0.7));
-  const vuesPlafond = opts.vuesPlafond ?? 80_000;
-  const vuesScore = scoreDepuisVues(opts.vues, vuesPlafond);
-  const pertinence = Math.min(100, Math.max(0, opts.pertinence));
-  const base = (1 - poidsVues) * pertinence + poidsVues * vuesScore;
-  const kk = opts.k / 2;
-  return (kk * opts.prior + base) / (kk + 1);
 }
 
 /** Note + tier d'entrée, avec le détail prêt pour les logs d'import. */
@@ -1322,11 +1284,16 @@ export async function assurerDeckPourLangue(
   const { data: contenu } = await supabase
     .from("contenus")
     .select(
-      "id, titre, langue_source, compte_reference_id, structure_slides, placement_manuel",
+      "id, titre, langue_source, compte_reference_id, structure_slides, placement_manuel, texte_incruste",
     )
     .eq("id", contenuId)
     .single();
   if (!contenu) throw new Error("Contenu introuvable");
+
+  // Texte incrusté (0306) : AVANT la création de ligne à la demande. Une langue
+  // sans version n'existe pas pour ce slideshow — on ne crée rien, on ne traduit
+  // rien, on ne place rien.
+  if (contenu.texte_incruste) return await deckIncrustePourLangue(supabase, contenuId, langue);
 
   // L'admin a écrit le CTA lui-même dans le deck source (0258). Plus aucun
   // placement automatique, dans aucune langue : la langue source part telle
@@ -1483,6 +1450,40 @@ export async function assurerDeckPourLangue(
     ((frais as { hashtags?: string | null } | null)?.hashtags ?? hashtags ?? "").trim(),
     langue,
   );
+}
+
+/**
+ * Deck d'un slideshow à texte incrusté (0306), tel qu'il part chez le créateur.
+ *
+ * Aucune des passes du chemin ordinaire ne s'applique, et c'est voulu :
+ * - traduire : le texte est dans l'image, le deck d'une autre langue ne sert à
+ *   rien. Une langue sans deck complet LÈVE — l'assignation l'a normalement
+ *   déjà écartée, ceci est le filet ;
+ * - placer micabo : le CTA est dessiné dans l'image de chaque langue ;
+ * - `sansConcurrents` sur le texte : il n'y a pas de texte. Seuls les hashtags,
+ *   qui restent du texte, passent par le filtre concurrents.
+ */
+async function deckIncrustePourLangue(
+  supabase: Supabase,
+  contenuId: string,
+  langue: string,
+): Promise<{ slides: SlideLangue[]; hashtags: string }> {
+  const { data: cl, error } = await supabase
+    .from("contenu_langues")
+    .select("id, slides, hashtags")
+    .eq("contenu_id", contenuId)
+    .eq("langue", langue)
+    .maybeSingle();
+  if (error) throw error;
+  const slides = (cl?.slides ?? []) as SlideIncrustee[];
+  if (!cl || !deckIncrustePret(slides)) {
+    throw new Error(`Texte incrusté : aucune version ${langue} complète (ce slideshow ne se traduit pas)`);
+  }
+  const hashtags = retirerHashtagsConcurrents(
+    ((cl as { hashtags?: string | null }).hashtags ?? "").trim(),
+    await chargerConcurrents(supabase),
+  );
+  return { slides: deckIncrusteServi(slides), hashtags };
 }
 
 let concurrentsLus: { a: number; liste: Concurrent[] } | null = null;

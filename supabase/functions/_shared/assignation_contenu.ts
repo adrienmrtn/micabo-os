@@ -16,6 +16,7 @@ import { mapPool } from "./parallel.ts";
 import { serviceClient, messageErreur } from "./supabase.ts";
 import { extraireLabelsAssignables } from "./labels_systeme.ts";
 import { positionsOrphelines } from "./deck_structure.ts";
+import { deckIncrustePret, visuelsIncrustes, type SlideIncrustee } from "./texte_incruste.ts";
 import { messagePool, type EtatPoolCompte } from "./quota_pool.ts";
 import {
   appliquerFaceSwapUgcPost,
@@ -121,6 +122,8 @@ interface ContenuCandidat {
   tier: string | null;
   passages_cible: number | null;
   tier_maj_at: string | null;
+  /** Texte dans l'image, une version par langue (0306). */
+  texte_incruste: boolean | null;
 }
 
 /** PostgREST rend l'embed `posts(...)` en objet ou en tableau selon la relation. */
@@ -405,7 +408,7 @@ export async function assignerCompteJour(
       jour,
       contenusSession,
       ugcAi,
-      { ignorerElo, exclureTestsHisto: true },
+      { ignorerElo, exclureTestsHisto: true, langue },
     );
     if (!choisi) {
       log("Plus de candidat dans le pool");
@@ -634,6 +637,8 @@ interface SlideLangue {
   position: number;
   texte_overlay: string | null;
   position_sophia: boolean;
+  /** Texte incrusté (0306) : l'image de CETTE langue. Absent partout ailleurs. */
+  media_id?: string | null;
 }
 
 /**
@@ -668,7 +673,7 @@ async function creerPublicationAtomique(
 ): Promise<{ passage_id: string; post_id: string }> {
   const { data: contenu, error: errC } = await supabase
     .from("contenus")
-    .select("id, sujet_id, structure_slides, titre")
+    .select("id, sujet_id, structure_slides, titre, texte_incruste")
     .eq("id", args.contenuId)
     .single();
   if (errC || !contenu) throw errC ?? new Error("Contenu introuvable pour pont post");
@@ -700,40 +705,60 @@ async function creerPublicationAtomique(
     );
   }
 
-  const { parPos: mediaResolus, logs: visuelsLogs } = await resoudreVisuelsAssignation(
-    supabase,
-    args.contenuId,
-    structure.map((s) => ({
-      position: Number(s.position),
-      media_id: s.media_id ?? null,
-      pinned: Boolean(s.pinned && s.media_id),
-      critere: s.critere ?? null,
-      raw_url: s.raw_url ?? null,
-      reference_url: s.reference_url ?? null,
-    })) as SlideStructureVisuels[],
-  );
-  if (visuelsLogs.some((l) => l.fallback)) {
-    console.log(
-      `[assignation] contenu=${args.contenuId} visuels ` +
-        visuelsLogs
-          .map((l) => `#${l.position}:${l.motif}`)
-          .join(" · "),
+  // Texte incrusté (0306) : l'image de chaque slide est celle du deck de la
+  // langue, texte déjà dessiné. Ni la structure ni la bibliothèque du label ne
+  // doivent s'en mêler — un garnissage poserait une image VIERGE sous un texte
+  // vide, et la slide partirait muette. `visuelsIncrustes` lève sur une position
+  // sans image : l'appelant repioche, comme pour un deck désaligné.
+  const incruste = Boolean(contenu.texte_incruste);
+  let visuels: Array<{ position: number; media_id: string | null; reference_url: string | null }>;
+  let visuelsLogs: unknown[];
+  if (incruste) {
+    visuels = visuelsIncrustes(args.slides);
+    visuelsLogs = visuels.map((v) => ({
+      position: v.position,
+      media_id: v.media_id,
+      fallback: false,
+      motif: `texte incrusté — image ${args.langue}`,
+    }));
+  } else {
+    const resolution = await resoudreVisuelsAssignation(
+      supabase,
+      args.contenuId,
+      structure.map((s) => ({
+        position: Number(s.position),
+        media_id: s.media_id ?? null,
+        pinned: Boolean(s.pinned && s.media_id),
+        critere: s.critere ?? null,
+        raw_url: s.raw_url ?? null,
+        reference_url: s.reference_url ?? null,
+      })) as SlideStructureVisuels[],
     );
-  }
+    const mediaResolus = resolution.parPos;
+    visuelsLogs = resolution.logs;
+    if (resolution.logs.some((l) => l.fallback)) {
+      console.log(
+        `[assignation] contenu=${args.contenuId} visuels ` +
+          resolution.logs
+            .map((l) => `#${l.position}:${l.motif}`)
+            .join(" · "),
+      );
+    }
 
-  // Un visuel par position. Plus de pré-vérification d'existence en TS : la
-  // fonction SQL fait un `left join media_library` et écrit NULL si le média a
-  // disparu. La fenêtre entre la lecture et l'écriture, qui laissait passer une
-  // FK violée, est fermée pour de bon.
-  const visuels = args.slides.map((s) => {
-    const position = Number(s.position);
-    const visuel = parPos.get(position);
-    return {
-      position,
-      media_id: mediaResolus.get(position) ?? visuel?.media_id ?? null,
-      reference_url: visuel?.reference_url ?? visuel?.raw_url ?? null,
-    };
-  });
+    // Un visuel par position. Plus de pré-vérification d'existence en TS : la
+    // fonction SQL fait un `left join media_library` et écrit NULL si le média a
+    // disparu. La fenêtre entre la lecture et l'écriture, qui laissait passer une
+    // FK violée, est fermée pour de bon.
+    visuels = args.slides.map((s) => {
+      const position = Number(s.position);
+      const visuel = parPos.get(position);
+      return {
+        position,
+        media_id: mediaResolus.get(position) ?? visuel?.media_id ?? null,
+        reference_url: visuel?.reference_url ?? visuel?.raw_url ?? null,
+      };
+    });
+  }
 
   const { data, error } = await supabase.rpc("creer_publication_atomique", {
     p_compte_id: args.compteId,
@@ -744,6 +769,9 @@ async function creerPublicationAtomique(
       position: Number(s.position),
       texte_overlay: s.texte_overlay ?? "",
       position_sophia: Boolean(s.position_sophia),
+      // Gardé dans `passages.slides` : un repost bonus rejoue ce deck tel quel,
+      // et sans l'image de la langue il n'aurait plus rien à poser (0306).
+      ...(incruste && s.media_id ? { media_id: s.media_id } : {}),
     })),
     p_visuels: visuels,
     p_visuels_resolution: visuelsLogs,
@@ -909,9 +937,10 @@ async function restantsParContenu(
  *    hasard, avec un cycle d'1 passage ouvert au vol (« pas assez de posts à
  *    faire → on remet quelques posts en D pour remplir »).
  *
- * Un même slideshow peut repasser sur un compte qui l'a déjà posté un autre
- * jour ; il ne peut pas sortir deux fois le MÊME jour sur le même compte.
- * La langue ne filtre plus rien : le deck est traduit à la demande.
+ * Un même slideshow ne revient pas sur un compte avant `RECUL_MEME_COMPTE_JOURS`.
+ * La langue ne filtre rien pour un slideshow ordinaire — le deck est traduit à
+ * la demande — mais elle filtre un slideshow à texte incrusté : sans deck
+ * complet dans la langue du compte, il n'existe pas pour lui (0306).
  */
 async function choisirContenu(
   supabase: Supabase,
@@ -920,7 +949,7 @@ async function choisirContenu(
   jour: string,
   dejaCreesCetteSession: string[],
   ugcAi = false,
-  opts: { ignorerElo?: boolean; exclureTestsHisto?: boolean } = {},
+  opts: { ignorerElo?: boolean; exclureTestsHisto?: boolean; langue?: string } = {},
 ): Promise<Candidat | null> {
   // Mode test : on ignore les cycles (n'importe quel slideshow prêt fait l'affaire).
   const ignorerCycles = Boolean(opts.ignorerElo);
@@ -948,7 +977,7 @@ async function choisirContenu(
       let q = supabase
         .from("contenus")
         .select(
-          "id, musique_url, musique_titre, musique_plateforme, ugc_compatible, tier, passages_cible, tier_maj_at",
+          "id, musique_url, musique_titre, musique_plateforme, ugc_compatible, tier, passages_cible, tier_maj_at, texte_incruste",
         )
         .eq("statut", "valide")
         .eq("import_statut", "done")
@@ -960,6 +989,13 @@ async function choisirContenu(
   );
   if (contenus.length === 0) return null;
 
+  // Texte incrusté (0306) : écarté AVANT tout tirage — et avant le repêchage,
+  // qui sinon ouvrirait un cycle sur un slideshow impossible à livrer dans la
+  // langue du compte. Le deck d'une autre langue ne sert à rien : son texte est
+  // dessiné dans l'image.
+  const servables = await sansIncrustesHorsLangue(supabase, contenus, opts.langue ?? null);
+  if (servables.length === 0) return null;
+
   // Déjà sorti RÉCEMMENT sur ce compte. La fenêtre portait sur le jour même
   // jusqu'au 19/09/2026 — « un même slideshow peut revenir un autre jour » —
   // et c'est exactement ce qu'elle laissait faire : 46 posts sont partis deux
@@ -967,7 +1003,7 @@ async function choisirContenu(
   // était pourtant en base, il n'était simplement jamais relu au-delà du jour.
   const depuis = ajouterJoursParis(jour, -RECUL_MEME_COMPTE_JOURS);
   const recents = await lireParLots<PassageHisto>(
-    contenus.map((c) => c.id),
+    servables.map((c) => c.id),
     `Passages des ${RECUL_MEME_COMPTE_JOURS} derniers jours`,
     (lot) =>
       supabase
@@ -983,7 +1019,7 @@ async function choisirContenu(
     exclus.add(h.contenu_id);
   }
 
-  const pool = contenus.filter((c) => !exclus.has(c.id));
+  const pool = servables.filter((c) => !exclus.has(c.id));
   if (pool.length === 0) return null;
 
   const versCandidat = (c: ContenuCandidat, restants: number, repeche: boolean): Candidat => ({
@@ -1060,6 +1096,39 @@ async function choisirContenu(
   }
 
   return null;
+}
+
+/**
+ * Retire du pool les slideshows à texte incrusté qui n'ont pas de deck complet
+ * dans la langue du compte. Les slideshows ordinaires passent tous.
+ *
+ * Sans langue connue, AUCUN incrusté ne passe : servir une image dont le texte
+ * est dans une langue inconnue du compte serait pire qu'un post de moins.
+ */
+async function sansIncrustesHorsLangue(
+  supabase: Supabase,
+  contenus: ContenuCandidat[],
+  langue: string | null,
+): Promise<ContenuCandidat[]> {
+  const incrustes = contenus.filter((c) => c.texte_incruste).map((c) => c.id);
+  if (incrustes.length === 0) return contenus;
+  const prets = new Set<string>();
+  if (langue) {
+    const decks = await lireParLots<{ contenu_id: string; slides: SlideIncrustee[] | null }>(
+      incrustes,
+      `Decks incrustés ${langue}`,
+      (lot) =>
+        supabase
+          .from("contenu_langues")
+          .select("contenu_id, slides")
+          .eq("langue", langue)
+          .in("contenu_id", lot),
+    );
+    for (const d of decks) {
+      if (deckIncrustePret(d.slides)) prets.add(d.contenu_id);
+    }
+  }
+  return contenus.filter((c) => !c.texte_incruste || prets.has(c.id));
 }
 
 /** Assigne tous les comptes actifs pour un jour. */
