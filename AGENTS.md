@@ -116,6 +116,13 @@ admin n'a pas validé ces slideshows ET posé le label sur des comptes FR, DE ou
 TR. Un compte qui le porte avec un autre label tire les white posts comme les
 autres, dans les mêmes règles (tier, recul de 30 jours, part des C).
 
+**Un compte qui ne porte QUE `white-post` s'assèche vite.** Le recul de
+30 jours (`RECUL_MEME_COMPTE_JOURS`) lui interdit de revoir un white post dans
+le mois : il lui en faut `posts_par_jour × 30` dans sa langue, soit ~60 à 2
+posts par jour. Et un white post en A ne doit que 2 passages par cycle, toutes
+langues confondues, avant son verdict à J+2. Avec 5 white posts, un tel compte
+tient deux à trois jours, puis « Plus de candidat dans le pool ».
+
 **État du déploiement au 06/10, à lire avant de toucher aux chargeurs.**
 
 - 0306 est appliquée et le MCP l'a enregistrée sous le nom
@@ -150,7 +157,10 @@ autres, dans les mêmes règles (tier, recul de 30 jours, part des C).
   `realignerDeck` garde les `media_id` si l'éditeur enregistre.
   `os.micabo.app`, qu'on ne trouve que dans les migrations Upwork retirées,
   répond `DEPLOYMENT_NOT_FOUND` : ce domaine n'est rattaché à aucun
-  déploiement Vercel.
+  déploiement Vercel. Personne ne s'en sert : sur les 24 h du 06/10, les 29
+  utilisateurs du front passent tous par `micabo-os.vercel.app` (referer des
+  appels REST), et aucun réglage, prompt, modèle de nudge ni fonction SQL ne
+  contient plus ce domaine.
 
 ## Tierlist des slideshows (0250, en prod depuis le 11/09/2026)
 
