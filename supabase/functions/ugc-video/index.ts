@@ -408,12 +408,13 @@ async function motifsConcurrents(supabase: Supabase): Promise<RegExp[]> {
 
 async function traduireUne(textes: SegmentTexte[], langue: LangueUgc): Promise<SegmentTexte[]> {
   let derniere = "";
-  for (const model of MODELES_TRADUCTION) {
+  // Deux essais par modèle : une réponse qui perd ses lignes est redemandée.
+  for (const model of MODELES_TRADUCTION.flatMap((m) => [m, m])) {
     try {
       const sortie = await falLlmTexte({ model, temperature: 0.3, prompt: promptTraductionUgc(textes, langue) });
       const lu = lireTraductionUgc(sortie, textes);
       if (lu) return lu.map((s) => ({ ...s, texte: s.texte ? nettoyerTexteDeck(s.texte, langue) : "" }));
-      derniere = `réponse illisible (${model})`;
+      derniere = `réponse illisible ou lignes perdues (${model})`;
     } catch (e) {
       derniere = `${model} : ${messageErreur(e)}`;
     }
@@ -433,16 +434,28 @@ async function traduireModele(supabase: Supabase, id: string): Promise<void> {
     if (!textes.some((s) => s.texte)) return;
     const motifs = await motifsConcurrents(supabase);
     const traductions: Record<string, { segments: SegmentTexte[]; alertes: string[] }> = {};
+    const echecs: string[] = [];
+    // Une langue ratée ne fait pas perdre les autres : elle est nommée dans
+    // `erreur`, et l'écran garde ce qu'elle avait avant.
     await Promise.all(
       LANGUES_UGC.map(async (langue) => {
-        const segments = await traduireUne(textes, langue);
-        const alertes = segments.flatMap((s) =>
-          motifs.filter((r) => r.test(s.texte)).map((r) => `concurrent cité (${s.segment}) : ${r.source}`)
-        );
-        traductions[langue] = { segments, alertes };
+        try {
+          const segments = await traduireUne(textes, langue);
+          const alertes = segments.flatMap((s) =>
+            motifs.filter((r) => r.test(s.texte)).map((r) => `concurrent cité (${s.segment}) : ${r.source}`)
+          );
+          traductions[langue] = { segments, alertes };
+        } catch (e) {
+          echecs.push(messageErreur(e));
+        }
       }),
     );
-    await majModele(supabase, id, { traductions, traduit_le: new Date().toISOString(), erreur: null });
+    const { data: avant } = await supabase.from("ugc_modeles").select("traductions").eq("id", id).single();
+    await majModele(supabase, id, {
+      traductions: { ...((avant?.traductions as Record<string, unknown> | null) ?? {}), ...traductions },
+      traduit_le: new Date().toISOString(),
+      erreur: echecs.length ? echecs.join(" · ") : null,
+    });
   } catch (e) {
     await majModele(supabase, id, { erreur: messageErreur(e) }).catch(() => null);
   }

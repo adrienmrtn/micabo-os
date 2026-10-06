@@ -3,6 +3,9 @@ import {
   coutRendu,
   dureeReactionValide,
   formeConforme,
+  formeTraductionTenue,
+  lireTraductionUgc,
+  promptTraductionUgc,
   idVideoTiktok,
   instantsPlanche,
   lireCoupe,
@@ -125,5 +128,30 @@ describe("textes et liens", () => {
   it("lit l'id d'un lien TikTok long, rien sur un lien court", () => {
     expect(idVideoTiktok("https://www.tiktok.com/@x/video/7691007701127564576?lang=fr")).toBe("7691007701127564576");
     expect(idVideoTiktok("https://vm.tiktok.com/ZMabc/")).toBeNull();
+  });
+});
+
+describe("texte à coller par langue", () => {
+  const original = [
+    { segment: "reaction" as const, texte: "Pov t'arrives\na apprendre 150\npages en 1h\ngrâce à ce mec\nqui t'a parlé\nde la méthode" },
+    { segment: "demo" as const, texte: "" },
+  ];
+
+  it("donne au modèle le nombre de lignes de chaque segment", () => {
+    expect(promptTraductionUgc(original, "de")).toContain('<reaction lignes="6">');
+    expect(promptTraductionUgc(original, "de")).toContain("die micabo-App");
+  });
+
+  it("refuse une traduction qui perd ses lignes (l'allemand sur une ligne, 06/10)", () => {
+    expect(formeTraductionTenue(original[0]!.texte, "POV du lernst 150 Seiten in 1h dank diesem Typen")).toBe(false);
+    expect(formeTraductionTenue(original[0]!.texte, "a\nb\nc\nd\ne")).toBe(true);
+    expect(formeTraductionTenue(original[0]!.texte, "a\nb\nc\nd\ne\nf\ng")).toBe(true);
+    expect(formeTraductionTenue("une seule ligne", "tout autre chose")).toBe(true);
+    expect(lireTraductionUgc('{"reaction": "POV alles auf einer Zeile", "demo": ""}', original)).toBeNull();
+    expect(lireTraductionUgc('{"reaction": "a\\nb\\nc\\nd\\ne\\nf", "demo": ""}', original)?.[0]?.texte).toBe("a\nb\nc\nd\ne\nf");
+  });
+
+  it("refuse un segment plein revenu vide, garde un segment vide", () => {
+    expect(lireTraductionUgc('{"reaction": "", "demo": ""}', original)).toBeNull();
   });
 });

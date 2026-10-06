@@ -8,6 +8,8 @@ export {
   dureeReactionValide,
   estMoteurKling,
   formeConforme,
+  formeTraductionTenue,
+  lignesTexte,
   idVideoTiktok,
   instantsPlanche,
   LANGUES_UGC,

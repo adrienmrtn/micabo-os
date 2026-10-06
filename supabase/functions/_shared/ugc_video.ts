@@ -252,14 +252,32 @@ export const FORMES_MARQUE_UGC: Record<LangueUgc, string> = {
  * Mêmes règles que les decks : une appli ou une méthode nommée devient micabo
  * (0287), repères scolaires localisés (0297), pas de tiret long (0268).
  */
+/** Lignes non vides d'un texte : la forme que le créateur reproduit dans TikTok. */
+export function lignesTexte(texte: string): number {
+  return texte.split("\n").filter((l) => l.trim()).length;
+}
+
+/**
+ * Une traduction garde le nombre de lignes de l'original, à une près. Le
+ * prompt le demande, et le 06/10 l'allemand est quand même revenu sur une
+ * seule ligne pour six (le turc sur trois) : comme la numérotation du
+ * placement (0292), la forme se tient dans le code, pas dans le prompt.
+ */
+export function formeTraductionTenue(original: string, traduit: string): boolean {
+  const n = lignesTexte(original);
+  if (n < 2) return true;
+  return Math.abs(lignesTexte(traduit) - n) <= 1;
+}
+
 export function promptTraductionUgc(textes: SegmentTexte[], langue: LangueUgc): string {
   const bloc = textes
-    .map((s) => `<${s.segment}>\n${s.texte}\n</${s.segment}>`)
+    .map((s) => `<${s.segment} lignes="${lignesTexte(s.texte)}">\n${s.texte}\n</${s.segment}>`)
     .join("\n");
   return `Tu adaptes le texte incrusté d'une vidéo TikTok (une réaction filmée, suivie d'une démo d'appli d'étude) pour un compte TikTok d'étudiant qui écrit en ${NOMS_LANGUES[langue]}. Le créateur collera ce texte lui-même dans TikTok, au même endroit que sur la vidéo d'origine.
 
 Règles :
-1. Écris en ${NOMS_LANGUES[langue]} naturel, comme un élève ou un étudiant de ce pays l'écrirait sur TikTok : mêmes codes (POV, abréviations courantes), longueur proche, retours à la ligne au même rythme.
+1. Écris en ${NOMS_LANGUES[langue]} naturel, comme un élève ou un étudiant de ce pays l'écrirait sur TikTok : mêmes codes (POV, abréviations courantes), longueur proche.
+1 bis. Chaque segment garde son nombre de lignes (attribut lignes), à une ligne près : le texte est posé sur la vidéo en bloc, coupé aux mêmes endroits du sens. Dans le JSON, un retour à la ligne s'écrit \\n.
 2. Garde le sens, le ton et la chute. N'ajoute rien, ne commente rien.
 3. Toute appli, méthode ou outil d'étude nommé devient micabo, écrit ${FORMES_MARQUE_UGC[langue]}. micabo toujours en minuscules, une seule fois dans tout le texte. Jamais « site » ni « plateforme ».
 4. Examens, classes, notes, personnes ou sites propres au pays d'origine : l'équivalent local s'il existe vraiment, sinon une formule générique. Les notes sont converties au barème local.
@@ -289,6 +307,7 @@ export function lireTraductionUgc(sortie: string, attendus: SegmentTexte[]): Seg
     if (typeof v !== "string") return null;
     // Un segment plein qui revient vide est une réponse ratée, pas une traduction.
     if (s.texte.trim() && !v.trim()) return null;
+    if (!formeTraductionTenue(s.texte, v.replace(/\r\n/g, "\n"))) return null;
     rendu.push({ segment: s.segment, texte: v.replace(/\r\n/g, "\n").trim() });
   }
   return rendu;
