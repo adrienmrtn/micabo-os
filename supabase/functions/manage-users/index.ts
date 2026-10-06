@@ -4,6 +4,7 @@ import {
   type ApplicationRow,
 } from "../_shared/applications.ts";
 import { retirerContentCredentialsBytes } from "../_shared/c2pa.ts";
+import { idsLabelsRepli } from "../_shared/labels_repli.ts";
 import { estLabelSysteme, idsLabelsAssignables } from "../_shared/labels_systeme.ts";
 import { appliquerIdentiteInstantanee } from "../_shared/persona.ts";
 import { estRoleManager } from "../_shared/roles.ts";
@@ -834,7 +835,10 @@ async function preparerFileEtPersona(
   return { ok: true, fileItem, fileItemQueue, personaUgc };
 }
 
-/** Label avec le moins de comptes actifs dans la langue (ou global si langue vide). */
+/**
+ * Label avec le moins de comptes actifs dans la langue (ou global si langue vide).
+ * Jamais un label sur demande (`white-post`) : voir `idsLabelsRepli`.
+ */
 async function labelMoinsUtiliseParLangue(
   supabase: Supabase,
   langue: string,
@@ -847,7 +851,7 @@ async function labelMoinsUtiliseParLangue(
     let q = supabase.from("labels").select("id, slug, retire_le");
     if (opts.applicationId) q = q.eq("application_id", opts.applicationId);
     const { data: tous } = await q;
-    pool = idsLabelsAssignables(tous ?? []);
+    pool = idsLabelsRepli(tous ?? []);
   }
   if (pool.length === 0) return null;
 
@@ -893,7 +897,7 @@ async function labelIdsAvecContenusUgc(
   const ids = [...new Set((data ?? []).map((r) => r.label_id as string).filter(Boolean))];
   if (ids.length === 0) return [];
   const { data: labs } = await supabase.from("labels").select("id, slug, retire_le").in("id", ids);
-  return idsLabelsAssignables(labs ?? []);
+  return idsLabelsRepli(labs ?? []);
 }
 
 async function labelADesContenusUgc(supabase: Supabase, labelId: string): Promise<boolean> {
