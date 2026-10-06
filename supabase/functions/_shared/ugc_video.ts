@@ -142,9 +142,10 @@ Figures 2 and after show ONE person, the persona, in the persona's own room.
 Make a photo of the persona from Figures 2+, in the persona's room from Figures 2+, reproducing exactly the pose, framing, camera angle, distance, facial expression, gaze and gestures of Figure 1.
 - Face, hair, skin tone, build and clothes come from Figures 2+.
 - Background and lighting come from the room of Figures 2+, seen from the angle that matches Figure 1.
-- Objects the person holds or touches in Figure 1 (tablet, laptop, phone, notebook, pen, cup) stay, at the same place and size, so the hands can do the same gestures.
+- Objects in the foreground of Figure 1 that the person holds, touches or could reach (tablet, laptop, phone, notebook, pen, cup) stay, at the same place, size and angle: later in the video the hands use them (closing a tablet, picking up a phone).
 - Take NOTHING else from Figure 1: not the person, not the room, not the clothes, no other object.
 - No text, no captions, no stickers, no emoji, no watermark, no logo.
+- ONE single photo, same orientation as Figure 1: never a grid, a collage, a triptych or several views side by side.
 - Vertical amateur phone front-camera photo, natural skin texture with pores, same image quality as Figures 2+.`;
 
 /** Le persona à la place de la personne, dans le décor d'origine. */
@@ -157,10 +158,40 @@ Transfer the FULL identity of the persona onto Figure 1. This is NOT a head swap
 
 KEEP from Figure 1 exactly: body pose, hand positions, gesture, facial expression, gaze, clothing, framing, camera angle, background, lighting, color grade and phone-photo grain.
 Remove any text, caption, sticker or watermark: the result has no text at all.
+ONE single photo, same orientation as Figure 1: never a grid, a collage, a triptych or several views side by side.
 Photorealistic, casual amateur phone-photo look.`;
 
 export function promptPersona(decor: "persona" | "source"): string {
   return decor === "source" ? PROMPT_PERSONA_DECOR_SOURCE : PROMPT_PERSONA_DECOR_PERSONA;
+}
+
+/** Les formats que Nano Banana Pro accepte, hors « auto ». */
+export const RATIOS_NANO_BANANA = ["21:9", "16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2:3", "9:16"] as const;
+
+function valeurRatio(r: string): number {
+  const [l, h] = r.split(":").map(Number);
+  return l! / h!;
+}
+
+/**
+ * Le format Nano Banana le plus proche de l'image de départ. « auto » a rendu
+ * un triptyque paysage (trois vues côte à côte) pour Inès le 06/10, sur une
+ * image de départ en 9:16 : le format se donne, il ne se laisse pas choisir.
+ */
+export function ratioNanoBanana(largeur: number, hauteur: number): string {
+  if (!(largeur > 0) || !(hauteur > 0)) return "9:16";
+  const cible = Math.log(largeur / hauteur);
+  let meilleur: string = RATIOS_NANO_BANANA[0];
+  for (const r of RATIOS_NANO_BANANA) {
+    if (Math.abs(Math.log(valeurRatio(r)) - cible) < Math.abs(Math.log(valeurRatio(meilleur)) - cible)) meilleur = r;
+  }
+  return meilleur;
+}
+
+/** L'image rendue a-t-elle la forme demandée (à 6 % près) ? */
+export function formeConforme(largeur: number, hauteur: number, ratio: string): boolean {
+  if (!(largeur > 0) || !(hauteur > 0)) return false;
+  return Math.abs(Math.log(largeur / hauteur) - Math.log(valeurRatio(ratio))) < 0.06;
 }
 
 /** Prompt Kling : court, le mouvement vient de la vidéo de référence. */

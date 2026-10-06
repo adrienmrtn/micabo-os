@@ -1,6 +1,6 @@
 import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { chunksPng, imageSansMetadonnees, pngSansMetadonnees } from "./imageMetadonnees";
+import { chunksPng, dimensionsImage, imageSansMetadonnees, pngSansMetadonnees } from "./imageMetadonnees";
 
 function crc32(octets: Uint8Array): number {
   let crc = 0xffffffff;
@@ -93,5 +93,25 @@ describe("imageSansMetadonnees", () => {
     expect(r.mime).toBe("image/jpeg");
     expect([...r.octets]).toEqual([0xff, 0xd8, 0xff, 0xda, 1, 2, 0xff, 0xd9]);
     expect(() => imageSansMetadonnees(texte("RIFF....WEBP"))).toThrow();
+  });
+});
+
+describe("dimensionsImage", () => {
+  it("lit la taille d'un PNG dans IHDR", () => {
+    expect(dimensionsImage(pngTemoin())).toEqual({ largeur: 1, hauteur: 1 });
+  });
+
+  it("lit la taille d'un JPEG dans son SOF, après les segments APP", () => {
+    // APP1 de 4 octets, puis SOF0 : précision 8, hauteur 1376, largeur 768.
+    const jpeg = Uint8Array.of(
+      0xff, 0xd8, 0xff, 0xe1, 0, 4, 0x45, 0x78,
+      0xff, 0xc0, 0, 11, 8, 0x05, 0x60, 0x03, 0x00, 1, 1, 0x11, 0,
+      0xff, 0xda, 1, 2, 0xff, 0xd9,
+    );
+    expect(dimensionsImage(jpeg)).toEqual({ largeur: 768, hauteur: 1376 });
+  });
+
+  it("rend null sur un format inconnu", () => {
+    expect(dimensionsImage(texte("RIFF....WEBP"))).toBeNull();
   });
 });

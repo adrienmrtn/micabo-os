@@ -4,6 +4,7 @@
  */
 export {
   chunksPng,
+  dimensionsImage,
   imageSansMetadonnees,
   pngSansMetadonnees,
 } from "../../../supabase/functions/_shared/image_metadonnees.ts";

@@ -112,6 +112,40 @@ export function pngSansMetadonnees(octets: Uint8Array): Uint8Array {
   return sortie;
 }
 
+/**
+ * Largeur et hauteur d'un PNG (IHDR) ou d'un JPEG (premier SOF), sans décoder
+ * l'image. `null` si le format n'est pas reconnu.
+ */
+export function dimensionsImage(octets: Uint8Array): { largeur: number; hauteur: number } | null {
+  const vue = new DataView(octets.buffer, octets.byteOffset, octets.byteLength);
+  if (estPng(octets)) {
+    if (octets.length < 24) return null;
+    return { largeur: vue.getUint32(16), hauteur: vue.getUint32(20) };
+  }
+  if (!estJpeg(octets)) return null;
+  let i = 2;
+  while (i + 9 < octets.length) {
+    if (octets[i] !== 0xff) return null;
+    const marqueur = octets[i + 1]!;
+    if (marqueur === 0xff) {
+      i += 1; // bourrage
+      continue;
+    }
+    if (marqueur === 0xd8 || marqueur === 0x01 || (marqueur >= 0xd0 && marqueur <= 0xd7)) {
+      i += 2;
+      continue;
+    }
+    const longueur = vue.getUint16(i + 2);
+    // SOF0 à SOF15, sauf DHT (C4), JPG (C8) et DAC (CC).
+    if (marqueur >= 0xc0 && marqueur <= 0xcf && marqueur !== 0xc4 && marqueur !== 0xc8 && marqueur !== 0xcc) {
+      return { hauteur: vue.getUint16(i + 5), largeur: vue.getUint16(i + 7) };
+    }
+    if (marqueur === 0xda) return null; // données d'image avant tout SOF
+    i += 2 + longueur;
+  }
+  return null;
+}
+
 /** JPEG ou PNG sans métadonnées, avec son type. Lève sur un autre format. */
 export function imageSansMetadonnees(octets: Uint8Array): { octets: Uint8Array; mime: string; ext: string } {
   if (estJpeg(octets)) return { octets: jpegSansMetadonnees(octets), mime: "image/jpeg", ext: "jpg" };

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   coutRendu,
   dureeReactionValide,
+  formeConforme,
   idVideoTiktok,
   instantsPlanche,
   lireCoupe,
@@ -9,6 +10,7 @@ import {
   normaliserTextes,
   pasPlanche,
   promptPersona,
+  ratioNanoBanana,
   renduAssezLong,
 } from "./ugcVideo";
 
@@ -79,6 +81,28 @@ describe("prompts du persona", () => {
   it("le décor d'origine transfère l'identité et retire le texte", () => {
     expect(promptPersona("source")).toMatch(/Transfer the FULL identity/);
     expect(promptPersona("source")).toMatch(/no text at all/);
+  });
+
+  it("demandent une seule photo, jamais une grille (triptyque d'Inès, 06/10)", () => {
+    for (const d of ["persona", "source"] as const) expect(promptPersona(d)).toMatch(/never a grid/);
+  });
+});
+
+describe("format de l'image du persona", () => {
+  it("prend le format Nano Banana le plus proche de l'image de départ", () => {
+    expect(ratioNanoBanana(576, 1024)).toBe("9:16");
+    expect(ratioNanoBanana(1080, 1920)).toBe("9:16");
+    expect(ratioNanoBanana(1080, 1350)).toBe("4:5");
+    expect(ratioNanoBanana(1920, 1080)).toBe("16:9");
+    expect(ratioNanoBanana(0, 0)).toBe("9:16");
+  });
+
+  it("refuse une image rendue qui n'a pas la forme demandée", () => {
+    expect(formeConforme(768, 1376, "9:16")).toBe(true);
+    expect(formeConforme(1080, 1920, "9:16")).toBe(true);
+    // Le triptyque d'Inès : paysage pour une demande en 9:16.
+    expect(formeConforme(1080, 590, "9:16")).toBe(false);
+    expect(formeConforme(1024, 1024, "9:16")).toBe(false);
   });
 });
 

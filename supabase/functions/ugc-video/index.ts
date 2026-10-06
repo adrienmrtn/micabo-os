@@ -37,7 +37,7 @@
  */
 
 import { downloadMedia, scrapeVideoPost } from "../_shared/apify.ts";
-import { imageSansMetadonnees } from "../_shared/image_metadonnees.ts";
+import { dimensionsImage, imageSansMetadonnees } from "../_shared/image_metadonnees.ts";
 import { nettoyerTexteDeck } from "../_shared/marque.ts";
 import { falLlmTexte } from "../_shared/fal_llm.ts";
 import { sonderVideoMeta } from "../_shared/fal_normaliser_video.ts";
@@ -56,6 +56,7 @@ import {
   coutRendu,
   dureeReactionValide,
   estMoteurKling,
+  formeConforme,
   idVideoTiktok,
   instantsPlanche,
   LANGUES_UGC,
@@ -71,6 +72,7 @@ import {
   promptCoupe,
   promptPersona,
   promptTraductionUgc,
+  ratioNanoBanana,
   REACTION_MAX_S,
   REACTION_MIN_S,
   renduAssezLong,
@@ -517,25 +519,37 @@ async function lancerRendu(supabase: Supabase, renduId: string): Promise<void> {
     // 06/10 : encore IN_PROGRESS à 120 s), et l'allonger dans le module
     // partagé ferait « changer » les bundles du moteur qui tirent
     // `ugc_face_swap.ts`. Même appel, budget de 5 minutes, en tâche de fond.
-    const nb = await falQueueAwaitJson(
-      MODELE_NANO_BANANA_EDIT,
-      await falQueueSubmit(MODELE_NANO_BANANA_EDIT, {
-        prompt: promptPersona(r.decor === "source" ? "source" : "persona"),
-        image_urls: [urlPublique(supabase, figure1), ...refs],
-        num_images: 1,
-        aspect_ratio: "auto",
-        output_format: "png",
-        resolution: "1K",
-        safety_tolerance: "6",
-      }),
-      undefined,
-      300_000,
-    );
-    const imageNb = ((nb.images ?? (nb.data as Record<string, unknown> | undefined)?.images) as
-      | Array<{ url?: string }>
-      | undefined)?.[0]?.url;
-    if (!imageNb) throw new Error(`Nano Banana sans image : ${JSON.stringify(nb).slice(0, 200)}`);
-    const nette = imageSansMetadonnees((await falDownloadBytes(imageNb)).bytes);
+    // Le format est celui de l'image de départ, jamais « auto » : en « auto »,
+    // Inès est sortie en triptyque paysage. Une image d'une autre forme est
+    // redemandée une fois (0,15 $ de plus, que `cout_usd` ne compte pas).
+    const ratio = ratioNanoBanana(Number(modele.largeur ?? 0), Number(modele.hauteur ?? 0));
+    let nette: { octets: Uint8Array; mime: string; ext: string } | null = null;
+    let forme = "";
+    for (let essai = 0; essai < 2 && !nette; essai += 1) {
+      const nb = await falQueueAwaitJson(
+        MODELE_NANO_BANANA_EDIT,
+        await falQueueSubmit(MODELE_NANO_BANANA_EDIT, {
+          prompt: promptPersona(r.decor === "source" ? "source" : "persona"),
+          image_urls: [urlPublique(supabase, figure1), ...refs],
+          num_images: 1,
+          aspect_ratio: ratio,
+          output_format: "png",
+          resolution: "1K",
+          safety_tolerance: "6",
+        }),
+        undefined,
+        300_000,
+      );
+      const imageNb = ((nb.images ?? (nb.data as Record<string, unknown> | undefined)?.images) as
+        | Array<{ url?: string }>
+        | undefined)?.[0]?.url;
+      if (!imageNb) throw new Error(`Nano Banana sans image : ${JSON.stringify(nb).slice(0, 200)}`);
+      const image = imageSansMetadonnees((await falDownloadBytes(imageNb)).bytes);
+      const dim = dimensionsImage(image.octets);
+      forme = dim ? `${dim.largeur}×${dim.hauteur}` : "illisible";
+      if (dim && formeConforme(dim.largeur, dim.hauteur, ratio)) nette = image;
+    }
+    if (!nette) throw new Error(`Image du persona en ${forme} pour un format ${ratio} demandé, deux fois`);
     const imagePath = `ugc/rendus/${renduId}/persona.${nette.ext}`;
     await deposer(supabase, imagePath, nette.octets, nette.mime);
     await majRendu(supabase, renduId, { image_persona_path: imagePath, etape: "kling" });
