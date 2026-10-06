@@ -580,7 +580,10 @@ async function apercu(supabase: Supabase, chemins: string[], largeur: number) {
       const video = /\.(mp4|mov|webm)$/i.test(chemin);
       const { octets, mime } = video
         ? { octets: await lireStorage(supabase, chemin), mime: "video/mp4" }
-        : await telecharger(`${base}/render/image/public/medias/${chemin}?width=${largeur}&quality=75`);
+        : // Largeur seule = recadrage au centre : `contain` dans une boîte haute garde l'image entière.
+          await telecharger(
+            `${base}/render/image/public/medias/${chemin}?width=${largeur}&height=${largeur * 2}&resize=contain&quality=75`,
+          );
       const nom = chemin.split("/").slice(-2).join("-");
       sortie.push({ chemin, url: await falHebergerOctets(octets, mime || "image/jpeg", nom) });
     } catch (e) {
