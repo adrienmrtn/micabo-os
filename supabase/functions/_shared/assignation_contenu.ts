@@ -17,6 +17,7 @@ import { LOT_IDS, lireParLots } from "./lots.ts";
 import { mapPool } from "./parallel.ts";
 import { serviceClient, messageErreur } from "./supabase.ts";
 import { extraireLabelsAssignables } from "./labels_systeme.ts";
+import { compteEnProcess } from "./compte_process.ts";
 import { positionsOrphelines } from "./deck_structure.ts";
 import { deckIncrustePret, visuelsIncrustes, type SlideIncrustee } from "./texte_incruste.ts";
 import { messagePool, type EtatPoolCompte } from "./quota_pool.ts";
@@ -1196,7 +1197,7 @@ export type AssignationCompteResultat = {
   quotaBaisse?: QuotaBaisse & { nom?: string };
 };
 
-/** Comptes en process (warmup OK, pas UGC video) encore sous leur quota du jour. */
+/** Comptes en process (warmup OK, pas un compte vidéo) encore sous leur quota du jour. */
 export async function listerComptesSousQuota(
   supabase: Supabase,
   jour: string,
@@ -1210,13 +1211,9 @@ export async function listerComptesSousQuota(
   if (error) throw error;
 
   const maintenant = Date.now();
-  const comptes = (comptesBruts ?? []).filter((c) => {
-    // Quota 0 (legacy) = toujours à traiter (plancher 1).
-    if (opts.ignorerWarmup) return true;
-    const ends = c.warmup_ends_at as string | null | undefined;
-    if (!ends) return false;
-    return new Date(ends).getTime() <= maintenant;
-  });
+  const comptes = (comptesBruts ?? []).filter((c) =>
+    compteEnProcess(c, maintenant, Boolean(opts.ignorerWarmup))
+  );
   if (comptes.length === 0) return [];
 
   const ids = comptes.map((c) => c.id as string);
@@ -1358,14 +1355,12 @@ export async function assignerTousComptes(
   if (error) throw error;
 
   // Warmup : uniquement les comptes dont warmup_ends_at est passé (en process).
-  // Mode test : on peut cibler un compte hors process (ignorerWarmup).
+  // Mode test : on peut cibler un compte hors process (ignorerWarmup). Un
+  // compte vidéo AI UGC n'est jamais servi (voir `compte_process.ts`).
   const maintenant = Date.now();
-  const comptes = (comptesBruts ?? []).filter((c) => {
-    if (o.ignorerWarmup) return true;
-    const ends = c.warmup_ends_at as string | null | undefined;
-    if (!ends) return false; // pas démarré → hors process
-    return new Date(ends).getTime() <= maintenant;
-  });
+  const comptes = (comptesBruts ?? []).filter((c) =>
+    compteEnProcess(c, maintenant, Boolean(o.ignorerWarmup))
+  );
 
   return await mapPool(comptes, LARGEUR_ASSIGNATION, async (compte) => {
     const nom =
