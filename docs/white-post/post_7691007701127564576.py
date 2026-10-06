@@ -80,7 +80,7 @@ T = {
       "sana [sabrı, istikrarı ve hazzı ertelemeyi] çoğu verimlilik tavsiyesinden daha iyi öğretir"],
   4: ["[her gün] biraz ders çalış",
       "konuları [önceden tekrar edeceğini] söylüyorsun ama sonunda [her şeyi sınavdan önceki gece] çalışıyorsun",
-      "[ben de aynıydım], ta ki micabo uygulamasını bulana kadar: [ders notlarımı bilgi kartlarına çeviriyor], ben de günde 10 dakika tekrar ediyorum",
+      "[ben de aynıydım], ta ki micabo uygulamasını bulana kadar: [ders notlarımı bilgi kartlarına çeviriyor], ben de günde 10\u00a0dakika tekrar ediyorum",
       "hafızanı, düzenini ve [motivasyon yokken bile çalışmaya devam etme] becerini geliştirir"],
   5: ["bir dövüş sporu yap",
       "[sürekli düzeltilirsin], tekniğin kötüyse hemen belli olur ve [yorgunken bile] devam etmek zorundasın",

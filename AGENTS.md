@@ -33,7 +33,7 @@ sert encore : `resoudreVisuelsAssignation` (garnissage d’une slide depuis la
 biblio du label) vit dans `_shared/visuels_assignation.ts`, et les exemples
 feed d’un label dans `src/features/moteur/promptsFeed.ts`.
 
-## Slideshows à texte incrusté : les white posts (0306, 06/10/2026)
+## Slideshows à texte incrusté : les white posts (0306/0307, 06/10/2026)
 
 Un « white post » a son texte **dessiné dans l'image** : fond blanc, texte noir
 souligné, une petite photo collée (modèle : @amayareading). Traduire à
@@ -80,31 +80,73 @@ d'abord l'anglais d'origine au pixel, on ne traduit qu'ensuite. Mesures du
 compte : **Inter Display Regular** 42 px (titres 63 px), interligne 48,5,
 souligné taille/22 à taille × 0,12 sous la ligne de base, noir pur sur 254.
 
-**Premier post, le 06/10** : « 10/10 hobbies to make you dangerously
-disciplined » (`7691007701127564576`, 796 800 vues), rendu en FR et en DE. La
-slide 4 était une publicité ReadUp ; elle devient la slide micabo (« réviser
-tous les jours » / « jeden Tag ein bisschen lernen ») avec la capture de
-l'appli dans la langue. Contenu `97dfd889`, tier A (note 79,3), **en file**.
-Aucun compte ne porte encore `white-post` : rien ne sera servi tant qu'un admin
-ne l'a pas posé sur des comptes FR ou DE.
+**Ajouter une langue après coup** (0307) : `import-texte-incruste` avec
+`contenu_id` et `langues` seulement. `ajouter_langues_texte_incruste` (réservée
+au `service_role`, `for update` sur `contenus`) range médias et deck en une
+transaction, avec les gardes de 0306 : n images exactement, positions 1..n,
+aucun média d'une langue sans deck. **Une langue déjà présente est refusée** :
+remplacer ses images orphelinerait les `media_id` que `passages.slides` garde
+pour les reposts bonus. Le statut ne bouge pas — sur un contenu déjà validé, la
+langue est servable aussitôt.
+
+**Les cinq posts du 06/10**, tous @amayareading, tous en FR / DE / TR, tous
+tier A (note 79,3 : les vues dépassent le plafond de la formule), **en file** :
+
+| contenu | TikTok | slide micabo |
+|---|---|---|
+| `97dfd889` | 7691007701127564576, dangerously disciplined | réviser tous les jours |
+| `5b47357f` | 7685071416466607382, destroying your focus | scroller tous les jours |
+| `8a492bda` | 7684726544442346774, disgustingly productive (7 slides) | teste-toi au lieu de relire |
+| `17164fa4` | 7689918962905124129, become smart again | révise au lieu de scroller |
+| `c3e5bffa` | 7686189452963712288, dangerously intelligent | scrolle moins, retiens plus |
+
+La slide publicitaire ReadUp de chaque post devient la slide micabo, chacune
+sous un angle différent : cinq posts qui diraient la même phrase se verraient
+sur un même compte. Le turc de `97dfd889` est arrivé par 0307, les quatre
+autres sont nés avec leurs trois langues.
+
+**La capture de l'appli en turc est une reconstruction** (`capture_tr.py`, à
+partir de la capture FR, mêmes polices Outfit / DM Sans) : l'appli n'a jamais
+été capturée en turc. À remplacer par une vraie capture dès qu'il y en a une —
+ce qui veut dire rerendre la slide micabo des cinq posts et passer par une
+nouvelle langue ou un nouveau contenu, puisque 0307 refuse de remplacer.
+
+**Aucun compte ne porte encore `white-post`** : rien ne sera servi tant qu'un
+admin n'a pas validé ces slideshows ET posé le label sur des comptes FR, DE ou
+TR. Un compte qui le porte avec un autre label tire les white posts comme les
+autres, dans les mêmes règles (tier, recul de 30 jours, part des C).
 
 **État du déploiement au 06/10, à lire avant de toucher aux chargeurs.**
 
-- La migration est appliquée. Le MCP l'a enregistrée sous le nom
+- 0306 est appliquée et le MCP l'a enregistrée sous le nom
   `0289_texte_incruste` ; le fichier est `0306` parce que la branche
-  `claude/wizardly-allen-c3xioi`, déployée en prod mais non mergée, occupe déjà
-  0289 → 0305.
-- `import-texte-incruste` (v1) tourne sur un chargeur **provisoire** : le bundle
-  est lu dans le key-value store Apify `micabo-white-post`, épinglé par son
-  sha256. À remplacer par le chargeur GitHub habituel dès que le code est
-  poussé.
-- Les changements moteur et front **ne sont pas déployés**. La prod exécute la
-  branche `claude/wizardly-allen-c3xioi` (assignation sur `4781398`) : des
-  bundles construits depuis `main` effaceraient tout ce qu'elle porte. Il faut
-  d'abord rapporter ces changements sur cette branche, regénérer les bundles
-  (`assignation`, `assignation-contenu`, `minuit-vnext`, `revoquer-post`,
-  `bruler-texte-test`), puis redéployer. D'ici là, ne pas valider un white post
-  ni poser `white-post` sur un compte.
+  `claude/wizardly-allen-c3xioi` occupait déjà 0289 → 0305. 0307 est
+  enregistrée sous son nom.
+- **La prod exécute maintenant `claude/zealous-faraday-6h1qc1`**, qui contient
+  `claude/wizardly-allen-c3xioi` (`26de06d`) fusionnée. Six chargeurs sur
+  `d5c9ee7` : `assignation` (v44), `assignation-contenu` (v43),
+  `minuit-vnext` (v47), `revoquer-post` (v43), `bruler-texte-test` (v31) et
+  `import-texte-incruste` (v2), qui a quitté son chargeur provisoire Apify pour
+  le chargeur GitHub habituel. **Les cinq alias `createClient` ont été
+  renommés** : `$e`→`Te`, `xe`→`Se`, `Je`→`Ge`, `Se`→`ve`, `re`→`ne` ; `B`
+  pour `import-texte-incruste`. Test de vie `401` passé sur les six, par
+  `pg_net`, aucun log d'erreur derrière.
+- Tout prochain bundle doit partir d'un arbre qui contient les DEUX branches.
+  Les cinq bundles moteur reconstruits depuis `26de06d` seul ressortent
+  identiques à ceux du dépôt : l'écart est entièrement le code white post.
+- `import-contenu` ressort à **taille constante** (sortie de `noteImport` vers
+  `note_import.ts`, identifiants permutés) : bundle du dépôt et chargeur gardés
+  tels quels. Sept autres (`audit-propres`, `bruler-assignes`,
+  `decrire-images`, `essai-placement`, `essai-variations`,
+  `normaliser-format`, `renettoyer-contenu`) diffèrent aussi à taille
+  constante, mais l'arbre de `26de06d` seul les reconstruit déjà ainsi : dérive
+  antérieure, pas touchée.
+- **Le front n'est pas en production** : Vercel construit la prod depuis
+  `main`, et ni cette branche ni `claude/wizardly-allen-c3xioi` n'y sont. Le
+  front de `main` affiche un white post en file sans vignette et sans ses
+  versions par langue (il lit `structure_slides`, qui n'a pas de média) ; la
+  validation y marche, et `realignerDeck` garde les `media_id` si l'éditeur
+  enregistre. Les images ne se relisent donc qu'avec le front de cette branche.
 
 ## Tierlist des slideshows (0250, en prod depuis le 11/09/2026)
 
