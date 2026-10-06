@@ -111,10 +111,32 @@ partir de la capture FR, mêmes polices Outfit / DM Sans) : l'appli n'a jamais
 ce qui veut dire rerendre la slide micabo des cinq posts et passer par une
 nouvelle langue ou un nouveau contenu, puisque 0307 refuse de remplacer.
 
-**Aucun compte ne porte encore `white-post`** : rien ne sera servi tant qu'un
-admin n'a pas validé ces slideshows ET posé le label sur des comptes FR, DE ou
-TR. Un compte qui le porte avec un autre label tire les white posts comme les
-autres, dans les mêmes règles (tier, recul de 30 jours, part des C).
+**Trois comptes en `white-post` seul depuis le 06/10** (demande d'Adrien) :
+`anna.examen886` (fr), `lea.arbeit646` (de) et `asya.ders680` (tr), choisis
+parce qu'ils postaient tous leurs créneaux sans percer (médianes de 1 060 à
+1 439 vues sur 21 jours, aucun post au-delà de 12 700). Le label a remplacé
+`classic-study` par un `update` de `compte_labels` ; le retour se fait de la
+même façon, il n'y avait rien d'autre sur ces comptes. Leurs passages déjà
+créés gardent leurs slideshows classiques. **Rien ne leur sera servi tant que
+les white posts ne sont pas validés** dans la file.
+
+Un compte qui porte `white-post` avec un autre label tire les white posts comme
+les autres, dans les mêmes règles (tier, recul de 30 jours, part des C).
+
+**Le repli ne donne jamais `white-post` à un compte qui naît** (06/10).
+`labelMoinsUtiliseParLangue` (`manage-users`) donne le label le moins utilisé
+de la langue quand la file admin est vide — et elle l'est en pratique : son
+unique entrée est une chaîne, que `normaliserFileLabelsValeur` ignore (le piège
+noté en 0277). Né avec zéro compte, `white-post` gagnait à chaque création ; il
+serait resté le moins utilisé avec un compte par langue, et un compte espagnol
+ou anglais l'aurait reçu sans qu'aucun white post n'existe dans sa langue.
+`_shared/labels_repli.ts` (`idsLabelsRepli`, 5 tests) retire du repli les
+labels sur demande ; ils restent assignables à la main. Module à part pour ne
+pas faire « changer » les bundles du moteur qui tirent `labels_systeme.ts`.
+Aucun compte n'a été créé entre la naissance du label (08:12 UTC) et le
+correctif. **`manage-users` v18 tourne sur `d8e723e`** (alias `ne`→`te`, test de
+vie `401`), commit de `claude/zealous-faraday-6h1qc1` pas encore dans `main` :
+ne pas redéployer `manage-users` depuis un `main` qui ne l'a pas.
 
 **Un compte qui ne porte QUE `white-post` s'assèche vite.** Le recul de
 30 jours (`RECUL_MEME_COMPTE_JOURS`) lui interdit de revoir un white post dans

@@ -7,7 +7,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "9cb11b3c6958e57bcd6a3e9c7c2db7bae7520b01";
+const SHA = "d8e723e62523933eb1c396057b284a6a861d8d98";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/manage-users.bundle.js`;
 
@@ -19,4 +19,4 @@ const src = await res.text();
 if (!src.includes("Deno.serve") || !src.includes('"hook"')) {
   throw new Error("manage-users bundle illisible ou tronqué");
 }
-new Function("ne", src)(createClient);
+new Function("te", src)(createClient);
