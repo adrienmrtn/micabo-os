@@ -397,6 +397,19 @@ fois calée), et l'iPad posé à plat reste à sa place. Deux défauts :
 Une réaction se choisit donc sans objet manipulé ET sans geste collé à
 l'objectif, et sa première frame doit être nette.
 
+**La coupe vient de la vidéo, pas de l'image** (même jour, Jade sur la même
+réaction, à la main). Deux images de départ très différentes (A en mains
+jointes, Jade bras croisés) ont donné **exactement 159 images, 5,3 s** :
+Kling écarte toujours les mêmes images de la vidéo de référence, celles où
+le bras cache la personne (sa doc demande « upper body visible, without
+obstruction »). On ne l'évite pas en soignant l'image de départ ; on l'évite
+en coupant la réaction après le geste, ou par le remplacement Kling O1, qui
+garde la vidéo entière. Jade, elle, est restée Jade du début à la fin
+(visage, cardigan, chambre, iPad) : un persona AI Influencer tient mieux
+l'identité que A. Une seconde image de départ, avec la pose décrite mot à
+mot, a eu les bras justes mais un autre visage, un plan plus large et un
+portable à la place de l'iPad : écartée. ~1,05 $ (deux images + Kling).
+
 **Pièges du MCP, précisés le 06/10** : `drop policy if exists`, même sur une
 table qui n'existe pas encore, fait attendre une confirmation humaine et la
 migration meurt à 60 s sans rien appliquer. Une migration qui crée ses tables
