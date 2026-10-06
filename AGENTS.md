@@ -116,14 +116,22 @@ admin n'a pas validé ces slideshows ET posé le label sur des comptes FR, DE ou
 TR. Un compte qui le porte avec un autre label tire les white posts comme les
 autres, dans les mêmes règles (tier, recul de 30 jours, part des C).
 
+**Un compte qui ne porte QUE `white-post` s'assèche vite.** Le recul de
+30 jours (`RECUL_MEME_COMPTE_JOURS`) lui interdit de revoir un white post dans
+le mois : il lui en faut `posts_par_jour × 30` dans sa langue, soit ~60 à 2
+posts par jour. Et un white post en A ne doit que 2 passages par cycle, toutes
+langues confondues, avant son verdict à J+2. Avec 5 white posts, un tel compte
+tient deux à trois jours, puis « Plus de candidat dans le pool ».
+
 **État du déploiement au 06/10, à lire avant de toucher aux chargeurs.**
 
 - 0306 est appliquée et le MCP l'a enregistrée sous le nom
   `0289_texte_incruste` ; le fichier est `0306` parce que la branche
   `claude/wizardly-allen-c3xioi` occupait déjà 0289 → 0305. 0307 est
   enregistrée sous son nom.
-- **La prod exécute maintenant `claude/zealous-faraday-6h1qc1`**, qui contient
-  `claude/wizardly-allen-c3xioi` (`26de06d`) fusionnée. Six chargeurs sur
+- **Tout est dans `main` depuis #96** (`2be53e3`, squash du 06/10) :
+  `claude/wizardly-allen-c3xioi` (`26de06d`) et les white posts. Les chargeurs
+  restent épinglés sur les SHA de branche, que GitHub sert toujours. Six sur
   `d5c9ee7` : `assignation` (v44), `assignation-contenu` (v43),
   `minuit-vnext` (v47), `revoquer-post` (v43), `bruler-texte-test` (v31) et
   `import-texte-incruste` (v2), qui a quitté son chargeur provisoire Apify pour
@@ -131,9 +139,9 @@ autres, dans les mêmes règles (tier, recul de 30 jours, part des C).
   renommés** : `$e`→`Te`, `xe`→`Se`, `Je`→`Ge`, `Se`→`ve`, `re`→`ne` ; `B`
   pour `import-texte-incruste`. Test de vie `401` passé sur les six, par
   `pg_net`, aucun log d'erreur derrière.
-- Tout prochain bundle doit partir d'un arbre qui contient les DEUX branches.
-  Les cinq bundles moteur reconstruits depuis `26de06d` seul ressortent
-  identiques à ceux du dépôt : l'écart est entièrement le code white post.
+- Le prochain bundle part de `main`. Avant #96, les cinq bundles moteur
+  reconstruits depuis `26de06d` seul ressortaient identiques à ceux du dépôt :
+  l'écart était entièrement le code white post.
 - `import-contenu` ressort à **taille constante** (sortie de `noteImport` vers
   `note_import.ts`, identifiants permutés) : bundle du dépôt et chargeur gardés
   tels quels. Sept autres (`audit-propres`, `bruler-assignes`,
@@ -141,12 +149,18 @@ autres, dans les mêmes règles (tier, recul de 30 jours, part des C).
   `normaliser-format`, `renettoyer-contenu`) diffèrent aussi à taille
   constante, mais l'arbre de `26de06d` seul les reconstruit déjà ainsi : dérive
   antérieure, pas touchée.
-- **Le front n'est pas en production** : Vercel construit la prod depuis
-  `main`, et ni cette branche ni `claude/wizardly-allen-c3xioi` n'y sont. Le
-  front de `main` affiche un white post en file sans vignette et sans ses
-  versions par langue (il lit `structure_slides`, qui n'a pas de média) ; la
-  validation y marche, et `realignerDeck` garde les `media_id` si l'éditeur
-  enregistre. Les images ne se relisent donc qu'avec le front de cette branche.
+- **Le front est en production depuis #96** : le bundle servi par
+  `micabo-os.vercel.app` contient l'écran des versions par langue (vérifié par
+  `pg_net`, le proxy de l'environnement de travail bloque le domaine). Un front
+  plus ancien afficherait un white post sans vignette ni versions (il lit
+  `structure_slides`, qui n'a pas de média) ; la validation y marcherait, et
+  `realignerDeck` garde les `media_id` si l'éditeur enregistre.
+  `os.micabo.app`, qu'on ne trouve que dans les migrations Upwork retirées,
+  répond `DEPLOYMENT_NOT_FOUND` : ce domaine n'est rattaché à aucun
+  déploiement Vercel. Personne ne s'en sert : sur les 24 h du 06/10, les 29
+  utilisateurs du front passent tous par `micabo-os.vercel.app` (referer des
+  appels REST), et aucun réglage, prompt, modèle de nudge ni fonction SQL ne
+  contient plus ce domaine.
 
 ## Tierlist des slideshows (0250, en prod depuis le 11/09/2026)
 
