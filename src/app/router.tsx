@@ -36,6 +36,7 @@ import { AdminFilePage } from "@/pages/admin/AdminFilePage";
 import { AdminPostDetailPage } from "@/pages/admin/AdminPostDetailPage";
 import { AdminTestsPage } from "@/pages/admin/AdminTestsPage";
 import { AdminUgcPersonasPage } from "@/pages/admin/AdminUgcPersonasPage";
+import { AdminUgcAtelierPage } from "@/pages/admin/AdminUgcAtelierPage";
 import { PosterCalendrierPage } from "@/pages/poster/PosterCalendrierPage";
 import { PosterReferralPage } from "@/pages/poster/PosterReferralPage";
 import { PosterPostPage } from "@/pages/poster/PosterPostPage";
@@ -89,6 +90,7 @@ export function AppRouter() {
             <Route path="/admin/documents" element={<AdminDocumentsPage />} />
             <Route path="/admin/assistant" element={<AdminChatbotPage />} />
             <Route path="/admin/ugc/personas" element={<AdminUgcPersonasPage />} />
+            <Route path="/admin/ugc/atelier" element={<AdminUgcAtelierPage />} />
           </Route>
         </Route>
 

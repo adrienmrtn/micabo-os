@@ -20,6 +20,7 @@ import {
   Settings,
   ShieldAlert,
   UserRound,
+  Clapperboard,
   Users,
 } from "lucide-react";
 
@@ -91,6 +92,12 @@ export function AdminLayout() {
               label: t("nav.ugcPersonas"),
               icon: UserRound,
               description: t("navDesc.ugcPersonas"),
+            },
+            {
+              to: "/admin/ugc/atelier",
+              label: t("nav.ugcAtelier"),
+              icon: Clapperboard,
+              description: t("navDesc.ugcAtelier"),
             },
           ],
         },
