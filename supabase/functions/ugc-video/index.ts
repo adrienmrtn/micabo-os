@@ -851,6 +851,40 @@ Deno.serve(async (request) => {
       return json({ ok: true, ...(await nettoyerPersonas(supabase, ids)) });
     }
 
+    if (action === "videos_renettoyer") {
+      // Repasse les MP4 déjà livrés quand le retrait des métadonnées progresse
+      // (06/10 : le SEI « kling-ai » des trois premiers rendus). Même chemin,
+      // même ligne `media_library` : rien à repointer.
+      let chemins = Array.isArray(body.chemins) ? body.chemins.map(String) : [];
+      if (!chemins.length) {
+        const { data } = await supabase.from("media_library").select("storage_path").like("storage_path", "ugc/%.mp4");
+        chemins = (data ?? []).map((m) => String(m.storage_path));
+      }
+      const rapport: Array<Record<string, unknown>> = [];
+      for (const chemin of chemins) {
+        if (!chemin.startsWith("ugc/") || !chemin.endsWith(".mp4")) {
+          rapport.push({ chemin, erreur: "hors de ugc/…/.mp4" });
+          continue;
+        }
+        try {
+          const avant = await lireStorage(supabase, chemin);
+          const restes = metadonneesMp4(avant);
+          if (!restes.length) {
+            rapport.push({ chemin, propre: true });
+            continue;
+          }
+          const propre = mp4SansMetadonnees(avant);
+          const encore = metadonneesMp4(propre);
+          if (encore.length) throw new Error(`Métadonnées restantes : ${encore.join(", ")}`);
+          await deposer(supabase, chemin, propre, "video/mp4");
+          rapport.push({ chemin, retire: restes, avant: avant.length, apres: propre.length });
+        } catch (e) {
+          rapport.push({ chemin, erreur: messageErreur(e) });
+        }
+      }
+      return json({ ok: true, rapport });
+    }
+
     if (action === "rendu_lancer") {
       const modeleId = String(body.modele_id ?? "");
       const personaId = String(body.persona_id ?? "");
