@@ -266,6 +266,14 @@ synchrone ; l'import avait fini en ~3 min (vidéo de 33 s), au-delà des 150 s
 d'une requête. Retour à la tâche de fond le jour même. Vérifier la ligne en
 base avant de conclure à une mort.
 
+**Déploiement du 06/10** : migration 0308 appliquée (tables neuves seulement,
+plus `ugc_modeles.erreur` ajoutée dans la foulée), `ugc-video` en chargeur
+(v5) sur `8a8048e`, alias `$e`, test de vie `401` passé. Aucun autre chargeur
+n'a bougé : le moteur ne tire ni `ugc_video.ts` ni `mp4_metadonnees.ts`. La
+page `/admin/ugc/atelier` n'est en production qu'après fusion dans `main`.
+Test de plomberie sur un tutoriel Gizmo (import, planche, coupe) : bon, et
+la coupe vide était juste, personne n'y est filmé. Modèle archivé.
+
 **Pièges du MCP, précisés le 06/10** : `drop policy if exists`, même sur une
 table qui n'existe pas encore, fait attendre une confirmation humaine et la
 migration meurt à 60 s sans rien appliquer. Une migration qui crée ses tables
