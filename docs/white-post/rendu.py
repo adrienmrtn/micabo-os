@@ -89,6 +89,9 @@ def rendre(spec: dict, source: str | None, sortie: str) -> list[dict]:
             largeur = police_ss.getlength(texte) / SS
             if bloc.get("align") == "right":
                 x = bloc["x"] - largeur
+            elif bloc.get("align") == "center":
+                # `x` est alors l'axe de la colonne, chaque ligne centrée dessus
+                x = bloc["x"] - largeur / 2
             else:
                 x = bloc["x"]
             d.text((x * SS, base * SS), texte, font=police_ss, fill=255, anchor="ls")
