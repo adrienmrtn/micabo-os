@@ -113,12 +113,22 @@ partir de la capture FR, mêmes polices Outfit / DM Sans) : l'appli n'a jamais
 ce qui veut dire rerendre la slide micabo des cinq posts et passer par une
 nouvelle langue ou un nouveau contenu, puisque 0307 refuse de remplacer.
 
-**Trois comptes en `white-post` seul depuis le 06/10** (demande d'Adrien) :
-`anna.examen886` (fr), `lea.arbeit646` (de) et `asya.ders680` (tr), choisis
-parce qu'ils postaient tous leurs créneaux sans percer (médianes de 1 060 à
-1 439 vues sur 21 jours, aucun post au-delà de 12 700). Le label a remplacé
-`classic-study` par un `update` de `compte_labels` ; le retour se fait de la
-même façon, il n'y avait rien d'autre sur ces comptes.
+**Les comptes en `white-post` seul, au 06/10 au soir** : `anna.examen886`
+(fr), et deux comptes NEUFS créés par Adrien le 06/10, `lea.studium381` (de,
+fin de warmup le 07/10 à 08:10 UTC) et `deniz.sinav272` (tr, 11:33 UTC).
+Adrien tient à ce que le format soit testé sur des comptes neufs.
+
+Le matin du 06/10, trois comptes existants y étaient passés : `anna.examen886`,
+`lea.arbeit646` (de) et `asya.ders680` (tr), choisis parce qu'ils postaient
+tous leurs créneaux sans percer (médianes de 1 060 à 1 439 vues sur 21 jours,
+aucun post au-delà de 12 700). Le label a remplacé `classic-study` par un
+`update` de `compte_labels` ; le retour se fait de la même façon, il n'y avait
+rien d'autre sur ces comptes. **Le soir même, `lea.arbeit646` et `asya.ders680`
+sont repassés en `classic-study`** pour laisser le stock aux comptes neufs de
+leur langue : `lea.arbeit646` n'avait reçu aucun white post, et les deux
+d'`asya.ders680`, pas encore publiés, ont été remplacés par des classiques (même
+procédé que ci-dessous). Sans ça, deux comptes turcs auraient publié les mêmes
+images au pixel près devant la même audience.
 
 Le 06/10 à 11:40 UTC, à la demande d'Adrien, les posts classiques **pas encore
 publiés** du jour ont été remplacés : seuls les deux d'`asya.ders680`
@@ -133,9 +143,30 @@ musique et hashtags. Pas par `revoquer-post` : le secret cron y vaut rôle admin
 et un admin rejette le slideshow pour tout le monde. Les deux slideshows
 classiques retrouvent leur passage dû et repartent ailleurs.
 
-Les autres white posts partent à l'assignation de la nuit du 06 au 07/10. Après
-elle, 8 des 10 passages dus sont pris : la nuit suivante n'en a plus que 2 pour
-6 créneaux, jusqu'aux verdicts de J+2.
+Le même jour à 14:03 UTC, ce remplacement a été défait pour `asya.ders680`
+(retour en classique, `85379b9e` et `cd8d453b`), sauvegarde dans la même table.
+
+**Second lot, dix posts, en file le 06/10** (`docs/white-post/README.md`), tous
+@amayareading, FR / DE / TR, un angle micabo chacun :
+
+| contenu | TikTok | tier | slide micabo |
+|---|---|---|---|
+| `5728e185` | 7688807102764092705, ruin your 20s | A | l'ironie : « n'ouvre surtout pas l'appli micabo » |
+| `939637c1` | 7685340052989398275, smart again #2 (sans slide pub) | A | se faire interroger, les trous se voient |
+| `f36c8e54` | 7685736268617059616, harmed your brain (7 slides) | A | attention courte, séances courtes |
+| `8de16b74` | 7690642292855672096, successful people | A | ne plus recopier ses cours en fiches |
+| `be7b4194` | 7683541501007252758, smart again (sources) | A | la courbe de l'oubli |
+| `f5fc62fa` | 7691336990419209505, stop in your 20s | A | les temps morts |
+| `430b62d6` | 7692093201968090401, smart again (short-form) | A | ses propres cours, pas des vidéos |
+| `3615df10` | 7681048823824649494, phone addiction | B | l'appli à la place de TikTok sur l'écran d'accueil |
+| `27cd75a1` | 7680975889932225814, 7 ways (7 slides) | C | le matin au réveil |
+| `2c25985f` | 7683630825610513686, anti-rot routine | C | le soir, avant de dormir |
+
+Tiers par la formule d'import : les deux derniers ont moins de 10 000 vues
+d'origine. Ils sont en `brouillon` : rien n'entre dans le pool sans un admin.
+Une fois validés, le stock passe à 15 white posts, soit 27 passages par cycle
+pour trois comptes à 2 posts par jour, et chaque compte peut en recevoir 15
+avant de buter sur le recul de 30 jours (7 jours et demi).
 
 Un compte qui porte `white-post` avec un autre label tire les white posts comme
 les autres, dans les mêmes règles (tier, recul de 30 jours, part des C).
@@ -159,7 +190,10 @@ vie `401`), dans `main` depuis #98.
 le mois : il lui en faut `posts_par_jour × 30` dans sa langue, soit ~60 à 2
 posts par jour. Et un white post en A ne doit que 2 passages par cycle, toutes
 langues confondues, avant son verdict à J+2. Avec 5 white posts, un tel compte
-tient deux à trois jours, puis « Plus de candidat dans le pool ».
+tient deux à trois jours, puis « Plus de candidat dans le pool ». Il ne
+reçoit alors AUCUN post : sans autre label, il n'a pas de repli vers les
+classiques. Un post rendu dans trois langues sert une fois chaque compte de
+ces langues : pour tenir, il faut environ deux white posts neufs par jour.
 
 **État du déploiement au 06/10, à lire avant de toucher aux chargeurs.**
 
