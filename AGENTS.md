@@ -186,7 +186,7 @@ tient deux à trois jours, puis « Plus de candidat dans le pool ».
   appels REST), et aucun réglage, prompt, modèle de nudge ni fonction SQL ne
   contient plus ce domaine.
 
-## AI UGC : l'atelier, premier lot (0308, 06/10/2026)
+## AI UGC : l'atelier, premier lot (0308/0309, 06/10/2026)
 
 Un post AI UGC, ce sont **deux vidéos et un texte** que le créateur assemble
 dans TikTok : la **réaction** d'un TikTok source refaite par le persona du
@@ -213,9 +213,12 @@ au lot 2 avec son exclusion dans `labels_repli.ts`.
   import d'un TikTok (Apify, planche d'une image toutes les ~0,5 s par
   `extract-nth-frame`, coupe proposée par `gemini-2.5-flash`), coupe du
   segment réaction (Fal `trim-video`), image de départ et la même sans texte,
-  OCR des deux segments, rendus, démos, import de personas depuis des URL, et
-  `apercu` (voir plus bas). Les étapes longues tournent en tâche de fond
-  (`EdgeRuntime.waitUntil`) : l'écran relit les tables.
+  OCR des deux segments, texte traduit par langue (0309), rendus, démos,
+  import de personas depuis des URL, `personas_nettoyer` et
+  `videos_renettoyer` (repassent photos et MP4 déjà rangés quand le retrait
+  des métadonnées progresse), et `apercu` (voir plus bas). Les étapes longues
+  tournent en tâche de fond (`EdgeRuntime.waitUntil`) : l'écran relit les
+  tables.
 - **Un rendu** : Nano Banana Pro pose le persona dans l'image de départ
   (`decor = persona` : sa chambre, de la frame source on ne garde que la pose ;
   `decor = source` : le décor d'origine), puis Kling motion control
@@ -225,17 +228,57 @@ au lot 2 avec son exclusion dans `labels_repli.ts`.
   l'appelle toutes les 20 s tant qu'un rendu attend). Gardes : réaction entre
   3 et 30 s, rendu refusé sous 85 % de la durée de la réaction (Kling tronque
   parfois), abandon à 1 h.
+- **L'image du persona a le format de l'image de départ, jamais « auto »**
+  (`ratioNanoBanana`). En « auto », Nano Banana a rendu pour Inès un
+  **triptyque paysage** (trois vues côte à côte) sur une frame en 9:16, et
+  Kling l'aurait animé tel quel. L'image rendue est mesurée
+  (`dimensionsImage`, sans décodage) et redemandée une fois si sa forme ne
+  colle pas (`formeConforme`, 6 %) ; la seconde image n'entre pas dans
+  `cout_usd`. Nano Banana passe par la file Fal avec 5 minutes de budget, pas
+  par `editerNanoBananaPro` (120 s, trop court avec six références, et
+  l'allonger ferait « changer » les bundles du moteur via `ugc_face_swap.ts`).
+- **Les objets de la frame restent**, y compris ceux que la personne ne
+  touche pas encore : Clara et Manon avaient perdu l'iPad que la source ferme
+  deux secondes plus tard, et leur main se tend vers l'objectif dans le vide.
+  Le prompt le dit ; rien ne le vérifie, c'est la validation qui juge.
 - **Prix Fal lus le 06/10** : Kling motion control 0,112 $/s (v2.6 pro),
   0,07 (v2.6 standard), 0,168 (v3 pro), 0,126 (v3 standard) ; Nano Banana Pro
   0,15 $ l'image. Une réaction de 6 s revient à ~0,82 $ (v2.6 pro) ou ~1,16 $
   (v3 pro), donc **4 à 6 $ par vidéo source** pour cinq personas.
-- **MP4 sans métadonnées** (`_shared/mp4_metadonnees.ts`, pur, 8 tests) :
+- **MP4 sans métadonnées** (`_shared/mp4_metadonnees.ts`, pur, 11 tests) :
   retire `udta`, `meta`, `uuid` (XMP, C2PA) partout, met à zéro les dates de
   `mvhd`/`tkhd`/`mdhd`, vide le nom de `hdlr` et le `compressorname`, et
   recale `stco`/`co64` mdat par mdat. Rien n'est ré-encodé. Vérifié à côté
   sur quatre MP4 ffmpeg (faststart, moov en fin, clés Apple, C2PA simulé) :
-  décodage OK, flux identiques au `framemd5`. Ne touche pas un SEI d'encodeur
-  écrit dans le flux vidéo (x264 en laisse un). Un MP4 fragmenté est refusé.
+  décodage OK, flux identiques au `framemd5`. Un MP4 fragmenté est refusé.
+- **Kling signe DANS le flux vidéo** : un SEI « données utilisateur » (H.264
+  type 5, UUID puis `kling-ai`) en tête du premier échantillon, que le
+  retrait des boîtes ne voit pas. Trouvé sur les premiers rendus en cherchant
+  les chaînes du fichier. Un NAL SEI qui ne porte QUE ce type de message est
+  retiré de son échantillon (`stsz` et `stco`/`co64` recalés) ; x264 range
+  ses réglages au même endroit. 33 octets par rendu, 173 images sur 173
+  identiques au `framemd5`. Un SEI mixte (point de reprise + données
+  utilisateur) est laissé et signalé par `metadonneesMp4`, donc la
+  finalisation refuse le fichier plutôt que de le livrer.
+- **Photos des personas sans métadonnées** (`_shared/image_metadonnees.ts`,
+  pur) : elles serviront de photo de profil. PNG : seuls les chunks d'image
+  restent (iCCP remplacé par sRGB, son nom signe l'outil) ; JPEG par
+  `jpegSansMetadonnees`. Les 25 photos des cinq personas ont été repassées
+  le 06/10 (58 à 921 octets retirés chacune), et chaque image de départ d'un
+  rendu naît propre. **Un filigrane invisible écrit dans les pixels (SynthID
+  sur les images Google, Nano Banana compris) n'est pas une métadonnée** :
+  rien ici ne le retire.
+- **Le texte à coller, par langue** (0309, `ugc_modeles.traductions`) : fr,
+  de, tr, es, en, avec la capture d'origine (`image_ref_path`) qui montre où
+  le poser et le lien du TikTok d'origine, à l'écran avec un bouton copier.
+  Toute appli ou méthode nommée devient micabo dans sa forme de langue, une
+  fois. **La forme se tient dans le code** (leçon de 0292) : le prompt
+  demandait des retours à la ligne « au même rythme », et l'allemand est
+  revenu sur une ligne pour six. Le prompt donne le nombre de lignes de
+  chaque segment, `formeTraductionTenue` refuse plus d'une ligne d'écart,
+  deux essais par modèle. Un concurrent qui survit est une alerte à l'écran,
+  pas une coupe. **Aistote** (« la méthode aistote », la première vidéo) entre
+  dans `concurrents` par 0309.
 - **Personas par Higgsfield** (MCP connecté à la session) : visage par Soul
   2.0 (0,12 crédit l'image), angles, tête baissée et photo de profil par
   Nano Banana Pro avec le visage en référence (2 crédits l'image). Rapatriés
@@ -266,13 +309,24 @@ synchrone ; l'import avait fini en ~3 min (vidéo de 33 s), au-delà des 150 s
 d'une requête. Retour à la tâche de fond le jour même. Vérifier la ligne en
 base avant de conclure à une mort.
 
-**Déploiement du 06/10** : migration 0308 appliquée (tables neuves seulement,
-plus `ugc_modeles.erreur` ajoutée dans la foulée), `ugc-video` en chargeur
-(v5) sur `8a8048e`, alias `$e`, test de vie `401` passé. Aucun autre chargeur
-n'a bougé : le moteur ne tire ni `ugc_video.ts` ni `mp4_metadonnees.ts`. La
-page `/admin/ugc/atelier` n'est en production qu'après fusion dans `main`.
-Test de plomberie sur un tutoriel Gizmo (import, planche, coupe) : bon, et
-la coupe vide était juste, personne n'y est filmé. Modèle archivé.
+**Déploiement du 06/10** : migrations 0308 (tables neuves seulement, plus
+`ugc_modeles.erreur` ajoutée dans la foulée) et 0309 appliquées,
+`ugc-video` en chargeur (**v11**) sur `b556685`, alias `je`, test de vie
+`401` passé à chaque version. Aucun autre chargeur n'a bougé : le moteur ne
+tire ni `ugc_video.ts`, ni `mp4_metadonnees.ts`, ni `image_metadonnees.ts`.
+La page `/admin/ugc/atelier` n'est en production qu'après fusion dans
+`main`. Test de plomberie sur un tutoriel Gizmo (import, planche, coupe) :
+bon, et la coupe vide était juste, personne n'y est filmé. Modèle archivé.
+
+**Le premier modèle réel** (`b557fc8d`, @etudiant_pass 7679514675842682134,
+« Pov t'arrives a apprendre 150 pages… la méthode aistote ») : réaction de
+0 à 5,919 s, OCR exact, cinq langues. Six rendus en décor « persona » :
+Clara (v2.6 pro et v3 pro), Inès, Léa, Manon, A (v2.6 pro). Le geste passe
+partout (doigt au menton, main tendue, applaudissement, sourire), visages
+stables, mains propres, 1040×1984 à 30 i/s, muet. **v3 pro ne se distingue
+pas de v2.6 pro sur ce geste** pour 40 % de plus : v2.6 pro reste le défaut.
+0,796 $ le rendu (6 s), ~6,2 $ dépensés sur ce modèle, triptyque d'Inès et
+deux images perdues au délai de 120 s compris.
 
 **Pièges du MCP, précisés le 06/10** : `drop policy if exists`, même sur une
 table qui n'existe pas encore, fait attendre une confirmation humaine et la
