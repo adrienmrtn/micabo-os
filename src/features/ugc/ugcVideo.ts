@@ -14,6 +14,7 @@ export {
   instantsPlanche,
   LANGUES_UGC,
   lireCoupe,
+  lireDebutDemo,
   lireTraductionUgc,
   MOTEUR_DEFAUT,
   MOTEURS_KLING,

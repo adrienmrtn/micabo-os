@@ -218,6 +218,18 @@ export function normaliserTextes(brut: unknown): SegmentTexte[] {
   return sortie.sort((a, b) => (a.segment === b.segment ? 0 : a.segment === "reaction" ? -1 : 1));
 }
 
+/**
+ * Le début de la démo tel que l'écran l'envoie : `null`, absent ou vide veut
+ * dire « pas de démo ». `Number(null)` vaut 0 : lu naïvement, un modèle sans
+ * démo (@studyywithsachii, 06/10) recevait une démo à 0 s, et l'OCR de la
+ * « démo » relisait la légende de la réaction.
+ */
+export function lireDebutDemo(brut: unknown): number | null {
+  if (brut === null || brut === undefined || brut === "") return null;
+  const n = Number(brut);
+  return Number.isFinite(n) ? n : null;
+}
+
 /** Identifiant de la vidéo dans un lien TikTok long (`/video/<id>`), sinon null. */
 export function idVideoTiktok(url: string): string | null {
   const m = url.match(/\/video\/(\d{8,})/);

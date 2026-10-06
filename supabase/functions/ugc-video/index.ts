@@ -62,6 +62,7 @@ import {
   LANGUES_UGC,
   type LangueUgc,
   lireCoupe,
+  lireDebutDemo,
   lireTraductionUgc,
   MOTEUR_DEFAUT,
   MOTEURS_KLING,
@@ -850,7 +851,10 @@ Deno.serve(async (request) => {
       if (!dureeReactionValide(fin - debut)) {
         return json({ error: `La réaction doit durer entre ${REACTION_MIN_S} et ${REACTION_MAX_S} s` }, 400);
       }
-      const demo = Number.isFinite(Number(body.demo_debut_s)) ? Number(body.demo_debut_s) : null;
+      const demo = lireDebutDemo(body.demo_debut_s);
+      if (demo !== null && demo < fin) {
+        return json({ error: "La démo commence après la fin de la réaction" }, 400);
+      }
       await majModele(supabase, id, { erreur: null, statut: "a_couper" });
       enArrierePlan(couperModele(supabase, id, debut, fin, demo));
       return json({ ok: true, id });

@@ -9,6 +9,7 @@ import {
   idVideoTiktok,
   instantsPlanche,
   lireCoupe,
+  lireDebutDemo,
   MOTEURS_KLING,
   normaliserTextes,
   pasPlanche,
@@ -106,6 +107,18 @@ describe("format de l'image du persona", () => {
     // Le triptyque d'Inès : paysage pour une demande en 9:16.
     expect(formeConforme(1080, 590, "9:16")).toBe(false);
     expect(formeConforme(1024, 1024, "9:16")).toBe(false);
+  });
+});
+
+describe("début de la démo", () => {
+  it("null, absent ou vide veut dire pas de démo, jamais 0 s", () => {
+    expect(lireDebutDemo(null)).toBeNull();
+    expect(lireDebutDemo(undefined)).toBeNull();
+    expect(lireDebutDemo("")).toBeNull();
+    expect(lireDebutDemo("abc")).toBeNull();
+    expect(lireDebutDemo(6.2)).toBe(6.2);
+    expect(lireDebutDemo("6.2")).toBe(6.2);
+    expect(lireDebutDemo(0)).toBe(0);
   });
 });
 
