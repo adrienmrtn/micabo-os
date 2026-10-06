@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { estLabelSurDemande, idsLabelsRepli } from "../../../supabase/functions/_shared/labels_repli.ts";
 import {
   estLabelRetire,
   extraireLabelsAssignables,
@@ -75,5 +76,46 @@ describe("label retiré — jamais assignable (0277)", () => {
     expect(estLabelRetire({})).toBe(false);
     expect(estLabelRetire(null)).toBe(false);
     expect(estLabelRetire(undefined)).toBe(false);
+  });
+});
+
+/**
+ * Le 06/10, `white-post` est né avec zéro compte : le repli (« le label le moins
+ * utilisé dans la langue ») l'aurait donné à chaque compte créé ensuite, file
+ * admin vide. Un label sur demande reste assignable à la main, jamais par le
+ * repli.
+ */
+describe("labels sur demande — jamais tirés par le repli", () => {
+  const labels = [
+    { id: "classic", slug: "classic-study", retire_le: null },
+    { id: "white", slug: "white-post", retire_le: null },
+    { id: "hook", slug: "hook", retire_le: null },
+  ];
+
+  it("reste assignable à la main", () => {
+    expect(idsLabelsAssignables(labels)).toEqual(["classic", "white"]);
+  });
+
+  it("sort du pool du repli, comme hook", () => {
+    expect(idsLabelsRepli(labels)).toEqual(["classic"]);
+  });
+
+  it("rend une liste vide plutôt qu'un label sur demande", () => {
+    expect(idsLabelsRepli([{ id: "white", slug: "white-post", retire_le: null }])).toEqual([]);
+  });
+
+  it("garde l'exclusion du retiré", () => {
+    expect(
+      idsLabelsRepli([
+        { id: "old", slug: "cold-study", retire_le: "2026-09-24T16:00:00Z" },
+        { id: "classic", slug: "classic-study", retire_le: null },
+      ]),
+    ).toEqual(["classic"]);
+  });
+
+  it("reconnaît white-post par son slug", () => {
+    expect(estLabelSurDemande({ slug: "white-post" })).toBe(true);
+    expect(estLabelSurDemande({ slug: "classic-study" })).toBe(false);
+    expect(estLabelSurDemande(null)).toBe(false);
   });
 });
