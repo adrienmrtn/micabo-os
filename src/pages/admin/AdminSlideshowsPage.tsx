@@ -40,6 +40,8 @@ import { LabelEditor } from "@/features/moteur/LabelPicker";
 import { remettreEnFile } from "@/features/moteur/fileValidationApi";
 import { HistoriqueTier } from "@/features/moteur/HistoriqueTier";
 import { PassagesSlideshow } from "@/features/moteur/PassagesSlideshow";
+import { VersionsIncrustees } from "@/features/moteur/VersionsIncrustees";
+import { vignetteIncrustee } from "@/features/moteur/texteIncruste";
 import {
   captionnerMediaBiblio,
   collecterMediaIdsContenus,
@@ -221,6 +223,8 @@ function urlPropre(c: ContenuListe, slide: ContenuSlide): string | null {
 }
 
 function vignette(c: ContenuListe): string | null {
+  // Texte incrusté (0306) : la structure n'a pas d'image, chaque langue a les siennes.
+  if (c.texte_incruste) return vignetteIncrustee(c.versionsIncrustees);
   const slides = [...(c.structure_slides ?? [])].sort((a, b) => a.position - b.position);
   for (const s of slides) {
     const propre = urlPropre(c, s);
@@ -1548,7 +1552,14 @@ function DetailSlideshow({
                 </div>
               )}
             </section>
-            <VisuelsContenu contenu={d} />
+            {d.texte_incruste ? (
+              <VersionsIncrustees
+                versions={d.versionsIncrustees ?? []}
+                hashtags={Object.fromEntries(langues.map((l) => [l.langue, l.hashtags ?? ""]))}
+              />
+            ) : (
+              <VisuelsContenu contenu={d} />
+            )}
             {reimportDetailLogs.length > 0 && (
               <div className="max-h-32 space-y-0.5 overflow-y-auto rounded border bg-muted/30 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
                 {reimportDetailLogs.map((l, i) => (
@@ -1627,6 +1638,8 @@ function DetailSlideshow({
               )}
             </section>
 
+            {/* Texte incrusté : les versions par langue sont montrées plus haut, un deck n'a pas de texte. */}
+            {!d.texte_incruste && (
             <section className="space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("slideshows.decks")}
@@ -1666,6 +1679,7 @@ function DetailSlideshow({
                 </>
               )}
             </section>
+            )}
 
             <section className="space-y-2">
               <button
@@ -1784,11 +1798,14 @@ export function AdminSlideshowsPage() {
   const { applicationId } = useApplication();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  // « actifs » = tout sauf les rejetés. Défaut : la bibliothèque utile, pas la
-  // pile des TikToks écartés à l'import.
+  // Défaut : les VALIDES, la bibliothèque que le moteur pioche. « actifs » (tout
+  // sauf les rejetés) mêlait les imports en cours et la file de validation à la
+  // bibliothèque : le 02/10, les slideshows d'emir.study en plein nettoyage y
+  // apparaissaient comme s'ils avaient sauté la file. Ils restent sous « En
+  // cours » et dans /admin/file.
   const [filtre, setFiltre] = React.useState<
     "actifs" | "tous" | "valide" | "rejete" | "brouillon"
-  >("actifs");
+  >("valide");
   const [filtreLabel, setFiltreLabel] = React.useState<FiltreLabel>(null);
   const [filtreCompte, setFiltreCompte] = React.useState<FiltreCompte>(null);
   const [filtreUgc, setFiltreUgc] = React.useState<FiltreUgc>("tous");
@@ -2183,7 +2200,7 @@ export function AdminSlideshowsPage() {
               </p>
             )}
             <div className="flex flex-wrap items-center gap-1.5">
-              {(["actifs", "tous", "valide", "rejete", "brouillon"] as const).map((f) => (
+              {(["valide", "brouillon", "actifs", "tous", "rejete"] as const).map((f) => (
                 <Chip key={f} actif={filtre === f} onClick={() => setFiltre(f)}>
                   {t(`contenus.filtre.${f}`)}
                 </Chip>

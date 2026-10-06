@@ -690,3 +690,67 @@ from ec cross join p
 group by ec.compte, ec.langue
 having count(*) filter (where ec.t >= p.t_fin - interval '7 days' and ec.ecart < interval '5 minutes') > 0
 order by enchaines_24h desc, enchaines_7j desc, ec.compte;
+
+-- ===== Q13 placements_a_controler =====
+-- L'ENTRÉE DU CONTRÔLE DE 08:49 (PLACEMENT.md). Les posts NON publiés de J-2 à J,
+-- un par ligne, avec la slide micabo (celle que le moteur a marquée, sinon la
+-- dernière qui cite micabo) et le post entier dans `post`. Les drapeaux sont
+-- des indices mécaniques, pas des verdicts : le modèle lit le post et tranche.
+-- - `mentions` : nombre de slides qui citent micabo (la règle : 1) ;
+-- - `trop_long` : la slide micabo dépasse de plus de 10 % la plus longue de ses
+--   voisines (hors couverture) ;
+-- - `formule` : une tournure de fiche produit ou de pub (génère, au bon moment,
+--   top pour ça, erstellt dir, oluşturur…) — faux positifs possibles en turc
+--   (« hazırlanırken ») ;
+-- - `tiret` : un tiret long ou demi-cadratin ;
+-- - `copie_autre_slide` : le texte micabo est mot pour mot celui d'une autre
+--   slide (le défaut des placements qui recopient leur voisine) ;
+-- - `deck_porte_encore` : le deck de la langue a toujours ce texte à cette
+--   position, donc une correction nettoie aussi les prochains posts.
+-- `meme_texte` = combien de passages non publiés portent ce texte au même
+-- endroit : décider une fois, corriger chacun.
+with p as (select date '{{JOUR}}' as j),
+pa as (
+  select pa.id as passage_id, pa.post_id, pa.contenu_id, pa.langue, pa.date_publication_prevue as date_prevue,
+         co.handle_tiktok as compte,
+         (select (e->>'position')::int from jsonb_array_elements(pa.slides) e
+           where (e->>'position_sophia')::boolean limit 1) as slide_placement
+  from public.passages pa
+  join public.posts po on po.id = pa.post_id
+  join public.comptes co on co.id = pa.compte_id
+  where pa.date_publication_prevue between (select j from p) - 2 and (select j from p)
+    and pa.statut <> 'publie' and pa.publie_at is null and po.publie_at is null
+),
+s as (
+  select pa.passage_id, ps.position, ps.texte_overlay as t
+  from pa join public.post_slides ps on ps.post_id = pa.post_id
+),
+agg as (
+  select passage_id,
+    count(*) filter (where t ~* '\mmicabo\M') as mentions,
+    array_agg(position order by position) filter (where t ~* '\mmicabo\M') as slides_micabo,
+    max(length(t)) filter (where position <> 1 and coalesce(t !~* '\mmicabo\M', true)) as long_voisine_max
+  from s group by passage_id
+),
+x as (
+  select pa.*, agg.mentions, agg.slides_micabo, agg.long_voisine_max,
+    coalesce(pa.slide_placement, agg.slides_micabo[array_upper(agg.slides_micabo, 1)]) as slide
+  from pa join agg using (passage_id)
+)
+select x.passage_id, x.compte, x.langue, x.date_prevue, left(x.contenu_id::text, 8) as contenu,
+  x.slide, x.mentions, x.slides_micabo, length(pl.t) as longueur, x.long_voisine_max,
+  length(pl.t) > 1.1 * x.long_voisine_max as trop_long,
+  pl.t ~* '(au bon moment|à partir de tes|g[ée]n[èe]re|transforme tes (cours|notes)|(top|parfaite?|idéale?) pour (ça|cela)|te permet de|personnalis|super dafür|perfekt dafür|erstellt dir|automatisch|richtigen zeitpunkt|individuell|genial para (eso|esto)|perfect[ao] para (eso|esto)|te genera|te crea|momento justo|personaliz|tam bunun için|oluştur|hazırla|kişisel|doğru zaman|great for (that|this)|perfect for (that|this)|generates|creates your|at the right time|personali[sz]ed)' as formule,
+  pl.t ~ '[—–]' as tiret,
+  exists (select 1 from s o where o.passage_id = x.passage_id and o.position <> pl.position and o.t = pl.t) as copie_autre_slide,
+  exists (
+    select 1 from public.contenu_langues cl, jsonb_array_elements(cl.slides) e
+    where cl.contenu_id = x.contenu_id and cl.langue = x.langue and jsonb_typeof(cl.slides) = 'array'
+      and (e->>'position')::int = x.slide and e->>'texte_overlay' = pl.t
+  ) as deck_porte_encore,
+  count(*) over (partition by x.contenu_id, x.langue, x.slide, pl.t) as meme_texte,
+  pl.t as texte,
+  (select jsonb_agg(jsonb_build_object('p', y.position, 't', y.t) order by y.position)
+     from s y where y.passage_id = x.passage_id) as post
+from x left join s pl on pl.passage_id = x.passage_id and pl.position = x.slide
+order by x.contenu_id, x.langue, x.compte;

@@ -69,6 +69,11 @@ import {
   SLUG_HOOK,
 } from "./mediaCaption";
 import { fusionnerTexteSlide } from "./deckSlides";
+import {
+  versionsIncrustees,
+  type SlideIncrustee,
+  type VersionIncrustee,
+} from "./texteIncruste";
 import { RAISON_RETRAIT_QA } from "./revoquerSlideshow";
 import { verifierLienPublication } from "./lienPublication";
 import type { CompteResumePoster } from "./types";
@@ -5633,6 +5638,61 @@ export interface ContenuListe extends Contenu {
       est_hook: boolean;
     }
   >;
+  /**
+   * Texte incrusté (0306) : une version par langue, images dans l'ordre. La
+   * structure n'a pas d'image — chaque langue a les siennes.
+   */
+  versionsIncrustees?: VersionIncrustee[];
+}
+
+/**
+ * Versions par langue des slideshows à texte incrusté de la liste.
+ *
+ * Lu à part, et seulement pour eux : les autres slideshows n'ont aucune image
+ * dans leurs decks, et relire tous les decks d'une liste de 300 pour rien
+ * coûterait cher.
+ */
+async function versionsIncrusteesDe(
+  contenus: Contenu[],
+): Promise<Map<string, VersionIncrustee[]>> {
+  const ids = contenus.filter((c) => c.texte_incruste).map((c) => c.id);
+  const out = new Map<string, VersionIncrustee[]>();
+  if (ids.length === 0) return out;
+  const decks: Array<{ contenu_id: string; langue: string; slides: SlideIncrustee[] | null }> = [];
+  for (let i = 0; i < ids.length; i += 80) {
+    const { data, error } = await supabase
+      .from("contenu_langues")
+      .select("contenu_id, langue, slides")
+      .in("contenu_id", ids.slice(i, i + 80));
+    if (error) throw error;
+    decks.push(...((data ?? []) as typeof decks));
+  }
+  const mediaIds = [
+    ...new Set(
+      decks.flatMap((d) =>
+        (d.slides ?? []).map((s) => s.media_id).filter((id): id is string => Boolean(id)),
+      ),
+    ),
+  ];
+  const urls: Record<string, string> = {};
+  for (let i = 0; i < mediaIds.length; i += 150) {
+    const { data, error } = await supabase
+      .from("media_library")
+      .select("id, url")
+      .in("id", mediaIds.slice(i, i + 150));
+    if (error) throw error;
+    for (const m of data ?? []) urls[m.id as string] = m.url as string;
+  }
+  for (const id of ids) {
+    out.set(
+      id,
+      versionsIncrustees(
+        decks.filter((d) => d.contenu_id === id),
+        urls,
+      ),
+    );
+  }
+  return out;
 }
 
 async function metasMediasPropres(
@@ -5815,7 +5875,7 @@ async function enrichirContenusListe(contenus: Contenu[]): Promise<ContenuListe[
   if (contenus.length === 0) return [];
 
   const ids = contenus.map((c) => c.id);
-  const [{ data: liens }, { data: scores }, { data: passages }, metas] =
+  const [{ data: liens }, { data: scores }, { data: passages }, metas, incrustes] =
     await Promise.all([
       supabase
         .from("contenu_labels")
@@ -5830,6 +5890,7 @@ async function enrichirContenusListe(contenus: Contenu[]): Promise<ContenuListe[
         .select("contenu_id, created_at, bonus_repost")
         .in("contenu_id", ids),
       metasMediasPropres(contenus),
+      versionsIncrusteesDe(contenus),
     ]);
 
   const labelsPar = new Map<string, Label[]>();
@@ -5889,6 +5950,7 @@ async function enrichirContenusListe(contenus: Contenu[]): Promise<ContenuListe[
       mediaChemins: chemins,
       mediaVisages: visages,
       mediaCaptions: captions,
+      versionsIncrustees: incrustes.get(c.id),
     };
   });
 }
@@ -5974,7 +6036,7 @@ export async function lireSlideshow(id: string): Promise<SlideshowDetail | null>
   if (!contenu) return null;
 
   const refId = contenu.compte_reference_id as string | null;
-  const [{ data: langues }, { data: passages }, { data: liens }, metas, ref] =
+  const [{ data: langues }, { data: passages }, { data: liens }, metas, ref, incrustes] =
     await Promise.all([
       supabase
         .from("contenu_langues")
@@ -5997,6 +6059,7 @@ export async function lireSlideshow(id: string): Promise<SlideshowDetail | null>
             .eq("id", refId)
             .maybeSingle()
         : Promise.resolve({ data: null }),
+      versionsIncrusteesDe([contenu as Contenu]),
     ]);
 
   const source: { handle_tiktok: string } | null = ref.data ?? null;
@@ -6016,6 +6079,7 @@ export async function lireSlideshow(id: string): Promise<SlideshowDetail | null>
     mediaChemins: metas.chemins,
     mediaVisages: metas.visages,
     mediaCaptions: metas.captions,
+    versionsIncrustees: incrustes.get(c.id),
     scores: (langues ?? []).map((l) => ({
       langue: l.langue,
       score: l.score,

@@ -1216,6 +1216,15 @@ export const fr = {
       calqueDerriere: "Derrière",
       calqueRetirer: "Retirer",
     },
+    incruste: {
+      titre: "Texte incrusté · une version par langue",
+      desc: "Le texte et le CTA micabo sont dessinés dans l’image : rien n’est traduit ni placé. Un créateur ne reçoit ce slideshow que si sa langue a une version complète ici.",
+      aucuneVersion: "Aucune version : ce slideshow ne sera servi à personne.",
+      prete: "{{n}} slides · prête",
+      incomplete: "Incomplète · jamais servie",
+      hashtags: "Hashtags {{langue}}",
+      badge: "texte incrusté",
+    },
     formats: {
       titre: "Formats",
       desc:

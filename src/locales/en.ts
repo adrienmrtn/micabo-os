@@ -1212,6 +1212,15 @@ export const en = {
       calqueDerriere: "Back",
       calqueRetirer: "Remove",
     },
+    incruste: {
+      titre: "Burned-in text · one version per language",
+      desc: "The text and the micabo CTA are drawn into the image: nothing is translated or placed. A creator only gets this slideshow if their language has a complete version here.",
+      aucuneVersion: "No version: this slideshow will be served to nobody.",
+      prete: "{{n}} slides · ready",
+      incomplete: "Incomplete · never served",
+      hashtags: "{{langue}} hashtags",
+      badge: "burned-in text",
+    },
     formats: {
       titre: "Formats",
       desc:

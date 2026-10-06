@@ -5,9 +5,11 @@ import {
   appliquerVerdicts,
   CONCURRENTS_DEFAUT,
   concurrentsCites,
+  nomsSansMarque,
   reecritureAcceptable,
   retirerHashtagsConcurrents,
   slidesAJuger,
+  versMicaboDepuis,
 } from "./concurrents";
 
 const C = CONCURRENTS_DEFAUT;
@@ -69,7 +71,7 @@ describe("appliquerVerdicts", () => {
     { position: 1, texte_overlay: "j'ai utilisé quizlet", position_sophia: false },
     { position: 2, texte_overlay: "Faire des quiz avec\nWILGO chaque jour", position_sophia: false },
     { position: 3, texte_overlay: "Benutz WILGO", position_sophia: false },
-    { position: 4, texte_overlay: "l'appli micabo", position_sophia: true },
+    { position: 4, texte_overlay: "dernière slide", position_sophia: false },
   ];
   const aJuger = slidesAJuger(deck, C);
 
@@ -89,8 +91,69 @@ describe("appliquerVerdicts", () => {
     expect(r.slides[0]).toMatchObject({ texte_overlay: "j'ai utilisé quizlet", concurrent_laisse: "j'ai utilisé quizlet" });
     expect(r.slides[1]?.texte_overlay).toBe("Faire des quiz avec\nl'appli micabo chaque jour");
     expect(r.slides[2]?.texte_overlay).toBe("Benutz WILGO");
-    expect(r.slides[3]?.texte_overlay).toBe("l'appli micabo");
+    expect(r.slides[3]?.texte_overlay).toBe("dernière slide");
     expect(r).toMatchObject({ remplacees: [2], laissees: [1], refusees: [3] });
+  });
+
+  it("ne laisse qu'une slide nommer micabo (0289)", () => {
+    const deuxWilgo = [
+      { position: 1, texte_overlay: "mes méthodes" },
+      { position: 2, texte_overlay: "fais des quiz avec WILGO" },
+      { position: 3, texte_overlay: "la méthode WILGO" },
+    ];
+    const r = appliquerVerdicts(deuxWilgo, slidesAJuger(deuxWilgo, C), [
+      { position: 2, decision: "remplacer", texte: "fais des quiz avec l'appli micabo" },
+      { position: 3, decision: "remplacer", texte: "l'appli micabo" },
+    ], C);
+    // Le plus loin garde micabo, l'autre est refusé (le modèle devait l'écrire sans marque).
+    expect(r).toMatchObject({ remplacees: [3], refusees: [2] });
+
+    const sansMarque = appliquerVerdicts(deuxWilgo, slidesAJuger(deuxWilgo, C), [
+      { position: 2, decision: "remplacer", texte: "fais des quiz avec une appli" },
+      { position: 3, decision: "remplacer", texte: "l'appli micabo" },
+    ], C);
+    expect(sansMarque).toMatchObject({ remplacees: [2, 3], refusees: [] });
+  });
+
+  it("ne fait jamais devenir micabo un concurrent qui fait ce que micabo ne fait pas (0291)", () => {
+    const audio = [
+      { position: 2, texte_overlay: "change tes notes en audio avec PeECH" },
+      { position: 4, texte_overlay: "dernière slide" },
+    ];
+    const aJ = slidesAJuger(audio, C);
+    expect(
+      appliquerVerdicts(audio, aJ, [{ position: 2, decision: "remplacer", texte: "change tes notes en audio avec l'appli micabo" }], C)
+        .refusees,
+    ).toEqual([2]);
+    expect(
+      appliquerVerdicts(audio, aJ, [{ position: 2, decision: "remplacer", texte: "change tes notes en audio avec une appli" }], C)
+        .remplacees,
+    ).toEqual([2]);
+    expect(nomsSansMarque(C)).toEqual(["PeECH"]);
+  });
+
+  it("lit la liste sans marque en base, et garde le repli si la table est illisible", () => {
+    const base = [{ nom: "Wilgo", motif: "\\mwilgo\\M" }, { nom: "PeECH", motif: "\\mpeech\\M" }];
+    expect(nomsSansMarque(versMicaboDepuis(base, [{ nom: "Wilgo" }]))).toEqual(["Wilgo"]);
+    expect(nomsSansMarque(versMicaboDepuis(base, []))).toEqual([]);
+    expect(nomsSansMarque(versMicaboDepuis(base, null))).toEqual(["PeECH"]);
+  });
+
+  it("refuse micabo quand une autre slide le cite déjà", () => {
+    const place = [
+      { position: 2, texte_overlay: "change tes notes en audio avec PeECH" },
+      { position: 5, texte_overlay: "l'appli micabo", position_sophia: true },
+    ];
+    const aJ = slidesAJuger(place, C);
+    expect(aJ).toEqual([{ position: 2, cites: ["PeECH"] }]);
+    expect(
+      appliquerVerdicts(place, aJ, [{ position: 2, decision: "remplacer", texte: "change tes notes en audio avec l'appli micabo" }], C)
+        .refusees,
+    ).toEqual([2]);
+    expect(
+      appliquerVerdicts(place, aJ, [{ position: 2, decision: "remplacer", texte: "change tes notes en audio avec une appli" }], C)
+        .slides[0]?.texte_overlay,
+    ).toBe("change tes notes en audio avec une appli");
   });
 
   it("compte comme refusée une slide soumise sans verdict", () => {
@@ -107,8 +170,10 @@ describe("retirerHashtagsConcurrents", () => {
 });
 
 describe("CONCURRENTS_DEFAUT", () => {
-  it("est la liste semée par 0286, motif pour motif", () => {
-    const sql = readFileSync("supabase/migrations/0286_concurrents_posts.sql", "utf8");
+  it("est la liste semée par 0286 et 0289, motif pour motif", () => {
+    const sql =
+      readFileSync("supabase/migrations/0286_concurrents_posts.sql", "utf8") +
+      readFileSync("supabase/migrations/0289_placement_seconde_moitie.sql", "utf8");
     for (const c of CONCURRENTS_DEFAUT) {
       expect(sql).toContain(`('${c.nom}', '${c.motif}'`);
     }

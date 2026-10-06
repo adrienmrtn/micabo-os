@@ -5,9 +5,11 @@ import {
 import { assurerDeckPourLangue } from "./import_contenu.ts";
 import {
   RECUL_MEME_COMPTE_JOURS,
+  RECUL_MEME_LANGUE_JOURS,
   ajouterJoursParis,
   estTier,
   melanger,
+  prefererInedits,
   prioriserTiersHauts,
   type Tier,
 } from "./tierlist.ts";
@@ -16,6 +18,7 @@ import { mapPool } from "./parallel.ts";
 import { serviceClient, messageErreur } from "./supabase.ts";
 import { extraireLabelsAssignables } from "./labels_systeme.ts";
 import { positionsOrphelines } from "./deck_structure.ts";
+import { deckIncrustePret, visuelsIncrustes, type SlideIncrustee } from "./texte_incruste.ts";
 import { messagePool, type EtatPoolCompte } from "./quota_pool.ts";
 import {
   appliquerFaceSwapUgcPost,
@@ -121,6 +124,8 @@ interface ContenuCandidat {
   tier: string | null;
   passages_cible: number | null;
   tier_maj_at: string | null;
+  /** Texte dans l'image, une version par langue (0306). */
+  texte_incruste: boolean | null;
 }
 
 /** PostgREST rend l'embed `posts(...)` en objet ou en tableau selon la relation. */
@@ -405,7 +410,7 @@ export async function assignerCompteJour(
       jour,
       contenusSession,
       ugcAi,
-      { ignorerElo, exclureTestsHisto: true },
+      { ignorerElo, exclureTestsHisto: true, langue },
     );
     if (!choisi) {
       log("Plus de candidat dans le pool");
@@ -634,6 +639,8 @@ interface SlideLangue {
   position: number;
   texte_overlay: string | null;
   position_sophia: boolean;
+  /** Texte incrusté (0306) : l'image de CETTE langue. Absent partout ailleurs. */
+  media_id?: string | null;
 }
 
 /**
@@ -668,7 +675,7 @@ async function creerPublicationAtomique(
 ): Promise<{ passage_id: string; post_id: string }> {
   const { data: contenu, error: errC } = await supabase
     .from("contenus")
-    .select("id, sujet_id, structure_slides, titre")
+    .select("id, sujet_id, structure_slides, titre, texte_incruste")
     .eq("id", args.contenuId)
     .single();
   if (errC || !contenu) throw errC ?? new Error("Contenu introuvable pour pont post");
@@ -700,40 +707,60 @@ async function creerPublicationAtomique(
     );
   }
 
-  const { parPos: mediaResolus, logs: visuelsLogs } = await resoudreVisuelsAssignation(
-    supabase,
-    args.contenuId,
-    structure.map((s) => ({
-      position: Number(s.position),
-      media_id: s.media_id ?? null,
-      pinned: Boolean(s.pinned && s.media_id),
-      critere: s.critere ?? null,
-      raw_url: s.raw_url ?? null,
-      reference_url: s.reference_url ?? null,
-    })) as SlideStructureVisuels[],
-  );
-  if (visuelsLogs.some((l) => l.fallback)) {
-    console.log(
-      `[assignation] contenu=${args.contenuId} visuels ` +
-        visuelsLogs
-          .map((l) => `#${l.position}:${l.motif}`)
-          .join(" · "),
+  // Texte incrusté (0306) : l'image de chaque slide est celle du deck de la
+  // langue, texte déjà dessiné. Ni la structure ni la bibliothèque du label ne
+  // doivent s'en mêler — un garnissage poserait une image VIERGE sous un texte
+  // vide, et la slide partirait muette. `visuelsIncrustes` lève sur une position
+  // sans image : l'appelant repioche, comme pour un deck désaligné.
+  const incruste = Boolean(contenu.texte_incruste);
+  let visuels: Array<{ position: number; media_id: string | null; reference_url: string | null }>;
+  let visuelsLogs: unknown[];
+  if (incruste) {
+    visuels = visuelsIncrustes(args.slides);
+    visuelsLogs = visuels.map((v) => ({
+      position: v.position,
+      media_id: v.media_id,
+      fallback: false,
+      motif: `texte incrusté — image ${args.langue}`,
+    }));
+  } else {
+    const resolution = await resoudreVisuelsAssignation(
+      supabase,
+      args.contenuId,
+      structure.map((s) => ({
+        position: Number(s.position),
+        media_id: s.media_id ?? null,
+        pinned: Boolean(s.pinned && s.media_id),
+        critere: s.critere ?? null,
+        raw_url: s.raw_url ?? null,
+        reference_url: s.reference_url ?? null,
+      })) as SlideStructureVisuels[],
     );
-  }
+    const mediaResolus = resolution.parPos;
+    visuelsLogs = resolution.logs;
+    if (resolution.logs.some((l) => l.fallback)) {
+      console.log(
+        `[assignation] contenu=${args.contenuId} visuels ` +
+          resolution.logs
+            .map((l) => `#${l.position}:${l.motif}`)
+            .join(" · "),
+      );
+    }
 
-  // Un visuel par position. Plus de pré-vérification d'existence en TS : la
-  // fonction SQL fait un `left join media_library` et écrit NULL si le média a
-  // disparu. La fenêtre entre la lecture et l'écriture, qui laissait passer une
-  // FK violée, est fermée pour de bon.
-  const visuels = args.slides.map((s) => {
-    const position = Number(s.position);
-    const visuel = parPos.get(position);
-    return {
-      position,
-      media_id: mediaResolus.get(position) ?? visuel?.media_id ?? null,
-      reference_url: visuel?.reference_url ?? visuel?.raw_url ?? null,
-    };
-  });
+    // Un visuel par position. Plus de pré-vérification d'existence en TS : la
+    // fonction SQL fait un `left join media_library` et écrit NULL si le média a
+    // disparu. La fenêtre entre la lecture et l'écriture, qui laissait passer une
+    // FK violée, est fermée pour de bon.
+    visuels = args.slides.map((s) => {
+      const position = Number(s.position);
+      const visuel = parPos.get(position);
+      return {
+        position,
+        media_id: mediaResolus.get(position) ?? visuel?.media_id ?? null,
+        reference_url: visuel?.reference_url ?? visuel?.raw_url ?? null,
+      };
+    });
+  }
 
   const { data, error } = await supabase.rpc("creer_publication_atomique", {
     p_compte_id: args.compteId,
@@ -744,6 +771,9 @@ async function creerPublicationAtomique(
       position: Number(s.position),
       texte_overlay: s.texte_overlay ?? "",
       position_sophia: Boolean(s.position_sophia),
+      // Gardé dans `passages.slides` : un repost bonus rejoue ce deck tel quel,
+      // et sans l'image de la langue il n'aurait plus rien à poser (0306).
+      ...(incruste && s.media_id ? { media_id: s.media_id } : {}),
     })),
     p_visuels: visuels,
     p_visuels_resolution: visuelsLogs,
@@ -900,6 +930,43 @@ async function restantsParContenu(
 }
 
 /**
+ * Slideshows du pool passés dans la langue du compte, sur n'importe quel compte
+ * de cette langue, depuis `RECUL_MEME_LANGUE_JOURS` (02/10/2026).
+ *
+ * Les comptes inactifs comptent : leurs posts sont toujours en ligne, devant la
+ * même audience. Une lecture ratée lève, comme les autres lectures du tirage :
+ * elle ne doit pas passer pour « rien n'a été vu ».
+ */
+async function dejaPassesDansLaLangue(
+  supabase: Supabase,
+  langue: string | null,
+  contenuIds: string[],
+  jour: string,
+): Promise<Set<string>> {
+  if (!langue || contenuIds.length === 0) return new Set();
+  const { data: comptesLangue, error } = await supabase
+    .from("comptes")
+    .select("id")
+    .eq("langue", langue);
+  if (error) throw new Error(`Comptes en ${langue} : ${error.message}`);
+  const ids = (comptesLangue ?? []).map((c) => c.id as string);
+  if (ids.length === 0) return new Set();
+  const depuis = ajouterJoursParis(jour, -RECUL_MEME_LANGUE_JOURS);
+  const vus = await lireParLots<{ contenu_id: string }>(
+    contenuIds,
+    `Passages en ${langue} des ${RECUL_MEME_LANGUE_JOURS} derniers jours`,
+    (lot) =>
+      supabase
+        .from("passages")
+        .select("contenu_id")
+        .in("compte_id", ids)
+        .gte("date_publication_prevue", depuis)
+        .in("contenu_id", lot),
+  );
+  return new Set(vus.map((v) => v.contenu_id));
+}
+
+/**
  * Pioche le slideshow du prochain post d'un créateur.
  *
  * 1. pool = labels du créateur ∩ slideshows prêts (famille UGC, application) ;
@@ -909,9 +976,12 @@ async function restantsParContenu(
  *    hasard, avec un cycle d'1 passage ouvert au vol (« pas assez de posts à
  *    faire → on remet quelques posts en D pour remplir »).
  *
- * Un même slideshow peut repasser sur un compte qui l'a déjà posté un autre
- * jour ; il ne peut pas sortir deux fois le MÊME jour sur le même compte.
- * La langue ne filtre plus rien : le deck est traduit à la demande.
+ * Un slideshow ne revient pas sur le même compte avant `RECUL_MEME_COMPTE_JOURS`.
+ * La langue ne filtre rien pour un slideshow ordinaire (le deck est traduit à
+ * la demande), mais elle ORIENTE : à tier égal, un slideshow pas encore passé
+ * dans la langue du compte sort avant un slideshow que cette audience a déjà vu
+ * (`prefererInedits`). Elle FILTRE en revanche un slideshow à texte incrusté :
+ * sans deck complet dans la langue du compte, il n'existe pas pour lui (0306).
  */
 async function choisirContenu(
   supabase: Supabase,
@@ -920,16 +990,17 @@ async function choisirContenu(
   jour: string,
   dejaCreesCetteSession: string[],
   ugcAi = false,
-  opts: { ignorerElo?: boolean; exclureTestsHisto?: boolean } = {},
+  opts: { ignorerElo?: boolean; exclureTestsHisto?: boolean; langue?: string } = {},
 ): Promise<Candidat | null> {
   // Mode test : on ignore les cycles (n'importe quel slideshow prêt fait l'affaire).
   const ignorerCycles = Boolean(opts.ignorerElo);
   const { data: compteApp } = await supabase
     .from("comptes")
-    .select("application_id")
+    .select("application_id, langue")
     .eq("id", compteId)
     .maybeSingle();
   const applicationId = (compteApp?.application_id as string | undefined) ?? null;
+  const langueCompte = (compteApp?.langue as string | undefined) ?? null;
 
   // Contenu IDs portant au moins un label du compte
   const liens = await lireParLots<{ contenu_id: string }>(
@@ -948,7 +1019,7 @@ async function choisirContenu(
       let q = supabase
         .from("contenus")
         .select(
-          "id, musique_url, musique_titre, musique_plateforme, ugc_compatible, tier, passages_cible, tier_maj_at",
+          "id, musique_url, musique_titre, musique_plateforme, ugc_compatible, tier, passages_cible, tier_maj_at, texte_incruste",
         )
         .eq("statut", "valide")
         .eq("import_statut", "done")
@@ -960,6 +1031,13 @@ async function choisirContenu(
   );
   if (contenus.length === 0) return null;
 
+  // Texte incrusté (0306) : écarté AVANT tout tirage — et avant le repêchage,
+  // qui sinon ouvrirait un cycle sur un slideshow impossible à livrer dans la
+  // langue du compte. Le deck d'une autre langue ne sert à rien : son texte est
+  // dessiné dans l'image.
+  const servables = await sansIncrustesHorsLangue(supabase, contenus, opts.langue ?? langueCompte);
+  if (servables.length === 0) return null;
+
   // Déjà sorti RÉCEMMENT sur ce compte. La fenêtre portait sur le jour même
   // jusqu'au 19/09/2026 — « un même slideshow peut revenir un autre jour » —
   // et c'est exactement ce qu'elle laissait faire : 46 posts sont partis deux
@@ -967,7 +1045,7 @@ async function choisirContenu(
   // était pourtant en base, il n'était simplement jamais relu au-delà du jour.
   const depuis = ajouterJoursParis(jour, -RECUL_MEME_COMPTE_JOURS);
   const recents = await lireParLots<PassageHisto>(
-    contenus.map((c) => c.id),
+    servables.map((c) => c.id),
     `Passages des ${RECUL_MEME_COMPTE_JOURS} derniers jours`,
     (lot) =>
       supabase
@@ -983,7 +1061,7 @@ async function choisirContenu(
     exclus.add(h.contenu_id);
   }
 
-  const pool = contenus.filter((c) => !exclus.has(c.id));
+  const pool = servables.filter((c) => !exclus.has(c.id));
   if (pool.length === 0) return null;
 
   const versCandidat = (c: ContenuCandidat, restants: number, repeche: boolean): Candidat => ({
@@ -1011,10 +1089,18 @@ async function choisirContenu(
   );
 
   const dus = pool.filter((c) => (restants.get(c.id) ?? 0) > 0);
+  const dejaDansLaLangue = await dejaPassesDansLaLangue(
+    supabase,
+    langueCompte,
+    pool.map((c) => c.id),
+    jour,
+  );
   // Les B+ passent d'abord, mais une part des tirages (`PART_TIRAGE_C`) est
   // réservée aux C : sans elle, un C ne pouvait jamais être mesuré, donc jamais
-  // remonter.
-  const pick = tirerAuHasard(prioriserTiersHauts(dus));
+  // remonter. Dans le groupe retenu, ce que la langue n'a pas encore vu passe
+  // devant (02/10/2026), mais tier par tier (05/10/2026) : un B jamais testé
+  // n'évince plus un S ou un A déjà vu dans la langue.
+  const pick = tirerAuHasard(prefererInedits(prioriserTiersHauts(dus), dejaDansLaLangue));
   if (pick) return versCandidat(pick, restants.get(pick.id) ?? 0, false);
 
   // Remplissage : pas assez de passages dus → on repêche un slideshow en D
@@ -1027,10 +1113,11 @@ async function choisirContenu(
   // garde-fou ne pouvait pas se déclencher, et sept créateurs sortaient le même
   // slideshow le même jour.
   //
-  // `repecher_contenu` rend `false` dans deux cas, et l'appelant passe au
-  // candidat suivant dans les deux : le slideshow a DÉJÀ été repêché pour ce
-  // jour (0276), ou un autre worker vient d'ouvrir son cycle sans l'avoir
-  // encore consommé (0275).
+  // `repecher_contenu` rend `false` dans trois cas, et l'appelant passe au
+  // candidat suivant dans tous : le slideshow a DÉJÀ été repêché pour ce
+  // jour (0276) ; un cycle est déjà ouvert, soit pas encore consommé (0275),
+  // soit en attente de son verdict (0304) ; ou c'est un D déjà repêché trois
+  // fois depuis son entrée en D sans remonter (0304).
   //
   // 0275 seul ne suffisait pas : dès que le premier worker avait inséré son
   // passage, le cycle était plein, donc rouvrable, donc rouvert par le worker
@@ -1043,11 +1130,15 @@ async function choisirContenu(
   // quota. C'est l'arbitrage du 19/09 — un post de moins vaut mieux qu'un
   // doublon, et huit créateurs sur le même slideshow le même jour EST un
   // doublon vu de l'audience.
-  const repechables = melanger(
-    pool.filter(
-      (c) => !estTier(c.tier) || c.tier === "D" || Number(c.passages_cible ?? 0) === 0,
-    ),
+  const enD = pool.filter(
+    (c) => !estTier(c.tier) || c.tier === "D" || Number(c.passages_cible ?? 0) === 0,
   );
+  // Mélangés à l'intérieur de chaque groupe (0275), les inédits de la langue
+  // d'abord.
+  const repechables = [
+    ...melanger(enD.filter((c) => !dejaDansLaLangue.has(c.id))),
+    ...melanger(enD.filter((c) => dejaDansLaLangue.has(c.id))),
+  ];
 
   for (const repeche of repechables) {
     const { data, error } = await supabase.rpc("repecher_contenu", {
@@ -1060,6 +1151,39 @@ async function choisirContenu(
   }
 
   return null;
+}
+
+/**
+ * Retire du pool les slideshows à texte incrusté qui n'ont pas de deck complet
+ * dans la langue du compte. Les slideshows ordinaires passent tous.
+ *
+ * Sans langue connue, AUCUN incrusté ne passe : servir une image dont le texte
+ * est dans une langue inconnue du compte serait pire qu'un post de moins.
+ */
+async function sansIncrustesHorsLangue(
+  supabase: Supabase,
+  contenus: ContenuCandidat[],
+  langue: string | null,
+): Promise<ContenuCandidat[]> {
+  const incrustes = contenus.filter((c) => c.texte_incruste).map((c) => c.id);
+  if (incrustes.length === 0) return contenus;
+  const prets = new Set<string>();
+  if (langue) {
+    const decks = await lireParLots<{ contenu_id: string; slides: SlideIncrustee[] | null }>(
+      incrustes,
+      `Decks incrustés ${langue}`,
+      (lot) =>
+        supabase
+          .from("contenu_langues")
+          .select("contenu_id, slides")
+          .eq("langue", langue)
+          .in("contenu_id", lot),
+    );
+    for (const d of decks) {
+      if (deckIncrustePret(d.slides)) prets.add(d.contenu_id);
+    }
+  }
+  return contenus.filter((c) => !c.texte_incruste || prets.has(c.id));
 }
 
 /** Assigne tous les comptes actifs pour un jour. */

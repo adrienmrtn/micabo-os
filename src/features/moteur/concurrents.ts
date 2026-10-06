@@ -5,9 +5,11 @@ export {
   type Concurrent,
   CONCURRENTS_DEFAUT,
   concurrentsCites,
+  nomsSansMarque,
   reecritureAcceptable,
   regexConcurrent,
   retirerHashtagsConcurrents,
   slidesAJuger,
   type VerdictConcurrent,
+  versMicaboDepuis,
 } from "../../../supabase/functions/_shared/concurrents.ts";

@@ -7,7 +7,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const SHA = "772589b1d9a3b5e1e17e10f572a1511d2b44ab0f";
+const SHA = "d5c9ee753c77263e80c804c3ad3d2c7fa73a15a9";
 const url =
   `https://raw.githubusercontent.com/adrienmrtn/micabo-os/${SHA}/supabase/functions/_deploy/assignation.bundle.js`;
 
@@ -19,4 +19,4 @@ const src = await res.text();
 if (!src.includes("Deno.serve") || !src.includes("date_publication_prevue")) {
   throw new Error("assignation bundle illisible ou tronqué");
 }
-new Function("_e", src)(createClient);
+new Function("Te", src)(createClient);

@@ -137,6 +137,13 @@ devant ChatGPT et Gemini : c'est son placement, il devient micabo) :
 - un hashtag du concurrent (`#Wilgo`) : il se retire de la légende, sans rien
   mettre à la place.
 
+**Sans marque** — un concurrent de la table `concurrents_sans_marque` (PeECH,
+une appli de lecture audio) ne devient **jamais** micabo : micabo ne fait pas
+d'audio (décision d'Adrien, 01/10). Son nom, avec le mot qui le porte, devient
+« une appli audio » / « une appli » dans la langue du post, le reste mot pour
+mot. Et une slide qui fait déjà dire à micabo qu'il lit les notes à voix haute
+se corrige de la même façon.
+
 **Comment remplacer** — le moins possible :
 - seul le nom du concurrent (avec l'article ou le mot « méthode », « App »,
   « app » qui le porte) devient la forme de marque de la langue : « l'appli

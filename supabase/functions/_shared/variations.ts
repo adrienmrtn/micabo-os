@@ -92,6 +92,9 @@ export async function trouverCandidatVariation(
       .eq("id", cl.contenu_id)
       .eq("statut", "valide")
       .eq("import_statut", "done")
+      // Texte incrusté (0306) : une variation réécrit le TEXTE, qui ici est
+      // dans l'image. Elle sortirait un slideshow sans un mot de différent.
+      .eq("texte_incruste", false)
       .maybeSingle();
 
     if (!contenu) continue;

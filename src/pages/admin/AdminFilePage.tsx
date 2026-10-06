@@ -47,6 +47,8 @@ import {
   type CalquePng,
 } from "@/features/moteur/fileValidation";
 import { PassagesSlideshow } from "@/features/moteur/PassagesSlideshow";
+import { VersionsIncrustees } from "@/features/moteur/VersionsIncrustees";
+import { vignetteIncrustee } from "@/features/moteur/texteIncruste";
 import { useApplication } from "@/features/moteur/ApplicationContext";
 import { nomLangue } from "@/features/moteur/langues";
 import { TIERS, type Tier } from "@/features/moteur/tierlist";
@@ -93,7 +95,12 @@ function Vignette({ contenu, actif, onClick }: {
   onClick: () => void;
 }) {
   const premiere = triees((contenu.structure_slides ?? []) as ContenuSlide[])[0];
-  const url = premiere?.media_id ? contenu.mediaUrls?.[premiere.media_id] : undefined;
+  // Texte incrusté (0306) : la structure n'a pas d'image, chaque langue a les siennes.
+  const url = contenu.texte_incruste
+    ? (vignetteIncrustee(contenu.versionsIncrustees) ?? undefined)
+    : premiere?.media_id
+      ? contenu.mediaUrls?.[premiere.media_id]
+      : undefined;
   return (
     <button
       type="button"
@@ -115,7 +122,12 @@ function Vignette({ contenu, actif, onClick }: {
             </Badge>
           )}
           <span className="text-[10px] text-muted-foreground">
-            {nomLangue(contenu.langue_source)}
+            {contenu.texte_incruste
+              ? (contenu.versionsIncrustees ?? [])
+                  .filter((v) => v.prete)
+                  .map((v) => v.langue.toUpperCase())
+                  .join(" · ") || "—"
+              : nomLangue(contenu.langue_source)}
           </span>
           <span className="text-[10px] text-muted-foreground">
             · {(contenu.structure_slides ?? []).length} slides
@@ -162,6 +174,8 @@ function Editeur({
   const [tier, setTier] = React.useState<string>("");
   const [cible, setCible] = React.useState(0);
   const [hashtags, setHashtags] = React.useState("");
+  /** Texte incrusté : une légende par langue, puisque chaque langue est un post à part. */
+  const [hashtagsLangues, setHashtagsLangues] = React.useState<Record<string, string>>({});
   const [musiqueTitre, setMusiqueTitre] = React.useState("");
   const [musiqueUrl, setMusiqueUrl] = React.useState("");
   const [note, setNote] = React.useState("");
@@ -204,6 +218,7 @@ function Editeur({
     setLabelIds((d.labels ?? []).map((l) => l.id));
     const deckSource = d.langues.find((l) => l.langue === d.langue_source) ?? d.langues[0];
     setHashtags(deckSource?.hashtags ?? "");
+    setHashtagsLangues(Object.fromEntries(d.langues.map((l) => [l.langue, l.hashtags ?? ""])));
     const porteuse = ((deckSource?.slides ?? []) as Array<{
       position: number;
       position_sophia: boolean;
@@ -220,6 +235,34 @@ function Editeur({
   const enregistrer = React.useCallback(async () => {
     if (!d || !travail) return 0;
     let aplaties = 0;
+
+    // Champs plats + format + labels + note : communs aux deux formats.
+    const champsCommuns = async () => {
+      await majChampsContenu(d.id, {
+        titre,
+        musique_titre: musiqueTitre.trim() || null,
+        musique_url: musiqueUrl.trim() || null,
+        tier: tier || null,
+        passages_cible: Math.max(0, Math.round(cible)),
+      });
+      if ((d.format_id ?? "") !== formatId) {
+        await definirFormatContenu(d.id, formatId || null);
+      }
+      await setLabelsContenu(d.id, labelIds);
+      if ((d.file_note ?? "") !== note) await ecrireNoteFile(d.id, note);
+    };
+
+    // Texte incrusté (0306) : rien à aplatir, réordonner, réécrire ni placer —
+    // le texte et le CTA sont dans l'image de chaque langue. Toucher la
+    // structure ou les decks ici ne pourrait que les désaligner.
+    if (d.texte_incruste) {
+      await champsCommuns();
+      for (const l of d.langues) {
+        const valeur = hashtagsLangues[l.langue] ?? "";
+        if ((l.hashtags ?? "") !== valeur) await majHashtagsDeck(l.id, valeur);
+      }
+      return 0;
+    }
 
     // 1 — Images retouchées : aplatir le montage par-dessus l'image propre.
     for (const s of travail) {
@@ -279,18 +322,7 @@ function Editeur({
     }
 
     // 5 — Champs plats + format + labels + note.
-    await majChampsContenu(d.id, {
-      titre,
-      musique_titre: musiqueTitre.trim() || null,
-      musique_url: musiqueUrl.trim() || null,
-      tier: tier || null,
-      passages_cible: Math.max(0, Math.round(cible)),
-    });
-    if ((d.format_id ?? "") !== formatId) {
-      await definirFormatContenu(d.id, formatId || null);
-    }
-    await setLabelsContenu(d.id, labelIds);
-    if ((d.file_note ?? "") !== note) await ecrireNoteFile(d.id, note);
+    await champsCommuns();
 
     // 6 — Placement micabo. Après l'écriture des textes et la renumérotation :
     // la position cochée est celle du deck FINAL.
@@ -308,7 +340,7 @@ function Editeur({
     }
 
     return aplaties;
-  }, [d, travail, deckSource, titre, musiqueTitre, musiqueUrl, tier, cible, formatId, labelIds, note, hashtags, ctaSlide]);
+  }, [d, travail, deckSource, titre, musiqueTitre, musiqueUrl, tier, cible, formatId, labelIds, note, hashtags, hashtagsLangues, ctaSlide]);
 
   const sauver = useMutation({
     mutationFn: enregistrer,
@@ -365,6 +397,7 @@ function Editeur({
             </span>
             {" · "}
             {nomLangue(d.langue_source)}
+            {d.texte_incruste ? ` · ${t("incruste.badge")}` : ""}
             {d.source?.handle_tiktok ? ` · @${d.source.handle_tiktok}` : ""}
             {d.vues_source != null
               ? ` · ${t("slideshows.vuesSource")} ${d.vues_source.toLocaleString(i18n.language)}`
@@ -500,14 +533,16 @@ function Editeur({
               onChange={(e) => edite(setMusiqueUrl)(e.target.value)}
             />
           </div>
-          <div className="space-y-1 sm:col-span-2">
-            <Label htmlFor="file-hashtags">{t("file.hashtags")}</Label>
-            <Input
-              id="file-hashtags"
-              value={hashtags}
-              onChange={(e) => edite(setHashtags)(e.target.value)}
-            />
-          </div>
+          {!d.texte_incruste && (
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="file-hashtags">{t("file.hashtags")}</Label>
+              <Input
+                id="file-hashtags"
+                value={hashtags}
+                onChange={(e) => edite(setHashtags)(e.target.value)}
+              />
+            </div>
+          )}
           <div className="space-y-1 sm:col-span-2">
             <Label htmlFor="file-note">{t("file.note")}</Label>
             <Textarea
@@ -534,6 +569,17 @@ function Editeur({
         </CardContent>
       </Card>
 
+      {d.texte_incruste ? (
+        <VersionsIncrustees
+          versions={d.versionsIncrustees ?? []}
+          hashtags={hashtagsLangues}
+          disabled={occupe}
+          onHashtags={(langue, valeur) =>
+            edite(setHashtagsLangues)((prev) => ({ ...prev, [langue]: valeur }))
+          }
+        />
+      ) : (
+      <>
       <p
         className={cn(
           "rounded-md border px-3 py-2 text-xs",
@@ -621,6 +667,8 @@ function Editeur({
           </Card>
         ))}
       </div>
+      </>
+      )}
     </div>
   );
 }

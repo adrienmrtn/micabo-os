@@ -422,6 +422,8 @@ export interface ContenuLangueSlide {
   position: number;
   texte_overlay: string | null;
   position_sophia: boolean;
+  /** Texte incrusté (0306) : l'image de CETTE langue, texte déjà dessiné. */
+  media_id?: string | null;
 }
 
 /** Détail ELO d'un import (formule + par langue). */
@@ -512,6 +514,12 @@ export interface Contenu {
   valide_par?: string | null;
   /** Note libre laissée pendant le passage en file. */
   file_note?: string | null;
+  /**
+   * Texte dessiné dans l'image (white posts, 0306) : chaque deck de langue
+   * porte ses propres images, rien n'est traduit ni placé. Une langue sans
+   * deck complet n'est jamais servie.
+   */
+  texte_incruste?: boolean;
   created_at: string;
 }
 
