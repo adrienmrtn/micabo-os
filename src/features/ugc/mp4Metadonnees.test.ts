@@ -172,3 +172,92 @@ describe("mp4SansMetadonnees", () => {
     expect(() => mp4SansMetadonnees(casse)).toThrow(/hors de tout mdat/);
   });
 });
+
+// Un flux H.264 minimal : avcC (préfixes de 4 octets), trois échantillons en
+// deux morceaux. Le premier commence par le SEI que Kling écrit (UUID puis
+// « kling-ai ») ; l'UUID contient 00 00 01, donc un octet d'échappement 03
+// dans le NAL, que la lecture doit sauter pour retrouver la taille du message.
+// 17 octets dans le NAL, 16 une fois l'échappement retiré.
+const UUID_ECHAPPE = [0, 0, 3, 1, ...new Array(13).fill(0x2a)];
+const SEI_KLING = [0x06, 0x05, 25, ...UUID_ECHAPPE, ...ascii("kling-ai"), 0, 0x80];
+/** SEI mixte : point de reprise (type 6) + données utilisateur. */
+const SEI_MIXTE = [0x06, 0x06, 1, 0x84, 0x05, 25, ...UUID_ECHAPPE, ...ascii("x264 crf"), 0, 0x80];
+
+function nal(...octets: number[]): number[] {
+  return [...u32(octets.length), ...octets];
+}
+
+const ECHANTILLONS = [
+  [...nal(...SEI_KLING), ...nal(0x65, ...ascii("IDR1"))],
+  nal(0x41, ...ascii("PPP2")),
+  [...nal(...SEI_MIXTE), ...nal(0x41, ...ascii("PPP3"))],
+];
+
+function moovVideo(morceaux: number[]): number[] {
+  const avcC = boite("avcC", [1, 0x64, 0, 0x1f, 0xff, 0xe0, 0]);
+  const avc1 = boite(
+    "avc1",
+    new Array(6).fill(0), [0, 1], new Array(16).fill(0), [0, 2, 0, 4],
+    u32(0x00480000), u32(0x00480000), u32(0), [0, 1], new Array(32).fill(0), [0, 0x18, 0xff, 0xff],
+    avcC,
+  );
+  const stbl = boite(
+    "stbl",
+    boite("stsd", [0, 0, 0, 0], u32(1), avc1),
+    boite("stsc", [0, 0, 0, 0], u32(2), u32(1), u32(2), u32(1), u32(2), u32(1), u32(1)),
+    boite("stsz", [0, 0, 0, 0], u32(0), u32(3), ...ECHANTILLONS.map((e) => u32(e.length))),
+    table("stco", morceaux),
+  );
+  const trak = boite("trak", boite("mdia", hdlr("VideoHandler"), boite("minf", stbl)));
+  return boite("moov", avecDates("mvhd"), trak);
+}
+
+function fichierVideo(): Uint8Array {
+  const debut = ftyp.length + moovVideo([0, 0]).length + 8;
+  const premier = ECHANTILLONS[0]!.length + ECHANTILLONS[1]!.length;
+  return Uint8Array.from([
+    ...ftyp,
+    ...moovVideo([debut, debut + premier]),
+    ...boite("mdat", ECHANTILLONS.flat()),
+  ]);
+}
+
+/** Les échantillons tels que stsz + stsc + stco les désignent. */
+function echantillons(o: Uint8Array): string[] {
+  const txt = String.fromCharCode(...o);
+  const vue = new DataView(o.buffer, o.byteOffset);
+  const z = txt.indexOf("stsz") + 4;
+  const tailles = Array.from({ length: vue.getUint32(z + 8) }, (_, k) => vue.getUint32(z + 12 + 4 * k));
+  const c = txt.indexOf("stco") + 4;
+  const offs = [vue.getUint32(c + 8), vue.getUint32(c + 12)];
+  const pos = [offs[0]!, offs[0]! + tailles[0]!, offs[1]!];
+  return pos.map((p, k) => String.fromCharCode(...o.subarray(p, p + tailles[k]!)));
+}
+
+describe("mp4SansMetadonnees : SEI de données utilisateur", () => {
+  it("retire le SEI de Kling, recale stsz et stco, garde les images", () => {
+    const src = fichierVideo();
+    expect(metadonneesMp4(src)).toEqual(
+      expect.arrayContaining(["mdat:sei(kling-ai)", "mdat:sei(x264 crf)"]),
+    );
+    const propre = mp4SansMetadonnees(src);
+    expect(String.fromCharCode(...propre)).not.toContain("kling-ai");
+    const ech = echantillons(propre);
+    expect(ech[0]).toBe(String.fromCharCode(...nal(0x65, ...ascii("IDR1"))));
+    expect(ech[1]).toBe(String.fromCharCode(...nal(0x41, ...ascii("PPP2"))));
+    expect(ech[2]).toContain("PPP3");
+    // Le SEI (préfixe compris), et le nom du hdlr vidé au passage.
+    expect(propre.length).toBe(src.length - nal(...SEI_KLING).length - "VideoHandler".length);
+  });
+
+  it("laisse un SEI mixte et le signale, plutôt que de perdre le point de reprise", () => {
+    const propre = mp4SansMetadonnees(fichierVideo());
+    expect(String.fromCharCode(...propre)).toContain("x264 crf");
+    expect(metadonneesMp4(propre)).toEqual(["mdat:sei(x264 crf)"]);
+  });
+
+  it("reste idempotent avec un retrait dans mdat", () => {
+    const une = mp4SansMetadonnees(fichierVideo());
+    expect(mp4SansMetadonnees(une)).toEqual(une);
+  });
+});
