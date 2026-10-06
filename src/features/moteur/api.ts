@@ -2093,6 +2093,10 @@ export interface PostCalendrierAdmin {
   nb_media: number;
   /** Aucune slide, ou aucune image — inutilisable pour le poster. */
   slideshow_vide: boolean;
+  /** Vidéo du jour d'un compte AI UGC (0310), pas un post. */
+  video?: boolean;
+  /** Page à ouvrir quand ce n'est pas `/admin/posts/<id>` (vidéo : `/ugc/<id>`). */
+  lien?: string;
 }
 
 /** Médias uniques liés aux slides des posts prévus un jour (planning). */
@@ -2172,7 +2176,7 @@ export async function postsCalendrierAdmin(): Promise<PostCalendrierAdmin[]> {
     }
   }
 
-  return rows.map((p) => {
+  const lignes: PostCalendrierAdmin[] = rows.map((p) => {
     const counts = slidesParPost.get(p.id as string) ?? { nb: 0, media: 0 };
     const slideshow_vide = counts.nb === 0 || counts.media === 0;
     return {
@@ -2198,6 +2202,46 @@ export async function postsCalendrierAdmin(): Promise<PostCalendrierAdmin[]> {
       slideshow_vide,
     };
   });
+
+  // Les vidéos des comptes AI UGC (0310) : même planning, même groupe par
+  // créateur. La RLS ne les montre qu'à l'admin (un manager n'en lit aucune).
+  const { data: videos, error: e3 } = await supabase
+    .from("ugc_publications")
+    .select(
+      "id, compte_id, date_publication_prevue, statut, publie_at, publie_url, " +
+        "comptes(persona_nom, handle_tiktok, avatar_url, qualification, langue, ugc_ai, profiles(prenom, nom))",
+    )
+    .neq("statut", "annule")
+    .order("date_publication_prevue", { ascending: false })
+    .limit(400);
+  if (e3) throw e3;
+  // deno-lint-ignore no-explicit-any
+  const lignesVideo = ((videos ?? []) as any[]).map((v): PostCalendrierAdmin => ({
+    id: v.id as string,
+    compte_id: v.compte_id as string,
+    date_publication_prevue: v.date_publication_prevue as string,
+    type: "video",
+    statut: v.statut as string,
+    pipeline_statut: "done",
+    publie_at: (v.publie_at as string | null) ?? null,
+    publie_url: (v.publie_url as string | null) ?? null,
+    persona_nom: (v.comptes?.persona_nom as string | null) ?? null,
+    handle_tiktok: (v.comptes?.handle_tiktok as string | null) ?? null,
+    avatar_url: (v.comptes?.avatar_url as string | null) ?? null,
+    qualification: normaliserQualification(v.comptes?.qualification),
+    poster_prenom: (v.comptes?.profiles?.prenom as string | null) ?? null,
+    poster_nom: (v.comptes?.profiles?.nom as string | null) ?? null,
+    sujet_titre: null,
+    langue: (v.comptes?.langue as string | null) ?? null,
+    ugc_ai: Boolean(v.comptes?.ugc_ai),
+    nb_slides: 1,
+    nb_media: 1,
+    slideshow_vide: false,
+    video: true,
+    lien: `/ugc/${v.id}`,
+  }));
+
+  return [...lignes, ...lignesVideo];
 }
 
 export interface CompteCreateurDetail {
