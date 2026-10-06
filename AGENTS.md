@@ -282,7 +282,10 @@ au lot 2 avec son exclusion dans `labels_repli.ts`.
   revenu sur une ligne pour six. Le prompt donne le nombre de lignes de
   chaque segment, `formeTraductionTenue` refuse plus d'une ligne d'écart,
   deux essais par modèle. Un concurrent qui survit est une alerte à l'écran,
-  pas une coupe. **Aistote** (« la méthode aistote », la première vidéo) entre
+  pas une coupe. Et la marque ne se coupe pas entre deux lignes
+  (`marqueSurUneLigne`) : sur @studyywithsachii, trois langues sur cinq
+  rendaient « micabo- / App », « micabo / uygulamasını », « micabo / app » ;
+  le retour à la ligne passe juste avant la marque, même nombre de lignes. **Aistote** (« la méthode aistote », la première vidéo) entre
   dans `concurrents` par 0309.
 - **Personas par Higgsfield** (MCP connecté à la session) : visage par Soul
   2.0 (0,12 crédit l'image), angles, tête baissée et photo de profil par
@@ -341,7 +344,7 @@ refusée.
 
 **Déploiement du 06/10** : migrations 0308 (tables neuves seulement, plus
 `ugc_modeles.erreur` ajoutée dans la foulée) et 0309 appliquées,
-`ugc-video` en chargeur (**v12**) sur `c92fb89`, alias `je`, test de vie
+`ugc-video` en chargeur (**v13**) sur `1120156`, alias `je`, test de vie
 `401` passé à chaque version. Aucun autre chargeur n'a bougé : le moteur ne
 tire ni `ugc_video.ts`, ni `mp4_metadonnees.ts`, ni `image_metadonnees.ts`.
 La page `/admin/ugc/atelier` n'est en production qu'après fusion dans
