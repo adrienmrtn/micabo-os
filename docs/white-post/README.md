@@ -70,6 +70,10 @@ sont recopiées octet pour octet depuis la slide d'origine.
   les créateurs ne sont pas tous des créatrices.
 - Une ligne ne doit jamais toucher une photo : si la traduction s'allonge, on
   descend la photo d'un interligne (slide 3) plutôt que de serrer le texte.
+- Alignement d'un bloc : à gauche par défaut, `"align": "right"` (`x` = bord
+  droit) ou `"align": "center"` (`x` = axe, chaque ligne centrée dessus).
+- Certains posts d'amaya sont dessinés plus petit (38 px, titres 58,5 px :
+  7692093201968090401) : on garde la taille mesurée, pas 42 / 63.
 
 ## La capture turque
 
@@ -92,9 +96,37 @@ python3 -I docs/white-post/capture_tr.py <capture_fr.jpg> <dossier_fontsource/> 
 | 7684726544442346774 | disgustingly productive (7 slides) | teste-toi au lieu de relire | 271 100 |
 | 7689918962905124129 | become smart again | révise au lieu de scroller | 187 000 |
 | 7686189452963712288 | dangerously intelligent | scrolle moins, retiens plus | 123 200 |
+| 7688807102764092705 | top 5 ways to ruin your 20s | l'ironie du post : « n'ouvre surtout pas l'appli micabo » | 471 400 |
+| 7685340052989398275 | become smart again (niche #2), sans slide pub | se faire interroger : les trous se voient (slide 5, la photo devient la capture) | 212 800 |
+| 7685736268617059616 | 5 signs you've harmed your brain (7 slides) | attention courte, séances courtes | 107 800 |
+| 7690642292855672096 | niche traits of successful people | ne plus recopier ses cours en fiches | 91 400 |
+| 7683541501007252758 | become smart again (sources) | réviser avant d'oublier : la courbe de l'oubli | 58 100 |
+| 7691336990419209505 | habits to stop in your 20s | les temps morts de la journée | 20 000 |
+| 7692093201968090401 | become smart again (short-form) | ses propres cours plutôt que des vidéos de révision | 15 500 |
+| 7681048823824649494 | fixed my phone addiction | l'appli à la place de TikTok sur l'écran d'accueil | 11 300 |
+| 7680975889932225814 | 7 ways to stop doomscrolling (7 slides) | le matin au réveil | 7 955 |
+| 7683630825610513686 | the anti-rot routine | le soir, avant de dormir | 7 442 |
 
 Chaque slide micabo prend un angle différent (régularité, scroll, rappel
-actif, mémoire) : cinq posts qui diraient la même phrase se verraient.
+actif, mémoire) : cinq posts qui diraient la même phrase se verraient. Le
+second lot (06/10, dix posts) garde la règle, et la ligne micabo n'y répète
+jamais « elle transforme mes cours en flashcards et je révise 10 min par
+jour » mot pour mot.
+
+Ce que la slide micabo peut promettre : on y met ses cours, notes ou PDF,
+l'appli en fait des flashcards ou des questions, on se teste quelques minutes
+par jour. Jamais : bloquer des applis (c'est ReadUp), audio, photo, rappels,
+planning, tuteur, note obtenue ou chiffre de résultat.
+
+Quatre posts reprennent la série « become smart again » d'amaya : chacun a
+son propre titre (« réveiller ton intelligence », « retrouver un cerveau vif »,
+« te remettre à réfléchir », « récupérer ton cerveau »), un même compte les
+recevra tous.
+
+Les deux derniers posts du lot ont moins de 10 000 vues d'origine : ils
+entrent en C (`VUES_SOURCE_MIN_B_PLUS`). Écartés du catalogue : « 7 figures by
+25 » (argent), la tier list du soir (alcool, doses de magnésium) et un post au
+texte posé sur la photo, qui n'est pas un white post.
 
 ```
 python3 -I docs/white-post/post_7691007701127564576.py <slides_origine/> <cap_fr> <cap_de> <cap_tr> <sortie/>

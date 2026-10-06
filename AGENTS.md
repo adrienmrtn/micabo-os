@@ -113,14 +113,80 @@ partir de la capture FR, mêmes polices Outfit / DM Sans) : l'appli n'a jamais
 ce qui veut dire rerendre la slide micabo des cinq posts et passer par une
 nouvelle langue ou un nouveau contenu, puisque 0307 refuse de remplacer.
 
-**Trois comptes en `white-post` seul depuis le 06/10** (demande d'Adrien) :
-`anna.examen886` (fr), `lea.arbeit646` (de) et `asya.ders680` (tr), choisis
-parce qu'ils postaient tous leurs créneaux sans percer (médianes de 1 060 à
-1 439 vues sur 21 jours, aucun post au-delà de 12 700). Le label a remplacé
-`classic-study` par un `update` de `compte_labels` ; le retour se fait de la
-même façon, il n'y avait rien d'autre sur ces comptes. Leurs passages déjà
-créés gardent leurs slideshows classiques ; leurs premiers white posts partent
-à l'assignation de la nuit du 06 au 07/10.
+**Les comptes en `white-post` seul, au 06/10 au soir** : `anna.examen886`
+(fr), et deux comptes NEUFS créés par Adrien le 06/10, `lea.studium381` (de,
+fin de warmup le 07/10 à 08:10 UTC) et `deniz.sinav272` (tr, 11:33 UTC).
+Adrien tient à ce que le format soit testé sur des comptes neufs.
+
+Le matin du 06/10, trois comptes existants y étaient passés : `anna.examen886`,
+`lea.arbeit646` (de) et `asya.ders680` (tr), choisis parce qu'ils postaient
+tous leurs créneaux sans percer (médianes de 1 060 à 1 439 vues sur 21 jours,
+aucun post au-delà de 12 700). Le label a remplacé `classic-study` par un
+`update` de `compte_labels` ; le retour se fait de la même façon, il n'y avait
+rien d'autre sur ces comptes. **Le soir même, `lea.arbeit646` et `asya.ders680`
+sont repassés en `classic-study`** pour laisser le stock aux comptes neufs de
+leur langue : `lea.arbeit646` n'avait reçu aucun white post, et les deux
+d'`asya.ders680`, pas encore publiés, ont été remplacés par des classiques (même
+procédé que ci-dessous). Sans ça, deux comptes turcs auraient publié les mêmes
+images au pixel près devant la même audience.
+
+Le 06/10 à 11:40 UTC, à la demande d'Adrien, les posts classiques **pas encore
+publiés** du jour ont été remplacés : seuls les deux d'`asya.ders680`
+(`60684d34`, `809b6d65`) l'étaient encore, `lea.arbeit646` avait publié ses
+deux et `anna.examen886` a publié le sien à 11:40:01, vingt secondes avant la
+bascule. Passages et posts sauvegardés dans `white_post_bascule_sauvegarde`
+(RLS, aucune policy), supprimés sous garde « encore `assigne`, sans
+`publie_at` », puis `kick_edge_micabo('assignation-contenu', {compteId,
+date})` **sans `forcer`** : le moteur comble jusqu'au quota, rien de plus. Il a
+tiré `17164fa4` et `5b47357f` en turc, 6 images sur 6 du deck `tr`, texte vide,
+musique et hashtags. Pas par `revoquer-post` : le secret cron y vaut rôle admin,
+et un admin rejette le slideshow pour tout le monde. Les deux slideshows
+classiques retrouvent leur passage dû et repartent ailleurs.
+
+Le même jour à 14:03 UTC, ce remplacement a été défait pour `asya.ders680`
+(retour en classique, `85379b9e` et `cd8d453b`), sauvegarde dans la même table.
+
+**Second lot, dix posts, en file le 06/10** (`docs/white-post/README.md`), tous
+@amayareading, FR / DE / TR, un angle micabo chacun :
+
+| contenu | TikTok | tier | slide micabo |
+|---|---|---|---|
+| `5728e185` | 7688807102764092705, ruin your 20s | A | l'ironie : « n'ouvre surtout pas l'appli micabo » |
+| `939637c1` | 7685340052989398275, smart again #2 (sans slide pub) | A | se faire interroger, les trous se voient |
+| `f36c8e54` | 7685736268617059616, harmed your brain (7 slides) | A | attention courte, séances courtes |
+| `8de16b74` | 7690642292855672096, successful people | A | ne plus recopier ses cours en fiches |
+| `be7b4194` | 7683541501007252758, smart again (sources) | A | la courbe de l'oubli |
+| `f5fc62fa` | 7691336990419209505, stop in your 20s | A | les temps morts |
+| `430b62d6` | 7692093201968090401, smart again (short-form) | A | ses propres cours, pas des vidéos |
+| `3615df10` | 7681048823824649494, phone addiction | B | l'appli à la place de TikTok sur l'écran d'accueil |
+| `27cd75a1` | 7680975889932225814, 7 ways (7 slides) | C | le matin au réveil |
+| `2c25985f` | 7683630825610513686, anti-rot routine | C | le soir, avant de dormir |
+
+Tiers par la formule d'import : les deux derniers ont moins de 10 000 vues
+d'origine. **Validés le 06/10 à 16:17 UTC** à la demande d'Adrien (`valide_par`
+vide, comme le premier lot). Le stock passe à 15 white posts, soit 27 passages
+par cycle pour trois comptes à 2 posts par jour, et chaque compte peut en
+recevoir 15 avant de buter sur le recul de 30 jours (7 jours et demi).
+
+**Qui reçoit quoi, et quand.** `anna.examen886` reçoit ses 2 white posts à
+l'assignation de minuit (`minuit-vnext`, 22:00 UTC). Les deux comptes neufs ne
+sont PAS servis à minuit : ils sont encore en warmup. C'est
+`minuit-vnext-journee` (`5,20,35,50 * * * *`, assignation de tous les comptes
+pour le jour de Paris) qui les sert au premier passage après la fin du warmup,
+le jour même : `lea.studium381` vers 08:20 UTC le 07/10, `deniz.sinav272` vers
+11:35 UTC. Ensuite, comme tout le monde, à chaque minuit.
+
+**La couleur d'un label peut le rendre invisible** (06/10). `white-post` est
+blanc (#ffffff), et les puces de label prennent la couleur du label pour leur
+texte et leur bordure (filtres et cartes de `/admin/slideshows`, carte du burn)
+ou pour leur fond sous un texte blanc (`LabelPicker` actif, fiches compte et
+source) : le label s'écrivait blanc sur blanc et la page Slideshows semblait ne
+pas l'avoir. `couleurLabelLisible` (`src/features/moteur/couleurLabel.ts`,
+pur, 6 tests) rend `null` sous un contraste de 1,8 avec le blanc, et la puce
+retombe sur son style par défaut, comme un label sans couleur. Le seuil ne
+refuse que l'illisible : l'ambre de Hook (#f59e0b, 2,1) reste coloré. La
+couleur enregistrée n'est pas touchée. La pastille du Pilotage a pris un
+liseré pour la même raison.
 
 Un compte qui porte `white-post` avec un autre label tire les white posts comme
 les autres, dans les mêmes règles (tier, recul de 30 jours, part des C).
@@ -137,15 +203,17 @@ labels sur demande ; ils restent assignables à la main. Module à part pour ne
 pas faire « changer » les bundles du moteur qui tirent `labels_systeme.ts`.
 Aucun compte n'a été créé entre la naissance du label (08:12 UTC) et le
 correctif. **`manage-users` v18 tourne sur `d8e723e`** (alias `ne`→`te`, test de
-vie `401`), commit de `claude/zealous-faraday-6h1qc1` pas encore dans `main` :
-ne pas redéployer `manage-users` depuis un `main` qui ne l'a pas.
+vie `401`), dans `main` depuis #98.
 
 **Un compte qui ne porte QUE `white-post` s'assèche vite.** Le recul de
 30 jours (`RECUL_MEME_COMPTE_JOURS`) lui interdit de revoir un white post dans
 le mois : il lui en faut `posts_par_jour × 30` dans sa langue, soit ~60 à 2
 posts par jour. Et un white post en A ne doit que 2 passages par cycle, toutes
 langues confondues, avant son verdict à J+2. Avec 5 white posts, un tel compte
-tient deux à trois jours, puis « Plus de candidat dans le pool ».
+tient deux à trois jours, puis « Plus de candidat dans le pool ». Il ne
+reçoit alors AUCUN post : sans autre label, il n'a pas de repli vers les
+classiques. Un post rendu dans trois langues sert une fois chaque compte de
+ces langues : pour tenir, il faut environ deux white posts neufs par jour.
 
 **État du déploiement au 06/10, à lire avant de toucher aux chargeurs.**
 
