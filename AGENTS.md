@@ -596,7 +596,9 @@ d'origine d'un slideshow.
 
 **Déploiement du 06/10** : migration 0310 appliquée, `ugc-video` **v14** sur
 `14209ee` (alias `je`), test de vie `401` passé. Aucun chargeur du moteur n'a
-bougé. La page créateur n'est en production qu'après fusion dans `main`.
+bougé. **Front en production depuis #99** (`ade8564`, squash du 06/10) :
+le bundle servi par `micabo-os.vercel.app` contient `/ugc/:id`, le calendrier
+vidéo et `ugc_publication_marquer` (vérifié par `pg_net`).
 
 ## Tierlist des slideshows (0250, en prod depuis le 11/09/2026)
 
