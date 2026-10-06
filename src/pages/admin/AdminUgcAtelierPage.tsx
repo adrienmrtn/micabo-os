@@ -147,6 +147,8 @@ function CarteModele({
   const { t } = useTranslation();
   const qc = useQueryClient();
   const enImport = modele.statut === "a_couper" && !modele.source_path && !modele.erreur;
+  // Même seuil que la fonction (IMPORT_ABANDON_MS) : au-delà, recoller le lien relance l'import.
+  const importPerdu = enImport && Date.now() - new Date(modele.updated_at).getTime() > 10 * 60 * 1000;
   const rafraichir = () => qc.invalidateQueries({ queryKey: ["ugc-atelier"] });
 
   const archiver = useMutation({ mutationFn: () => archiverModele(modele.id), onSuccess: rafraichir });
@@ -177,12 +179,13 @@ function CarteModele({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        {enImport ? (
+        {enImport && !importPerdu ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
             {t("ugcAtelier.importEnCours")}
           </p>
         ) : null}
+        {importPerdu ? <p className="text-sm text-destructive">{t("ugcAtelier.importPerdu")}</p> : null}
         {modele.erreur ? <p className="text-sm text-destructive">{modele.erreur}</p> : null}
         {modele.source_path ? <Coupe modele={modele} /> : null}
         {modele.statut === "pret" ? (

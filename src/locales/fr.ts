@@ -142,6 +142,7 @@ export const fr = {
       statutModele: { a_couper: "À couper", pret: "Prêt", archive: "Archivé" },
       vues: "{{n}} vues",
       archiver: "Archiver",
+      importPerdu: "Import interrompu. Recolle le lien pour le relancer.",
       importEnCours: "Import en cours (Apify, planche, coupe proposée)…",
       coupeProposee: "Coupe proposée : {{debut}} s → {{fin}} s.",
       debut: "Début (s)",

@@ -7,14 +7,14 @@
  *   { action: "persona_creer", nom, images: { face, left, right, down, profil }, prompt? }
  *       → ugc_personas. Une image = un chemin du bucket ou une URL.
  *   { action: "modele_importer", url }
- *       → ugc_modeles. En tâche de fond : Apify (vidéo), planche d'images,
+ *       → ugc_modeles : Apify (vidéo), planche d'images,
  *         coupe proposée par un modèle de vision.
  *   { action: "modele_couper", id, debut_s, fin_s, demo_debut_s? }
- *       → en tâche de fond : segment réaction (Fal, sans recodage), image de
+ *       → segment réaction (Fal, sans recodage), image de
  *         départ, la même sans texte, OCR des deux segments. Statut `pret`.
  *   { action: "modele_textes", id, textes }
  *   { action: "rendu_lancer", modele_id, persona_id, moteur?, decor? }
- *       → ugc_rendus. En tâche de fond : Nano Banana (le persona dans l'image
+ *       → ugc_rendus : Nano Banana (le persona dans l'image
  *         de départ), puis soumission Kling motion control. Kling met plusieurs
  *         minutes : la fonction ne l'attend pas.
  *   { action: "rendus_suivre" }
@@ -79,6 +79,7 @@ const MODELE_COUPE = "google/gemini-2.5-flash";
 /** Au-delà, un rendu encore « en cours » est réputé perdu. */
 const KLING_ABANDON_MS = 60 * 60 * 1000;
 const IMAGE_ABANDON_MS = 15 * 60 * 1000;
+const IMPORT_ABANDON_MS = 10 * 60 * 1000;
 
 type Supabase = ReturnType<typeof serviceClient>;
 
@@ -123,12 +124,13 @@ async function imagePropre(supabase: Supabase, source: string): Promise<{ octets
   return { octets: r.bytes, mime, ext };
 }
 
-/** La suite tourne après la réponse : l'appelant relit la table. */
-function enArrierePlan(travail: Promise<unknown>): void {
-  const edge = (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime;
-  const p = travail.catch((e) => console.error("ugc-video (fond)", messageErreur(e)));
-  if (edge) edge.waitUntil(p);
-}
+/**
+ * Pas de tâche de fond : le 06/10, un import passé à `EdgeRuntime.waitUntil`
+ * a été coupé par le runtime ~10 s après la réponse (`shutdown`, raison
+ * `EarlyDrop`), au milieu d'un dépôt Storage, sans que le `catch` puisse
+ * écrire l'erreur. Chaque action tient sous ~90 s : elle tourne dans la
+ * requête, et seul Kling (plusieurs minutes) est relevé à part.
+ */
 
 /** `sub` du JWT admin (déjà vérifié par assertAuthorised), sinon null. */
 function auteurDe(request: Request): string | null {
@@ -489,6 +491,9 @@ async function suivreRendus(supabase: Supabase) {
   if (error) throw new Error(error.message);
 
   const bilan: Array<{ id: string; etat: string }> = [];
+  // Une finalisation télécharge, nettoie et redépose une vidéo (~20 s) : au
+  // plus trois par appel, les suivantes partent au prochain relevé.
+  let finalises = 0;
   for (const r of enCours ?? []) {
     const id = String(r.id);
     const age = Date.now() - new Date(String(r.updated_at)).getTime();
@@ -503,6 +508,11 @@ async function suivreRendus(supabase: Supabase) {
       const st = await fetch(`${r.fal_status_url}?logs=0`, { headers: falAuthHeaders(key) });
       const s = (await st.json()) as { status?: string; error?: unknown };
       if (s.status === "COMPLETED") {
+        if (finalises >= 3) {
+          bilan.push({ id, etat: "pret_a_finaliser" });
+          continue;
+        }
+        finalises += 1;
         const res = await fetch(String(r.fal_response_url), { headers: falAuthHeaders(key) });
         const sortie = (await res.json()) as Record<string, unknown>;
         if (!res.ok) throw new Error(`Kling : ${JSON.stringify(sortie).slice(0, 300)}`);
@@ -635,14 +645,28 @@ Deno.serve(async (request) => {
         ? await supabase.from("ugc_modeles").select("id").eq("tiktok_post_id", idLien).limit(1)
         : { data: [] as Array<{ id: string }> };
       const existant = parLien?.[0] ?? parId?.[0];
-      if (existant) return json({ ok: true, id: existant.id, deja: true });
+      if (existant) {
+        // Un import échoué, ou mort avec son isolat (rien n'a pu écrire
+        // l'erreur), se relance sur la même ligne en recollant le lien.
+        const { data: m } = await supabase
+          .from("ugc_modeles")
+          .select("source_path, erreur, updated_at")
+          .eq("id", existant.id)
+          .single();
+        const perdu = m && !m.source_path &&
+          (m.erreur || Date.now() - new Date(String(m.updated_at)).getTime() > IMPORT_ABANDON_MS);
+        if (!perdu) return json({ ok: true, id: existant.id, deja: true });
+        await majModele(supabase, existant.id as string, { erreur: null });
+        await importerModele(supabase, existant.id as string, url);
+        return json({ ok: true, id: existant.id, relance: true });
+      }
       const { data, error } = await supabase
         .from("ugc_modeles")
         .insert({ source_url: url, titre: "Import en cours…" })
         .select("id")
         .single();
       if (error || !data) throw new Error(`ugc_modeles : ${error?.message ?? "?"}`);
-      enArrierePlan(importerModele(supabase, data.id as string, url));
+      await importerModele(supabase, data.id as string, url);
       return json({ ok: true, id: data.id });
     }
 
@@ -658,7 +682,7 @@ Deno.serve(async (request) => {
       }
       const demo = Number.isFinite(Number(body.demo_debut_s)) ? Number(body.demo_debut_s) : null;
       await majModele(supabase, id, { erreur: null, statut: "a_couper" });
-      enArrierePlan(couperModele(supabase, id, debut, fin, demo));
+      await couperModele(supabase, id, debut, fin, demo);
       return json({ ok: true, id });
     }
 
@@ -686,7 +710,7 @@ Deno.serve(async (request) => {
         return json({ error: "Un rendu vivant existe déjà pour ce modèle, ce persona, ce moteur et ce décor" }, 409);
       }
       if (error || !data) throw new Error(`ugc_rendus : ${error?.message ?? "?"}`);
-      enArrierePlan(lancerRendu(supabase, data.id as string));
+      await lancerRendu(supabase, data.id as string);
       return json({ ok: true, id: data.id });
     }
 

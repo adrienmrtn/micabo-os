@@ -142,6 +142,7 @@ export const en = {
       statutModele: { a_couper: "To cut", pret: "Ready", archive: "Archived" },
       vues: "{{n}} views",
       archiver: "Archive",
+      importPerdu: "Import interrupted. Paste the link again to restart it.",
       importEnCours: "Importing (Apify, contact sheet, suggested cut)…",
       coupeProposee: "Suggested cut: {{debut}} s → {{fin}} s.",
       debut: "Start (s)",

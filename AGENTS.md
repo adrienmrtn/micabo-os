@@ -186,6 +186,89 @@ tient deux à trois jours, puis « Plus de candidat dans le pool ».
   appels REST), et aucun réglage, prompt, modèle de nudge ni fonction SQL ne
   contient plus ce domaine.
 
+## AI UGC : l'atelier, premier lot (0308, 06/10/2026)
+
+Un post AI UGC, ce sont **deux vidéos et un texte** que le créateur assemble
+dans TikTok : la **réaction** d'un TikTok source refaite par le persona du
+compte, une **démo** de l'appli micabo prise dans une bibliothèque par langue,
+et le **texte** de la vidéo d'origine (traduit) qu'il colle là où il était.
+Pas de placement micabo : la démo est le placement. Un compte = un persona
+(`comptes_ugc_persona_unique` le garantit depuis 0174). Décision d'Adrien du
+06/10 : **cinq personas, cinq versions de chaque vidéo** (une par persona).
+
+**Ce lot est un atelier, isolé du moteur.** Rien n'est lu par l'assignation,
+aucun `contenus` n'est créé, le label `ai-ugc` n'existe pas encore : né sans
+compte, il serait le « moins utilisé » du repli de `manage-users` et partirait
+sur le premier compte classique créé (le piège de 0277 et du 06/10). Il naît
+au lot 2 avec son exclusion dans `labels_repli.ts`.
+
+- **Tables** (0308, RLS admin) : `ugc_modeles` (la vidéo source, sa planche,
+  la coupe, l'image de départ, les textes par segment), `ugc_rendus` (une
+  réaction rendue pour un persona : moteur, décor, statut, coût, jugement),
+  `ugc_demos` (démos par langue). Les vidéos livrables sont des lignes
+  `media_library` nées avec `upscale_le` posé et sans label : aucun pool de
+  garnissage ni l'upscale ne les voit. `ugc_reactions`, `ugc_utilisations` et
+  `ugc_video_posts` (l'ancien module retiré le 14/09) restent dormantes.
+- **`ugc-video`** (chargeur `_deploy`, alias relu à chaque rebuild) :
+  import d'un TikTok (Apify, planche d'une image toutes les ~0,5 s par
+  `extract-nth-frame`, coupe proposée par `gemini-2.5-flash`), coupe du
+  segment réaction (Fal `trim-video`), image de départ et la même sans texte,
+  OCR des deux segments, rendus, démos, import de personas depuis des URL, et
+  `apercu` (voir plus bas). Les étapes longues tournent en tâche de fond
+  (`EdgeRuntime.waitUntil`) : l'écran relit les tables.
+- **Un rendu** : Nano Banana Pro pose le persona dans l'image de départ
+  (`decor = persona` : sa chambre, de la frame source on ne garde que la pose ;
+  `decor = source` : le décor d'origine), puis Kling motion control
+  (`character_orientation = video`, `keep_original_sound = false` : livrée
+  muette, le créateur pose un son natif). Kling met plusieurs minutes : la
+  fonction **soumet et n'attend pas** ; `rendus_suivre` relève (la page
+  l'appelle toutes les 20 s tant qu'un rendu attend). Gardes : réaction entre
+  3 et 30 s, rendu refusé sous 85 % de la durée de la réaction (Kling tronque
+  parfois), abandon à 1 h.
+- **Prix Fal lus le 06/10** : Kling motion control 0,112 $/s (v2.6 pro),
+  0,07 (v2.6 standard), 0,168 (v3 pro), 0,126 (v3 standard) ; Nano Banana Pro
+  0,15 $ l'image. Une réaction de 6 s revient à ~0,82 $ (v2.6 pro) ou ~1,16 $
+  (v3 pro), donc **4 à 6 $ par vidéo source** pour cinq personas.
+- **MP4 sans métadonnées** (`_shared/mp4_metadonnees.ts`, pur, 8 tests) :
+  retire `udta`, `meta`, `uuid` (XMP, C2PA) partout, met à zéro les dates de
+  `mvhd`/`tkhd`/`mdhd`, vide le nom de `hdlr` et le `compressorname`, et
+  recale `stco`/`co64` mdat par mdat. Rien n'est ré-encodé. Vérifié à côté
+  sur quatre MP4 ffmpeg (faststart, moov en fin, clés Apple, C2PA simulé) :
+  décodage OK, flux identiques au `framemd5`. Ne touche pas un SEI d'encodeur
+  écrit dans le flux vidéo (x264 en laisse un). Un MP4 fragmenté est refusé.
+- **Personas par Higgsfield** (MCP connecté à la session) : visage par Soul
+  2.0 (0,12 crédit l'image), angles, tête baissée et photo de profil par
+  Nano Banana Pro avec le visage en référence (2 crédits l'image). Rapatriés
+  par `persona_brouillon` (le CDN Higgsfield est bloqué par le proxy de
+  l'environnement de travail), créés par `persona_creer`.
+
+**Les cinq personas du 06/10** (aucun compte encore) : Clara (`4b9e6c4f`),
+Inès (`a7b7bb2c`), Léa (`db62f97b`), Manon (`62fca58c`), quatre visages Soul
+2.0 avec leur chambre, et A (`ee9bd860`), créé le 01/09 par Nano Banana dans
+l'OS, dont face, angles et tête baissée ont été refaits dans une chambre (ses
+photos studio sur fond gris auraient mis le persona devant un mur gris en
+décor « persona » ; elles restent sous `ugc/personas/draft/8e786da4-…`).
+Les quatre nouvelles portent le même sweat gris et le même chignon : le
+prompt de base était commun. À varier si les comptes se ressemblent trop.
+~40 crédits Higgsfield dépensés pour les cinq.
+
+**Regarder une image ou une vidéo depuis l'environnement de travail** : le
+proxy bloque `supabase.co` et le CDN de Higgsfield, pas `fal.media`.
+`ugc-video` `{ action: "apercu", chemins }` recopie les fichiers du bucket sur
+le CDN Fal (image réduite en `resize=contain` ; sans hauteur, le rendu du
+Storage recadre au centre) ; on les télécharge ensuite et ffmpeg en tire les
+images d'une vidéo.
+
+**Pièges du MCP, précisés le 06/10** : `drop policy if exists`, même sur une
+table qui n'existe pas encore, fait attendre une confirmation humaine et la
+migration meurt à 60 s sans rien appliquer. Une migration qui crée ses tables
+crée leurs policies sans `drop`.
+
+**Fal `extract-nth-frame`** rend des images réparties uniformément de 0 à la
+fin, pas toutes les N images : mesuré sur une vidéo rouge/vert/bleu d'1 s
+chacune, 8 images pour 3 s (3 rouges, 2 vertes, 3 bleues). `instantsPlanche`
+les date ainsi.
+
 ## Tierlist des slideshows (0250, en prod depuis le 11/09/2026)
 
 Un slideshow porte **un tier** (`contenus.tier` : D, C, B, A, S, S+) et un
