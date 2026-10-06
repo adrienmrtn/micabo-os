@@ -131,6 +131,22 @@ export const fr = {
       ugcAtelier: "Réaction TikTok refaite par chaque persona (Nano Banana + Kling)",
       referral: "Propositions de nouveaux créateurs",
     },
+    ugcPoster: {
+      titre: "Vidéo du jour",
+      preparation: "Préparation de la vidéo…",
+      enregistrerVideo: "Enregistrer la vidéo",
+      enregistrerAide:
+        "Sur iPhone : choisis « Enregistrer la vidéo », elle arrive dans ta pellicule.",
+      sonAide:
+        "La vidéo est muette : ajoute un son tendance dans TikTok avant de publier.",
+      demo: "Démo de l'appli",
+      demoAide: "À mettre juste après la vidéo, dans le même TikTok.",
+      enregistrerDemo: "Enregistrer la démo",
+      texteTitre: "Texte à mettre sur la vidéo",
+      texteAide:
+        "Pose-le au même endroit et à la même taille que sur la vidéo d'origine, du début à la fin.",
+      captureTitre: "Vidéo d'origine (où poser le texte)",
+    },
     ugcAtelier: {
       titre: "Atelier AI UGC",
       intro:
@@ -697,6 +713,7 @@ export const fr = {
       remanie: "Remanié",
       nouveau: "Nouveau",
       contenu: "Slideshow",
+      video: "Vidéo",
     },
     pilotage: {
       title: "Pilotage",

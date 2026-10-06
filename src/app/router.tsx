@@ -40,6 +40,7 @@ import { AdminUgcAtelierPage } from "@/pages/admin/AdminUgcAtelierPage";
 import { PosterCalendrierPage } from "@/pages/poster/PosterCalendrierPage";
 import { PosterReferralPage } from "@/pages/poster/PosterReferralPage";
 import { PosterPostPage } from "@/pages/poster/PosterPostPage";
+import { PosterUgcPage } from "@/pages/poster/PosterUgcPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 
 function Accueil() {
@@ -119,6 +120,7 @@ export function AppRouter() {
         <Route element={<RoleGate allow={["poster", "admin"]} />}>
           <Route element={<PosterLayout />}>
             <Route path="/posts/:id" element={<PosterPostPage />} />
+            <Route path="/ugc/:id" element={<PosterUgcPage />} />
           </Route>
         </Route>
       </Route>

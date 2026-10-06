@@ -131,6 +131,22 @@ export const en = {
       ugcAtelier: "TikTok reaction redone by each persona (Nano Banana + Kling)",
       referral: "New creator proposals",
     },
+    ugcPoster: {
+      titre: "Today's video",
+      preparation: "Preparing the video…",
+      enregistrerVideo: "Save the video",
+      enregistrerAide:
+        "On iPhone: choose “Save Video”, it lands in your camera roll.",
+      sonAide:
+        "The video is silent: add a trending sound in TikTok before posting.",
+      demo: "App demo",
+      demoAide: "Put it right after the video, in the same TikTok.",
+      enregistrerDemo: "Save the demo",
+      texteTitre: "Text to put on the video",
+      texteAide:
+        "Place it at the same spot and size as on the original video, from start to end.",
+      captureTitre: "Original video (where to put the text)",
+    },
     ugcAtelier: {
       titre: "AI UGC workshop",
       intro:
@@ -695,6 +711,7 @@ export const en = {
       remanie: "Reworked",
       nouveau: "New",
       contenu: "Slideshow",
+      video: "Video",
     },
     pilotage: {
       title: "Control panel",

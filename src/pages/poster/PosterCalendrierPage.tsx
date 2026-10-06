@@ -34,6 +34,7 @@ import { WarmupBadge } from "@/features/moteur/WarmupBadge";
 import { statutWarmup } from "@/features/moteur/warmup";
 import { useAuth } from "@/features/auth/AuthContext";
 import { moisDuJour, postsDuJour } from "@/features/moteur/calendrierPoster";
+import { entreeCalendrierUgc, mesPublicationsUgc } from "@/features/ugc/publications";
 import { cn } from "@/lib/utils";
 
 interface PostCalendrier {
@@ -46,6 +47,8 @@ interface PostCalendrier {
   handle_tiktok: string | null;
   sujet_titre: string | null;
   publie_at: string | null;
+  /** Page à ouvrir quand ce n'est pas `/posts/<id>` (vidéo AI UGC). */
+  lien?: string;
 }
 
 /** Lit la vue `posts_poster`, qui ne révèle jamais le compte de référence. */
@@ -124,7 +127,7 @@ function CartePost({
         </div>
 
         <Button asChild size="lg" className="w-full" variant={publie ? "outline" : "default"}>
-          <Link to={`/posts/${post.id}`}>
+          <Link to={post.lien ?? `/posts/${post.id}`}>
             {t("calendrier.voirPost")}
             <ArrowRight />
           </Link>
@@ -274,11 +277,25 @@ export function PosterCalendrierPage() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { data: posts, isPending } = useQuery({
+  const { data: postsSlideshow, isPending } = useQuery({
     queryKey: ["mes-posts", user?.id],
     queryFn: mesPosts,
     enabled: Boolean(user?.id),
   });
+  // Les vidéos des comptes AI UGC (0310) : une lecture qui échoue ne doit pas
+  // vider le calendrier des slideshows, elle se signale à part.
+  const { data: videos, error: erreurVideos } = useQuery({
+    queryKey: ["mes-publications-ugc", user?.id],
+    queryFn: mesPublicationsUgc,
+    enabled: Boolean(user?.id),
+  });
+  const posts = React.useMemo<PostCalendrier[]>(
+    () => [
+      ...(postsSlideshow ?? []),
+      ...(videos ?? []).map((v) => entreeCalendrierUgc(v, t("ugcPoster.titre"))),
+    ],
+    [postsSlideshow, videos, t],
+  );
   const { data: comptes } = useQuery({
     queryKey: ["mes-comptes"],
     queryFn: mesComptes,
@@ -314,7 +331,7 @@ export function PosterCalendrierPage() {
   // Un jour peut porter plusieurs posts : la case affiche donc une liste.
   const parJour = React.useMemo(() => {
     const carte = new Map<string, PostCalendrier[]>();
-    for (const post of posts ?? []) {
+    for (const post of posts) {
       if (compte?.id && post.compte_id && post.compte_id !== compte.id) continue;
       const date = post.date_publication_prevue;
       if (!date) continue;
@@ -327,7 +344,7 @@ export function PosterCalendrierPage() {
     return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
   }
 
-  const { duJour, enRetard } = postsDuJour(posts ?? [], jour, compte?.id);
+  const { duJour, enRetard } = postsDuJour(posts, jour, compte?.id);
   const titreJour = t("calendrier.aujourdhui");
   const cases = grilleDuMois(mois.annee, mois.mois);
   const nomDuMois = new Date(mois.annee, mois.mois, 1).toLocaleDateString(i18n.language, {
@@ -364,8 +381,10 @@ export function PosterCalendrierPage() {
         />
       )}
 
-      {/* Warmup : le créateur démarre le timer ici (plus côté HM). */}
-      {compte && (
+      {/* Warmup : le créateur démarre le timer ici (plus côté HM). Un compte
+          vidéo AI UGC n'en a pas : son warmup vide le tient hors du moteur des
+          slideshows (assignation, relevé, qualification), voir 0310. */}
+      {compte && !compte.ugc_ai_video && (
       <div
         className={cn(
           "flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between",
@@ -429,6 +448,9 @@ export function PosterCalendrierPage() {
 
       <section className="space-y-4">
         <h2 className="text-lg font-semibold tracking-tight">{titreJour}</h2>
+        {erreurVideos && (
+          <p className="text-sm text-destructive">{(erreurVideos as Error).message}</p>
+        )}
         {duJour.length === 0 && enRetard.length === 0 ? (
           <EmptyState
             icon={<CalendarCheck className="size-5" />}
@@ -522,7 +544,7 @@ export function PosterCalendrierPage() {
                   {duJourCase.map((post) => (
                     <Link
                       key={post.id}
-                      to={`/posts/${post.id}`}
+                      to={post.lien ?? `/posts/${post.id}`}
                       title={post.sujet_titre ?? undefined}
                       className={cn(
                         "block w-full max-w-full truncate rounded px-1.5 py-1 text-[11px] leading-tight transition-colors",

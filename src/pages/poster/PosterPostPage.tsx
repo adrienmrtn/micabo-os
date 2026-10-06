@@ -86,7 +86,7 @@ function estPropre(slide: PostSlide): boolean {
 
 /** Zone de texte entièrement tapable : sur mobile, viser un petit bouton est
  * pénible, et la sélection manuelle d'un texte multiligne encore plus. */
-function TexteCopiable({ texte, label }: { texte: string; label?: string }) {
+export function TexteCopiable({ texte, label }: { texte: string; label?: string }) {
   const { t } = useTranslation();
   const [copie, setCopie] = React.useState(false);
 
@@ -123,7 +123,7 @@ function TexteCopiable({ texte, label }: { texte: string; label?: string }) {
 }
 
 /** Plein écran : le placement du texte se juge sur une image lisible. */
-function Loupe({ url, onClose }: { url: string; onClose: () => void }) {
+export function Loupe({ url, onClose }: { url: string; onClose: () => void }) {
   const { t } = useTranslation();
 
   React.useEffect(() => {
@@ -157,7 +157,7 @@ function Loupe({ url, onClose }: { url: string; onClose: () => void }) {
  * tout au calme sur grand écran, puis scanne pour récupérer les fichiers.
  * Masqué sur mobile, où l'on est déjà sur le bon appareil.
  */
-function CarteQr({ url }: { url: string }) {
+export function CarteQr({ url }: { url: string }) {
   const { t } = useTranslation();
   const [image, setImage] = React.useState<string | null>(null);
 
@@ -186,7 +186,7 @@ function CarteQr({ url }: { url: string }) {
 }
 
 /** Une photo cliquable, légendée, qui s'ouvre en plein écran. */
-function Visuel({
+export function Visuel({
   url,
   legende,
   onZoom,
