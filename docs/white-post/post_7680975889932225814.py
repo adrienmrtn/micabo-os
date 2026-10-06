@@ -103,9 +103,9 @@ SLIDES = [
                 "tr": "Uyanır uyanmaz kaydırma",
             }},
             {"id": "p1", "x": 341, "base": 558, "size": 42, "pitch": 48, "w": 620, "text": {
-                "fr": f"Je fais plutôt quelques flashcards de mes cours sur l’appli micabo, et ça m’aide vraiment{NB}: mon cerveau démarre la journée sur mes cours, pas sur un fil. Mais tout sauf un fil infini fait l’affaire",
-                "de": "Ich mache stattdessen ein paar Karteikarten zu meinem Stoff in der micabo-App, und das hilft echt: Mein Kopf startet mit dem Lernstoff in den Tag statt mit einem Feed. Aber alles außer einem endlosen Feed tut’s auch",
-                "tr": "Ben onun yerine micabo uygulamasında derslerimden birkaç bilgi kartıyla kendimi test ediyorum ve bu çok işe yarıyor: beynim güne akışla değil, derslerimle başlıyor. Ama sonsuz akış olmayan her şey işini görür",
+                "fr": f"Je fais plutôt quelques flashcards de mes cours sur l’appli micabo, et ça m’aide vraiment{NB}: mon cerveau démarre la journée sur mes cours. Mais tout sauf un fil infini fait l’affaire",
+                "de": "Ich mache stattdessen ein paar Karteikarten zu meinem Stoff in der micabo-App, und das hilft echt: So startet mein Kopf mit dem Lernstoff in den Tag. Aber alles außer einem endlosen Feed tut’s auch",
+                "tr": "Ben onun yerine micabo uygulamasında derslerimden birkaç bilgi kartıyla kendimi test ediyorum ve bu çok işe yarıyor: beynim güne doğrudan derslerimle başlıyor. Ama sonsuz akış olmayan her şey işini görür",
             }},
         ],
     },
