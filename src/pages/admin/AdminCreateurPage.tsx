@@ -304,22 +304,26 @@ export function AdminCreateurPage() {
                       </Button>
                     )}
                     <Button size="sm" variant="outline" asChild>
-                      <Link to={`/admin/posts/${post.id}`}>{t("adminCal.voirPost")}</Link>
+                      <Link to={post.lien ?? `/admin/posts/${post.id}`}>{t("adminCal.voirPost")}</Link>
                     </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className={cn("size-8 text-destructive hover:bg-destructive/10")}
-                      aria-label={t("common.delete")}
-                      disabled={supprimer.isPending}
-                      onClick={() => {
-                        if (window.confirm(t("adminCal.confirmSuppr", { nom }))) {
-                          supprimer.mutate(post.id);
-                        }
-                      }}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
+                    {/* Une vidéo AI UGC n'est pas un post : la suppression d'un
+                        post n'a rien à y faire. */}
+                    {!post.video && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className={cn("size-8 text-destructive hover:bg-destructive/10")}
+                        aria-label={t("common.delete")}
+                        disabled={supprimer.isPending}
+                        onClick={() => {
+                          if (window.confirm(t("adminCal.confirmSuppr", { nom }))) {
+                            supprimer.mutate(post.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               );

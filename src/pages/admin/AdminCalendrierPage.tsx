@@ -93,6 +93,7 @@ export function AdminCalendrierPage() {
         langue: postsCompte[0]?.langue ?? null,
         qualification: postsCompte[0]?.qualification ?? "PASSABLE",
         ugc: Boolean(postsCompte[0]?.ugc_ai),
+        video: postsCompte.some((p) => p.video),
         postes: postsCompte.filter(estPoste).length,
         vides: postsCompte.filter((p) => p.slideshow_vide && !estPoste(p)).length,
       }))
@@ -421,6 +422,7 @@ export function AdminCalendrierPage() {
                 {groupe.ugc && (
                   <Badge variant="secondary">{t("adminCal.badgeUgc")}</Badge>
                 )}
+                {groupe.video && <Badge variant="secondary">{t("type.video")}</Badge>}
                 {groupe.vides > 0 && (
                   <Badge variant="destructive" title={t("adminCal.slideshowVideAide")}>
                     {t("adminCal.slideshowVide")}

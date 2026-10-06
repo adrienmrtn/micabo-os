@@ -548,14 +548,16 @@ réassignerait un SLIDESHOW), le relevé et la qualification lisent tous
 `passages` et des slides d'images. Un post vidéo y serait un intrus que
 chaque chemin devrait apprendre à sauter.
 
-**Le moteur ne voit pas un compte vidéo, et ça tient à deux choses** :
-aucun label (l'assignation journaliserait « aucun label » et passerait), et
-**un warmup vide** (`warmup_ends_at` nul : l'assignation, le relevé et la
-qualification ne prennent que les comptes sortis de warmup). La page du
-créateur cache la carte warmup d'un compte `ugc_ai_video`. **Ne pas démarrer
-son warmup, ne pas lui donner de label** : avec un label, il recevrait des
-slideshows. `comptes.ugc_ai_video` (colonne dormante depuis le 14/09) est
-réutilisée pour le marquer.
+**L'assignation des slideshows écarte un compte vidéo** (`compteEnProcess`,
+`_shared/compte_process.ts`, pur, 5 tests) : `comptes.ugc_ai_video` (colonne
+dormante depuis le 14/09, réutilisée pour le marquer) le sort des deux
+listes de l'assignation, mode test compris. Sans cette règle, un compte
+vidéo sorti de warmup et sans label restait « sous quota » pour toujours, et
+chaque maillon de la chaîne d'assignation (jusqu'à 40, toutes les 15
+minutes) le reprenait pour journaliser « aucun label ». Le relevé et la
+qualification le voient (warmup fini) mais ne lisent que `passages` : un
+passage à vide, sans scrape. **Ne pas lui donner de label** quand même. La
+page du créateur cache la carte warmup d'un compte vidéo.
 
 **Le calendrier du créateur** mêle ses vidéos à ses posts
 (`entreeCalendrierUgc` : même « Aujourd'hui », mêmes retards, même grille) et
@@ -576,15 +578,21 @@ pour copier) avec la capture, la légende, le lien du post publié.
    `genre: "demo", langue`, sous `ugc/demos/` + `ugc_demos` ;
 4. un `insert` dans `ugc_publications` (texte pris dans
    `ugc_modeles.traductions`, capture = `image_ref_path`).
-Rien ne la crée tout seul chaque jour : l'automatiser (et la montrer dans le
-calendrier admin) est le prochain lot. Pas de relevé des vues non plus : le
-relevé ne lit que `passages`.
+Rien ne la crée tout seul chaque jour, **et c'est voulu** : Adrien veut
+mieux calibrer avant d'automatiser (06/10), donc pas de vidéo le 07/10. Pas
+de relevé des vues non plus : le relevé ne lit que `passages`.
+
+**Le calendrier admin** (`postsCalendrierAdmin`) lit aussi
+`ugc_publications` : une vidéo compte dans prévus / postés comme un post, le
+créateur porte un badge Vidéo, et dans sa fiche la ligne ouvre `/ugc/<id>`
+sans le bouton de suppression d'un post. Un manager n'en lit aucune (RLS).
 
 **@eva.learn** (compte `fd30e4af`, créé le 06/10) : login `eva@micabo.app`
 (poster `5a7dece1`, créé par `manage-users` `create` avec `type_compte:
 "aucun"`, le mot de passe a été donné à Adrien, pas écrit ici), compte en
 **français** (choix d'Adrien), persona **Jade** (`37ace51e`), nom affiché Eva,
-photo de profil de Jade, une vidéo par jour, aucun label, warmup vide. Le
+photo de profil de Jade, une vidéo par jour, aucun label, **warmup levé le
+06/10 à 16:32 UTC** (demande d'Adrien), une fois l'assignation redéployée. Le
 compte a été inséré en SQL : `manage-users` ne crée un premier compte qu'en
 consommant la file des labels. Première vidéo, **pour le 06/10**
 (`d4dbe23b`) : la réaction Genjutsu 480p de Jade (8,04 s, 1,27 Mo, media
@@ -595,8 +603,14 @@ micabo… »), légende « j’adore trop cette méthode de révision 📚 #revi
 d'origine d'un slideshow.
 
 **Déploiement du 06/10** : migration 0310 appliquée, `ugc-video` **v14** sur
-`14209ee` (alias `je`), test de vie `401` passé. Aucun chargeur du moteur n'a
-bougé. **Front en production depuis #99** (`ade8564`, squash du 06/10) :
+`14209ee` (alias `je`), test de vie `401` passé. Puis l'écart des comptes
+vidéo : quatre chargeurs sur `b6475fc` — `assignation` (v45),
+`assignation-contenu` (v44), `minuit-vnext` (v48), `revoquer-post` (v44) —,
+**alias inchangés** (`Te`, `Se`, `Ge`, `ve`), relus dans les bundles ; test de
+vie `401` sur les quatre. Rebâtis d'abord depuis `main` sans changement : les
+cinq bundles moteur ressortaient identiques au dépôt, donc l'écart est
+entièrement `compteEnProcess`. `bruler-texte-test` et `rattrapage-elo` ne
+bougent pas ; les huit bundles à dérive connue (taille constante) non plus. **Front en production depuis #99** (`ade8564`, squash du 06/10) :
 le bundle servi par `micabo-os.vercel.app` contient `/ugc/:id`, le calendrier
 vidéo et `ugc_publication_marquer` (vérifié par `pg_net`).
 
