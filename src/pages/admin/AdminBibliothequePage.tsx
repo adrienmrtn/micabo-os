@@ -53,12 +53,16 @@ import {
   type ProviderNettoyage,
 } from "@/features/moteur/nettoyageEtapes";
 import { useApplication } from "@/features/moteur/ApplicationContext";
+import { estCheminIncruste } from "@/features/moteur/slidePropre";
 import type { Media } from "@/features/moteur/types";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:w-64";
 
 function estPropre(media: Media): boolean {
+  // Un white post (`incruste/…`) a son texte dessiné dans l'image : il n'est
+  // jamais « à nettoyer », le nettoyer effacerait le post.
+  if (estCheminIncruste(media.storage_path)) return true;
   // Rangée en propre ET pas signalée par l'audit (texte encore présent).
   return media.storage_path.startsWith("propre/") && !media.texte_restant;
 }

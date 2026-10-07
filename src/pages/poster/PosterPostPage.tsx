@@ -42,6 +42,10 @@ import {
 } from "@/features/moteur/api";
 import { verifierLienPublication } from "@/features/moteur/lienPublication";
 import {
+  estIncruste,
+  estPropre as photoPubliable,
+} from "@/features/moteur/slidePropre";
+import {
   appliquerEvenement,
   etapesInitiales,
   type EvenementEtape,
@@ -74,14 +78,15 @@ function visuelSlide(slide: PostSlide): string | null {
 }
 
 /**
- * Une slide n'est publiable que si sa photo a été nettoyée : `storage_path`
- * commençant par `propre/`. Un `brut/` porte encore le texte d'origine, un
- * media absent n'a rien du tout — les deux sont à signaler, pas à enregistrer.
- * Une image brûlée part de la propre : elle est publiable par construction.
+ * Une slide n'est publiable que si sa photo a été nettoyée (`propre/…`) ou si
+ * c'est un white post (`incruste/…`, texte dessiné dans l'image). Un `brut/`
+ * porte encore le texte d'origine, un media absent n'a rien du tout — les deux
+ * sont à signaler, pas à enregistrer. Une image brûlée part de la propre : elle
+ * est publiable par construction.
  */
 function estPropre(slide: PostSlide): boolean {
   if (estBurned(slide)) return true;
-  return Boolean(slide.media_library?.storage_path?.startsWith("propre/"));
+  return photoPubliable(slide);
 }
 
 /** Zone de texte entièrement tapable : sur mobile, viser un petit bouton est
@@ -736,7 +741,7 @@ export function PosterPostPage() {
                 {estPropre(slide) ? (
                   <Visuel
                     url={visuelSlide(slide)!}
-                    legende={estBurned(slide)
+                    legende={estBurned(slide) || estIncruste(slide)
                       ? t("posts.photoBurned")
                       : t("posts.photoAPoster")}
                     onZoom={() => setLoupe(visuelSlide(slide)!)}
