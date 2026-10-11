@@ -5,10 +5,14 @@ import { BookOpen, CalendarDays, Gift, HelpCircle } from "lucide-react";
 import { NudgePopup } from "@/features/nudge/NudgePopup";
 import { ReviewPopup } from "@/features/reviews/ReviewPopup";
 import { OnboardingPopup } from "@/features/onboarding/OnboardingPopup";
+import { DemenagementPopup } from "@/features/demenagement/DemenagementPopup";
+import { useDemenagementSophia } from "@/features/demenagement/useDemenagementSophia";
 import { AppShell } from "./AppShell";
 
 export function PosterLayout() {
   const { t } = useTranslation();
+  // Déménagement vers l'OS Sophia : il passe avant les autres pop-ups.
+  const identifiantSophia = useDemenagementSophia();
   return (
     <AppShell
       navLabel={t("nav.poster")}
@@ -28,9 +32,15 @@ export function PosterLayout() {
         },
       ]}
     >
-      <OnboardingPopup />
-      <NudgePopup />
-      <ReviewPopup />
+      {identifiantSophia ? (
+        <DemenagementPopup identifiant={identifiantSophia} />
+      ) : (
+        <>
+          <OnboardingPopup />
+          <NudgePopup />
+          <ReviewPopup />
+        </>
+      )}
       <Outlet />
     </AppShell>
   );
