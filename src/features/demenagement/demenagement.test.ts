@@ -81,6 +81,13 @@ describe("langueDemenagement", () => {
     expect(langueDemenagement(null, null)).toBe("en");
   });
 
+  it("une langue sans texte (it, pt…) : l'interface si ce n'est pas le « fr » par défaut, sinon l'anglais", () => {
+    expect(langueDemenagement(["fr", "it"], "en")).toBe("en");
+    expect(langueDemenagement(["fr", "pt"], "fr")).toBe("en");
+    expect(langueDemenagement(["fr", "pt"], "de")).toBe("de");
+    expect(langueDemenagement(["fr", "nl"], null)).toBe("en");
+  });
+
   it("chaque langue a tous ses textes", () => {
     const cles = Object.keys(TEXTES_DEMENAGEMENT.fr).sort();
     for (const textes of Object.values(TEXTES_DEMENAGEMENT)) {

@@ -80,8 +80,15 @@ export function langueDemenagement(
   langues: readonly string[] | null | undefined,
   langueInterface: string | null | undefined,
 ): LangueDemenagement {
-  const codes = (langues ?? []).map(codeLangue).filter((c): c is LangueDemenagement => c !== null);
-  return codes.find((c) => c !== "fr") ?? codes[0] ?? codeLangue(langueInterface ?? "") ?? "en";
+  const brut = (langues ?? []).map((l) => l.trim().toLowerCase().slice(0, 2)).filter(Boolean);
+  const etrangeres = brut.filter((c) => c !== "fr");
+  if (etrangeres.length === 0 && brut.includes("fr")) return "fr";
+  const connue = etrangeres.map(codeLangue).find((c): c is LangueDemenagement => c !== null);
+  if (connue) return connue;
+  // Langue sans texte ici (it, pt…) : l'interface si elle n'est pas le « fr »
+  // par défaut, sinon l'anglais — jamais le français par défaut.
+  const ui = codeLangue(langueInterface ?? "");
+  return ui && (etrangeres.length === 0 || ui !== "fr") ? ui : "en";
 }
 
 export interface TextesDemenagement {
