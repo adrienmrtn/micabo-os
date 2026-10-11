@@ -20,6 +20,13 @@ export const DEMENAGEMENT_DEBUT = Date.parse("2026-10-11T22:00:00.000Z");
 /** Mot de passe initial des logins Sophia. */
 export const MOT_DE_PASSE_SOPHIA = "12345678";
 
+/**
+ * Copie des logins vers Sophia (migration_micabo.correspondance.importe_le).
+ * Un login créé ici après n'a pas de jumeau sur Sophia : pas de pop-up, plutôt
+ * que des identifiants qui n'existent pas.
+ */
+export const COPIE_LOGINS = Date.parse("2026-10-09T16:56:28.000Z");
+
 /** Créateurs qui restent sur micabo-os. */
 const RESTENT_SUR_MICABO = new Set(["eva@micabo.app"]);
 
@@ -35,23 +42,46 @@ export function demenagementCommence(maintenant: number = Date.now()): boolean {
   return maintenant >= DEMENAGEMENT_DEBUT;
 }
 
+/**
+ * L'identifiant Sophia à montrer à l'utilisateur connecté, ou null : seulement
+ * un CRÉATEUR (un admin relit ses posts dans le même espace), à partir du 12/10,
+ * dont le login existait lors de la copie. Sans date de création : null.
+ */
+export function identifiantADonner(args: {
+  role: string | null | undefined;
+  email: string | null | undefined;
+  creeLe: string | null | undefined;
+  maintenant?: number;
+}): string | null {
+  if (args.role !== "poster" || !demenagementCommence(args.maintenant)) return null;
+  const cree = Date.parse(args.creeLe ?? "");
+  if (!Number.isFinite(cree) || cree >= COPIE_LOGINS) return null;
+  return identifiantSophia(args.email);
+}
+
 export type LangueDemenagement = "fr" | "en" | "tr" | "de" | "es";
 const LANGUES: readonly LangueDemenagement[] = ["fr", "en", "tr", "de", "es"];
 
+function codeLangue(l: string): LangueDemenagement | null {
+  const code = l.trim().toLowerCase().slice(0, 2) as LangueDemenagement;
+  return LANGUES.includes(code) ? code : null;
+}
+
 /**
- * La langue du message : celle du créateur (`profiles.langues`), sinon celle de
- * l'interface, sinon l'anglais. L'OS n'a que fr / en ; les créateurs turcs,
- * allemands et espagnols lisent ce message dans leur langue.
+ * La langue du message : celle du créateur, sinon celle de l'interface, sinon
+ * l'anglais. L'OS n'a que fr / en ; les créateurs turcs, allemands et espagnols
+ * lisent ce message dans leur langue.
+ *
+ * `profiles.langues` vaut `{fr}` par défaut et manage-users y AJOUTE la langue
+ * du compte : un créateur turc a `['fr', 'tr']`. La langue ajoutée l'emporte
+ * donc sur ce « fr » ; un créateur français garde `['fr']`.
  */
 export function langueDemenagement(
   langues: readonly string[] | null | undefined,
   langueInterface: string | null | undefined,
 ): LangueDemenagement {
-  for (const l of [...(langues ?? []), langueInterface ?? ""]) {
-    const code = l.trim().toLowerCase().slice(0, 2) as LangueDemenagement;
-    if (LANGUES.includes(code)) return code;
-  }
-  return "en";
+  const codes = (langues ?? []).map(codeLangue).filter((c): c is LangueDemenagement => c !== null);
+  return codes.find((c) => c !== "fr") ?? codes[0] ?? codeLangue(langueInterface ?? "") ?? "en";
 }
 
 export interface TextesDemenagement {

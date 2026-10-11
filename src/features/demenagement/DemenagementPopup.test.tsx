@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import "@/locales";
 
 vi.mock("@/features/auth/AuthContext", () => ({
-  useAuth: () => ({ user: { email: "omerc@micabo.app" }, profil: { langues: ["tr"], email: "omerc@micabo.app" } }),
+  useAuth: () => ({ user: { email: "omerc@micabo.app" }, profil: { langues: ["fr", "tr"], email: "omerc@micabo.app" } }),
 }));
 
 import { DemenagementPopup } from "./DemenagementPopup";
